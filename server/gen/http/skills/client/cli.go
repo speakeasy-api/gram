@@ -1318,6 +1318,29 @@ func BuildGetSharedPayload(skillsGetSharedToken string) (*skills.GetSharedPayloa
 	return v, nil
 }
 
+// BuildDownloadSharedPayload builds the payload for the skills downloadShared
+// endpoint from CLI flags.
+func BuildDownloadSharedPayload(skillsDownloadSharedToken string) (*skills.DownloadSharedPayload, error) {
+	var err error
+	var token string
+	{
+		token = skillsDownloadSharedToken
+		if utf8.RuneCountInString(token) < 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("token", token, utf8.RuneCountInString(token), 32, true))
+		}
+		if utf8.RuneCountInString(token) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("token", token, utf8.RuneCountInString(token), 128, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &skills.DownloadSharedPayload{}
+	v.Token = token
+
+	return v, nil
+}
+
 // BuildListDistributionsPayload builds the payload for the skills
 // listDistributions endpoint from CLI flags.
 func BuildListDistributionsPayload(skillsListDistributionsSkillID string, skillsListDistributionsPluginID string, skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {

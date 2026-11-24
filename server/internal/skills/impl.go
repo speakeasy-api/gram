@@ -2322,6 +2322,11 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
 	}
 
+	files, archivePath, err := s.sharedSkillFiles(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, payload.Token)
+	if err != nil {
+		return nil, err
+	}
+
 	return &gen.SharedSkill{
 		Name:           row.Name,
 		DisplayName:    row.DisplayName,
@@ -2331,6 +2336,8 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 		CacheControl:   conv.PtrEmpty("private, max-age=300"),
 		XRobotsTag:     conv.PtrEmpty("noindex, nofollow"),
 		ReferrerPolicy: conv.PtrEmpty("no-referrer"),
+		Files:          files,
+		ArchivePath:    archivePath,
 	}, nil
 }
 

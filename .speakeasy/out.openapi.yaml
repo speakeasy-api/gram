@@ -71090,6 +71090,103 @@ paths:
       x-speakeasy-name-override: distribute
       x-speakeasy-react-hook:
         name: DistributeSkill
+  /rpc/skills.downloadShared:
+    get:
+      description: Download a shared skill's whole directory as a ZIP (<name>/SKILL.md plus <name>/<path> for every supporting file) by its share token. Unauthenticated, like getShared.
+      operationId: downloadSharedSkill
+      parameters:
+        - allowEmptyValue: true
+          description: The public share token.
+          in: query
+          name: token
+          required: true
+          schema:
+            description: The public share token.
+            maxLength: 128
+            minLength: 32
+            type: string
+      responses:
+        "200":
+          content:
+            application/zip:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+            Referrer-Policy:
+              schema:
+                type: string
+            X-Robots-Tag:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: downloadShared skills
+      tags:
+        - skills
+      x-speakeasy-name-override: downloadShared
   /rpc/skills.get:
     get:
       description: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.
@@ -121952,12 +122049,20 @@ components:
     SharedSkill2:
       type: object
       properties:
+        archive_path:
+          type: string
+          description: The server path of a ZIP of the whole skill directory, downloadable without authentication. Present only when the skill has supporting files.
         content:
           type: string
           description: The latest SKILL.md content.
         display_name:
           type: string
           description: The user-facing skill name.
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          description: The supporting files shared with SKILL.md, sorted by path. Empty when the skill is SKILL.md alone.
         name:
           type: string
           description: The normalized skill name.
@@ -121973,6 +122078,7 @@ components:
         - display_name
         - content
         - updated_at
+        - files
     SigintSensor:
       type: object
       properties:

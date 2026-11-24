@@ -80,10 +80,10 @@ func (s *Service) readPlatformResource(ctx context.Context, req *rawRequest) (js
 
 // readPlatformSkill answers resources/read for a file of an embedded skill
 // with the exact embedded bytes. Embedded skills are reviewed Speakeasy
-// content rather than a customer's managed skill, so a SKILL.md read is
-// counted on the skill read metric but recorded as no activation: there is no
-// stored version to observe. A supporting-file read is not counted, since it
-// follows a load that already was. uri is the skill URI the request named,
+// content rather than a customer's managed skill, so a read is counted on the
+// skill read metric, a supporting file under its own label, but recorded as
+// no activation: there is no stored version to observe. uri is the skill URI
+// the request named,
 // already known to have the shape of a file of a served skill.
 func (s *Service) readPlatformSkill(ctx context.Context, req *rawRequest, uri string) (json.RawMessage, error) {
 	_, resource, ok := s.platformSkills.Read(uri)
@@ -95,9 +95,11 @@ func (s *Service) readPlatformSkill(ctx context.Context, req *rawRequest, uri st
 	if err != nil {
 		return nil, err
 	}
-	if resource.IsManifest() {
-		s.metrics.RecordSkillRead(ctx, mcpmetrics.SurfacePlatform, mcpmetrics.SkillOriginEmbedded)
+	kind := mcpmetrics.SkillResourceManifest
+	if !resource.IsManifest() {
+		kind = mcpmetrics.SkillResourceSupportingFile
 	}
+	s.metrics.RecordSkillRead(ctx, mcpmetrics.SurfacePlatform, mcpmetrics.SkillOriginEmbedded, kind)
 	return bs, nil
 }
 

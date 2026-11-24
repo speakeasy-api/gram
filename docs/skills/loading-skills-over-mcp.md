@@ -20,7 +20,10 @@ A skill is served as a single file. Its entry has exactly one resource:
 | `resources[0].uri`    | the same URI                                                                                                                                                                                 |
 | `resources[0].digest` | `sha256:<hex>` over the served bytes: the version's `skill_versions.raw_sha256` on a hosted endpoint, a hash of the embedded file on the Platform MCP                                        |
 | `resources[0].size`   | the length of those bytes                                                                                                                                                                    |
+| `resources[1..]`      | one entry per supporting file of the version, sorted by path: `uri` is `skill://<project-slug>/<name>/<path>`, `digest` is `sha256:<hex>` of the file's bytes, `size` their length           |
 | `frontmatter`         | the version's YAML frontmatter rendered verbatim as JSON: `name`, `description`, and every other field the author wrote                                                                      |
+
+A supporting file's URI percent-encodes a path segment only where URI syntax requires it, so typical paths such as `references/REFERENCE.md` appear verbatim, and each file has exactly one URI.
 
 The frontmatter is never curated. `allowed-tools`, `license`, `metadata` and any future field appear only when the author wrote them. The extension requires the frontmatter `name` to equal the URI's `<name>` segment, the one immediately before `/SKILL.md`. Validation trims the name before checking it, so a version whose author quoted a padded name (`name: "refunds "`) is stored valid under the trimmed name while its frontmatter keeps the padding; such a version is never served (the resolver skips it with an error log, and the platform catalog refuses to build), so every served entry's frontmatter `name`, canonical name and URI name segment agree.
 
@@ -63,7 +66,7 @@ Both surfaces advertise the extension in `initialize` and `server/discover` when
 
 The platform toolset otherwise declares only `tools`. With the flag on it declares `tools`, `resources` and `extensions`, and nothing else: `resources` is added because the extension depends on the Resources primitive, and `prompts` is never declared on that surface. The external Platform MCP always declares `tools`, `resources` and `logging`, for its setup guides; with the flag on it adds `extensions`. That server's capabilities are shared by every caller, so the extension is added to each caller's `initialize` and `server/discover` result rather than to the server's options.
 
-`directoryRead` is not declared: skills are single files and `resources/directory/read` is not implemented.
+`directoryRead` is not declared and `resources/directory/read` is not implemented: every file of a skill is already enumerated in its entry's `resources`.
 
 The extension's methods are available on any protocol revision the server serves once the capability is declared. Extensions are negotiated separately from the revision.
 
@@ -121,7 +124,9 @@ Params are `{"uri": "skill://<project-slug>/<name>/SKILL.md"}`. The result carri
 }
 ```
 
-A skill read is answered from the distribution, not from a toolset resource. It invokes nothing, so it is not metered, not billed, writes no tool-call telemetry row, and runs no risk scan on the way out; the content was validated when the version was recorded. An unknown or unassigned URI answers `-32602`. On a hosted endpoint, any `resources/read` whose URI does not have the `skill://<project-slug>/<name>/SKILL.md` shape takes the existing toolset resource path untouched. The platform toolset has no other resources to read: with the flag on, a `resources/read` of any other URI there answers `-32602`, and with it off the method stays method-not-found (`-32601`). On the external Platform MCP, any `skill://` URI that names no served skill answers `-32602`, and other URIs take the setup guide resource path.
+A supporting file is read the same way at `skill://<project-slug>/<name>/<path>`. It is served only where its skill is, and returns `text` for UTF-8 text media types or a base64 `blob` otherwise, with the stored content type as `mimeType`.
+
+A skill read is answered from the distribution, not from a toolset resource. It invokes nothing, so it is not metered, not billed, writes no tool-call telemetry row, and runs no risk scan on the way out; the content was validated when the version was recorded. An unknown or unassigned URI answers `-32602`. On a hosted endpoint, any `resources/read` whose URI does not have the shape of a skill file (`skill://<project-slug>/<name>/SKILL.md` or `skill://<project-slug>/<name>/<path>`) takes the existing toolset resource path untouched. The platform toolset has no other resources to read: with the flag on, a `resources/read` of any other URI there answers `-32602`, and with it off the method stays method-not-found (`-32601`). On the external Platform MCP, any `skill://` URI that names no served skill answers `-32602`, and other URIs take the setup guide resource path.
 
 Skills never appear in `resources/list`. The platform toolset answers `resources/list` with an empty list while the flag is on, so its declared `resources` capability is honest. The external Platform MCP keeps listing and reading its setup guides as before; only `skill://` URIs are answered from the catalog.
 
@@ -153,7 +158,9 @@ A skills listing serves at most 1000 skills. The query keeps one version per ski
 
 The management API exposes the most recent such read as `last_loaded_over_mcp_at` on `SkillDistribution` (returned by `skills.distribute`) and `PluginSkillDistribution` (returned by `skills.listDistributions`). It is a per-skill value, so every distribution of one skill carries the same time, and it reflects only reads over a Speakeasy-hosted MCP server: a load of the same skill reported by a coding-agent hook does not move it.
 
-Reads are counted on the `mcp.skill.read` counter with `gram.mcp.surface` (`hosting` or `platform`), `gram.mcp.skill.origin` (`distribution` for a managed skill, `embedded` for the platform catalog) and the network surface. Reads on the external Platform MCP are not counted: `gram.mcp.surface` has no value for that endpoint. Only successful reads count, and nothing is recorded per server or per skill, so the counter stays bounded.
+Only a `SKILL.md` read is an activation. Reading a supporting file records no observation and moves no seen count or `last_loaded_over_mcp_at`.
+
+Reads are counted on the `mcp.skill.read` counter with `gram.mcp.surface` (`hosting` or `platform`), `gram.mcp.skill.origin` (`distribution` for a managed skill, `embedded` for the platform catalog) and the network surface. A supporting-file read also carries `gram.mcp.skill.resource` = `supporting_file`; a `SKILL.md` read carries no such attribute, so it keeps the series it always had. Count skill loads by excluding `gram.mcp.skill.resource:supporting_file`. Reads on the external Platform MCP are not counted: `gram.mcp.surface` has no value for that endpoint. Only successful reads count, and nothing is recorded per server or per skill, so the counter stays bounded.
 
 ## Client support
 

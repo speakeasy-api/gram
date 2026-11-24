@@ -534,8 +534,8 @@ func TestRecordSkillRead_PinsInstrumentAndDimensions(t *testing.T) {
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
 	require.NotNil(t, m.mcpSkillReadCounter)
-	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
-	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
 
 	got := collectMetric(t, reader, InstrumentMCPSkillRead)
 	metricdatatest.AssertHasAttributes(t, got,
@@ -557,13 +557,38 @@ func TestRecordSkillRead_SeparatesSurfaceAndOrigin(t *testing.T) {
 	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
 
 	m := NewMetrics(meter, testenv.NewLogger(t))
-	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
-	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded)
-	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginEmbedded, SkillResourceManifest)
+	m.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded, SkillResourceManifest)
 
 	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
 	require.True(t, ok)
 	require.Len(t, sum.DataPoints, 3)
+}
+
+func TestRecordSkillRead_LabelsSupportingFilesOnly(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceSupportingFile)
+	m.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceSupportingFile)
+
+	sum, ok := collectMetric(t, reader, InstrumentMCPSkillRead).Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 2)
+	for _, point := range sum.DataPoints {
+		value, labeled := point.Attributes.Value(attr.McpSkillResourceKey)
+		if labeled {
+			require.Equal(t, string(SkillResourceSupportingFile), value.AsString())
+			require.Equal(t, int64(2), point.Value)
+			continue
+		}
+		require.Equal(t, int64(1), point.Value, "SKILL.md reads keep their unlabeled series")
+	}
 }
 
 func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {
@@ -578,7 +603,7 @@ func TestRecordSkillRead_UsesTrustedPrivateOrigin(t *testing.T) {
 		NetworkIngressID: uuid.New(),
 	})
 
-	NewMetrics(meter, testenv.NewLogger(t)).RecordSkillRead(ctx, SurfaceHosting, SkillOriginDistribution)
+	NewMetrics(meter, testenv.NewLogger(t)).RecordSkillRead(ctx, SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
 
 	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPSkillRead),
 		attr.McpSurface(string(SurfaceHosting)),
@@ -591,9 +616,9 @@ func TestRecordSkillRead_IsNilSafe(t *testing.T) {
 	t.Parallel()
 
 	var nilMetrics *Metrics
-	nilMetrics.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution)
+	nilMetrics.RecordSkillRead(t.Context(), SurfaceHosting, SkillOriginDistribution, SkillResourceManifest)
 	empty := &Metrics{}
-	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
+	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded, SkillResourceManifest)
 }
 
 func TestRecordGatewayAdmission(t *testing.T) {

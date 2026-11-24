@@ -1987,9 +1987,12 @@ func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkil
 
 const getSharedSkillByToken = `-- name: GetSharedSkillByToken :one
 SELECT
+  s.project_id,
+  s.id AS skill_id,
   s.name,
   s.display_name,
   s.summary,
+  latest.id AS skill_version_id,
   latest.content,
   latest.created_at AS version_created_at
 FROM skill_share_links l
@@ -1998,7 +2001,7 @@ JOIN skills s
   AND s.id = l.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
+  SELECT sv.id, sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
   WHERE sv.skill_id = l.skill_id
   ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
@@ -2009,9 +2012,12 @@ WHERE l.token = $1
 `
 
 type GetSharedSkillByTokenRow struct {
+	ProjectID        uuid.UUID
+	SkillID          uuid.UUID
 	Name             string
 	DisplayName      string
 	Summary          pgtype.Text
+	SkillVersionID   uuid.UUID
 	Content          string
 	VersionCreatedAt pgtype.Timestamptz
 }
@@ -2023,9 +2029,12 @@ func (q *Queries) GetSharedSkillByToken(ctx context.Context, token string) (GetS
 	row := q.db.QueryRow(ctx, getSharedSkillByToken, token)
 	var i GetSharedSkillByTokenRow
 	err := row.Scan(
+		&i.ProjectID,
+		&i.SkillID,
 		&i.Name,
 		&i.DisplayName,
 		&i.Summary,
+		&i.SkillVersionID,
 		&i.Content,
 		&i.VersionCreatedAt,
 	)

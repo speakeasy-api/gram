@@ -557,6 +557,10 @@ const (
 	// "embedded" for a reviewed skill compiled into the platform toolset.
 	// Never a skill name or identifier.
 	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
+	// McpSkillResourceKey is the bounded kind of skill file a skill://
+	// resources/read served: "supporting_file" for a file beside SKILL.md.
+	// SKILL.md reads omit it. Never a path or skill identifier.
+	McpSkillResourceKey = attribute.Key("gram.mcp.skill.resource")
 	// McpSkillPinConflictCountKey is how many pinned skill links lost to a
 	// different pinned version when one MCP surface resolved a skill linked
 	// several times.
@@ -4165,6 +4169,13 @@ func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 func McpSkillOrigin[V ~string](v V) attribute.KeyValue { return McpSkillOriginKey.String(string(v)) }
 func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
 	return slog.String(string(McpSkillOriginKey), string(v))
+}
+
+func McpSkillResource[V ~string](v V) attribute.KeyValue {
+	return McpSkillResourceKey.String(string(v))
+}
+func SlogMcpSkillResource[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillResourceKey), string(v))
 }
 
 func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }

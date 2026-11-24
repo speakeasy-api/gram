@@ -7,8 +7,13 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { SkillFile, SkillFile$inboundSchema } from "./skillfile.js";
 
 export type SharedSkill2 = {
+  /**
+   * The server path of a ZIP of the whole skill directory, downloadable without authentication. Present only when the skill has supporting files.
+   */
+  archivePath?: string | undefined;
   /**
    * The latest SKILL.md content.
    */
@@ -17,6 +22,10 @@ export type SharedSkill2 = {
    * The user-facing skill name.
    */
   displayName: string;
+  /**
+   * The supporting files shared with SKILL.md, sorted by path. Empty when the skill is SKILL.md alone.
+   */
+  files: Array<SkillFile>;
   /**
    * The normalized skill name.
    */
@@ -35,8 +44,10 @@ export type SharedSkill2 = {
 export const SharedSkill2$inboundSchema: z.ZodMiniType<SharedSkill2, unknown> =
   z.pipe(
     z.object({
+      archive_path: z.optional(z.string()),
       content: z.string(),
       display_name: z.string(),
+      files: z.array(SkillFile$inboundSchema),
       name: z.string(),
       summary: z.optional(z.string()),
       updated_at: z.pipe(
@@ -46,6 +57,7 @@ export const SharedSkill2$inboundSchema: z.ZodMiniType<SharedSkill2, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "archive_path": "archivePath",
         "display_name": "displayName",
         "updated_at": "updatedAt",
       });

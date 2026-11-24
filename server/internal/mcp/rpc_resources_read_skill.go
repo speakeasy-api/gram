@@ -87,9 +87,10 @@ func readServedSkill(
 	}
 
 	// Loading a skill is reading its SKILL.md. A supporting file is read
-	// after the skill was loaded, so it is served without being counted,
-	// recorded or logged as another activation.
+	// after the skill was loaded, so it is counted on the read metric under
+	// its own label but not recorded or logged as another activation.
 	if !resource.IsManifest() {
+		metrics.RecordSkillRead(ctx, surface, mcpmetrics.SkillOriginDistribution, mcpmetrics.SkillResourceSupportingFile)
 		return bs, nil
 	}
 
@@ -107,7 +108,7 @@ func readServedSkill(
 			attr.SlogResourceURI(entry.URI()),
 		)
 	}
-	metrics.RecordSkillRead(ctx, surface, mcpmetrics.SkillOriginDistribution)
+	metrics.RecordSkillRead(ctx, surface, mcpmetrics.SkillOriginDistribution, mcpmetrics.SkillResourceManifest)
 	logSkillRead(ctx, logger, telemLogger, clientInfoStore, payload, *entry, len(bs), now)
 	return bs, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -270,6 +271,74 @@ func TestServeSharedSkillArchiveOnCustomDomain(t *testing.T) {
 	require.Equal(t, files["assets/logo.png"], got["zipped-skill/assets/logo.png"])
 	require.Equal(t, os.FileMode(0o755), modes["zipped-skill/scripts/run.py"])
 	require.Equal(t, os.FileMode(0o644), modes["zipped-skill/assets/logo.png"])
+}
+
+func TestGetSharedListsSupportingFilesAndArchivePath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, token := sharedSkillWithFiles(t, ctx, ti, "shared-with-files", map[string][]byte{
+		"scripts/run.py":          []byte("print(1)\n"),
+		"references/REFERENCE.md": []byte("# Reference\n"),
+	})
+
+	shared, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: token})
+	require.NoError(t, err)
+	require.Len(t, shared.Files, 2)
+	require.Equal(t, "references/REFERENCE.md", shared.Files[0].Path)
+	require.Equal(t, "scripts/run.py", shared.Files[1].Path)
+	require.EqualValues(t, len("print(1)\n"), shared.Files[1].SizeBytes)
+	require.NotNil(t, shared.ArchivePath)
+	require.Equal(t, "/rpc/skills.downloadShared?token="+token, *shared.ArchivePath)
+}
+
+func TestGetSharedWithoutSupportingFilesHasNoArchive(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, token := sharedSkillWithFiles(t, ctx, ti, "shared-single-file", nil)
+
+	shared, err := ti.service.GetShared(ctx, &gen.GetSharedPayload{Token: token})
+	require.NoError(t, err)
+	require.NotNil(t, shared.Files)
+	require.Empty(t, shared.Files)
+	require.Nil(t, shared.ArchivePath)
+}
+
+func TestDownloadSharedReturnsSkillDirectoryZip(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	files := map[string][]byte{"scripts/run.py": []byte("print(1)\n")}
+	manifest, token := sharedSkillWithFiles(t, ctx, ti, "downloaded-skill", files)
+
+	result, body, err := ti.service.DownloadShared(ctx, &gen.DownloadSharedPayload{Token: token})
+	require.NoError(t, err)
+	require.Equal(t, "application/zip", result.ContentType)
+	require.Equal(t, `attachment; filename="downloaded-skill.zip"`, result.ContentDisposition)
+	require.Equal(t, "noindex, nofollow", result.XRobotsTag)
+	archive, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	names := make([]string, 0, len(zr.File))
+	for _, file := range zr.File {
+		names = append(names, file.Name)
+		if file.Name == "downloaded-skill/SKILL.md" {
+			entry, err := file.Open()
+			require.NoError(t, err)
+			content, err := io.ReadAll(entry)
+			require.NoError(t, err)
+			require.NoError(t, entry.Close())
+			require.Equal(t, manifest, string(content))
+		}
+	}
+	require.ElementsMatch(t, []string{"downloaded-skill/SKILL.md", "downloaded-skill/scripts/run.py"}, names)
+
+	_, _, err = ti.service.DownloadShared(ctx, &gen.DownloadSharedPayload{Token: strings.Repeat("x", 43)})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestServeSharedSkillArchiveWrongOrganizationDomain(t *testing.T) {

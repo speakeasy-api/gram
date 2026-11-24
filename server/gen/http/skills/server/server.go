@@ -8,7 +8,9 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"net/http"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
@@ -42,6 +44,7 @@ type Server struct {
 	Share                  http.Handler
 	Unshare                http.Handler
 	GetShared              http.Handler
+	DownloadShared         http.Handler
 	ListDistributions      http.Handler
 	Link                   http.Handler
 	Unlink                 http.Handler
@@ -98,6 +101,7 @@ func New(
 			{"Share", "POST", "/rpc/skills.share"},
 			{"Unshare", "POST", "/rpc/skills.unshare"},
 			{"GetShared", "GET", "/rpc/skills.getShared"},
+			{"DownloadShared", "GET", "/rpc/skills.downloadShared"},
 			{"ListDistributions", "GET", "/rpc/skills.listDistributions"},
 			{"Link", "POST", "/rpc/skills.link"},
 			{"Unlink", "POST", "/rpc/skills.unlink"},
@@ -126,6 +130,7 @@ func New(
 		Share:                  NewShareHandler(e.Share, mux, decoder, encoder, errhandler, formatter),
 		Unshare:                NewUnshareHandler(e.Unshare, mux, decoder, encoder, errhandler, formatter),
 		GetShared:              NewGetSharedHandler(e.GetShared, mux, decoder, encoder, errhandler, formatter),
+		DownloadShared:         NewDownloadSharedHandler(e.DownloadShared, mux, decoder, encoder, errhandler, formatter),
 		ListDistributions:      NewListDistributionsHandler(e.ListDistributions, mux, decoder, encoder, errhandler, formatter),
 		Link:                   NewLinkHandler(e.Link, mux, decoder, encoder, errhandler, formatter),
 		Unlink:                 NewUnlinkHandler(e.Unlink, mux, decoder, encoder, errhandler, formatter),
@@ -161,6 +166,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Share = m(s.Share)
 	s.Unshare = m(s.Unshare)
 	s.GetShared = m(s.GetShared)
+	s.DownloadShared = m(s.DownloadShared)
 	s.ListDistributions = m(s.ListDistributions)
 	s.Link = m(s.Link)
 	s.Unlink = m(s.Unlink)
@@ -195,6 +201,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountShareHandler(mux, h.Share)
 	MountUnshareHandler(mux, h.Unshare)
 	MountGetSharedHandler(mux, h.GetShared)
+	MountDownloadSharedHandler(mux, h.DownloadShared)
 	MountListDistributionsHandler(mux, h.ListDistributions)
 	MountLinkHandler(mux, h.Link)
 	MountUnlinkHandler(mux, h.Unlink)
@@ -1421,6 +1428,94 @@ func NewGetSharedHandler(
 			if errhandler != nil {
 				errhandler(ctx, w, err)
 			}
+		}
+	})
+}
+
+// MountDownloadSharedHandler configures the mux to serve the "skills" service
+// "downloadShared" endpoint.
+func MountDownloadSharedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.downloadShared", f)
+}
+
+// NewDownloadSharedHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "downloadShared" endpoint.
+func NewDownloadSharedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDownloadSharedRequest(mux, decoder)
+		encodeResponse = EncodeDownloadSharedResponse(encoder)
+		encodeError    = EncodeDownloadSharedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "downloadShared")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*skills.DownloadSharedResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
 		}
 	})
 }

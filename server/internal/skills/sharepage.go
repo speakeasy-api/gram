@@ -3,20 +3,25 @@ package skills
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -185,29 +190,97 @@ func (s *Service) ServeSharedSkillArchive(w http.ResponseWriter, r *http.Request
 		return err
 	}
 
-	files, err := repo.New(s.db).ListSkillVersionFiles(ctx, repo.ListSkillVersionFilesParams{
-		ProjectID:      row.ProjectID,
-		SkillID:        row.SkillID,
-		SkillVersionID: row.SkillVersionID,
-	})
+	archive, err := s.sharedSkillArchive(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, row.Name, row.Content)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list shared skill files").LogError(ctx, s.logger)
-	}
-
-	var buf bytes.Buffer
-	if err := writeSkillArchive(&buf, row.Name, row.Content, files); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build shared skill archive").LogError(ctx, s.logger)
+		return err
 	}
 
 	setSharedSkillResponseHeaders(w)
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", row.Name+".zip"))
+	w.Header().Set("Content-Disposition", sharedSkillArchiveDisposition(row.Name))
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(buf.Bytes()); err != nil {
+	if _, err := w.Write(archive); err != nil {
 		return fmt.Errorf("write shared skill archive: %w", err)
 	}
 
 	return nil
+}
+
+// DownloadShared serves a shared skill's whole directory as a ZIP through
+// /rpc/skills.downloadShared, the platform-host counterpart of
+// ServeSharedSkillArchive that the dashboard share page links to. Like
+// GetShared the share token is the only credential.
+func (s *Service) DownloadShared(ctx context.Context, payload *gen.DownloadSharedPayload) (*gen.DownloadSharedResult, io.ReadCloser, error) {
+	row, err := repo.New(s.db).GetSharedSkillByToken(ctx, payload.Token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, oops.E(oops.CodeNotFound, nil, "link not found or no longer available")
+	}
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
+	}
+
+	archive, err := s.sharedSkillArchive(ctx, row.ProjectID, row.SkillID, row.SkillVersionID, row.Name, row.Content)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &gen.DownloadSharedResult{
+		ContentType:        "application/zip",
+		ContentDisposition: sharedSkillArchiveDisposition(row.Name),
+		CacheControl:       "private, max-age=300",
+		XRobotsTag:         "noindex, nofollow",
+		ReferrerPolicy:     "no-referrer",
+	}, io.NopCloser(bytes.NewReader(archive)), nil
+}
+
+// sharedSkillFiles returns a shared version's supporting files and, when it
+// has any, the server path of its ZIP download.
+func (s *Service) sharedSkillFiles(ctx context.Context, projectID, skillID, versionID uuid.UUID, token string) ([]*types.SkillFile, *string, error) {
+	rows, err := repo.New(s.db).ListSkillVersionFileMetadata(ctx, repo.ListSkillVersionFileMetadataParams{
+		ProjectID:      projectID,
+		SkillID:        skillID,
+		SkillVersionID: versionID,
+	})
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "list shared skill files").LogError(ctx, s.logger)
+	}
+
+	files := make([]*types.SkillFile, 0, len(rows))
+	for _, row := range rows {
+		files = append(files, &types.SkillFile{
+			Path:        row.Path,
+			Sha256:      row.Sha256,
+			SizeBytes:   row.SizeBytes,
+			ContentType: row.ContentType,
+		})
+	}
+	if len(files) == 0 {
+		return files, nil, nil
+	}
+	archivePath := "/rpc/skills.downloadShared?" + url.Values{"token": []string{token}}.Encode()
+	return files, &archivePath, nil
+}
+
+// sharedSkillArchive builds the ZIP of a shared skill version.
+func (s *Service) sharedSkillArchive(ctx context.Context, projectID, skillID, versionID uuid.UUID, name, manifest string) ([]byte, error) {
+	files, err := repo.New(s.db).ListSkillVersionFiles(ctx, repo.ListSkillVersionFilesParams{
+		ProjectID:      projectID,
+		SkillID:        skillID,
+		SkillVersionID: versionID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list shared skill files").LogError(ctx, s.logger)
+	}
+
+	var buf bytes.Buffer
+	if err := writeSkillArchive(&buf, name, manifest, files); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build shared skill archive").LogError(ctx, s.logger)
+	}
+	return buf.Bytes(), nil
+}
+
+func sharedSkillArchiveDisposition(name string) string {
+	return fmt.Sprintf("attachment; filename=%q", name+".zip")
 }
 
 // sharedSkillForDomain resolves the shared skill a download request names,

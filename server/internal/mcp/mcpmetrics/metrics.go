@@ -67,9 +67,26 @@ const (
 const InstrumentMCPProtocolVersionRejected = "mcp.request.protocol_version_rejected"
 
 // InstrumentMCPSkillRead is the OTel instrument name for the counter of
-// skills served over MCP: one increment per `resources/read` of a `skill://`
-// URI that returned the skill's SKILL.md.
+// skill files served over MCP: one increment per successful `resources/read`
+// of a `skill://` URI, a skill's SKILL.md or one of its supporting files.
 const InstrumentMCPSkillRead = "mcp.skill.read"
+
+// SkillResource is the closed set of skill files [Metrics.RecordSkillRead]
+// tells apart on mcp.skill.read under gram.mcp.skill.resource.
+type SkillResource string
+
+const (
+	// SkillResourceManifest: the skill's SKILL.md, the read that loads the
+	// skill. It is recorded without the gram.mcp.skill.resource attribute, so
+	// SKILL.md reads keep the series they had before supporting files were
+	// served.
+	SkillResourceManifest SkillResource = "manifest"
+
+	// SkillResourceSupportingFile: a supporting file of the skill (a
+	// scripts/, references/ or assets/ entry, or any other file beside
+	// SKILL.md). It is not an activation.
+	SkillResourceSupportingFile SkillResource = "supporting_file"
+)
 
 // SkillOrigin is the closed set of origins [Metrics.RecordSkillRead] records
 // on mcp.skill.read under gram.mcp.skill.origin. It names where the served
@@ -167,7 +184,8 @@ type Metrics struct {
 	mcpProtocolVersionRejectedCounter metric.Int64Counter
 
 	// mcpSkillReadCounter is the unsampled census of skills served over MCP
-	// (mcp.skill.read), by serving surface and skill origin. It deliberately
+	// (mcp.skill.read), by serving surface, skill origin, and, for supporting
+	// files, the resource kind. It deliberately
 	// carries no per-server, per-skill, or per-organization dimension: the
 	// activation question ("are agents loading skills over MCP at all, and
 	// from which surface?") needs fleet-wide aggregation, and per-skill
@@ -404,7 +422,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	mcpSkillReadCounter, err := meter.Int64Counter(
 		InstrumentMCPSkillRead,
-		metric.WithDescription("Skills served over MCP through resources/read of a skill:// URI, by serving surface, skill origin, and public/private network surface"),
+		metric.WithDescription("Skill files served over MCP through resources/read of a skill:// URI, by serving surface, skill origin, public/private network surface, and gram.mcp.skill.resource=supporting_file for files other than SKILL.md"),
 		metric.WithUnit("{read}"),
 	)
 	if err != nil {
@@ -589,22 +607,29 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
 
-// RecordSkillRead counts one skill served over MCP: a `resources/read` of a
-// `skill://` URI that returned the skill's SKILL.md on the given surface,
-// from the given origin. Reads that fail (unknown URI, caller not assigned,
-// extension not enabled) are not counted; they stay on the span. Like
-// `mcp.request` it carries the network surface so private-network and public
-// activation can be told apart, and nothing per server or per skill.
-func (m *Metrics) RecordSkillRead(ctx context.Context, surface Surface, origin SkillOrigin) {
+// RecordSkillRead counts one file of a skill served over MCP: a
+// `resources/read` of a `skill://` URI on the given surface, from the given
+// origin. A SKILL.md read carries no gram.mcp.skill.resource attribute, so
+// its series are the ones the counter has always had; a supporting-file read
+// carries gram.mcp.skill.resource=supporting_file. Reads that fail (unknown
+// URI, caller not assigned, extension not enabled) are not counted; they stay
+// on the span. Like `mcp.request` it carries the network surface so
+// private-network and public activation can be told apart, and nothing per
+// server or per skill.
+func (m *Metrics) RecordSkillRead(ctx context.Context, surface Surface, origin SkillOrigin, resource SkillResource) {
 	if m == nil || m.mcpSkillReadCounter == nil {
 		return
 	}
 
-	m.mcpSkillReadCounter.Add(ctx, 1, metric.WithAttributes(
+	attrs := []attribute.KeyValue{
 		attr.McpSurface(string(surface)),
 		attr.McpSkillOrigin(origin),
 		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
-	))
+	}
+	if resource == SkillResourceSupportingFile {
+		attrs = append(attrs, attr.McpSkillResource(resource))
+	}
+	m.mcpSkillReadCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 // RecordKillswitchIdentityCoverage records the bounded coverage classes for

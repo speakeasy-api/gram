@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 
+	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -104,6 +105,10 @@ type Client struct {
 	// endpoint.
 	GetSharedDoer goahttp.Doer
 
+	// DownloadShared Doer is the HTTP client used to make requests to the
+	// downloadShared endpoint.
+	DownloadSharedDoer goahttp.Doer
+
 	// ListDistributions Doer is the HTTP client used to make requests to the
 	// listDistributions endpoint.
 	ListDistributionsDoer goahttp.Doer
@@ -161,6 +166,7 @@ func NewClient(
 		ShareDoer:                  doer,
 		UnshareDoer:                doer,
 		GetSharedDoer:              doer,
+		DownloadSharedDoer:         doer,
 		ListDistributionsDoer:      doer,
 		LinkDoer:                   doer,
 		UnlinkDoer:                 doer,
@@ -722,6 +728,35 @@ func (c *Client) GetShared() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("skills", "getShared", err)
 		}
 		return decodeResponse(resp)
+	}
+}
+
+// DownloadShared returns an endpoint that makes HTTP requests to the skills
+// service downloadShared server.
+func (c *Client) DownloadShared() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDownloadSharedRequest(c.encoder)
+		decodeResponse = DecodeDownloadSharedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDownloadSharedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DownloadSharedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "downloadShared", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &skills.DownloadSharedResponseData{Result: res.(*skills.DownloadSharedResult), Body: resp.Body}, nil
 	}
 }
 
