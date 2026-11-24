@@ -641,7 +641,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
-	clientCatalog := s.aiCatalog.Snapshot()
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(clientCatalog, endpoint))
 	defer t.Finish(ctx)
@@ -1233,7 +1233,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
-	clientCatalog := s.aiCatalog.Snapshot()
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
 	attempt := challengeState.connectionAttempt(clientCatalog, endpoint)
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))

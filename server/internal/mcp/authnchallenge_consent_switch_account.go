@@ -285,7 +285,7 @@ func (s *Service) switchedChallengeError(ctx context.Context, logger *slog.Logge
 
 // switchClientName is the display name the consent page showed for clientID, empty when it can't be found.
 func (s *Service) switchClientName(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) string {
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.Snapshot(), clientID, lookupClientOnly)
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.SnapshotFor(ctx), clientID, lookupClientOnly)
 	if err != nil {
 		return ""
 	}

@@ -186,6 +186,30 @@ func (t Target) Clone() Target {
 // Defaults projects a catalog snapshot into device scan targets.
 // Products without install signatures remain available to admission only.
 func Defaults(catalog *aivendors.Snapshot) []Target {
+	shared := catalogDefaultsOf(catalog).targets
+	targets := make([]Target, 0, len(shared))
+	for _, target := range shared {
+		targets = append(targets, target.Clone())
+	}
+	return targets
+}
+
+type catalogDefaultsKey struct{}
+
+// catalogDefaults is computed once per catalog snapshot and shared; never mutate it.
+type catalogDefaults struct {
+	targets     []Target
+	listVersion int32
+}
+
+func catalogDefaultsOf(catalog *aivendors.Snapshot) catalogDefaults {
+	return aivendors.Derived(catalog, catalogDefaultsKey{}, func(catalog *aivendors.Snapshot) catalogDefaults {
+		targets := projectDefaults(catalog)
+		return catalogDefaults{targets: targets, listVersion: ListVersion(targets)}
+	})
+}
+
+func projectDefaults(catalog *aivendors.Snapshot) []Target {
 	products := catalog.ScanProducts()
 	targets := make([]Target, 0, len(products))
 	for _, product := range products {

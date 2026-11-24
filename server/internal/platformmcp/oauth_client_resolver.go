@@ -179,7 +179,7 @@ func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode cli
 // URL-shaped client_id, before any document is fetched. Returns nil when the
 // client is admitted and a *admission.DenialError when policy denies it.
 func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	decision := admission.Evaluate(catalog, platformCIMDAdmissionMode, clientID)
 	if len(clientID) > admission.MaxClientIDLength {
 		// Evaluate applies this bound itself in the modes that consult the

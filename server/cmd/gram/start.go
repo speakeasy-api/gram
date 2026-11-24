@@ -1547,6 +1547,8 @@ func newStartCommand() *cli.Command {
 			// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
 			// every route the host does not serve, and above customdomains.Middleware,
 			// which refuses hosts it does not know.
+			// Above the authentication host, whose router serves its routes itself.
+			mux.Use(aiCatalog.Middleware)
 			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
@@ -1980,8 +1982,9 @@ func newStartCommand() *cli.Command {
 			tunnelService.Metrics = tunnelmetrics.NewStore(chDB)
 			tunneledmcp.Attach(mux, tunnelService)
 			mcpRuntime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{
-				MCP:      mcpService,
-				Metadata: mcpMetadataService,
+				AICatalog: aiCatalog,
+				MCP:       mcpService,
+				Metadata:  mcpMetadataService,
 			})
 			if err != nil {
 				return fmt.Errorf("build MCP server runtime: %w", err)

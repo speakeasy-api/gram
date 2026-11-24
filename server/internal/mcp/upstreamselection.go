@@ -515,7 +515,7 @@ func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authenticatio
 			Subject:             subject,
 			RegistrationID:      client.id,
 			SkipUnusable:        skipUnusable,
-			Attribution:         authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()),
+			Attribution:         authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("resolve agent key client: %w", err)
@@ -579,7 +579,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			Subject:             tokenSubject(ctx, authentication.subject, authentication.authorizerOwner),
 			RegistrationID:      authentication.chosenClient.UUID,
 			SkipUnusable:        skipUnusable,
-			Attribution:         authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()),
+			Attribution:         authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("resolve auth client: %w", err)
@@ -587,7 +587,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
-		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
+		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
 		if err != nil {
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
@@ -595,7 +595,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	}
 	if authentication.ownClientsOnly {
 		if serverID := endpoint.proxiedServerID(); serverID.Valid {
-			resolved, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
+			resolved, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
 			if err != nil {
 				return nil, fmt.Errorf("resolve server clients: %w", err)
 			}
@@ -604,13 +604,13 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		}
 	}
 	if skipUnusable {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 		if err != nil {
 			return nil, fmt.Errorf("resolve available clients: %w", err)
 		}
 		return tokens, nil
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 	if err != nil {
 		return nil, fmt.Errorf("resolve bound clients: %w", err)
 	}
@@ -717,7 +717,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		readOnly:     false,
 		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return s.resolveChosenMemberTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.Snapshot()), endpoint, authentication.subject, enforced, member)
+			return s.resolveChosenMemberTokens(ctx, authentication.refreshAttribution(ctx, s.aiCatalog.SnapshotFor(ctx)), endpoint, authentication.subject, enforced, member)
 		},
 		mu:       sync.Mutex{},
 		byServer: map[uuid.UUID]*memberTokens{},
@@ -740,7 +740,7 @@ func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject u
 		readOnly:     false,
 		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, s.aiCatalog.Snapshot()))), endpoint, subject, true, member)
+			return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))), endpoint, subject, true, member)
 		},
 		mu:       sync.Mutex{},
 		byServer: map[uuid.UUID]*memberTokens{},

@@ -720,7 +720,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) {
 	service := platformmcp.NewShadowAIService(
 		config.ShadowInventory,
-		platformmcp.NewPostgresShadowAILibrary(config.AICatalog, agentrepo.New(config.DB)),
+		platformmcp.NewPostgresShadowAILibrary(agentrepo.New(config.DB)),
 		authorizer,
 		budget,
 	)

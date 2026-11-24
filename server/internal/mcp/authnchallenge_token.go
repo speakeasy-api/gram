@@ -398,7 +398,7 @@ func (s *Service) serveTokenGrant(
 	baseURL := s.resourceBaseURL(r, endpoint)
 
 	// One snapshot drives admission and attribution for the whole exchange.
-	clientCatalog := s.aiCatalog.Snapshot()
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
 
 	var grantErr error
 	clientID := creds.clientID

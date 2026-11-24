@@ -592,6 +592,9 @@ func NewService(aiCatalog *aivendors.Store,
 	codeExecutor codemode.Executor,
 	connections *mcpconnectionattempts.Recorder,
 ) (*Service, error) {
+	if aiCatalog == nil {
+		return nil, errors.New("mcp service requires an AI client catalog store")
+	}
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
 	}
@@ -1498,7 +1501,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+			s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), killswitchHappened(err), r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1621,7 +1624,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
 	// A notification has no response, so its refusal tells no one anything.
 	if (err != nil || !satisfied) && req.ID.IsSet() {
-		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 	}
 	if err != nil {
 		return err
@@ -1736,7 +1739,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, t
 			if err := s.authz.Require(ctx, connect); err != nil {
 				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
 				if mcpaccess.IsServerPermissionDenied(denied) {
-					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+					s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}
