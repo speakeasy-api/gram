@@ -326,7 +326,8 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 
 	ctx, ti := newTestService(t)
 	fx := seedRevocableSession(t, ctx, ti, "shared-revoke-cascade", "", "s3cret", true)
-	sibling := bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-revoke-sibling")
+	sibling := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-shared-revoke-sibling")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: fx.clientID, UserSessionIssuerID: sibling}))
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
@@ -377,7 +378,12 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 	require.NoError(t, err)
 	require.Equal(t, other.ID, stillLive.ID)
 
-	creds, err = revoker.SoftDeleteSubjectSessionsForCredentials(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, []uuid.UUID{unselectedID, sessionID})
+	otherProject := createProject(t, ctx, ti.conn, "shared-revoke-other-project")
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, otherProject, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "another project's revoke scope must not borrow the recorded choice")
+
+	creds, err = revoker.SoftDeleteSubjectSessionsForCredentials(ctx, ti.conn, fx.subject, sibling, uuid.Nil, fx.organizationID, []uuid.UUID{unselectedID, sessionID})
 	require.NoError(t, err)
 	require.Len(t, creds, 1, "the batch preserves the later revoked credential’s recorded choice")
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
