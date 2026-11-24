@@ -37,7 +37,7 @@ func validateCatalog(s *Snapshot) error {
 			return fmt.Errorf("%w: product %q has %d client info names, over the maximum of %d", errInvalidCatalog, p.ID, len(p.ClientInfoNames), maxClientInfoNames)
 		}
 	}
-	// A disabled pattern never names a product, so it cannot make attribution ambiguous.
+	// A disabled pattern makes its matches unknown, and an unknown result cannot be ambiguous between products.
 	enabled := make([]Preset, 0, len(s.patterns))
 	for _, p := range s.patterns {
 		if p.Enabled {

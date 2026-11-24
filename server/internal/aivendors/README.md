@@ -6,7 +6,9 @@ cannot be read, the process does not start. If the catalog is empty or invalid,
 `Load` logs an error and returns the built-in catalog minus what the database
 removed: a soft-deleted product is dropped, a URL whose only live rows are
 disabled is disabled, and a URL with no live row is dropped. A live row with the
-same id or URL is not a removal. Other edits, such as a renamed product or
+same id or URL is not a removal. If the removals would leave no product at all,
+they are ignored and the full built-in catalog is served, so recorded blocks
+keep applying. Other edits, such as a renamed product or
 changed signatures, are not carried into the fallback. Reading the removals is
 part of the read, so if it fails the process does not start. A process still
 on the fallback applies later removals on its next refresh; a process serving a

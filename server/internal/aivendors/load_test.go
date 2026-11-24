@@ -180,8 +180,7 @@ func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
 	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 	require.NoError(t, err)
-	require.True(t, loaded.BuiltIn())
-	require.Empty(t, loaded.Products(), "every built-in product was soft-deleted, so the fallback keeps none")
+	require.Same(t, aivendors.CompiledSnapshot(), loaded, "removals that leave no product are ignored, so blocks keep applying")
 }
 
 func TestLoadFallsBackToTheBuiltInCatalogBeforeTheSeedRuns(t *testing.T) {

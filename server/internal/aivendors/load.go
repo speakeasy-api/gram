@@ -160,7 +160,12 @@ func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
 	for _, d := range documents {
 		r.documents[d.Url] = d.Live
 	}
-	return builtInSnapshot(r), nil
+	fallback := builtInSnapshot(r)
+	// Removals that leave nothing would stop every block applying, so they are ignored.
+	if len(fallback.products) == 0 {
+		return CompiledSnapshot(), nil
+	}
+	return fallback, nil
 }
 
 // Refresh keeps the current snapshot when a load fails, is empty or is invalid.
