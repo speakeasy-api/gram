@@ -15,7 +15,7 @@ import (
 func TestExplicitAssistantToolTargetPreservesAuthorization(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	connect := MCPCheck(ScopeMCPConnect, "toolset_1", "project_1")
+	connect := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("project_1")).Connect()
 	allow := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
 	for _, kind := range []MandatoryCaller{MandatoryCallerAgent, MandatoryCallerWorkload} {
 		for _, allowed := range []bool{false, true} {

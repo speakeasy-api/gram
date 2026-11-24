@@ -44,7 +44,8 @@ var fixedByValues = []FixedBy{FixedByNothing, FixedByAdminChange, FixedBySystemC
 
 // fixKey is the person, app and connection a success must share with the failure it
 // fixes. An attempt that reached no server is told apart by its project and provider
-// connection, so one provider's refresh never fixes another's.
+// connection, so one provider's refresh never fixes another's. It leaves the client out:
+// daily outcomes pair by app registration, while ReadFailingNow tells clients apart.
 type fixKey struct {
 	organizationID string
 	subjectURN     string

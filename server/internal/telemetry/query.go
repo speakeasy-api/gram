@@ -79,7 +79,7 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return scope, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return scope, err
 	}
 
@@ -443,7 +443,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -598,7 +598,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 // expected case, not a denial to record, and RBAC off keeps every project.
 func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
 	// An organization-wide grant reads every project at once.
-	allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(orgID))
+	allowed, err := s.authz.Evaluate(ctx, authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
 	}
@@ -608,7 +608,7 @@ func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projec
 
 	readable := make([]string, 0, len(projectIDs))
 	for _, projectID := range projectIDs {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
 		}

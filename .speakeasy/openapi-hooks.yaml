@@ -961,6 +961,8 @@ tags:
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: integrations
     description: Explore third-party tools in Speakeasy.
+  - name: intentPolicies
+    description: Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.
   - name: internalSessionIssuers
     description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets
@@ -971,6 +973,8 @@ tags:
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
+  - name: mcpConnectionHealth
+    description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata

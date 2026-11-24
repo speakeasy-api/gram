@@ -61,7 +61,7 @@ func recordAgentKeyAuthClientChoices(ctx context.Context, tx pgx.Tx, human agent
 		if err != nil {
 			return fmt.Errorf("load credential choice server: %w", err)
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, server.ID.String(), server.ProjectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Connect())
 		if err != nil {
 			return fmt.Errorf("authorize credential choice server: %w", err)
 		}

@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -102,6 +103,10 @@ type Service struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
 
 	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
 	// Empty leaves them out.
@@ -261,6 +266,7 @@ func NewService(
 	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -313,6 +319,7 @@ func NewService(
 		hookFleet:                nil,
 		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
 		customDomainTargetSuffix: "",
+		staffOrg:                 staffOrg,
 	}
 }
 
@@ -1846,7 +1853,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(rearmed.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(rearmed.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
 	}
@@ -1966,7 +1973,7 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(started.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(started.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", started.Tier).LogError(ctx, logger)
 	}

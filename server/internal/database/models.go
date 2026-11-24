@@ -52,6 +52,12 @@ type AccessRequest struct {
 	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
 	// @access: opaque-confidential
 	ChallengeIds []string
+	// How long the requester asked to have the access, in seconds. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedDurationSeconds pgtype.Int4
+	// When the requester asked to have the access until. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedUntil pgtype.Timestamptz
 	// When a pending request lapses.
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
@@ -416,7 +422,9 @@ type AiIntegrationConfig struct {
 	// @access: restricted
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -1834,6 +1842,28 @@ type ChatMessageParticipant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type ChatMessageTranscript struct {
+	// Source message identity.
+	// @access: confidential
+	MessageID uuid.UUID
+	// Owning project identity.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Owning organization identity.
+	// @access: confidential
+	OrganizationID string
+	// Organization-key encrypted transcript payload.
+	// @access: opaque-restricted
+	Ciphertext string
+	// Unkeyed freshness digest of sensitive transcript fields.
+	// @access: opaque-restricted
+	SourceHash []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type ChatResolution struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3027,8 +3057,12 @@ type FunctionsAccess struct {
 	DeploymentID uuid.UUID
 	// @access: confidential
 	FunctionID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
 	// @access: secret-restricted
 	EncryptionKey conv.Secret
+	// @access: secret-restricted
+	EncryptionKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	BearerFormat pgtype.Text
 	// @access: confidential
@@ -4289,7 +4323,9 @@ type ModelProviderKey struct {
 	// @access: confidential
 	Provider string
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -4715,9 +4751,9 @@ type OpenrouterApiKey struct {
 	// @access: confidential
 	KeyType string
 	// @access: secret-restricted
-	Key pgtype.Text
-	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	KeyHash string
 	// @access: restricted
@@ -5759,6 +5795,14 @@ type PluginGithubConnection struct {
 	RepoName string
 	// @access: secret-restricted
 	MarketplaceToken pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenHash pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	PublishedFingerprint pgtype.Text
 	// @access: confidential

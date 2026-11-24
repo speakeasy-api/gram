@@ -125,7 +125,7 @@ func TestMandatoryShadowCallerClass(t *testing.T) {
 func TestShadowMandatoryRecordsAgreementWithoutChangingTheRequest(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	allowed := sessionContext(t, shadowOrg, authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource))
 
 	h := newShadowHarness(t, true)
@@ -151,7 +151,7 @@ func TestShadowMandatoryRecordsAgreementWithoutChangingTheRequest(t *testing.T) 
 func TestShadowMandatoryAnonymousAndCrossOrgCallers(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	h := newShadowHarness(t, true)
 	h.service.shadowMandatory(t.Context(), mandatorySurfaceProxiedConnect, shadowOrg, true, connect)
 	foreign := sessionContext(t, "org_other", authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource))
@@ -192,7 +192,7 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 func TestShadowRequireOnlyComparesDecisions(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	ctx := sessionContext(t, shadowOrg)
 	h := newShadowHarness(t, true)
 	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
@@ -208,7 +208,7 @@ func TestShadowRequireOnlyComparesDecisions(t *testing.T) {
 func TestShadowMandatoryDedupesDisagreementLogs(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	h := newShadowHarness(t, true)
 	for range 3 {
 		h.service.shadowMandatory(sessionContext(t, shadowOrg), mandatorySurfaceHostedConnect, shadowOrg, true, connect)
@@ -221,7 +221,7 @@ func TestShadowMandatoryDedupesDisagreementLogs(t *testing.T) {
 func TestShadowMandatoryCountsEvaluationFailures(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	// An API key with no authorization mode is a broken credential, not a decision.
 	broken := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: shadowOrg, APIKeyID: uuid.NewString()})
 
@@ -287,7 +287,7 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 func TestShadowMandatoryDedupeHoldsUnderConcurrency(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	h := newShadowHarness(t, true)
 	var wg sync.WaitGroup
 	for range 64 {
@@ -318,7 +318,7 @@ func TestShadowAuthClientUseRefusesPersonalClientsWithoutAnOwner(t *testing.T) {
 func TestShadowMandatoryNeverRecordsCanceledRequests(t *testing.T) {
 	t.Parallel()
 
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	h := newShadowHarness(t, true)
 	ctx, cancel := context.WithCancel(sessionContext(t, shadowOrg))
 	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
@@ -352,7 +352,7 @@ func TestShadowMandatoryLabelsLegacyAuthCeilings(t *testing.T) {
 		})
 		ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: shadowOrg},
 			urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()), contextvalues.PrincipalCredential{AuthorizerUserID: "user_owner"})
-		h.service.shadowMandatory(ctx, mandatorySurfaceProxiedConnect, shadowOrg, true, authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1"))
+		h.service.shadowMandatory(ctx, mandatorySurfaceProxiedConnect, shadowOrg, true, authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect())
 
 		points := h.points(t)
 		require.Len(t, points, 1)

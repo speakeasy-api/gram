@@ -102,7 +102,7 @@ func NewService(
 // organization-tier handler needs: the RBAC scope and the customer-managed-keys
 // entitlement. Routing all of them through one function keeps the entitlement
 // from being reachable by an endpoint that simply forgot to check it.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -110,7 +110,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -258,7 +258,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.CreateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.UpdateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +417,7 @@ func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.Updat
 }
 
 func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.CreateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +490,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.UpdateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +616,7 @@ func (s *Service) ListGcpIamCredentials(ctx context.Context, payload *gen.ListGc
 // listCredentials returns the org's credential summaries, optionally filtered to
 // a single provider (invalid pgtype.Text = no filter).
 func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*gen.ListExternalCredentialsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +635,7 @@ func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*g
 }
 
 func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +660,7 @@ func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIa
 }
 
 func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -691,7 +691,7 @@ func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIa
 // target. The probe is ephemeral — nothing is persisted — and a resolution
 // failure is a reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.VerifyGcpIamCredentialPayload) (*gen.VerifyCredentialResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +792,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 // rights to. It is deliberately readable before any credential exists, because
 // making that grant is a precondition of creating one at all.
 func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupInfoPayload) (*gen.GcpSetupInfo, error) {
-	_, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	_, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -838,7 +838,7 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // and managed organization encryption keys — and the admin delete refuses
 // while any of them still depend on it.
 func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID string) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}

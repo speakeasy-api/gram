@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.21.0
+
+### Minor Changes
+
+- 8ec032b: Resources can now set `_meta`. Pass `meta` to `resource()` or `experimental_uiResource()` to return it on `resources/list` and `resources/read`. MCP Apps UI resources can use it to declare `ui.csp`.
+
 ## 0.20.1
 
 ### Patch Changes

@@ -38,6 +38,12 @@ type grantAuthorization struct {
 	// legacyAuthCeiling marks a stored policy older than version 5, whose
 	// auth client ceiling admission derived from its server access.
 	legacyAuthCeiling bool
+	// attached is consent to an agent using a connection its owner attached
+	// to it, set only by MandatoryAuthorization.WithAttachedConnection for an
+	// agent with a represented user. A check on that connection binds
+	// $represented_user to its owner and must also pass the owner's live
+	// policy.
+	attached *attachedConnection
 }
 
 // RepresentedUserPolicy is the trusted represented-user binding of an admission.
@@ -111,6 +117,7 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 		representedUser:     represented.UserID,
 		representedPolicies: nil,
 		legacyAuthCeiling:   legacyAuthCeiling,
+		attached:            nil,
 	}
 	if represented.UserID != "" {
 		policies.representedPolicies = [][]Grant{append([]Grant{}, represented.Policy...)}
@@ -177,7 +184,7 @@ func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, boo
 		representedPolicies := make([][]Grant, 0, len(current.representedPolicies)+len(boundary.representedPolicies))
 		representedPolicies = append(representedPolicies, current.representedPolicies...)
 		representedPolicies = append(representedPolicies, boundary.representedPolicies...)
-		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies, legacyAuthCeiling: current.legacyAuthCeiling || boundary.legacyAuthCeiling}, true
+		return grantAuthorization{policies: policies, representedUser: current.representedUser, representedPolicies: representedPolicies, legacyAuthCeiling: current.legacyAuthCeiling || boundary.legacyAuthCeiling, attached: nil}, true
 	}
 	return current, true
 }
@@ -187,16 +194,16 @@ func currentGrantAuthorizationFromContext(ctx context.Context) (grantAuthorizati
 		return policies, true
 	}
 	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil}, false
 	}
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil}, false
 	}
 	grants, ok := GrantsFromContext(ctx)
 	if !ok {
-		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}, false
+		return grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil}, false
 	}
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil, legacyAuthCeiling: false}, true
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: loadedGrantsUser(ctx), representedPolicies: nil, legacyAuthCeiling: false, attached: nil}, true
 }
 
 // loadedGrantsUser is the user whose own grants PrepareContext loaded. API
@@ -214,25 +221,43 @@ func loadedGrantsUser(ctx context.Context) string {
 }
 
 func loadedGrantAuthorization(grants []Grant) grantAuthorization {
-	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	return grantAuthorization{policies: [][]Grant{grants}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil}
 }
 
 // bind applies the trusted represented-user binding to an auth-client check,
 // replacing any binding the caller set.
+//
+// A check on a connection its owner attached to the agent binds the owner
+// instead: the attachment is the owner's consent, so every policy the agent is
+// admitted under decides the use as it would the represented user's own
+// connection. Each policy still bounds which auth clients, projects and
+// upstream clients the agent may use, and any block on the connection still
+// applies.
 func (a grantAuthorization) bind(check Check) Check {
-	if check.isAuthClientCheck() {
-		check.representedUser = a.representedUser
+	if !check.isAuthClientCheck() {
+		return check
+	}
+	check.representedUser = a.representedUser
+	if a.attached.appliesTo(check) {
+		check.representedUser = a.attached.owner
 	}
 	return check
 }
 
 // policiesFor returns every policy check must pass. An agent acting for a user
 // may use an auth client only if that user may use it too.
+//
+// A connection its owner attached to the agent must also be one the owner may
+// still use, so the owner's live policy joins them.
 func (a grantAuthorization) policiesFor(check Check) [][]Grant {
 	if len(a.representedPolicies) == 0 || !check.isAuthClientCheck() {
 		return a.policies
 	}
-	return append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+	policies := append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+	if a.attached.appliesTo(check) {
+		policies = append(policies, a.attached.policy)
+	}
+	return policies
 }
 
 // keysMissingFrom lists the grant keys the check does not carry, where that

@@ -137,7 +137,7 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 // derivable disposition, past a block that otherwise covers it.
 func directOverrideCheck(check Check) Check {
 	if check.isToolCall() {
-		return check.WithStrictSelectorMatch()
+		check.exact = true
 	}
 	return check
 }

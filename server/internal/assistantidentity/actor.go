@@ -29,7 +29,7 @@ func CheckActor(ctx context.Context, db orgrepo.DBTX, engine *authz.Engine, org 
 	if err != nil {
 		return fmt.Errorf("load actor grants: %w", err)
 	}
-	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.String(), Dimensions: nil}
+	check := authz.Project(authz.ProjectIDOf(project)).Read()
 	if err := engine.EvaluateLoadedGrants(ctx, grants, check); err != nil {
 		return fmt.Errorf("%w: cannot read the project: %w", ErrActorIneligible, err)
 	}

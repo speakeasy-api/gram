@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminHooksRollout } from "@/lib/gramAdminApi";
@@ -133,9 +139,7 @@ describe("HooksRollout", () => {
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(
-      Array.from(dialog.querySelectorAll("button")).find(
-        (button) => button.textContent === "Set default pin",
-      )!,
+      within(dialog).getByRole("button", { name: "Set default pin" }),
     );
     await waitFor(() =>
       expect(mocks.setHooksRolloutDefault).toHaveBeenCalledWith(46),
@@ -154,7 +158,8 @@ describe("HooksRollout", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Set default pin" }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mocks.setHooksRolloutDefault).not.toHaveBeenCalled();
   });

@@ -124,19 +124,14 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	// server's rules from them, and the organization-wide assignment review
 	// could never load.
 	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil},
-		authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID),
+		authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin(),
+		authz.MCPServer(authz.MCPServerIDFrom(payload.ResourceID), authz.ProjectIDFrom(projectID)).Read(),
 	); err != nil {
 		return nil, err
 	}
 	// The entries name the people each rule reaches, so seeing them takes
 	// organization read as well as access to the server itself.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -177,12 +172,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -482,12 +472,7 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 

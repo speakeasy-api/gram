@@ -22,7 +22,7 @@ func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 					authz.NewGrant(authz.ScopeMCPConnect, "example-server"),
 					authz.NewGrant(blocked, "example-server"),
 				}
-				allowed, err := consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
+				allowed, err := consentPolicyConnect(policy, exampleServerCheck(scope, "example-server"))
 				require.NoError(t, err)
 				// mcp:write and mcp:connect satisfy all three checks, so what
 				// takes one away is the block on the checked scope or on any
@@ -49,18 +49,31 @@ func TestConsentPolicyConnectExclusionsAndErrors(t *testing.T) {
 				{PrincipalUrn: principal, Scope: scope, Selector: authz.NewSelector(scope, "example-server")},
 				{PrincipalUrn: principal, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, "example-server")},
 			}
-			allowed, err := consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
+			allowed, err := consentPolicyConnect(policy, exampleServerCheck(scope, "example-server"))
 			require.NoError(t, err)
 			require.False(t, allowed)
 			policy[1].Selector = authz.NewSelector(authz.ScopeMCPBlockedConnect, "other-server")
-			allowed, err = consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
+			allowed, err = consentPolicyConnect(policy, exampleServerCheck(scope, "example-server"))
 			require.NoError(t, err)
 			require.True(t, allowed)
 			for _, resourceID := range []string{"", "*"} {
-				allowed, err = consentPolicyConnect(policy, authz.MCPCheck(scope, resourceID, "example-project"))
+				allowed, err = consentPolicyConnect(policy, exampleServerCheck(scope, resourceID))
 				require.False(t, allowed)
 				require.ErrorIs(t, err, authz.ErrInvalidCheck, "evaluation errors must propagate, not become ordinary ineligibility")
 			}
 		})
+	}
+}
+
+// exampleServerCheck is the check for scope on server in the example project.
+func exampleServerCheck(scope authz.Scope, server string) authz.Check {
+	ref := authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom("example-project"))
+	switch scope {
+	case authz.ScopeMCPConnect:
+		return ref.Connect()
+	case authz.ScopeMCPWrite:
+		return ref.Write()
+	default:
+		return ref.Read()
 	}
 }

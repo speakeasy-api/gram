@@ -128,7 +128,7 @@ vi.mock("@/components/ui/Select", () => ({
     children: React.ReactNode;
   }) => (
     <select
-      aria-label="Server to link"
+      aria-label="Server to make official"
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
     >
@@ -448,7 +448,7 @@ describe("OfficialServerPanel", () => {
     expect(screen.getByText("Onboarded")).toBeTruthy();
     expect(
       screen.getByText(
-        "Linked to “Tracker”, served through the gateway “Team Gateway”. Direct connections are blocked and agents are sent there.",
+        "Official server: “Tracker”, served through the gateway “Team Gateway”. Direct connections are blocked and agents are sent there.",
       ),
     ).toBeTruthy();
     expect(
@@ -487,7 +487,7 @@ describe("OfficialServerPanel", () => {
     options.action.onClick();
     await vi.waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(
-        "Could not restore the link. Try again.",
+        "Could not restore the official server. Try again.",
       ),
     );
     expect(mocks.save).toHaveBeenLastCalledWith({
@@ -510,14 +510,16 @@ describe("OfficialServerPanel", () => {
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove choice" })).toBeNull();
     expect(screen.queryByText("Advanced")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stop using as official" }),
+    );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenLastCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
       }),
     );
     expect(mocks.toastSuccess.mock.calls[0]?.[0]).toBe(
-      "Link to “Tracker” removed",
+      "“Tracker” is no longer the official server",
     );
   });
 
@@ -592,7 +594,9 @@ describe("OfficialServerPanel", () => {
     );
 
     expect(screen.getByText("Direct connection kept")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Link it" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
+    );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
@@ -630,9 +634,11 @@ describe("OfficialServerPanel", () => {
       await screen.findByRole("button", { name: "Add from catalog" }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Make official" })).toBeTruthy();
-    expect(screen.getByText("Link another server")).toBeTruthy();
+    expect(screen.getByText("Use another server as official")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Link it" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
+    );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
@@ -646,12 +652,15 @@ describe("OfficialServerPanel", () => {
     renderPanel(server());
     await screen.findByRole("button", { name: "Make official" });
 
-    expect(screen.queryByText("Link another server")).toBeNull();
+    expect(screen.queryByText("Use another server as official")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByText("Link another server")).toBeTruthy();
+    expect(screen.getByText("Use another server as official")).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Link" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Make official: chosen server",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
@@ -661,7 +670,9 @@ describe("OfficialServerPanel", () => {
     await screen.findByRole("button", { name: "Make official" });
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    const select = screen.getByRole("combobox", { name: "Server to link" });
+    const select = screen.getByRole("combobox", {
+      name: "Server to make official",
+    });
     expect(
       within(select)
         .getAllByRole("option")
@@ -669,7 +680,9 @@ describe("OfficialServerPanel", () => {
     ).toEqual(["Choose a server", "Company Tools"]);
 
     fireEvent.change(select, { target: { value: "server-tools" } });
-    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Company Tools”" }),
+    );
 
     await waitFor(() => {
       expect(mocks.save).toHaveBeenCalledWith({

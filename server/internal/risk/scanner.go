@@ -344,8 +344,8 @@ type Scanner struct {
 	piiScanner            ra.PIIScanner               // nil if Presidio is unavailable
 	piScanner             *promptinjection.Scanner    // never nil
 	promptPolicy          *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
-	flags                 feature.Provider            // nil disables prompt_based enforcement
-	dispatcher            EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
+	flags                 feature.Provider
+	dispatcher            EnforcementDispatcher // nil leaves Pub/Sub enforcement inert
 	riskRecorder          *metering.RiskRecorder
 	realtimeRecordsMu     sync.Mutex
 	realtimeRecords       sync.WaitGroup
@@ -578,24 +578,10 @@ func (s *Scanner) scanForEnforcement(
 		}
 	}
 
-	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
-	// fan-out) so prompt_based policies don't each repeat the slug lookup and
-	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge.
-
-	promptPoliciesOn := false
-	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == ra.PolicyTypePromptBased
-	}) {
-		// All enforcing policies for a project belong to the same org.
-		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
-	}
-
 	// The risk engine mode selects the engine behind gitleaks, presidio and
 	// prompt_injection sources for the whole org. Resolved once, only when a
-	// policy actually has a covered source, on the parent ctx like the
-	// prompt-policy flag above. The slug rides along for the LLM lane's
-	// telemetry.
+	// policy actually has a covered source, on the parent ctx. The slug rides
+	// along for the LLM lane's telemetry.
 	mode, orgSlug := feature.VariantRiskLLMOff, ""
 	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return llmanalyzer.CoversAnySource(p.Sources)
@@ -635,7 +621,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, llmFindings, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           false,
 				native:           pubsubLanesOn,
-				promptPolicies:   pubsubLanesOn && promptPoliciesOn,
+				promptPolicies:   pubsubLanesOn,
 				llm:              true,
 				llmExecutionPath: realtimeStreamsExecutionPath,
 				llmFailMode:      failModeClosed,
@@ -654,7 +640,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
 				native:           true,
-				promptPolicies:   promptPoliciesOn,
+				promptPolicies:   true,
 				llm:              false,
 				llmExecutionPath: "",
 				llmFailMode:      "",
@@ -666,7 +652,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
 				native:           true,
-				promptPolicies:   promptPoliciesOn,
+				promptPolicies:   true,
 				llm:              false,
 				llmExecutionPath: "",
 				llmFailMode:      "",
@@ -678,7 +664,7 @@ func (s *Scanner) scanForEnforcement(
 		nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 			legacy:           false,
 			native:           true,
-			promptPolicies:   promptPoliciesOn,
+			promptPolicies:   true,
 			llm:              false,
 			llmExecutionPath: "",
 			llmFailMode:      "",
@@ -705,7 +691,7 @@ func (s *Scanner) scanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, incomplete)
+			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, incomplete)
 			if comparison != nil {
 				comparisonsMu.Lock()
 				comparisons = append(comparisons, pendingComparison{policy: p, input: *comparison})
@@ -911,14 +897,14 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // policy's result (every covered source under shadow, compared sources under
 // llm). Its llmFindings and truncated are filled from the arguments when the
 // lane was awaited; recordComparisons fills them otherwise.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, comparison *shadowComparisonInput, retErr error) {
-	result, retErr = s.scanPolicyEnforce(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, mode, nativeFindings, promptPolicyFindings, llmFindings, truncated, incomplete, &comparison)
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, comparison *shadowComparisonInput, retErr error) {
+	result, retErr = s.scanPolicyEnforce(ctx, policy, baseProvenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, truncated, incomplete, &comparison)
 	return result, comparison, retErr
 }
 
 // scanPolicyEnforce is scanPolicy's body; the deferred capture writes the
 // comparison input to comparisonOut so early returns need no plumbing.
-func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool, comparisonOut **shadowComparisonInput) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool, comparisonOut **shadowComparisonInput) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -1006,7 +992,7 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 			return nil, nil
 		}
 		if promptPolicyFindings == nil {
-			return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, incomplete)
+			return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, incomplete)
 		}
 		findings, ok := promptPolicyFindings[policy.ID.String()]
 		if !ok {
@@ -1387,14 +1373,8 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, incomplete *atomic.Bool) (*ScanResult, error) {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, incomplete *atomic.Bool) (*ScanResult, error) {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
-	if !promptPoliciesOn {
-		// Preserve the intentional allow, but do not cache it as evaluated:
-		// feature-flag state is not part of the durable checkpoint fingerprint.
-		incomplete.Store(true)
-		return nil, nil
-	}
 	prompt := ""
 	if policy.Prompt.Valid {
 		prompt = policy.Prompt.String

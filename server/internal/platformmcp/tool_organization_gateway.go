@@ -96,12 +96,6 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	return s.get(ctx, principal, orggateway.Availability)
 }
 
-// getForPlatformMCP is Get as Platform MCP's own use of the gateway sees it:
-// on unless an administrator turned it off explicitly.
-func (s *OrganizationGatewayService) getForPlatformMCP(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
-	return s.get(ctx, principal, orggateway.PlatformAvailability)
-}
-
 func (s *OrganizationGatewayService) get(ctx context.Context, principal Principal, availability func(context.Context, usersessionsrepo.DBTX, repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)) (GetMyOrganizationGatewayOutput, error) {
 	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	switch {
@@ -220,7 +214,7 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 	}
 	// Match ResolveProjectRead's exact project:read check using the live grants
 	// loaded by external admission. Refuse hidden projects like absent projects.
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Project(authz.ProjectIDOf(project.ID)).Read())
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("authorize project gateway discovery: %w", err)
 	}
