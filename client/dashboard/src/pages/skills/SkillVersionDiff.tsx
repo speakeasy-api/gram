@@ -239,8 +239,8 @@ function SkillFileDiff({
   if (before.text === null || after.text === null) {
     return (
       <Text small muted>
-        {change.path} is not a text file, so there is no line diff.{" "}
-        {sizeDetail(change)}
+        {change.path} is not a text file, so there is no line diff. Size:{" "}
+        {sizeDetail(change)}.
       </Text>
     );
   }
