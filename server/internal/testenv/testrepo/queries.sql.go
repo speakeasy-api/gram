@@ -4229,7 +4229,7 @@ func (q *Queries) LatchAttachmentOwnerFixture(ctx context.Context, arg LatchAtta
 const listAgentColumnNamesFixture = `-- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position
 `
 

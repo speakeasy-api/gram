@@ -1078,7 +1078,7 @@ WHERE id = @id;
 -- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position;
 
 -- name: CreateProjectFixture :one
