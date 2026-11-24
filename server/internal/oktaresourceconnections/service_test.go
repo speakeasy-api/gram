@@ -436,7 +436,14 @@ func TestList_SkipsRevokedTunnels(t *testing.T) {
 	require.Contains(t, ids, live.String())
 	require.NotContains(t, ids, revoked.String())
 
-	_, err := confirm(t, ctx, si, audience, nil, revoked)
+	// The transaction-time lookup must also classify live tunnels as using
+	// typed offers, not only remote-backed targets.
+	eligible, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: live})
+	require.NoError(t, err)
+	require.True(t, eligible.UsesTypedOffers)
+	require.Len(t, eligible.OfferedClientIds, 1)
+
+	_, err = confirm(t, ctx, si, audience, nil, revoked)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
