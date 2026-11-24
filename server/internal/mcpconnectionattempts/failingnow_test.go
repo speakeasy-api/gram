@@ -381,6 +381,24 @@ func TestFailingNow_AnotherAppWorkingInAnUnnamedRunRestartsIt(t *testing.T) {
 	require.Equal(t, f.at(2*time.Hour), got[0].LastWorkedAt.UTC())
 }
 
+// A flow that switched account at consent got only the person handed the token in.
+func TestFailingNow_AnAccountSwitchEndsOnlyThePersonHandedTheSignIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	a, b := person(), person()
+	f.unnamedRenewalsFail(a)
+	f.unnamedRenewalsFail(b)
+	attempt := AttemptAt(uuid.New(), f.at(21*time.Minute), f.direct(AppOtherMetadataURL))
+	started, err := RowAt(attempt, StepInboundSignIn, ResultComplete, false, f.at(21*time.Minute), Subject(&a))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute), Subject(&b))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{started, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, a.String(), got[0].SubjectURN)
+}
+
 // Later means after the last failed attempt ended; a success at or before it does not end the run.
 func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterAnEarlierSuccess(t *testing.T) {
 	t.Parallel()
@@ -402,6 +420,55 @@ func TestFailingNow_ANamedAppSignInFailureEndsOnItsSignInUnderAnotherRegistratio
 	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
 	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyCodexCLI))
 	require.Empty(t, f.failing())
+}
+
+// genericThenNamed writes an attempt whose first row is generic and whose failing token row names second, ago before now.
+func (f *failingFixture) genericThenNamed(p urn.SessionSubject, ago time.Duration, second string, secondVersion string) uuid.UUID {
+	f.t.Helper()
+	attempt := AttemptAt(uuid.New(), f.at(ago), f.direct(AppDCR))
+	first, err := RowAt(attempt, StepInboundAuthorize, ResultComplete, false, f.at(ago), Subject(&p), client(FamilyScript), version("1.0"))
+	require.NoError(f.t, err)
+	failed, err := RowAt(attempt, StepInboundToken, CodeRefreshTokenExpired, true, f.at(ago-time.Minute), Subject(&p), client(second), version(secondVersion))
+	require.NoError(f.t, err)
+	require.NoError(f.t, AppendRows(f.t.Context(), f.ch, []Row{first, failed}))
+	return attempt.ID()
+}
+
+// A failure that named its app on a later row is that app's, even after a generic first row.
+func TestFailingNow_AFailureNamedOnALaterRowIsThatAppsEpisode(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	id := f.genericThenNamed(p, 41*time.Minute, FamilyCodexCLI, "0.50.0")
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCodexCLI, got[0].ClientFamily)
+	require.Equal(t, "0.50.0", got[0].ClientVersion)
+	require.Equal(t, []EpisodeApp{{Key: AppDCR.String(), Family: FamilyCodexCLI, Version: "0.50.0"}}, got[0].Apps)
+
+	var logs []AttemptSummary
+	filter := AttemptFilter{StartedFrom: f.at(time.Hour), StartedBefore: f.now, OrganizationID: f.org}
+	require.NoError(t, ReadAttempts(t.Context(), f.ch, filter, func(s AttemptSummary) { logs = append(logs, s) }))
+	require.Len(t, logs, 1)
+	require.Equal(t, id, logs[0].AttemptID)
+	require.Equal(t, FamilyScript, logs[0].ClientFamily, "Connection Logs keeps the earliest family")
+
+	f.attempt(f.direct(AppOtherMetadataURL), 30*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	require.Len(t, f.failing(), 1, "another named app's sign-in")
+
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyCodexCLI))
+	require.Empty(t, f.failing(), "the same app's sign-in")
+}
+
+func TestFailingNow_AFailureNamingNoAppKeepsItsEarliestFamily(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.genericThenNamed(p, 41*time.Minute, FamilyOther, "")
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyScript, got[0].ClientFamily)
+	require.Equal(t, "1.0", got[0].ClientVersion)
 }
 
 // A named app that keeps failing stays listed while another named app works for the same person.

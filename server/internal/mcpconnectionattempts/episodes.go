@@ -130,6 +130,14 @@ type attemptFacts struct {
 	// ClientVersion is the version on the row that named the client, empty when it had none.
 	ClientVersion string `ch:"version"`
 
+	// NamedFamily and NamedVersion are the earliest row naming a client's family and version, empty when none does.
+	NamedFamily  string `ch:"named_family"`
+	NamedVersion string `ch:"named_version"`
+
+	// EndingSubject is the person on the row End decides the attempt by; Subjects counts the attempt's distinct people.
+	EndingSubject string `ch:"ending_subject"`
+	Subjects      uint64 `ch:"subjects"`
+
 	// SignInMembers, SignInClients and SignInTimes are the member, service connection
 	// and time of each row where the person's sign-in to a service worked.
 	SignInMembers []string    `ch:"sign_in_members"`
@@ -147,6 +155,9 @@ var serviceSignInRows = `(
 	OR (step = '` + StepProviderRefresh.name + `' AND step_result IN ('` + ResultRefreshed.name + `', '` + ResultAdoptedConcurrentWinner.name + `'))
 	OR (step = '` + StepUpstreamEMA.name + `' AND step_result = '` + ResultAssertionIssued.name + `'))`
 
+// namedClientRows are the rows whose family NamedClient accepts.
+var namedClientRows = `client_family NOT IN ('', '` + FamilyOther + `', '` + FamilyScript + `', '` + FamilyBrowser + `')`
+
 // episodeColumns adds what episodes need to an attempt's summary.
 var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
@@ -155,6 +166,12 @@ var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
 		argMinIf(remote_session_client_id, (event_time, step, outcome, reason, remote_session_client_id), is_final),
 		argMax(remote_session_client_id, (event_time, step, reason, remote_session_client_id))) AS ending_client,
+	if(countIf(is_final) > 0,
+		argMinIf(subject_urn, (event_time, step, outcome, reason, subject_urn), is_final),
+		argMax(subject_urn, (event_time, step, reason, subject_urn))) AS ending_subject,
+	uniqExactIf(subject_urn, subject_urn != '') AS subjects,
+	argMinIf(client_family, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_family,
+	argMinIf(client_version, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_version,
 	if(countIf(client_family NOT IN ('', 'browser')) > 0,
 		argMinIf(client_version, (event_time, client_family, client_version), client_family NOT IN ('', 'browser')),
 		argMinIf(client_version, (event_time, client_version), client_family = 'browser')) AS version,
@@ -195,6 +212,10 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowF
 		var a attemptFacts
 		if err := rows.ScanStruct(&a); err != nil {
 			return nil, fmt.Errorf("scan episode attempt: %w", err)
+		}
+		// A named client on any row names the attempt's app, so every episode read sees one pair.
+		if a.NamedFamily != "" {
+			a.ClientFamily, a.ClientVersion = a.NamedFamily, a.NamedVersion
 		}
 		out = append(out, a)
 	}
@@ -310,7 +331,9 @@ func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now ti
 		if e.Outcome == OutcomeConnected && (e.Step == StepInboundToken.name || e.Step == StepSignInRenewal.name ||
 			(e.Step == StepInboundConsent.name && a.AppKey == AppFirstParty.key)) {
 			s.at = e.At
-			ev.signIns[a.SubjectURN] = append(ev.signIns[a.SubjectURN], s)
+			if who := a.signedInSubject(); who != "" {
+				ev.signIns[who] = append(ev.signIns[who], s)
+			}
 		}
 		s.part = PartServiceSignIn
 		for i, at := range a.SignInTimes {
@@ -319,6 +342,17 @@ func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now ti
 		}
 	}
 	return ev
+}
+
+// signedInSubject is the person on the ending row, else the attempt's only person, else none.
+func (a attemptFacts) signedInSubject() string {
+	switch {
+	case a.EndingSubject != "":
+		return a.EndingSubject
+	case a.Subjects == 1:
+		return a.SubjectURN
+	}
+	return ""
 }
 
 // lastWorked is the latest time the part f broke is known to have worked for f's
@@ -405,7 +439,7 @@ func (f failure) sameServer(s signIn) bool {
 	return a.ServerID != "" || (s.project == a.ProjectID && s.remoteClientID == a.RemoteSessionClientID)
 }
 
-// sameApp: an unnamed failure is any app's but the dashboard's, a named one its family's or, unnamed, its registration's.
+// sameApp: unnamed failures match any app but the dashboard; named ones the same family under any app key, else the same app key.
 func (f failure) sameApp(app, clientFamily string) bool {
 	switch {
 	case !NamedClient(f.a.ClientFamily):
