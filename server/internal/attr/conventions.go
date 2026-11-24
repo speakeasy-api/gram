@@ -368,11 +368,11 @@ const (
 	CacheKeyKey                 = attribute.Key("gram.cache.key")
 	CacheNamespaceKey           = attribute.Key("gram.cache.namespace")
 
-	// RedisRoleKey names the Redis role (sessions or evictable) of the
+	// RedisRoleKey names the Redis role (auth, ops, or evictable) of the
 	// client or adapter that saw a key.
 	RedisRoleKey = attribute.Key("gram.redis.role")
 
-	// RedisKeyPrefixKey is the declared evictable prefix a key matched, or
+	// RedisKeyPrefixKey is the declared key-family prefix a key matched, or
 	// "unclassified" for a key that matched none.
 	RedisKeyPrefixKey = attribute.Key("gram.redis.key_prefix")
 

@@ -74,6 +74,7 @@ var subcommandsWithKey = map[string]map[string]struct{}{
 	"memory": {"usage": {}},
 	"object": {"encoding": {}, "freq": {}, "idletime": {}, "refcount": {}},
 	"xinfo":  {"consumers": {}, "groups": {}, "stream": {}},
+	"xgroup": {"create": {}, "destroy": {}, "setid": {}, "createconsumer": {}, "delconsumer": {}},
 }
 
 // CommandKeys returns the keys cmd addresses, as far as they can be read from
@@ -114,8 +115,27 @@ func commandKeys(args []any) []string {
 	}
 
 	switch name {
-	case "eval", "evalsha", "eval_ro", "evalsha_ro", "fcall", "fcall_ro":
+	case "eval", "evalsha", "eval_ro", "evalsha_ro", "fcall", "fcall_ro", "blmpop", "bzmpop":
 		return countedKeys(args, 2)
+	case "lmpop", "zmpop", "zinter", "zunion", "zdiff", "zintercard", "sintercard":
+		return countedKeys(args, 1)
+	case "sort", "sort_ro":
+		keys := argStrings(args[1:min(2, len(args))])
+		for i := 2; i < len(args); i++ {
+			option, _ := argString(args[i])
+			switch strings.ToLower(option) {
+			case "store":
+				if i+1 < len(args) {
+					keys = append(keys, argStrings(args[i+1:i+2])...)
+				}
+				i++
+			case "get", "by":
+				i++
+			case "limit":
+				i += 2
+			}
+		}
+		return keys
 	case "zunionstore", "zinterstore", "zdiffstore":
 		return append(argStrings(args[1:min(2, len(args))]), countedKeys(args, 2)...)
 	case "mset", "msetnx":

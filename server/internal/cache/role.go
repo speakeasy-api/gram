@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -241,12 +242,25 @@ func (a *roleAdapter) ScanKeys(ctx context.Context, prefix string) ([]string, er
 	if err := a.check(ctx, "scan", prefix); err != nil {
 		return nil, err
 	}
-	return a.inner.ScanKeys(ctx, prefix)
+	keys, err := a.inner.ScanKeys(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(keys, func(key string) bool {
+		family := redisrole.Classify(key)
+		return family.Control || family.Role != a.role
+	}), nil
 }
 
 func (a *roleAdapter) DeleteByPrefix(ctx context.Context, prefix string) error {
-	if err := a.check(ctx, "scan", prefix); err != nil {
+	keys, err := a.ScanKeys(ctx, prefix)
+	if err != nil {
 		return err
 	}
-	return a.inner.DeleteByPrefix(ctx, prefix)
+	for batch := range slices.Chunk(keys, 100) {
+		if err := a.inner.client.Del(ctx, batch...).Err(); err != nil {
+			return fmt.Errorf("delete keys with prefix %q: %w", prefix, err)
+		}
+	}
+	return nil
 }
