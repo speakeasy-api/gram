@@ -113,6 +113,10 @@ type Service struct {
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
 
+	// organizationGroups mirrors the internal label to PostHog. Nil leaves it
+	// unmirrored.
+	organizationGroups OrganizationGroupIdentifier
+
 	// staffOrg is the deployment's Speakeasy staff organization, whose
 	// OpenRouter keys bypass the tier credit limits.
 	staffOrg staff.Organization
@@ -302,7 +306,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{organizationGroups: nil, orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracerProvider:             tracerProvider,
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
@@ -1322,9 +1326,11 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		if payload.AccountType != nil || payload.Whitelisted != nil {
 			return nil, oops.E(oops.CodeBadRequest, nil, "internal cannot be combined with account_type or whitelisted")
 		}
-		if _, err := s.setOrganizationInternal(ctx, payload.ID, *payload.Internal); err != nil {
+		slug, err := s.setOrganizationInternal(ctx, payload.ID, *payload.Internal)
+		if err != nil {
 			return nil, err
 		}
+		s.mirrorOrganizationInternal(ctx, payload.ID, slug, *payload.Internal)
 		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after internal change")
 	}
 	if payload.AccountType == nil {
