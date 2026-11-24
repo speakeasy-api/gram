@@ -88,3 +88,14 @@ func TestCaptureGateSharesProvisioningAcrossConcurrentWrites(t *testing.T) {
 	}
 	require.EqualValues(t, 1, provisioner.calls.Load())
 }
+
+func TestCaptureGateWaiterReturnsWhenItsWriteIsCancelled(t *testing.T) {
+	t.Parallel()
+	provisioner := &countingProvisioner{release: make(chan struct{})}
+	t.Cleanup(func() { close(provisioner.release) })
+	gate := NewCaptureGate(testenv.NewLogger(t), &feature.InMemory{}, provisioner)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.False(t, gate.OrganizationReady(ctx, "org_a"), "a cancelled write must not wait on a hung provisioning call")
+}

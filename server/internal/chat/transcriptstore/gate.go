@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
@@ -13,6 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
+
+// provisionTimeout bounds one organization's transcript key provisioning. It
+// runs while a message transaction is open, and minting a key is a few KMS and
+// database round trips, so 10 seconds is generous without letting a hung KMS
+// call hold writes indefinitely.
+const provisionTimeout = 10 * time.Second
 
 // keyProvisioner creates an organization's data key for a use case when it has
 // none. *orgencryption.Provisioner satisfies it.
@@ -61,18 +68,27 @@ func (g *CaptureGate) OrganizationReady(ctx context.Context, organizationID stri
 	if _, ok := g.ready.Load(organizationID); ok {
 		return true
 	}
-	_, err, _ := g.provisioning.Do(organizationID, func() (any, error) {
+	done := g.provisioning.DoChan(organizationID, func() (any, error) {
 		if _, ok := g.ready.Load(organizationID); ok {
 			return nil, nil
 		}
-		// Detach from the first caller's cancellation: every waiting write
-		// shares this result.
-		if err := g.provisioner.EnsureUseCase(context.WithoutCancel(ctx), organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
+		// Every waiting write shares this call, so it is bounded on its own
+		// rather than by the first caller's context.
+		provisionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), provisionTimeout)
+		defer cancel()
+		if err := g.provisioner.EnsureUseCase(provisionCtx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return nil, fmt.Errorf("provision chat transcript key: %w", err)
 		}
 		g.ready.Store(organizationID, struct{}{})
 		return nil, nil
 	})
+	var err error
+	select {
+	case <-ctx.Done():
+		err = fmt.Errorf("wait for chat transcript key: %w", ctx.Err())
+	case result := <-done:
+		err = result.Err
+	}
 	if err != nil {
 		g.logger.ErrorContext(ctx, "chat transcript capture stays off for this write",
 			attr.SlogOrganizationID(organizationID), attr.SlogError(err))
