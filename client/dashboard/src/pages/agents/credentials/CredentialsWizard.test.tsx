@@ -1559,6 +1559,11 @@ describe("Connecting a GKE cluster", () => {
         "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue.",
       ),
     ).toBeTruthy();
+    // With none to choose, the step gives no reason to pick one.
+    expect(
+      screen.queryByText(/None of this agent's servers use one/),
+    ).toBeNull();
+    expect(screen.queryByText(/The recommended one is/)).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
     ).toBe(true);

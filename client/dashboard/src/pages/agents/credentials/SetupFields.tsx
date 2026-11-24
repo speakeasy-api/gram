@@ -198,6 +198,7 @@ export function SharedServerChoice({
     (total, group) => total + group.options.length,
     0,
   );
+  const reason = recommendationReason(setupValues, count);
   return (
     <Stack gap={3}>
       <Stack gap={1}>
@@ -205,7 +206,7 @@ export function SharedServerChoice({
         <Text muted small>
           An agent on GKE, Claude Tag or another platform signs in through a
           shared authorization server, and every MCP server it uses must be on
-          the one you choose. {recommendationReason(setupValues, count)}
+          the one you choose.{reason && ` ${reason}`}
         </Text>
       </Stack>
       {setupValues.checking ? (
@@ -240,9 +241,11 @@ export function SharedServerChoice({
 
 /**
  * Why one shared authorization server is recommended. Only claims that the
- * servers already use it when at least one does.
+ * servers already use it when at least one does. Empty while the list loads
+ * or when there is none to choose: the notice below the label says why.
  */
 function recommendationReason(setupValues: SetupValues, count: number): string {
+  if (setupValues.checking || count === 0) return "";
   if (count === 1) return "This is the only one available.";
   if (setupValues.recommendedUsedBy > 0) {
     return "The recommended one is the server most of this agent's servers already use.";
