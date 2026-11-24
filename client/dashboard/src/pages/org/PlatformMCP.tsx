@@ -1238,7 +1238,7 @@ function PlatformMCPInstallMethodBody({
           id: "manual",
           title: "Connect the MCP manually",
           description:
-            "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
+            "Configure only the remote MCP without the reviewed catalogue workflow skill.",
         },
       ]
     : // The marketplace route is listed only where a reviewed package exists.
