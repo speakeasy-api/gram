@@ -363,7 +363,7 @@ export function ConnectionLogsView({
   // Counts run whenever the list may be blocked by search, so they answer first.
   const latest = isReference
     ? reference.data
-    : (counts.data ?? list.data?.pages[0]);
+    : (counts.data ?? list.data?.pages[0] ?? optionCounts.data);
   const viewerScope = latest?.viewerScope;
   const loggingEnabled = latest?.loggingEnabled ?? true;
   const rows: AttemptRow[] = useMemo(() => {

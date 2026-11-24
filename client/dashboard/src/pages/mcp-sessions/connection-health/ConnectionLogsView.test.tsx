@@ -7,6 +7,7 @@ const enabled = vi.hoisted(() => ({
   calls: [] as (boolean | undefined)[],
   sent: [] as { people: number; enabled: boolean | undefined }[],
   refetched: [] as number[],
+  logging: true,
 }));
 
 vi.mock("./api", async (original) => ({
@@ -22,7 +23,14 @@ vi.mock("./api", async (original) => ({
     enabled.calls.push(options?.enabled);
     enabled.sent.push({ people, enabled: options?.enabled });
     return {
-      data: { totalAttempts: 0, loggingEnabled: true, viewerScope: "all" },
+      data:
+        options?.enabled === false
+          ? undefined
+          : {
+              totalAttempts: 0,
+              loggingEnabled: enabled.logging,
+              viewerScope: "all",
+            },
       isPlaceholderData: false,
       isFetching: false,
       isError: false,
@@ -40,7 +48,8 @@ vi.mock("./api", async (original) => ({
       people: filters.people?.length ?? 0,
       enabled: options?.enabled,
     }),
-    data: { pages: [{ attempts: [] }] },
+    data:
+      options?.enabled === false ? undefined : { pages: [{ attempts: [] }] },
     isPending: false,
     isError: false,
     isFetching: false,
@@ -63,6 +72,19 @@ vi.mock("../providers", () => ({
 }));
 
 vi.mock("./AttemptDetailSheet", () => ({ AttemptDetailSheet: () => null }));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: () => null,
+}));
+
+vi.mock("@gram/client/react-query/featuresSet.js", () => ({
+  useFeaturesSetMutation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
 
 vi.mock("@/contexts/Auth", async (original) => ({
   ...(await original<object>()),
@@ -88,7 +110,10 @@ function renderLogs(url: string, serverId?: string) {
 }
 
 describe("ConnectionLogsView on a server's tab", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    enabled.logging = true;
+  });
 
   it("shows no server chip, reset or filter wording for the fixed server", () => {
     renderLogs("/?server=srv_other", "srv_1");
@@ -122,6 +147,16 @@ describe("ConnectionLogsView on a server's tab", () => {
     expect(filtered.every((c) => c.enabled === false)).toBe(true);
     // Unfiltered options still load so each pick can be removed.
     expect(enabled.sent.some((c) => c.people === 0 && c.enabled)).toBe(true);
+  });
+
+  it("shows the logging gate for a link over the limit when logging is off", () => {
+    enabled.logging = false;
+    const people = Array.from({ length: 51 }, (_, i) => `user:u${i}`).join(",");
+    renderLogs(`/?person=${encodeURIComponent(people)}`);
+    expect(screen.getByText("Connection Logs needs logging")).toBeTruthy();
+    expect(
+      screen.queryByText("Too many servers or people in this link"),
+    ).toBeNull();
   });
 
   it("sends a link with exactly 50 people", () => {
