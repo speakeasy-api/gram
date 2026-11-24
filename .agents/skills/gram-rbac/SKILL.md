@@ -55,13 +55,13 @@ ok, err := s.authz.Can(ctx, authz.Chat(id).Read())
 ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
 ```
 
-| Need                                             | Use                                                                                                                                                                    |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Refuse unless allowed                            | `Require(ctx, checks...)` (all must pass)                                                                                                                              |
-| Any one of several grants                        | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                         |
-| Branch on the answer                             | `Can(ctx, ...)`. Accepts a single `Either` group and probes. Returns an error, not false, for an invalid check.                                      |
-| Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
-| MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                  |
+| Need                      | Use                                                                                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse unless allowed     | `Require(ctx, checks...)` (all must pass)                                                                                                                              |
+| Any one of several grants | `Require(ctx, authz.Either(...))`: one alternative is enough, but a block on any alternative refuses the group                                                         |
+| Branch on the answer      | `Can(ctx, ...)`. Accepts a single `Either` group and probes. Returns an error, not false, for an invalid check.                                                        |
+| Narrow a list             | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
+| MCP tool call             | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                  |
 
 Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, so project-wide grants match it and `Filter` returns the project id for it.
 
