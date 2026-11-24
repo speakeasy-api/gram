@@ -209,10 +209,11 @@ func requireAttachmentRecheckReach(t *testing.T, ctx context.Context, q *repo.Qu
 	} else {
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 	}
-	endpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+	params := repo.GetRemoteSessionRecheckEndpointsParams{
 		ID: session.ID, UpdatedAt: session.UpdatedAt, GrantGeneration: session.GrantGeneration,
 		OrganizationIds: []string{org}, NowTs: conv.ToPGTimestamptz(window.now),
-	})
+	}
+	endpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, params)
 	require.NoError(t, err)
 	if !want {
 		require.Empty(t, rows)
@@ -222,6 +223,12 @@ func requireAttachmentRecheckReach(t *testing.T, ctx context.Context, q *repo.Qu
 	require.Len(t, rows, 1)
 	require.Equal(t, session.ID, rows[0].ID)
 	require.Len(t, endpoints, 1)
+	_, err = q.GetDueRemoteSessionRecheckCandidate(ctx, window.candidateParams(session.ID, "org_unrelated"))
+	require.ErrorIs(t, err, pgx.ErrNoRows, "an attachment cannot reauthorize a recheck claimed by another tenant")
+	params.OrganizationIds = []string{"org_unrelated"}
+	foreignEndpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, foreignEndpoints, "a valid attachment cannot produce a probe target for another tenant")
 	require.Equal(t, "attachment-probe", endpoints[0].Slug)
 	return repo.ClearRemoteSessionRecheckLeaseParams{ID: session.ID, ClaimedAt: rows[0].ClaimedAt, OrganizationIds: []string{org}, NowTs: conv.ToPGTimestamptz(window.now)}
 }
