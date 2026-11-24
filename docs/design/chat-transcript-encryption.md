@@ -185,7 +185,9 @@ service does the same for authenticated and signed attachment downloads. If no
 copy exists, the plaintext object is served (`plaintext_fallback`). A copy that
 exists but does not authenticate, has another identity, holds other bytes, or
 opens to more than the reader's size limit fails the read. It is never replaced
-by plaintext. When the reader cannot name the object's identity (a row without
+by plaintext. The `chat.transcript_shadow.asset_read.*` outcome follows the
+same rule: `success` and `plaintext_fallback` serve content, and every other
+outcome (`stale`, `invalid`, `error`) fails the read. When the reader cannot name the object's identity (a row without
 an organization, or an object name that is not a content hash), it serves
 plaintext only if no copy exists next to the object, and fails otherwise.
 
