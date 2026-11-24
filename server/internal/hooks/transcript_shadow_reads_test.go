@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // shadowLoad is one LoadMany call a hook request made.
@@ -30,6 +32,10 @@ type shadowLoad struct {
 
 	// err is what the store returned.
 	err error
+
+	// lockFree reports whether the chat's prompt correlation lock was free
+	// during the call.
+	lockFree bool
 }
 
 // recordingShadowReader wraps the real store and records every LoadMany call,
@@ -38,11 +44,18 @@ type recordingShadowReader struct {
 	store *transcriptstore.Store
 	mu    sync.Mutex
 	loads []shadowLoad
+
+	// lockFree, when set, reports whether the chat's prompt correlation lock
+	// is free at the moment of each LoadMany call.
+	lockFree func(ctx context.Context) bool
 }
 
 func (r *recordingShadowReader) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
 	opened, err := r.store.LoadMany(ctx, organizationID, projectID, messageIDs)
-	load := shadowLoad{requested: slices.Clone(messageIDs), opened: make([]uuid.UUID, 0, len(opened)), err: err}
+	load := shadowLoad{requested: slices.Clone(messageIDs), opened: make([]uuid.UUID, 0, len(opened)), err: err, lockFree: true}
+	if r.lockFree != nil {
+		load.lockFree = r.lockFree(ctx)
+	}
 	for id := range opened {
 		load.opened = append(load.opened, id)
 	}
@@ -95,7 +108,7 @@ func newShadowReadFixture(t *testing.T) (context.Context, shadowReadFixture) {
 // through a recording wrapper around the fixture's store.
 func (f shadowReadFixture) readThrough(projectID uuid.UUID) *recordingShadowReader {
 	f.ti.service.SetTranscriptShadowReads(f.store, projectID)
-	reader := &recordingShadowReader{store: f.store, mu: sync.Mutex{}, loads: nil}
+	reader := &recordingShadowReader{store: f.store, mu: sync.Mutex{}, loads: nil, lockFree: nil}
 	f.ti.service.transcriptShadow = reader
 	return reader
 }
@@ -142,6 +155,42 @@ func (f shadowReadFixture) attachToPrompt(ctx context.Context, t *testing.T, pro
 	require.NoError(t, err)
 	require.Equal(t, "allow", res.Decision)
 	return entryUUID
+}
+
+// attachmentRows maps the external ID of each attachment stored under one of
+// the given prompts, or stored without a match, to its parent prompt.
+func (f shadowReadFixture) attachmentRows(ctx context.Context, t *testing.T, parents ...uuid.UUID) map[string]uuid.NullUUID {
+	t.Helper()
+	parts, err := chatRepo.New(f.ti.conn).ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+		ChatID:               f.chatID,
+		ProjectID:            f.projectID,
+		ParentChatMessageIds: parents,
+		RiskContentPartIds:   nil,
+	})
+	require.NoError(t, err)
+	got := make(map[string]uuid.NullUUID, len(parts))
+	for _, part := range parts {
+		got[part.ExternalID.String] = part.ParentChatMessageID
+	}
+	return got
+}
+
+// correlationLockFree reports whether no transaction holds the chat's prompt
+// correlation lock. The probe takes the lock only when it is free and releases
+// it on the same connection.
+func (f shadowReadFixture) correlationLockFree(ctx context.Context) bool {
+	probe, err := f.ti.conn.Acquire(ctx)
+	if err != nil {
+		return false
+	}
+	defer probe.Release()
+	q := testrepo.New(probe)
+	free, err := q.TryAcquireChatPromptCorrelationLockFixture(ctx, testrepo.TryAcquireChatPromptCorrelationLockFixtureParams{ProjectID: f.projectID, ChatID: f.chatID})
+	if err != nil || !free {
+		return false
+	}
+	released, err := q.ReleaseChatPromptCorrelationLockFixture(ctx, testrepo.ReleaseChatPromptCorrelationLockFixtureParams{ProjectID: f.projectID, ChatID: f.chatID})
+	return err == nil && released
 }
 
 // attachmentParents maps each stored attachment's external ID to its parent
@@ -222,7 +271,7 @@ func TestIngest_ShadowReadProjectMatchesPlaintextWhenNoShadowExists(t *testing.T
 	require.Equal(t, []uuid.UUID{captured}, loads[0].opened)
 }
 
-func TestIngest_ShadowReadProjectFailsOnAStaleShadow(t *testing.T) {
+func TestIngest_ShadowReadProjectStoresAttachmentsUnmatchedOnAStaleShadow(t *testing.T) {
 	t.Parallel()
 	ctx, f := newShadowReadFixture(t)
 	f.capture()
@@ -235,13 +284,96 @@ func TestIngest_ShadowReadProjectFailsOnAStaleShadow(t *testing.T) {
 	require.EqualValues(t, 1, changed)
 
 	// The hash names the edited plaintext, so a plaintext fallback would
-	// attach here. The stale shadow must fail the match instead.
-	f.attachToPrompt(ctx, t, "changed")
+	// match it. The stale shadow fails the read, and the attachment is stored
+	// without a match. An attachment with no hash needs no body and still
+	// goes to the latest prompt.
+	hashed := "attachment-" + uuid.NewString()
+	unhashed := "attachment-" + uuid.NewString()
+	promptSHA256 := testPromptSHA256("changed")
+	payload := canonicalIngestPayload("claude", "assistant.responded", f.sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{
+			{EntryUUID: hashed, PromptSha256: &promptSHA256, AttachmentKind: "file", Content: "invented demo attachment body"},
+			{EntryUUID: unhashed, AttachmentKind: "file", Content: "invented second attachment body"},
+		},
+	}
+	res, err := f.ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
 
-	require.Empty(t, f.attachmentParents(ctx, t, edited))
+	require.Equal(t, map[string]uuid.NullUUID{
+		hashed:   {UUID: uuid.Nil, Valid: false},
+		unhashed: {UUID: edited, Valid: true},
+	}, f.attachmentRows(ctx, t, edited))
 	loads := reader.recorded()
 	require.Len(t, loads, 1)
 	require.ErrorIs(t, loads[0].err, transcriptstore.ErrStale)
+}
+
+func TestIngest_ShadowReadProjectStopsOpeningOnceEveryHashMatches(t *testing.T) {
+	t.Parallel()
+	ctx, f := newShadowReadFixture(t)
+	f.capture()
+	reader := f.readThrough(f.projectID)
+
+	prompts := make([]uuid.UUID, 0, promptShadowPageSize+2)
+	for i := range promptShadowPageSize + 2 {
+		prompts = append(prompts, f.submitPrompt(ctx, t, fmt.Sprintf("Invented prompt number %d", i)))
+	}
+	newest := prompts[len(prompts)-1]
+	oldest := prompts[0]
+
+	// The newest prompt is on the first page, so one call opens it.
+	recent := f.attachToPrompt(ctx, t, fmt.Sprintf("Invented prompt number %d", len(prompts)-1))
+	loads := reader.recorded()
+	require.Len(t, loads, 1, "the first page matched every hash")
+	require.Len(t, loads[0].requested, promptShadowPageSize)
+	require.Contains(t, loads[0].requested, newest)
+	require.NotContains(t, loads[0].requested, oldest)
+
+	// The oldest prompt is past the first page, so a second call opens it.
+	old := f.attachToPrompt(ctx, t, "Invented prompt number 0")
+	loads = reader.recorded()[1:]
+	require.Len(t, loads, 2, "the second page holds the oldest prompt")
+	require.Len(t, loads[1].requested, 2)
+	require.Contains(t, loads[1].requested, oldest)
+
+	require.Equal(t, map[string]uuid.UUID{recent: newest, old: oldest}, f.attachmentParents(ctx, t, prompts...))
+}
+
+func TestIngest_ShadowReadProjectOpensShadowsBeforeTheAttachmentTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, f := newShadowReadFixture(t)
+	f.capture()
+	reader := f.readThrough(f.projectID)
+	reader.lockFree = f.correlationLockFree
+
+	prompt := f.submitPrompt(ctx, t, "Map the invented canal")
+
+	// A prompt correlation ID sends the attachments through the
+	// transaction that takes the per-chat lock.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	options := defaultAuthenticatedIngestOptions()
+	options.promptCorrelationID = "correlation-" + uuid.NewString()
+	entryUUID := "attachment-" + uuid.NewString()
+	promptSHA256 := testPromptSHA256("Map the invented canal")
+	payload := canonicalIngestPayload("claude", "assistant.responded", f.sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+			EntryUUID:      entryUUID,
+			PromptSha256:   &promptSHA256,
+			AttachmentKind: "file",
+			Content:        "invented demo attachment body",
+		}},
+	}
+	_, err := f.ti.service.IngestAuthenticatedWithOptions(ctx, authCtx, payload, options)
+	require.NoError(t, err)
+
+	require.Equal(t, map[string]uuid.UUID{entryUUID: prompt}, f.attachmentParents(ctx, t, prompt))
+	loads := reader.recorded()
+	require.Len(t, loads, 1)
+	require.True(t, loads[0].lockFree, "shadows are opened before the transaction takes the per-chat lock")
 }
 
 func TestIngest_OtherProjectsMatchPromptAttachmentsFromPlaintext(t *testing.T) {

@@ -3,9 +3,12 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/google/uuid"
 
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 )
@@ -44,19 +47,47 @@ func (s *Service) readsTranscriptShadows(projectID uuid.UUID) bool {
 	return enabled
 }
 
-// openTranscriptShadows opens the shadows of the given messages with one
-// LoadMany call, so a hook request decrypts a page of messages at once rather
-// than one message at a time. A message with no shadow is left out of the
-// result and the caller keeps its plaintext body, like chat.load. A stale or
-// unauthentic shadow fails the read: plaintext must not paper over broken
-// capture.
-func (s *Service) openTranscriptShadows(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
-	if len(messageIDs) == 0 {
-		return map[uuid.UUID]transcriptcrypto.Message{}, nil
-	}
-	opened, err := s.transcriptShadow.LoadMany(ctx, organizationID, projectID, messageIDs)
+// promptShadowPageSize bounds how many prompts one LoadMany call opens. An
+// attachment almost always names a recent prompt, so the first page usually
+// matches every hash and the read stops there.
+const promptShadowPageSize = 16
+
+// openPromptShadows opens the chat's user prompts from encrypted shadows,
+// newest first and a page per LoadMany call, until every wanted hash has
+// matched. It returns the body of each prompt it read; a prompt with no shadow
+// keeps its plaintext body, like chat.load. A stale or unauthentic shadow
+// fails the read: plaintext must not paper over broken capture. It uses its
+// own pooled connections, so call it before taking a transaction.
+func (s *Service) openPromptShadows(ctx context.Context, organizationID string, chatID, projectID uuid.UUID, wanted map[string]struct{}) (map[uuid.UUID]string, error) {
+	candidates, err := chatRepo.New(s.db).ListClaudeUserMessagesForPromptAttachmentParent(ctx, chatRepo.ListClaudeUserMessagesForPromptAttachmentParentParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("open encrypted chat transcript: %w", err)
+		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
 	}
-	return opened, nil
+	remaining := maps.Clone(wanted)
+	bodies := make(map[uuid.UUID]string, min(len(candidates), promptShadowPageSize))
+	for page := range slices.Chunk(candidates, promptShadowPageSize) {
+		ids := make([]uuid.UUID, 0, len(page))
+		for _, candidate := range page {
+			ids = append(ids, candidate.ID)
+		}
+		opened, err := s.transcriptShadow.LoadMany(ctx, organizationID, projectID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("open encrypted chat transcript: %w", err)
+		}
+		for _, candidate := range page {
+			body := candidate.Content
+			if message, ok := opened[candidate.ID]; ok {
+				body = message.Content
+			}
+			bodies[candidate.ID] = body
+			delete(remaining, promptBodyHash(body))
+		}
+		if len(remaining) == 0 {
+			break
+		}
+	}
+	return bodies, nil
 }

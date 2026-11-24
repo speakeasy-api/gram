@@ -117,15 +117,23 @@ unexpected error: it means capture or the data is broken, and plaintext must not
 hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
 
-Hook ingest (`/rpc/hooks.ingest`) uses the same allowlist and semantics when it
-matches a prompt attachment to its prompt by text hash, the one hook path that
-reads stored message bodies. It opens every candidate prompt with one
-`LoadMany` call per request, and only when an attachment carries a prompt hash.
-For other projects the allowlist check is an in-memory lookup and adds no query.
-A stale or unauthentic shadow fails that request's attachment capture, which is
-logged and does not fail the hook. Hook writes that skip a message already
-stored, and the Claude transcript upload, compare external message IDs rather
-than bodies, so they read no body.
+Hook ingest (`/rpc/hooks.ingest`) uses the same allowlist when it matches a
+prompt attachment to its prompt by text hash, the one hook path that reads
+stored message bodies. Only a request whose attachments carry a prompt hash, in
+a chat that has user prompts, reads shadows. It opens the chat's prompts newest
+first, up to 16 per `LoadMany` call, and stops once every hash has matched. An
+attachment usually names a recent prompt, so a request makes one call, whatever
+the session length. An attachment whose hash matches no prompt makes the
+request open every prompt in the chat, in pages. The shadows are opened before
+the AHP attachment transaction begins, so a request never holds two pooled
+connections or decrypts under the per-chat lock. For other projects the
+allowlist check is an in-memory lookup and adds no query. A stale or
+unauthentic shadow fails the read: the error is logged and counted as `stale`,
+and that request's hashed attachments are stored without a prompt match rather
+than matched against plaintext. Attachments without a hash still go to the
+latest prompt. Hook writes that skip a message already stored, and the Claude
+transcript upload, compare external message IDs rather than bodies, so they
+read no body.
 
 Direct SQL writers (see the scope table below) do not seal yet. If one edits a
 message that already has a shadow, that shadow goes stale and the read fails

@@ -5765,6 +5765,26 @@ func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	return err
 }
 
+const releaseChatPromptCorrelationLockFixture = `-- name: ReleaseChatPromptCorrelationLockFixture :one
+SELECT pg_advisory_unlock(hashtextextended(
+  'chat-prompt-correlation:' || ($1::uuid)::text || ':' || ($2::uuid)::text,
+  0
+))::boolean AS released
+`
+
+type ReleaseChatPromptCorrelationLockFixtureParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+// Test-only release of a lock TryAcquireChatPromptCorrelationLockFixture took.
+func (q *Queries) ReleaseChatPromptCorrelationLockFixture(ctx context.Context, arg ReleaseChatPromptCorrelationLockFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseChatPromptCorrelationLockFixture, arg.ProjectID, arg.ChatID)
+	var released bool
+	err := row.Scan(&released)
+	return released, err
+}
+
 const remoteSessionHasLiveCredentialsFixture = `-- name: RemoteSessionHasLiveCredentialsFixture :one
 SELECT (NOT deleted AND access_token_encrypted = $1::text AND refresh_token_encrypted = $2::text AND upstream_subject = $3::text)::boolean AS preserved
 FROM remote_sessions WHERE id = $4
@@ -8832,6 +8852,28 @@ func (q *Queries) TransferAttachmentToReplacementOwnerFixture(ctx context.Contex
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const tryAcquireChatPromptCorrelationLockFixture = `-- name: TryAcquireChatPromptCorrelationLockFixture :one
+SELECT pg_try_advisory_lock(hashtextextended(
+  'chat-prompt-correlation:' || ($1::uuid)::text || ':' || ($2::uuid)::text,
+  0
+))::boolean AS acquired
+`
+
+type TryAcquireChatPromptCorrelationLockFixtureParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+// Test-only non-blocking probe of the production per-chat prompt correlation
+// lock key. It takes a session lock when the key is free: release it with
+// ReleaseChatPromptCorrelationLockFixture on the same connection.
+func (q *Queries) TryAcquireChatPromptCorrelationLockFixture(ctx context.Context, arg TryAcquireChatPromptCorrelationLockFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireChatPromptCorrelationLockFixture, arg.ProjectID, arg.ChatID)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
 }
 
 const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
