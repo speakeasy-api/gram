@@ -37,16 +37,23 @@ func validateCatalog(s *Snapshot) error {
 			return fmt.Errorf("%w: product %q has %d client info names, over the maximum of %d", errInvalidCatalog, p.ID, len(p.ClientInfoNames), maxClientInfoNames)
 		}
 	}
-	if len(s.patterns) > maxPatterns {
-		return fmt.Errorf("%w: %d enabled patterns exceeds the maximum of %d", errInvalidCatalog, len(s.patterns), maxPatterns)
+	// A disabled pattern never names a product, so it cannot make attribution ambiguous.
+	enabled := make([]Preset, 0, len(s.patterns))
+	for _, p := range s.patterns {
+		if p.Enabled {
+			enabled = append(enabled, p)
+		}
 	}
-	parsed := make([]parsedPattern, len(s.patterns))
-	for i, p := range s.patterns {
+	if len(enabled) > maxPatterns {
+		return fmt.Errorf("%w: %d enabled patterns exceeds the maximum of %d", errInvalidCatalog, len(enabled), maxPatterns)
+	}
+	parsed := make([]parsedPattern, len(enabled))
+	for i, p := range enabled {
 		parsed[i], _ = parsePattern(p.URL)
 	}
-	for i, a := range s.patterns {
-		for j := i + 1; j < len(s.patterns); j++ {
-			b := s.patterns[j]
+	for i, a := range enabled {
+		for j := i + 1; j < len(enabled); j++ {
+			b := enabled[j]
 			if a.ProductID == b.ProductID || !parsed[i].overlaps(parsed[j]) {
 				continue
 			}
