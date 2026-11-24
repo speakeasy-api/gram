@@ -13,12 +13,13 @@
 //     - a service, only for outbound failures the provider fixes: what the server connects
 //     out to (the remote session issuer for a service sign-in when the server has one,
 //     else the remote URL host), on minServersPerService or more servers;
-//     - an app version: a named client family and version, with its failures on the
-//     connections (the same kind, id and member, not the merged server) where another
-//     named family worked after the first failure there (was served for an app sign-in,
-//     else the outside service answered); a failure at a gateway itself counts any of its
-//     members working. When it has any such failure, it also takes its failures on no
-//     MCP server; failures on connections without that evidence stay out.
+//     - an app version: a named client family and version, with its failures where
+//     another named family worked after the first failure there. For an app sign-in that
+//     is the front the app signs in at (the direct server, or the gateway whichever its
+//     member), and worked means served; otherwise it is the server behind every route,
+//     and worked means the outside service answered, any member counting for a failure
+//     at a gateway itself. When it has any such failure, it also takes its failures on no
+//     MCP server; failures without that evidence stay out.
 //  3. Every group becomes a problem. A failure that fits several is counted in one: the
 //     group with the most people is taken first (ties: app version, server, service, then
 //     key), its failures are set aside, and the rest are grouped again until none is left.
@@ -176,10 +177,15 @@ func isPerson(subject string) bool {
 	return err == nil && s.Kind == urn.SessionSubjectKindUser
 }
 
-type servedKey struct{ kind, id, member string }
+// servedKey is where evidence is looked up: the front an app signs in at, or with server set the merged server.
+type servedKey struct{ kind, id, server string }
 
-func servedKeyOf(e mcpconnectionattempts.FailingPerson) servedKey {
-	return servedKey{kind: e.ServerKind, id: e.ServerID, member: e.MemberID}
+// evidenceKey is the front for an app sign-in, shared by a gateway's members as in the parent's appSignedIn, else the merged server behind every route.
+func evidenceKey(e mcpconnectionattempts.FailingPerson, part mcpconnectionattempts.Part) servedKey {
+	if part == mcpconnectionattempts.PartAppSignIn {
+		return servedKey{kind: e.ServerKind, id: e.ServerID, server: ""}
+	}
+	return servedKey{kind: "", id: "", server: ServerOf(e)}
 }
 
 // workedAt is when a family was last served and last answered on one server.
@@ -244,10 +250,14 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 		}
 	}
 	for _, s := range served {
-		g.addWorked(servedKey{kind: s.ServerKind, id: s.ServerID, member: s.MemberID}, s)
+		var row mcpconnectionattempts.FailingPerson
+		row.ServerKind, row.ServerID, row.MemberID = s.ServerKind, s.ServerID, s.MemberID
+		g.addWorked(evidenceKey(row, mcpconnectionattempts.PartAppSignIn), s)
+		g.addWorked(evidenceKey(row, mcpconnectionattempts.PartServer), s)
 		if s.OnGatewayMember() {
-			// Any member working shows the gateway itself works.
-			g.addWorked(servedKey{kind: s.ServerKind, id: s.ServerID, member: ""}, s)
+			// Any member answering shows the gateway itself works.
+			row.MemberID = ""
+			g.addWorked(evidenceKey(row, mcpconnectionattempts.PartServer), s)
 		}
 	}
 	return g
@@ -523,7 +533,7 @@ func (g grouper) withEvidence(part mcpconnectionattempts.Part, idx []int) []int 
 		if !e.OnMCPServer() {
 			continue
 		}
-		k := servedKeyOf(e)
+		k := evidenceKey(e, part)
 		if at, ok := first[k]; !ok || e.OpenedAt.Before(at) {
 			first[k] = e.OpenedAt
 		}
@@ -546,7 +556,7 @@ func (g grouper) withEvidence(part mcpconnectionattempts.Part, idx []int) []int 
 	}
 	var out []int
 	for _, i := range idx {
-		if e := g.episodes[i]; !e.OnMCPServer() || worked[servedKeyOf(e)] {
+		if e := g.episodes[i]; !e.OnMCPServer() || worked[evidenceKey(e, part)] {
 			out = append(out, i)
 		}
 	}

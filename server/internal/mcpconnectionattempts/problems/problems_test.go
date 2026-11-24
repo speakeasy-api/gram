@@ -430,6 +430,24 @@ func TestGroup(t *testing.T) {
 			want:     []summary{{problems.RuleSameAppVersion, cursorKey, part, provider, 2, 2, cursorApp, true}},
 		},
 		{
+			name:     "another app answered through the server directly counts for its gateway member's outbound failures",
+			episodes: []mcpconnectionattempts.FailingPerson{down("a", "gw", time.Hour, cursor, member("gw", s1)), down("b", "gw", time.Hour, cursor, member("gw", s1))},
+			served:   []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
+			want:     []summary{{problems.RuleSameAppVersion, cursorKey, part, provider, 2, 2, cursorApp, true}},
+		},
+		{
+			name:     "another app signed in at the server directly does not count for a sign-in at the gateway",
+			episodes: []mcpconnectionattempts.FailingPerson{signedOut("a", "gw", time.Hour, cursor, member("gw", s1)), signedOut("b", "gw", time.Hour, cursor, member("gw", s1))},
+			served:   []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
+			want:     []summary{{problems.RuleSameServer, serverScope(s1), appSignIn, person, 2, 2, cursorApp, false}},
+		},
+		{
+			name:     "another app served through any member counts for a sign-in at the gateway",
+			episodes: []mcpconnectionattempts.FailingPerson{signedOut("a", "gw", time.Hour, cursor, member("gw", s1)), signedOut("b", "gw", time.Hour, cursor, member("gw", s1))},
+			served:   []mcpconnectionattempts.ServedByFamily{served("meta", "gw", s2, claude, 10*time.Minute)},
+			want:     []summary{{problems.RuleSameAppVersion, cursorKey, appSignIn, person, 2, 2, cursorApp, true}},
+		},
+		{
 			name:     "a gateway-level served row does not count for a member",
 			episodes: []mcpconnectionattempts.FailingPerson{badKey("a", "gw", time.Hour, cursor, member("gw", s1)), badKey("b", "gw", time.Hour, cursor, member("gw", s1))},
 			served:   []mcpconnectionattempts.ServedByFamily{served("meta", "gw", "", claude, 10*time.Minute)},
