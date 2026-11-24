@@ -6,7 +6,7 @@ import { firstPartyHosts, getServerURL } from "@/lib/utils";
  * host. Each value mirrors the client's compiled-in default and must change
  * with it.
  */
-export const CLIENT_DEFAULT_SERVER_URLS = {
+const CLIENT_DEFAULT_SERVER_URLS = {
   /** The speakeasy CLI (workflow.DefaultBaseURL in cli/internal/workflow). */
   cli: "https://app.getgram.ai",
   /** The speakeasy-hooks binary (relay.DefaultServerURL in hooks/relay). */
