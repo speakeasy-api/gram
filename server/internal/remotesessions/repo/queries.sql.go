@@ -12753,6 +12753,44 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 	return items, nil
 }
 
+const listVisibleUserSessionIssuerIDsForRemoteSessionClient = `-- name: ListVisibleUserSessionIssuerIDsForRemoteSessionClient :many
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.remote_session_client_id = $1::uuid
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+ORDER BY link.user_session_issuer_id
+`
+
+type ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+// The caller must already have selected a client visible in this scope.
+// A platform-global client can be offered in multiple tenants, so only
+// return the issuer links visible in this project or its organization.
+func (q *Queries) ListVisibleUserSessionIssuerIDsForRemoteSessionClient(ctx context.Context, arg ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listVisibleUserSessionIssuerIDsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEMABinding = `-- name: LockEMABinding :one
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2

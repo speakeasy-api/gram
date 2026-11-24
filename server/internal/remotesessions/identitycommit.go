@@ -1084,15 +1084,15 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	if reused {
 		// Reuse selects an offer, which does not carry the compatibility
 		// links included in the scoped client view.
-		row, err := tx.q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-			ProjectID:      c.plan.Scope.ProjectID,
-			OrganizationID: c.plan.Scope.OrganizationID,
-			ID:             client.ID,
+		var err error
+		bindings, err = tx.q.ListVisibleUserSessionIssuerIDsForRemoteSessionClient(ctx, repo.ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams{
+			ProjectID:             c.plan.Scope.ProjectID,
+			OrganizationID:        c.plan.Scope.OrganizationID,
+			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("read reused remote session client bindings: %w", err)
 		}
-		bindings = row.UserSessionIssuerIds
 	} else {
 		var err error
 		switch reg.Method {
