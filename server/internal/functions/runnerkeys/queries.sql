@@ -127,7 +127,9 @@ FROM platform_copies AS k;
 -- Destroys up to limit platform-key copies of the organization's runner keys
 -- after finalize. The organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE functions_access AS fa
     SET encryption_key = NULL
@@ -139,6 +141,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND fa.organization_id = @organization_id::text
+      AND fa.encryption_key IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'

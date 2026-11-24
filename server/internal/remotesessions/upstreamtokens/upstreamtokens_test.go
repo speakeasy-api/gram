@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -423,6 +424,48 @@ func TestCopyStoreClearReportsWhatItDestroyedByKind(t *testing.T) {
 	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}, cleared)
 	require.False(t, ti.stored(t, alone.ID).AccessTokenEncrypted.Valid)
 	require.True(t, ti.stored(t, beside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy stays")
+}
+
+func TestCopyStoreClearDoesNotCountACopyAConcurrentClearDestroyed(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+		AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+		AccessOrgCopy:       nullText(),
+		ReplaceRefreshToken: false,
+		RefreshPlatformCopy: nullText(),
+		RefreshOrgCopy:      nullText(),
+		ID:                  session.ID,
+		OrganizationID:      session.OrganizationID,
+		DecidedGeneration:   0,
+	})
+	require.NoError(t, err)
+
+	// The first clear runs in a transaction that holds the row's lock.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	first, err := repo.New(tx).ClearRemoteSessionAccessTokenPlatformCopies(t.Context(), repo.ClearRemoteSessionAccessTokenPlatformCopiesParams{OrganizationID: ti.orgID, LimitValue: 10, DecidedGeneration: 0})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), first.PlatformOnly)
+
+	// The second clear picked the same row before the first committed, and
+	// waits for its lock.
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	second := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		second <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-second
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 0, BesideOrgCopy: 0}, result.cleared, "the copy the first clear destroyed is not counted again")
 }
 
 // remoteSessionStores are the CopyStores of the remote session columns.

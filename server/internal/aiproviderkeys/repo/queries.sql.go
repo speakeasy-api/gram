@@ -24,6 +24,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND c.organization_id = $1::text
+      AND c.api_key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
@@ -49,7 +50,9 @@ type ClearAIIntegrationConfigAPIKeyPlatformCopiesRow struct {
 }
 
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx context.Context, arg ClearAIIntegrationConfigAPIKeyPlatformCopiesParams) (ClearAIIntegrationConfigAPIKeyPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearAIIntegrationConfigAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearAIIntegrationConfigAPIKeyPlatformCopiesRow
@@ -69,6 +72,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND c.organization_id = $1::text
+      AND c.api_key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
@@ -94,7 +98,9 @@ type ClearModelProviderKeyPlatformCopiesRow struct {
 }
 
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearModelProviderKeyPlatformCopies(ctx context.Context, arg ClearModelProviderKeyPlatformCopiesParams) (ClearModelProviderKeyPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearModelProviderKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearModelProviderKeyPlatformCopiesRow
@@ -114,6 +120,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND c.organization_id = $1::text
+      AND c.key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
@@ -139,7 +146,9 @@ type ClearOpenRouterAPIKeyPlatformCopiesRow struct {
 }
 
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearOpenRouterAPIKeyPlatformCopies(ctx context.Context, arg ClearOpenRouterAPIKeyPlatformCopiesParams) (ClearOpenRouterAPIKeyPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearOpenRouterAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearOpenRouterAPIKeyPlatformCopiesRow

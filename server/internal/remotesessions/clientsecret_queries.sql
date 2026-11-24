@@ -139,7 +139,9 @@ WHERE c.organization_id = @organization_id::text
 -- after finalize. The organization-key copy stays, so this is not a new
 -- revision.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE remote_session_clients AS c
     SET client_secret_encrypted = NULL
@@ -151,6 +153,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.client_secret_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'

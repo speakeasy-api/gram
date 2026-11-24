@@ -130,7 +130,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the organization's access
 -- tokens after finalize. The organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET access_token_encrypted = NULL
@@ -142,6 +144,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.access_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -233,7 +236,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the organization's refresh
 -- tokens after finalize. The organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET refresh_token_encrypted = NULL
@@ -245,6 +250,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -349,7 +355,9 @@ WHERE c.organization_id = @organization_id::text;
 -- Destroys up to limit platform-key copies of the organization's EMA access
 -- tokens after finalize. The organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE remote_session_ema_credentials AS c
     SET access_token_encrypted = NULL
@@ -361,6 +369,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.access_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -497,7 +506,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET identity_assertion_encrypted = NULL
@@ -509,6 +520,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.identity_assertion_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -601,7 +613,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET refresh_token_encrypted = NULL
@@ -613,6 +627,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -705,7 +720,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET upstream_subject_encrypted = NULL
@@ -717,6 +734,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.upstream_subject_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -809,7 +827,9 @@ WHERE s.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET nonce_encrypted = NULL
@@ -821,6 +841,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND s.organization_id = @organization_id::text
+      AND s.nonce_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'

@@ -25,6 +25,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND fa.organization_id = $1::text
+      AND fa.encryption_key IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'
@@ -52,7 +53,9 @@ type ClearRunnerKeyPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the organization's runner keys
 // after finalize. The organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearRunnerKeyPlatformCopies(ctx context.Context, arg ClearRunnerKeyPlatformCopiesParams) (ClearRunnerKeyPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRunnerKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearRunnerKeyPlatformCopiesRow

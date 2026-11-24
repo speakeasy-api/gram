@@ -25,6 +25,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND c.organization_id = $1::text
+      AND c.access_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -52,7 +53,9 @@ type ClearEMACredentialAccessTokenPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the organization's EMA access
 // tokens after finalize. The organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearEMACredentialAccessTokenPlatformCopies(ctx context.Context, arg ClearEMACredentialAccessTokenPlatformCopiesParams) (ClearEMACredentialAccessTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearEMACredentialAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearEMACredentialAccessTokenPlatformCopiesRow
@@ -72,6 +75,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.access_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -99,7 +103,9 @@ type ClearRemoteSessionAccessTokenPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the organization's access
 // tokens after finalize. The organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionAccessTokenPlatformCopiesParams) (ClearRemoteSessionAccessTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRemoteSessionAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearRemoteSessionAccessTokenPlatformCopiesRow
@@ -163,6 +169,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -190,7 +197,9 @@ type ClearRemoteSessionRefreshTokenPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the organization's refresh
 // tokens after finalize. The organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionRefreshTokenPlatformCopiesParams) (ClearRemoteSessionRefreshTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRemoteSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearRemoteSessionRefreshTokenPlatformCopiesRow
@@ -210,6 +219,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.identity_assertion_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -237,7 +247,9 @@ type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the value after finalize. The
 // organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams) (ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionIdentityAssertionPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow
@@ -257,6 +269,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.nonce_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -284,7 +297,9 @@ type ClearTrustedIssuerSessionNoncePlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the value after finalize. The
 // organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionNoncePlatformCopiesParams) (ClearTrustedIssuerSessionNoncePlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionNoncePlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearTrustedIssuerSessionNoncePlatformCopiesRow
@@ -304,6 +319,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -331,7 +347,9 @@ type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the value after finalize. The
 // organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams) (ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow
@@ -351,6 +369,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND s.organization_id = $1::text
+      AND s.upstream_subject_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
@@ -378,7 +397,9 @@ type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow struct {
 // Destroys up to limit platform-key copies of the value after finalize. The
 // organization-key copy stays.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams) (ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionUpstreamSubjectPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow

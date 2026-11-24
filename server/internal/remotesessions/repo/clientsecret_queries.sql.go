@@ -93,6 +93,7 @@ WITH cleared AS (
         LIMIT $2
       )
       AND c.organization_id = $1::text
+      AND c.client_secret_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
@@ -121,7 +122,9 @@ type ClearRemoteSessionClientSecretPlatformCopiesRow struct {
 // after finalize. The organization-key copy stays, so this is not a new
 // revision.
 // Returns how many cleared copies stood alone and how many stood beside an
-// organization-key copy.
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
 func (q *Queries) ClearRemoteSessionClientSecretPlatformCopies(ctx context.Context, arg ClearRemoteSessionClientSecretPlatformCopiesParams) (ClearRemoteSessionClientSecretPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRemoteSessionClientSecretPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
 	var i ClearRemoteSessionClientSecretPlatformCopiesRow

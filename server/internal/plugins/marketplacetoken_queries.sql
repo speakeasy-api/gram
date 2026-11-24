@@ -190,7 +190,9 @@ WHERE c.organization_id = @organization_id::text
 -- Destroys up to limit platform-key copies of the organization's tokens after
 -- finalize. The hash and the organization-key copy stay.
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE plugin_github_connections AS c
     SET marketplace_token_encrypted = NULL
@@ -202,6 +204,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.marketplace_token_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'marketplace-tokens'

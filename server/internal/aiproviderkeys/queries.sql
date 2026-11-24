@@ -69,7 +69,9 @@ WHERE c.organization_id = @organization_id::text;
 
 -- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :one
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE ai_integration_configs AS c
     SET api_key_encrypted = NULL
@@ -81,6 +83,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.api_key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
@@ -153,7 +156,9 @@ WHERE c.organization_id = @organization_id::text;
 
 -- name: ClearModelProviderKeyPlatformCopies :one
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE model_provider_keys AS c
     SET api_key_encrypted = NULL
@@ -165,6 +170,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.api_key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
@@ -237,7 +243,9 @@ WHERE c.organization_id = @organization_id::text;
 
 -- name: ClearOpenRouterAPIKeyPlatformCopies :one
 -- Returns how many cleared copies stood alone and how many stood beside an
--- organization-key copy.
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
 WITH cleared AS (
     UPDATE openrouter_api_keys AS c
     SET key_encrypted = NULL
@@ -249,6 +257,7 @@ WITH cleared AS (
         LIMIT @limit_value
       )
       AND c.organization_id = @organization_id::text
+      AND c.key_encrypted IS NOT NULL
       AND COALESCE((
         SELECT t.generation FROM organization_encryption_transitions AS t
         WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
