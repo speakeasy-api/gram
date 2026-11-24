@@ -4273,6 +4273,97 @@ describe("Servers that sign in as a person", () => {
     expect(mocks.attach).toHaveBeenCalledTimes(1);
   });
 
+  describe("on an existing agent's MCP sign-in tab", () => {
+    const agent = {
+      id: "agent_one",
+      name: "Release Bot",
+      lifecycle: "active",
+      projectId: "project_one",
+      permissions: { write: true, authorize: true },
+    } as never;
+    const grants = [
+      {
+        id: "grant_linear",
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_linear",
+          projectId: "project_one",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "grant_auth",
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as never;
+
+    function tab() {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const onDone = vi.fn();
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={client}>
+            <CredentialsWizard
+              agent={agent}
+              section
+              grants={grants}
+              onDone={(id) => {
+                onDone(id);
+              }}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      return { onDone };
+    }
+
+    it("never shows the editor's connection as the agent's, and assigns it only when asked", async () => {
+      mocks.sessions.mockResolvedValue([mine]);
+      const { onDone } = tab();
+      const row = await screen.findByRole("button", {
+        name: /Linear.*Requires connection/,
+      });
+      expect(screen.queryByText("Your connection")).toBeNull();
+
+      // Another change on the tab saves without assigning any connection.
+      const change = screen.getByRole("button", { name: "Add servers" });
+      await waitFor(() =>
+        expect((change as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(change);
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+      expect(mocks.attach).not.toHaveBeenCalled();
+
+      fireEvent.click(row);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Use your connection" }),
+      );
+      await waitFor(() => expect(mocks.attach).toHaveBeenCalledTimes(1));
+      expect(mocks.attach).toHaveBeenCalledWith(
+        {
+          gramProject: "project-one",
+          attachBindingRequestBody: {
+            principalId: "agent_one",
+            userSessionIssuerId: "issuer_linear",
+            remoteSessionId: "session_mine",
+          },
+        },
+        undefined,
+        expect.anything(),
+      );
+    });
+  });
+
   it("keeps Continue locked when a server's auth cannot be read", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.serverAuth.mockRejectedValue(new Error("network down"));

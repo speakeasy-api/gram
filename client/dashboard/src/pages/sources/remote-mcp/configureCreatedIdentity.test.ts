@@ -247,7 +247,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
       status: "setup-required",
       mcpServer: { visibility: "disabled" },
       message: expect.stringContaining(
-        "An organization admin can open Settings > Identity and select Add credential",
+        "An organization admin can open Settings > Sign-in and select Add credential",
       ),
     });
     expect(mocks.updateServer).not.toHaveBeenCalled();

@@ -270,7 +270,7 @@ func (o *OpenRouter) doSpendRequest(ctx context.Context, method, path string, re
 		body = bytes.NewReader(encoded)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, o.baseURL+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, o.managementURL+path, body)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}

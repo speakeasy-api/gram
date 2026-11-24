@@ -90,7 +90,7 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
 	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(project)).Connect()
 
 	turn := func(source, payload string) string {
 		t.Helper()

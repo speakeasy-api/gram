@@ -31,6 +31,7 @@ export function MoreActions({
   triggerLoading,
   triggerDisabled,
   triggerStyle,
+  triggerIcon = "ellipsis-vertical",
 }: {
   actions: Action[];
   triggerLabel?: string;
@@ -50,6 +51,8 @@ export function MoreActions({
    * `{ transitionProperty: "none" }` when this trigger's own visibility is
    * driven by an ancestor's `visible`/`invisible` toggle. */
   triggerStyle?: React.CSSProperties;
+  /** The icon-only trigger's glyph. */
+  triggerIcon?: IconName;
 }): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -114,7 +117,7 @@ export function MoreActions({
             {triggerLoading ? (
               <Spinner className="mr-0 size-4" />
             ) : (
-              <Icon name="ellipsis-vertical" className="size-4" />
+              <Icon name={triggerIcon} className="size-4" />
             )}
             <Button.Text className="sr-only">
               {triggerLoading

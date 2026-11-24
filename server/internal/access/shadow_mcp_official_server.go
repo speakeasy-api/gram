@@ -104,7 +104,7 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		return nil
 	case useAutomatic:
 		if _, err := q.DeleteShadowMCPOfficialServerChoice(ctx, shadowmcprepo.DeleteShadowMCPOfficialServerChoiceParams{UserID: userID, ProjectID: projectID, ServerUrl: key}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "remove shadow mcp official server link").LogError(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "remove shadow mcp official server").LogError(ctx, s.logger)
 		}
 		event.LinkURN = urn.NewShadowMCPOfficialServer(existing.ID)
 		err = s.audit.LogShadowMCPOfficialServerDelete(ctx, dbtx, audit.LogShadowMCPOfficialServerDeleteEvent{
@@ -132,7 +132,7 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 			UserID:      userID,
 		})
 		if upsertErr != nil {
-			return oops.E(oops.CodeUnexpected, upsertErr, "update shadow mcp official server link").LogError(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, upsertErr, "update shadow mcp official server").LogError(ctx, s.logger)
 		}
 		event.LinkURN = urn.NewShadowMCPOfficialServer(saved.ID)
 		after := officialLinkRow{ID: saved.ID, ServerURL: saved.ServerUrl, MCPServerID: saved.McpServerID}
@@ -143,11 +143,11 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		})
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log shadow mcp official server link").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "log shadow mcp official server change").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server link").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server change").LogError(ctx, s.logger)
 	}
 	return nil
 }
@@ -184,7 +184,7 @@ func (s *Service) addShadowMCPOfficialServerLink(ctx context.Context, q *shadowm
 		return officialLinkRow{ID: restored.ID, ServerURL: restored.ServerUrl, MCPServerID: restored.McpServerID}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "restore shadow mcp official server link").LogError(ctx, s.logger)
+		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "restore shadow mcp official server").LogError(ctx, s.logger)
 	}
 	inserted, err := q.UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
 		ProjectID:   projectID,
@@ -193,7 +193,7 @@ func (s *Service) addShadowMCPOfficialServerLink(ctx context.Context, q *shadowm
 		UserID:      userID,
 	})
 	if err != nil {
-		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "add shadow mcp official server link").LogError(ctx, s.logger)
+		return officialLinkRow{}, oops.E(oops.CodeUnexpected, err, "add shadow mcp official server").LogError(ctx, s.logger)
 	}
 	return officialLinkRow{ID: inserted.ID, ServerURL: inserted.ServerUrl, MCPServerID: inserted.McpServerID}, nil
 }

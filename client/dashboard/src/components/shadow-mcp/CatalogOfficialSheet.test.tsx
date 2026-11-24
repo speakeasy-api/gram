@@ -194,7 +194,9 @@ function renderSheet(target: object = entry) {
 /** Starts an install from the sheet, then has it finish with statuses. */
 function installWith(statuses: Array<Record<string, unknown>>) {
   const view = renderSheet();
-  fireEvent.click(screen.getByRole("button", { name: "Add and link" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add and make official" }),
+  );
   mocks.phase = "complete";
   mocks.statuses = statuses;
   view.rerender(sheet());
@@ -232,7 +234,9 @@ describe("CatalogOfficialSheet", () => {
       },
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add and link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add and make official" }),
+    );
     expect(mocks.startInstall).toHaveBeenCalled();
 
     mocks.phase = "complete";
@@ -256,7 +260,7 @@ describe("CatalogOfficialSheet", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
@@ -289,8 +293,10 @@ describe("CatalogOfficialSheet", () => {
     expect(screen.getByText("identity settings")).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Turn on and link" }));
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Turn on and make official" }),
+    );
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.mutateUpdate).toHaveBeenCalledWith({
       request: { updateMcpServerForm: { visibility: "private" } },
     });
@@ -307,7 +313,7 @@ describe("CatalogOfficialSheet", () => {
 
     expect(await screen.findByText("Upstream refused.")).toBeTruthy();
     expect(mocks.reset).toHaveBeenCalled();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -323,9 +329,9 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     expect(await screen.findByText("Server added")).toBeTruthy();
-    expect(screen.queryByText("Official server linked")).toBeNull();
+    expect(screen.queryByText("Official server set")).toBeNull();
     expect(
-      screen.getByText("Added, but not yet linked to Tracker."),
+      screen.getByText("Added, but not yet the official version of Tracker."),
     ).toBeTruthy();
   });
 
@@ -344,7 +350,9 @@ describe("CatalogOfficialSheet", () => {
     expect(
       await screen.findByText("Automatic client registration is unavailable."),
     ).toBeTruthy();
-    const turnOn = screen.getByRole("button", { name: "Turn on and link" });
+    const turnOn = screen.getByRole("button", {
+      name: "Turn on and make official",
+    });
     expect((turnOn as HTMLButtonElement).disabled).toBe(true);
     expect(
       screen.getByText(
@@ -372,7 +380,9 @@ describe("CatalogOfficialSheet", () => {
     expect(
       screen.queryByText(/Add or turn on an upstream credential above/),
     ).toBeNull();
-    const turnOn = screen.getByRole("button", { name: "Turn on and link" });
+    const turnOn = screen.getByRole("button", {
+      name: "Turn on and make official",
+    });
     expect((turnOn as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -394,7 +404,7 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Turn on and link" }),
+      await screen.findByRole("button", { name: "Turn on and make official" }),
     );
     expect(await screen.findByText("Could not enable it.")).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
@@ -429,7 +439,7 @@ describe("CatalogOfficialSheet", () => {
     expect(
       screen.getByText(/only over a connection Speakeasy cannot add/),
     ).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -442,7 +452,7 @@ describe("CatalogOfficialSheet", () => {
         mcpServerParam: "tracker",
       },
     ]);
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.save).toHaveBeenCalledTimes(1);
 
     // The workflow keeps its complete phase while the sheet is closed.
@@ -467,29 +477,29 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     const turnOn = await screen.findByRole("button", {
-      name: "Turn on and link",
+      name: "Turn on and make official",
     });
     expect((turnOn as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText("Could not verify upstream sign-in.")).toBeTruthy();
   });
 
-  it("keeps Add and link off while the catalog entry loads", () => {
+  it("keeps Add and make official off while the catalog entry loads", () => {
     mocks.detailsLoading = true;
     renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
 
     expect(screen.getByText("Loading the catalog entry")).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("keeps Add and link off when the catalog entry cannot be loaded", () => {
+  it("keeps Add and make official off when the catalog entry cannot be loaded", () => {
     mocks.detailsError = true;
     renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
 
     expect(
       screen.getByText(/The catalog entry could not be loaded/),
     ).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 });

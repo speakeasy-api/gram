@@ -9,6 +9,11 @@
 // plaintext DEK is cached in memory for DataKeyCacheTTL; key management also
 // calls KMS to verify a KEK before using it.
 //
+// ForIn uses a caller-owned writable READ COMMITTED transaction instead of
+// acquiring another pooled connection. Its TTL caches are private to that
+// Encryptor, so uncommitted state never enters the process cache. Each bound
+// Encryptor unwraps its first DEK again, even when the process cache is warm.
+//
 // Every ciphertext binds the organization, the use case and the column it is
 // stored in as associated data, so a value cannot be moved to another
 // organization, consumer or column and still decrypt.

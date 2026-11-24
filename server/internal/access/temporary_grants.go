@@ -153,7 +153,7 @@ func temporaryGrantActor(ctx context.Context, userID string) urn.Principal {
 }
 
 func (s *Service) requireTemporaryGrantAdmin(ctx context.Context, organizationID string) error {
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	return s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 }
 
 func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateTemporaryGrantPayload) (*gen.TemporaryGrant, error) {
@@ -334,7 +334,7 @@ func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemp
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.OrganizationID(ac.ActiveOrganizationID), attr.UserID(ac.UserID))
 
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	isAdmin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, s.logger)
 	}
@@ -790,8 +790,9 @@ func validateChallengesForTemporaryGrant(challenges []chrepo.ChallengeSummary, c
 }
 
 // deniedChallengeCheck rebuilds the check a challenge recorded as denied, a
-// tool call included, with strict selector matching. Rows written before selectors were recorded
-// cannot be rebuilt and are refused.
+// tool call included. It opens no grant key: a grant matches it only by naming
+// nothing the challenge did not carry. Rows written before selectors were
+// recorded cannot be rebuilt and are refused.
 func deniedChallengeCheck(challenge chrepo.ChallengeSummary) (authz.Check, error) {
 	if challenge.Selector == "" {
 		return authz.Check{}, fmt.Errorf("challenge %s is too old to be answered by a grant; retry the denied action", challenge.ID)
@@ -806,8 +807,7 @@ func deniedChallengeCheck(challenge chrepo.ChallengeSummary) (authz.Check, error
 			dimensions[key] = value
 		}
 	}
-	check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
-	return check.WithStrictSelectorMatch(), nil
+	return authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions), nil
 }
 
 // resolveChallengesWithTemporaryGrant records each answered challenge as

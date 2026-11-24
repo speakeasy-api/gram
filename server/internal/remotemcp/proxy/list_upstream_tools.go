@@ -43,6 +43,10 @@ type UpstreamListingRefusalError struct {
 	// Response carries the status and headers of an upstream auth refusal, and
 	// is nil when Cause is set. Its body is not retained.
 	Response *http.Response
+
+	// Answered is true when the MCP server answered before Cause stopped the listing.
+	// A tunnel gateway's 502 that a retryer could not route around is not its answer.
+	Answered bool
 }
 
 func (e *UpstreamListingRefusalError) Error() string {
@@ -150,13 +154,13 @@ func (t *upstreamListingTransport) RoundTrip(req *http.Request) (*http.Response,
 
 	_, resp, err := t.proxy.forwardRequestWithRetry(req.Context(), forwarded, func() io.Reader { return bytes.NewReader(body) }, nil)
 	if err != nil {
-		return nil, t.refuse(&UpstreamListingRefusalError{Cause: err, Response: nil})
+		return nil, t.refuse(&UpstreamListingRefusalError{Cause: err, Response: nil, Answered: false})
 	}
 
 	if t.proxy.UpstreamResponseInterceptor != nil {
 		if err := t.proxy.UpstreamResponseInterceptor(req.Context(), resp); err != nil {
 			o11y.NoLogDefer(resp.Body.Close)
-			return nil, t.refuse(&UpstreamListingRefusalError{Cause: err, Response: nil})
+			return nil, t.refuse(&UpstreamListingRefusalError{Cause: err, Response: nil, Answered: true})
 		}
 	}
 
@@ -166,7 +170,7 @@ func (t *upstreamListingTransport) RoundTrip(req *http.Request) (*http.Response,
 		refused := new(http.Response)
 		refused.StatusCode = resp.StatusCode
 		refused.Header = resp.Header.Clone()
-		return nil, t.refuse(&UpstreamListingRefusalError{Cause: nil, Response: refused})
+		return nil, t.refuse(&UpstreamListingRefusalError{Cause: nil, Response: refused, Answered: true})
 	}
 	return resp, nil
 }

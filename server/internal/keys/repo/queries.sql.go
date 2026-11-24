@@ -1047,6 +1047,97 @@ func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg Rev
 	return items, nil
 }
 
+const revokeStalePluginAPIKeys = `-- name: RevokeStalePluginAPIKeys :many
+WITH plugin_keys AS (
+  SELECT id, project_id, name, created_at, last_accessed_at, deleted
+  FROM api_keys
+  WHERE name ~ '^plugins-(mcp|hooks|hooks-download)-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+    AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+),
+last_publish AS (
+  SELECT project_id, max(created_at) AS published_at
+  FROM plugin_keys
+  WHERE project_id IS NOT NULL
+    AND name ~ '^plugins-(mcp|hooks)-[0-9]{8}-'
+  GROUP BY project_id
+),
+stale AS (
+  SELECT k.id
+  FROM plugin_keys k
+  LEFT JOIN last_publish lp ON lp.project_id = k.project_id
+  WHERE k.deleted IS FALSE
+    AND k.created_at < clock_timestamp() - ($1::int * interval '1 day')
+    AND (
+      lp.published_at IS NULL
+      OR k.created_at < lp.published_at - ($1::int * interval '1 day')
+      OR k.created_at > lp.published_at
+    )
+    AND (k.last_accessed_at IS NULL OR k.last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+  ORDER BY k.created_at
+  LIMIT $2
+)
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id IN (SELECT id FROM stale)
+  AND deleted IS FALSE
+  -- Rechecked here so a use recorded while this statement waited on the row
+  -- still spares the key.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - ($1::int * interval '1 day'))
+RETURNING id, organization_id, project_id, name, scopes
+`
+
+type RevokeStalePluginAPIKeysParams struct {
+	RetentionDays int32
+	BatchSize     int32
+}
+
+type RevokeStalePluginAPIKeysRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	Scopes         []string
+}
+
+// Revokes plugin-minted keys nobody needs any more: plugins-hooks-* and
+// plugins-mcp-* (publish) and plugins-hooks-download-* (ZIP download). Claude
+// web keys are left alone because each member already keeps only one. Provenance
+// is proven the same way as the rotation queries above. A key is kept while any
+// of these holds:
+//
+//   - it was created within the retention window;
+//   - it was created within the retention window up to and including the
+//     project's latest publish, so the current plugin generation keeps working
+//     however long ago it shipped. Revoked publish keys still count as
+//     publishes; a download minted after the latest publish gets no extra time;
+//   - it was used within the retention window.
+func (q *Queries) RevokeStalePluginAPIKeys(ctx context.Context, arg RevokeStalePluginAPIKeysParams) ([]RevokeStalePluginAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, revokeStalePluginAPIKeys, arg.RetentionDays, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeStalePluginAPIKeysRow
+	for rows.Next() {
+		var i RevokeStalePluginAPIKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const touchAPIKeyUpdatedAt = `-- name: TouchAPIKeyUpdatedAt :one
 UPDATE api_keys
 SET updated_at = clock_timestamp()

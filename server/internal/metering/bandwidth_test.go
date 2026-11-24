@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -356,4 +357,104 @@ func TestMCPBandwidthMiddlewareMetersUncompressedBytesInsideResponseCompression(
 	require.Len(t, messages, 1)
 	require.Equal(t, string(metering.MeterMCPBandwidthEgress), messages[0].GetMeterId())
 	require.Equal(t, int64(len(responseBody)), messages[0].GetValue(), "egress is metered before compression")
+}
+
+func TestMCPBandwidthMiddlewareMetersTrailingSlashRuntimeRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, requestPath := range []string{"/mcp/hosted/", "/platform/mcp/platform-toolset/"} {
+		t.Run(requestPath, func(t *testing.T) {
+			t.Parallel()
+
+			publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+			handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+				_, _ = io.ReadAll(r.Body)
+				_, _ = io.WriteString(w, "response")
+			}))
+
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, requestPath, strings.NewReader("request")))
+
+			messages, _ := publisher.published()
+			require.Len(t, messages, 2)
+			require.Equal(t, requestPath, messages[0].GetAttributes()[metering.AttributeRequestPath])
+		})
+	}
+}
+
+func TestMCPBandwidthMiddlewareSkipsNestedRuntimePaths(t *testing.T) {
+	t.Parallel()
+
+	for _, requestPath := range []string{"/mcp/hosted//", "/mcp//", "/mcp/hosted/register/"} {
+		t.Run(requestPath, func(t *testing.T) {
+			t.Parallel()
+
+			publisher := &bandwidthCapturePublisher{}
+			handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+				_, _ = io.WriteString(w, "response")
+			}))
+
+			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, requestPath, strings.NewReader("request")))
+
+			messages, _ := publisher.published()
+			require.Empty(t, messages)
+		})
+	}
+}
+
+func TestMCPBandwidthMiddlewareLabelsPrivateNetworkIngress(t *testing.T) {
+	t.Parallel()
+
+	ingressID := uuid.New()
+	publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+	handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+		_, _ = io.ReadAll(r.Body)
+		_, _ = io.WriteString(w, "response")
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/mcp/hosted", strings.NewReader("request"))
+	request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example.ts.net",
+		OrganizationID:   "org-test",
+		NetworkIngressID: ingressID,
+		NetworkIdentity:  nil,
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	messages, _ := publisher.published()
+	require.Len(t, messages, 2)
+	for _, message := range messages {
+		require.Equal(t, ingressID.String(), message.GetAttributes()[metering.AttributeNetworkIngressID])
+		require.NotContains(t, message.GetAttributes(), metering.AttributeCustomDomain)
+	}
+}
+
+func TestMCPBandwidthMiddlewareOmitsNetworkIngressOnPublicOrigins(t *testing.T) {
+	t.Parallel()
+
+	publisher := &bandwidthCapturePublisher{requireBatchSize: 2}
+	handler := metering.NewMCPBandwidthMiddleware(testenv.NewLogger(t), publisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metering.AttributeMCPBandwidth(r.Context(), "org-test", uuid.New())
+		_, _ = io.ReadAll(r.Body)
+		_, _ = io.WriteString(w, "response")
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/mcp/hosted", strings.NewReader("request"))
+	request = request.WithContext(requestorigin.WithContext(request.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePlatform,
+		BaseURL:          "https://app.example.test",
+		OrganizationID:   "",
+		NetworkIngressID: uuid.New(),
+		NetworkIdentity:  nil,
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	messages, _ := publisher.published()
+	require.Len(t, messages, 2)
+	for _, message := range messages {
+		require.NotContains(t, message.GetAttributes(), metering.AttributeNetworkIngressID)
+	}
 }

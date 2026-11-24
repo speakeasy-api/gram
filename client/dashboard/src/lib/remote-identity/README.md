@@ -74,7 +74,7 @@ lib/remote-identity/
     useUpstreamProbe.ts     does this URL demand authentication
 
   components/               the shared UI of the concept
-    IdentityModeCards.tsx   User Identity / Shared credential / Manual
+    IdentityModeCards.tsx   User identity / Shared credential / Manual
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content and inline callout
     ProviderLink.tsx        deep link to the CRUD surface
@@ -94,7 +94,7 @@ components stay free of query wiring.
   complex OAuth surface there, out of the linear setup flow.
 - **Typed credential headers.** The credential editor under
   `pages/mcp/x/tabs/settings/sections/authentication/` edits the headers on
-  an offered credential. Identity settings no longer edit source headers.
+  an offered credential. Sign-in settings no longer edit source headers.
 
 ## Drafts
 

@@ -263,7 +263,7 @@ func (i *Issuer) checkAuthorizer(ctx context.Context, c Credential) error {
 	if err != nil {
 		return fmt.Errorf("load principal credential authorizer grants: %w", err)
 	}
-	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: c.ProjectID.String(), Dimensions: nil}
+	check := authz.Project(authz.ProjectIDOf(c.ProjectID)).Read()
 	allowed, err := authz.GrantsAuthorize(grants, check)
 	if err != nil {
 		return fmt.Errorf("check principal credential authorizer: %w", err)
