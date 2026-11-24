@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -55,10 +56,14 @@ type proxyBuildOptions struct {
 
 	// connections, when set, records refused and failed tools/call requests.
 	connections *ConnectionAttribution
+
+	// uncachedToolCatalog reads the tool catalog from Postgres instead of
+	// through its cache.
+	uncachedToolCatalog bool
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil, uncachedToolCatalog: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -112,6 +117,31 @@ func WithConnectionAttribution(attribution ConnectionAttribution) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.connections = &attribution
 	}}
+}
+
+// WithUncachedToolCatalog makes the proxy's per-tool authorization read the
+// tool catalog from Postgres rather than through its cache. Sign-in and consent
+// steps use it so an evicting or unreachable cache cannot slow or fail them.
+func WithUncachedToolCatalog() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.uncachedToolCatalog = true
+	}}
+}
+
+// uncachedToolCatalogStore is a ToolCatalogStore that can also read past its cache.
+type uncachedToolCatalogStore interface {
+	Uncached() *tooldisposition.Uncached
+}
+
+// toolCatalogStore is the store a proxy built with options reads the tool catalog from.
+func (f *ProxyManager) toolCatalogStore(options proxyBuildOptions) ToolCatalogStore {
+	if !options.uncachedToolCatalog {
+		return f.toolDispositions
+	}
+	if store, ok := f.toolDispositions.(uncachedToolCatalogStore); ok {
+		return store.Uncached()
+	}
+	return f.toolDispositions
 }
 
 // WithAnonymousCaller marks the caller as admitted without a Speakeasy credential.
@@ -402,10 +432,11 @@ func (f *ProxyManager) BuildTarget(
 	}
 	// Only remote-backed servers hold a tool catalog; the catalog API rejects
 	// every other backend.
+	catalogStore := f.toolCatalogStore(options)
 	var catalog *toolCatalogSync
 	if visibility == mcpservers.VisibilityPrivate && identity.RemoteMCPServerID != "" {
 		catalog = &toolCatalogSync{
-			store:          f.toolDispositions,
+			store:          catalogStore,
 			refreshes:      f.toolCatalogRefreshes,
 			organizationID: organizationID,
 			mcpServerID:    identity.McpServerID,
@@ -416,14 +447,14 @@ func (f *ProxyManager) BuildTarget(
 	}
 
 	if visibility == mcpservers.VisibilityPrivate {
-		authzInterceptor := NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		authzInterceptor := NewToolsCallAuthzInterceptor(f.authz, catalogStore, identity.McpServerID, projectID, logger)
 		authzInterceptor.catalog = catalog
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors, authzInterceptor)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
-		filterInterceptor := NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger)
+		filterInterceptor := NewToolsListMCPConnectFilterInterceptor(f.authz, catalogStore, identity.McpServerID, projectID, logger)
 		filterInterceptor.catalog = catalog
 		toolsListRespInterceptors = append(toolsListRespInterceptors, ToolsListReservedMetaInterceptor{}, filterInterceptor)
 	}

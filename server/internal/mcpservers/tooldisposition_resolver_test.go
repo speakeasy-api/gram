@@ -9,7 +9,10 @@ package mcpservers_test
 // writes and reads share one cache.
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -18,9 +21,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -270,6 +276,85 @@ func TestToolCatalog_RecordMissingToolsAuditsAsSystemWhenAnAgentTriggersIt(t *te
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
+}
+
+// unreachableCache fails every call, as a cache that is down does.
+type unreachableCache struct {
+	cache.Cache
+}
+
+func (unreachableCache) Get(context.Context, string, any) error {
+	return errors.New("cache unreachable")
+}
+
+func (unreachableCache) Set(context.Context, string, any, time.Duration) error {
+	return errors.New("cache unreachable")
+}
+
+func (unreachableCache) Delete(context.Context, string) error {
+	return errors.New("cache unreachable")
+}
+
+// The uncached view reads Postgres, so a stale cached catalog does not decide
+// what a consent step sees.
+func TestToolCatalog_UncachedReadsPastAStaleCache(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	// Caches an empty catalog, then writes a tool behind the cache.
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Empty(t, catalog)
+	_, err = repo.New(ti.conn).AddMCPServerToolMetadata(ctx, repo.AddMCPServerToolMetadataParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.MustParse(serverID),
+		Tools:       []byte(`[{"tool_name":"delete_item","destructive_hint":true}]`),
+	})
+	require.NoError(t, err)
+
+	cached, err := ti.dispositions.Dispositions(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Empty(t, cached, "the cached view is stale")
+
+	uncached := ti.dispositions.Uncached()
+	live, err := uncached.Dispositions(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"delete_item": "destructive"}, live)
+	catalog, err = uncached.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"delete_item": "destructive"}, catalog)
+}
+
+// With the cache down, the uncached view still reads and records the catalog.
+func TestToolCatalog_UncachedWorksWithTheCacheDown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+	down := mcpservers.NewToolDispositionCache(testenv.NewLogger(t), ti.conn, unreachableCache{Cache: cache.NoopCache})
+
+	err := down.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "list_items", Title: nil, ReadOnlyHint: new(true), DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.Error(t, err, "the cached store fails closed when it cannot evict")
+
+	uncached := down.Uncached()
+	err = uncached.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "delete_item", Title: nil, ReadOnlyHint: nil, DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err, "the write committed and this view reads Postgres")
+
+	catalog, err := uncached.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"list_items": "read_only", "delete_item": "destructive"}, catalog)
 }
 
 func TestToolCatalog_RecordMissingToolsTrimsNamesAndSkipsBlankOnes(t *testing.T) {

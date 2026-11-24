@@ -116,7 +116,9 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	}
 	groupID := toolfilter.ResolveGroupID(serverGroupID, toolsetGroupID)
 
-	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(endpoint.ProjectID), mv.ToolsetSlug(conv.ToLower(toolsetRow.Slug)), &s.toolsetCache, groupID, s.platformExtras...)
+	// No toolset cache: consent is a sign-in step, so it reads Postgres rather
+	// than depend on a cache that may be evicting or unreachable.
+	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(endpoint.ProjectID), mv.ToolsetSlug(conv.ToLower(toolsetRow.Slug)), nil, groupID, s.platformExtras...)
 	if err != nil {
 		return nil, err
 	}
