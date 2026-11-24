@@ -25,7 +25,9 @@ vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
   useMcpServerAuthenticationReadiness: () => readiness.value,
 }));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
-  UserSessionIssuerField: () => <span>Used by this server</span>,
+  UserSessionIssuerField: ({ label }: { label: string }) => (
+    <span>{label}</span>
+  ),
 }));
 
 const mcpServer = {

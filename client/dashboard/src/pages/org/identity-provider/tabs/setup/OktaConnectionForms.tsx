@@ -487,8 +487,8 @@ export function AgentSetupForm({
         <Text small warning>
           Changing the agent ID leaves MCP sign-ins trusting the previous
           agent&apos;s sign-in client. After saving, set up Okta sign-in for the
-          new agent, paste its public key in Okta, and trust it on those
-          issuers.
+          new agent, paste its public key in Okta, and trust it on those MCP
+          sign-ins.
         </Text>
       )}
       <FieldDescription id="okta-agent-help">

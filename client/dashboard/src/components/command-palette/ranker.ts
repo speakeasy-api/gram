@@ -201,10 +201,15 @@ export function fuzzyScore(
   if (unmatched) score *= UNMATCHED_PENALTY;
   score +=
     SHORT_TITLE_BONUS * Math.max(0, 1 - c.title.length / SHORT_TITLE_LENGTH);
-  const phrase = all.join(" ");
+  const phrase = queryTokens.join(" ");
   if (
-    all.length > 1 &&
-    c.keywords.some((keyword) => tokens(keyword).join(" ") === phrase)
+    queryTokens.length > 1 &&
+    c.keywords.some(
+      (keyword) =>
+        tokens(keyword)
+          .filter((token) => !STOP_WORDS.has(token))
+          .join(" ") === phrase,
+    )
   ) {
     score += WHOLE_KEYWORD_BONUS;
   }

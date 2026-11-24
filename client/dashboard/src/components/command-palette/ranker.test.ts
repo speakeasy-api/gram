@@ -144,6 +144,16 @@ describe("fuzzyScore", () => {
     );
   });
 
+  it("ignores stop words when matching a whole keyword", () => {
+    const whole = candidate("Page", { keywords: ["authentication provider"] });
+    const split = candidate("Page", {
+      keywords: ["authentication", "provider"],
+    });
+    expect(fuzzyScore("open authentication provider", whole)).toBeGreaterThan(
+      fuzzyScore("open authentication provider", split),
+    );
+  });
+
   it("halves the score when a token is unmatched", () => {
     const matched = fuzzyScore("slack", candidate("Slack"));
     const withUnmatched = fuzzyScore("slack zzzz", candidate("Slack"));
