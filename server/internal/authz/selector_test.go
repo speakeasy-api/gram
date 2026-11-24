@@ -512,9 +512,11 @@ func TestMatching_RiskPolicyAudienceHasNoServerLimit(t *testing.T) {
 	t.Parallel()
 
 	audience := NewSelector(ScopeRiskPolicyEvaluate, "policy-1")
-	limited := maps.Clone(audience)
-	limited[SelectorKeyServerURL] = "https://one.example.com"
-	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, limited), "not allowed")
+	for key, value := range map[string]string{SelectorKeyServerURL: "https://one.example.com", SelectorKeyServerIdentity: "one"} {
+		limited := maps.Clone(audience)
+		limited[key] = value
+		require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, limited), "not allowed", key)
+	}
 	bypass := NewSelector(ScopeRiskPolicyBypass, "policy-1")
 	bypass[SelectorKeyServerURL] = "https://one.example.com"
 	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyEvaluate, audience), NewGrantWithSelector(ScopeRiskPolicyBypass, bypass)}

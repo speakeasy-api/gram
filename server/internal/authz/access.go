@@ -154,12 +154,10 @@ func (c Check) blockCoversMissingValue(key string) bool {
 
 // mayOmit reports whether the check may leave out a key that a grant of its
 // scope names and still match the grant. The registry declares these open
-// keys per permission (scopeOpenKeys), for three kinds of check only:
+// keys per permission (scopeOpenKeys), for two kinds of check only:
 //
 //   - a probe, which asks about some resource and not a concrete one;
-//   - a connection, which names no tool, against a tool or disposition limit;
-//   - a risk policy audience question, which names no server, against a
-//     server limit. Matching there places the caller under the policy.
+//   - a connection, which names no tool, against a tool or disposition limit.
 //
 // An exact check may omit nothing, and neither may any check of another
 // kind.
