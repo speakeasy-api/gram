@@ -66,13 +66,14 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "offer-target")
 	source := seedIssuer(t, ctx, ti, "offer-source")
 	registration := seedMigrationRemoteClient(t, ctx, ti, "offered-without-link")
+	hostedRegistration := seedMigrationRemoteClient(t, ctx, ti, "hosted-with-source-link", source)
 	linkOnly := leftoverSeedBoundRegistration(t, ctx, ti, source)
 	leftoverSeedBoundRegistration(t, ctx, ti, target)
 	member := impactSeedServer(t, ctx, ti, source)
 	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "offer-hosted")
 	targetServer := impactSeedServer(t, ctx, ti, target)
 	clientID := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, member, registration)
-	seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, hosted, registration)
+	hostedOffer := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, hosted, hostedRegistration)
 	fixtures := selectionbackfill.New(ti.conn)
 	gateway := uuid.New()
 	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gateway, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "typed-gateway", UserSessionIssuerID: conv.ToNullUUID(source)}))
@@ -96,11 +97,14 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	choice, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: "user_session", CredentialID: migrationCredentialID(session), McpServerID: member})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(clientID), choice.AuthClientID)
-	for _, reg := range []uuid.UUID{registration, linkOnly} {
+	for _, reg := range []uuid.UUID{registration, hostedRegistration, linkOnly} {
 		parents, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: reg, UserSessionIssuerID: target})
 		require.NoError(t, err)
 		require.Zero(t, parents, "only actual attachment rekeys may write target parents")
 	}
+	hostedOffers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, hosted)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{hostedOffer}, hostedOffers, "the source-linked registration survives as the exact hosted offer, not as a target link")
 	for _, id := range []uuid.UUID{member, hosted, targetServer} {
 		require.Empty(t, impactAssociatedClients(t, ctx, ti, id))
 	}
