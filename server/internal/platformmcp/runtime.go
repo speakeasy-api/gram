@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -166,16 +167,21 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Discovery is outside the allowlist and catalogue, so a meta-tool's
 	// dispatched call passes through both like a direct call.
 	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
-	// Outside discovery, which replaces the instructions in its small modes:
-	// the caller's servers are appended to whichever instructions it chose.
-	if postgresReader, ok := reader.(*PostgresReader); ok && postgresReader.gatewayProxy.valid() {
-		middlewares = append([]mcp.Middleware{gatewayServersInstructionsMiddleware(postgresReader.gatewayProxy, logger, runtime.instructionBudget(logger))}, middlewares...)
-	}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
+	// Outermost, so every middleware and tool in a request reads one catalog snapshot.
+	middlewares = append([]mcp.Middleware{aiCatalogPinMiddleware(registrar)}, middlewares...)
 	runtime.server.AddReceivingMiddleware(middlewares...)
 	return runtime
+}
+
+func aiCatalogPinMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(registrar.withAICatalogSnapshot(ctx), method, req)
+		}
+	}
 }
 
 func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
@@ -211,8 +217,9 @@ func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
 				return next(ctx, method, req)
 			}
 			clientID := mustPrincipal(ctx).ClientID
+			catalog := registrar.aiCatalogSnapshot(ctx)
 			if method == "tools/call" {
-				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(clientID, callReq.Params.Name) {
+				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(catalog, clientID, callReq.Params.Name) {
 					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
 				}
 			}
@@ -222,9 +229,9 @@ func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
 			}
 			switch typed := result.(type) {
 			case *mcp.InitializeResult:
-				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
 			case *mcp.DiscoverResult:
-				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				typed.Instructions = registrar.instructionsForClient(catalog, clientID, typed.Instructions)
 				// The instructions now depend on the caller, so no shared cache
 				// may hand one client's answer to another.
 				typed.CacheScope = "private"
@@ -315,6 +322,18 @@ func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platfo
 	return r
 }
 
+// WithAICatalog injects the AI client catalog that identifies OAuth clients.
+// Every production runtime needs one.
+func (r *Runtime) WithAICatalog(catalog *aivendors.Store) *Runtime {
+	if catalog == nil {
+		panic("platformmcp: AI client catalog store is required")
+	}
+	if r != nil && r.registrar != nil {
+		r.registrar.withAICatalog(catalog)
+	}
+	return r
+}
+
 func (r *Runtime) WithRiskTelemetry(telemetry RiskTelemetry) *Runtime {
 	if r != nil && r.registrar != nil {
 		r.registrar.withRiskTelemetry(telemetry)
@@ -329,6 +348,7 @@ func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string)
 }
 
 func (r *Runtime) Handler() http.Handler {
+	r.registrar.requireAICatalog()
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return r.server
 	}, &mcp.StreamableHTTPOptions{
@@ -466,5 +486,6 @@ func (r *Runtime) AssistantTools() []Descriptor {
 	if r == nil {
 		return nil
 	}
+	r.registrar.requireAICatalog()
 	return r.registrar.For(AudienceAssistant)
 }

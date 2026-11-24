@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // discoveryMode is the tool surface one Platform MCP request is served.
@@ -85,28 +84,14 @@ func (r *Runtime) WithDiscovery(config DiscoveryConfig) *Runtime {
 	return r
 }
 
-// harnessProducts maps each CIMD document URL in the aivendors registry to its
-// product ID, resolved once because the registry is static.
-var harnessProducts = sync.OnceValue(func() map[string]string {
-	products := make(map[string]string)
-	for _, product := range aivendors.Products() {
-		for _, clientID := range aivendors.GatewayMatchersFor(product).ClientIDs {
-			products[clientID] = product.ID
-		}
-	}
-	return products
-})
-
 // harnessForClient names the harness behind a verified OAuth client_id: the
-// aivendors product whose CIMD document admitted it, or "unknown". It
-// resolves through the CIMD admission catalog the same way the MCP gateway
-// does, never through the client's self-reported clientInfo. A dynamically
-// registered client has an opaque client_id that matches no entry.
-func harnessForClient(clientID string) string {
-	if preset, ok := admission.CatalogPreset(clientID); ok {
-		if product, ok := harnessProducts()[preset.URL]; ok {
-			return product
-		}
+// catalog product whose CIMD document admitted it, or "unknown". It resolves
+// through the CIMD admission catalog the same way the MCP gateway does, never
+// through the client's self-reported clientInfo. A dynamically registered
+// client has an opaque client_id that matches no entry.
+func harnessForClient(catalog *aivendors.Snapshot, clientID string) string {
+	if preset, ok := catalog.CatalogPreset(clientID); ok {
+		return preset.ProductID
 	}
 	return "unknown"
 }
@@ -123,7 +108,7 @@ func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, pri
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
-	harness := harnessForClient(principal.ClientID)
+	harness := harnessForClient(r.registrar.aiCatalogSnapshot(ctx), principal.ClientID)
 	if harness == chatGPTProductID {
 		return discoveryFull
 	}
@@ -265,23 +250,6 @@ func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string
 		}
 	}
 	return tools, nil
-}
-
-// smallSurfaceInstructionBudget is the instructions size hosts on the small
-// surface keep; Codex cuts the rest.
-const smallSurfaceInstructionBudget = 1 << 10
-
-// instructionBudget reports the instructions size a caller's host keeps, or
-// zero when it keeps them whole. Middleware outside discovery cannot read the
-// mode from its context, so it asks the same way discovery does.
-func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) int {
-	return func(ctx context.Context) int {
-		principal, ok := PrincipalFromContext(ctx)
-		if !ok || r.discoveryModeFor(ctx, logger, principal) == discoveryFull {
-			return 0
-		}
-		return smallSurfaceInstructionBudget
-	}
 }
 
 // discoveryInstructions replace the full server instructions, which Codex cuts

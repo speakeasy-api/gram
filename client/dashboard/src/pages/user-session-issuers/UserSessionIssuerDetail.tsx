@@ -66,13 +66,13 @@ export default function UserSessionIssuerDetail(): JSX.Element {
 type IssuerDetailLinks = {
   /** Where "not found" sends people back to. */
   listHref: string;
-  /** Another MCP Authentication Provider's page, after consolidating into it. */
+  /** Another MCP sign-in's page, after consolidating into it. */
   detailHref: (issuerId: string) => string;
 };
 
 /**
- * One MCP Authentication Provider, shared by the organization page and a
- * project's MCP Sessions configuration. `editableProjectId` names the project
+ * One MCP sign-in, shared by the organization page and a
+ * project's MCP Sign-in configuration. `editableProjectId` names the project
  * whose own providers this page may change; organization-wide ones are always
  * changed through the organization.
  */
@@ -102,14 +102,14 @@ function IssuerDetailContent({
       notFound={
         missing
           ? {
-              title: "MCP Authentication Provider not found",
+              title: "MCP sign-in not found",
               description:
                 "It may have been consolidated into another one or removed.",
               backTo: listHref,
             }
           : query.isError && !issuer
             ? {
-                title: "Couldn't load this MCP Authentication Provider",
+                title: "Couldn't load this MCP sign-in",
                 description: "Reload the page to try again.",
                 backTo: listHref,
               }
@@ -178,7 +178,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
       <Page.Eyebrow />
       <div className="flex items-center gap-3">
         <Text small muted>
-          MCP Authentication Provider
+          MCP sign-in
         </Text>
         <ScopeBadge
           projectId={issuer.projectId}
@@ -193,7 +193,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
 }
 
 /**
- * How clients reach this provider to sign in. Rarely needed, so it stays
+ * How clients reach this MCP sign-in to sign in. Rarely needed, so it stays
  * closed; only a broken sign-in address shows without opening it.
  */
 export function AdvancedSection({
@@ -318,7 +318,7 @@ export function McpServersSection({
     body = (
       <InlineEmptyState
         icon="server"
-        heading="No MCP servers use this MCP Authentication Provider"
+        heading="No MCP servers use this MCP sign-in"
         description="Choose it in an MCP server's settings to have clients sign in here."
       />
     );

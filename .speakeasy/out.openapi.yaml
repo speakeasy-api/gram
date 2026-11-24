@@ -32364,6 +32364,290 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListIntegrations
+  /rpc/intentPolicies.analyzeSession:
+    post:
+      description: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.
+      operationId: analyzeIntentSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeSessionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntentSessionAnalysis'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: analyzeSession intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: analyzeSession
+      x-speakeasy-react-hook:
+        name: AnalyzeIntentSession
+        type: mutation
+  /rpc/intentPolicies.getGuardrail:
+    get:
+      description: 'Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.'
+      operationId: getIntentGuardrail
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntentGuardrail'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getGuardrail intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: getGuardrail
+      x-speakeasy-react-hook:
+        name: IntentGuardrail
+  /rpc/intentPolicies.uploadTranscript:
+    post:
+      description: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.
+      operationId: uploadIntentTranscript
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadTranscriptRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadTranscriptResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: uploadTranscript intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: uploadTranscript
+      x-speakeasy-react-hook:
+        name: UploadIntentTranscript
+        type: mutation
   /rpc/internalSessionIssuers.get:
     get:
       description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
@@ -36805,6 +37089,111 @@ paths:
       x-speakeasy-name-override: getSignInSummary
       x-speakeasy-react-hook:
         name: McpSignInSummary
+  /rpc/mcpConnectionHealth.getSuspectedProblem:
+    post:
+      description: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.
+      operationId: getMcpSuspectedProblem
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetSuspectedProblemRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSuspectedProblemResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSuspectedProblem mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getSuspectedProblem
+      x-speakeasy-react-hook:
+        name: McpSuspectedProblem
   /rpc/mcpConnectionHealth.listAttempts:
     post:
       description: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.
@@ -37015,6 +37404,111 @@ paths:
       x-speakeasy-name-override: listDeniedClients
       x-speakeasy-react-hook:
         name: McpDeniedClients
+  /rpc/mcpConnectionHealth.listSuspectedProblems:
+    post:
+      description: 'List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider''s servers, gateways and authorization server count. Empty without log:read.'
+      operationId: listMcpSuspectedProblems
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListSuspectedProblemsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSuspectedProblemsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listSuspectedProblems mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: listSuspectedProblems
+      x-speakeasy-react-hook:
+        name: McpSuspectedProblems
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -37695,6 +38189,371 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpEndpoint
+  /rpc/mcpFeedback.getSettings:
+    get:
+      description: Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.
+      operationId: getMcpFeedbackSettings
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpFeedbackSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSettings mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: getSettings
+      x-speakeasy-react-hook:
+        name: McpFeedbackSettings
+  /rpc/mcpFeedback.list:
+    get:
+      description: List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.
+      operationId: listMcpFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return feedback with this severity.
+          in: query
+          name: severity
+          schema:
+            description: 'The impact a problem had on the agent''s task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.'
+            enum:
+              - blocked
+              - degraded
+              - cosmetic
+            type: string
+        - allowEmptyValue: true
+          description: Only return feedback about the tool with this exact name.
+          in: query
+          name: tool_name
+          schema:
+            description: Only return feedback about the tool with this exact name.
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of feedback.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of feedback.
+            type: string
+        - allowEmptyValue: true
+          description: The number of feedback reports to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of feedback reports to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMcpFeedbackResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: list mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: McpFeedback
+  /rpc/mcpFeedback.updateSettings:
+    post:
+      description: 'Switch an MCP server''s feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.'
+      operationId: updateMcpFeedbackSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMcpFeedbackSettingsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpFeedbackSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateSettings mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: updateSettings
+      x-speakeasy-react-hook:
+        name: UpdateMcpFeedbackSettings
   /rpc/mcpMetadata.export:
     post:
       description: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
@@ -92412,6 +93271,39 @@ components:
         - mode
         - enabled
         - signal_ids
+    AnalyzeSessionRequestBody:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session to analyze.
+          format: uuid
+        evaluator:
+          type: string
+          description: The label evaluator.
+          enum:
+            - jev
+            - gemini
+        generation:
+          type: integer
+          description: Chat generation to analyze. Defaults to the latest.
+          format: int32
+          minimum: 0
+        limit:
+          type: integer
+          description: Most tool calls to analyze from offset. Defaults to all, up to 200.
+          format: int32
+          minimum: 1
+          maximum: 200
+        offset:
+          type: integer
+          description: Index of the first tool call to analyze, for analyzing a session in batches. Totals still count every call.
+          default: 0
+          format: int32
+          minimum: 0
+      required:
+        - chat_id
+        - evaluator
     AnthropicInferenceConfig:
       type: object
       properties:
@@ -96380,6 +97272,7 @@ components:
             - risk_findings
             - tool_call_logs
             - mcp_connection_logs
+            - mcp_feedback
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -98601,6 +99494,7 @@ components:
             - risk_findings
             - tool_call_logs
             - mcp_connection_logs
+            - mcp_feedback
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -102885,6 +103779,44 @@ components:
         - status
         - payment_status
         - billing_ready
+    GetSuspectedProblemRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The problem id from listSuspectedProblems.
+        server_id:
+          type: string
+          description: Read the problem as listed for this server, gateway or toolset.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - id
+    GetSuspectedProblemResult:
+      type: object
+      properties:
+        found:
+          type: boolean
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        problem:
+          $ref: '#/components/schemas/SuspectedProblemDetail'
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
+        - found
     GetToolUsageClientToolBreakdownResult:
       type: object
       properties:
@@ -104846,6 +105778,387 @@ components:
       required:
         - version
         - created_at
+    IntentAnalysisTotals:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          description: Block decisions, including evaluator failures.
+          format: int64
+        calls:
+          type: integer
+          description: Tool calls in the session.
+          format: int64
+        clarified:
+          type: integer
+          description: Clarify decisions.
+          format: int64
+        cost_usd:
+          type: number
+          description: Summed evaluator cost.
+          format: double
+        judged:
+          type: integer
+          description: Tool calls assessed.
+          format: int64
+        latency_ms:
+          type: integer
+          description: Summed evaluator latency.
+          format: int64
+        permitted:
+          type: integer
+          description: Permit decisions.
+          format: int64
+      required:
+        - calls
+        - judged
+        - blocked
+        - clarified
+        - permitted
+        - cost_usd
+        - latency_ms
+    IntentCallAssessment:
+      type: object
+      properties:
+        arguments:
+          type: string
+          description: Arguments exactly as recorded.
+        decided_by:
+          type: array
+          items:
+            type: string
+          description: Contracts that produced the decision.
+        decision:
+          type: string
+          description: Combined decision.
+          enum:
+            - permit
+            - clarify
+            - block
+        evaluator_error:
+          type: string
+          description: Set when the evaluator failed to answer every label.
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelValue'
+          description: Inferred labels in guardrail order; missing labels are absent.
+        mcp_function:
+          type: string
+          description: MCP function, for MCP tools.
+        mcp_server:
+          type: string
+          description: MCP server, for MCP tools.
+        message_id:
+          type: string
+          description: Assistant message that carried the call.
+          format: uuid
+        occurred_at:
+          type: string
+          description: When the call was recorded.
+          format: date-time
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentContractOutcome'
+          description: Every contract's result, in guardrail order.
+        seq:
+          type: integer
+          description: Message sequence number.
+          format: int64
+        tool_call_id:
+          type: string
+          description: Provider call id.
+        tool_name:
+          type: string
+          description: Raw tool name.
+        usage:
+          $ref: '#/components/schemas/IntentCallUsage'
+      required:
+        - message_id
+        - seq
+        - tool_call_id
+        - tool_name
+        - arguments
+        - occurred_at
+        - labels
+        - decision
+        - decided_by
+        - outcomes
+        - usage
+    IntentCallUsage:
+      type: object
+      properties:
+        cost_usd:
+          type: number
+          description: Provider-reported cost; zero when unreported.
+          format: double
+        input_tokens:
+          type: integer
+          description: Prompt tokens.
+          format: int64
+        latency_ms:
+          type: integer
+          description: Evaluator latency.
+          format: int64
+        output_tokens:
+          type: integer
+          description: Completion tokens.
+          format: int64
+      required:
+        - input_tokens
+        - output_tokens
+        - cost_usd
+        - latency_ms
+    IntentCondition:
+      type: object
+      properties:
+        join:
+          type: string
+          description: Links the clause to the previous one; empty on the first clause.
+          enum:
+            - ""
+            - and
+            - or
+        label:
+          type: string
+          description: Label key the clause reads. Empty for a shell command pattern.
+        op:
+          type: string
+          description: How the label compares to values.
+          enum:
+            - ""
+            - is
+            - is not
+            - includes
+            - includes anything other than
+        pattern:
+          type: string
+          description: Regular expression a shell command must match, for a pattern clause.
+        values:
+          type: array
+          items:
+            type: string
+          description: 'Values compared: "true" for a yes/no label, else option keys. Several read as any of.'
+      required:
+        - join
+        - label
+        - op
+        - values
+        - pattern
+    IntentContract:
+      type: object
+      properties:
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentCondition'
+          description: When the contract fires, for display.
+        expression:
+          type: string
+          description: CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
+        id:
+          type: string
+          description: Stable contract id.
+        name:
+          type: string
+          description: Display name.
+        outcome:
+          type: string
+          description: Decision when the contract fires.
+          enum:
+            - block
+            - clarify
+        statement:
+          type: string
+          description: Grounding statement the contract enforces.
+      required:
+        - id
+        - name
+        - statement
+        - outcome
+        - conditions
+        - expression
+    IntentContractOutcome:
+      type: object
+      properties:
+        contract_id:
+          type: string
+          description: Contract id.
+        error:
+          type: string
+          description: Evaluation error, when any.
+        inputs:
+          type: object
+          description: Every label or tool path the contract reads, with its value (null when missing).
+          additionalProperties: true
+        result:
+          type: string
+          description: permit, clarify, block, or abstain; absent when the contract errored.
+      required:
+        - contract_id
+        - inputs
+    IntentEvaluatorDescriptor:
+      type: object
+      properties:
+        evaluator:
+          type: string
+          description: Evaluator kind.
+        model:
+          type: string
+          description: Model id.
+        prompt_version:
+          type: string
+          description: Question compilation version.
+        provider:
+          type: string
+          description: Inference transport.
+      required:
+        - evaluator
+        - provider
+        - model
+        - prompt_version
+    IntentGuardrail:
+      type: object
+      properties:
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentContract'
+          description: Contracts evaluated over the labels.
+        id:
+          type: string
+          description: Guardrail id.
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelQuestion'
+          description: Labels inferred for every call.
+        statements:
+          type: array
+          items:
+            type: string
+          description: Grounding statements fed to the evaluator.
+        version:
+          type: string
+          description: Guardrail version.
+      required:
+        - id
+        - version
+        - statements
+        - questions
+        - contracts
+    IntentLabelOption:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the option means.
+        key:
+          type: string
+          description: Option value exposed to contracts.
+        ordinal:
+          type: integer
+          description: Order of the option; higher is better understood.
+          format: int64
+        uncertain:
+          type: boolean
+          description: True when the option reports rank -1.
+      required:
+        - key
+        - description
+        - ordinal
+        - uncertain
+    IntentLabelQuestion:
+      type: object
+      properties:
+        instructions:
+          type: string
+          description: The question the evaluator answers.
+        key:
+          type: string
+          description: Label key, read by contracts as label.<key>.
+        kind:
+          type: string
+          description: Question shape.
+          enum:
+            - noul
+            - multi_noul
+            - choice
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelOption'
+          description: Values of a choice or multi_noul label.
+      required:
+        - key
+        - kind
+        - instructions
+        - options
+    IntentLabelValue:
+      type: object
+      properties:
+        distribution:
+          type: object
+          description: Per-option probabilities, when the evaluator gives them.
+          additionalProperties:
+            type: number
+            format: double
+        key:
+          type: string
+          description: Label key.
+        probability:
+          type: number
+          description: Probability of the selected value.
+          format: double
+        rank:
+          type: integer
+          description: Ordinal rank; -1 when categorical or uncertain.
+          format: int64
+        rationale:
+          type: string
+          description: Evaluator explanation, when given.
+        value:
+          description: Boolean, string, or list of strings, by label kind.
+      required:
+        - key
+        - value
+        - rank
+        - probability
+    IntentSessionAnalysis:
+      type: object
+      properties:
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentCallAssessment'
+          description: One entry per judged call, in session order.
+        chat_id:
+          type: string
+          description: The analyzed session.
+          format: uuid
+        evaluator:
+          $ref: '#/components/schemas/IntentEvaluatorDescriptor'
+        generation:
+          type: integer
+          description: The analyzed chat generation.
+          format: int32
+        guardrail_version:
+          type: string
+          description: Guardrail version applied.
+        limit_hit:
+          type: boolean
+          description: True when the session had more calls than were judged.
+        totals:
+          $ref: '#/components/schemas/IntentAnalysisTotals'
+      required:
+        - chat_id
+        - generation
+        - guardrail_version
+        - evaluator
+        - assessments
+        - totals
+        - limit_hit
     InternalSessionIssuer:
       type: object
       properties:
@@ -106741,6 +108054,29 @@ components:
       description: Result type for listing MCP endpoints
       required:
         - mcp_endpoints
+    ListMcpFeedbackResult:
+      type: object
+      properties:
+        counts:
+          $ref: '#/components/schemas/McpFeedbackCounts'
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpFeedback'
+          description: A page of reports, newest first.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when there are no more reports.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpFeedbackToolCount'
+          description: The tools named most often in the window, most first.
+      description: Counts by severity and the tools the reports are about over the last 30 days, and a newest-first page of feedback for an MCP server.
+      required:
+        - counts
+        - tools
+        - feedback
     ListMcpServerAuthClientChoicesResponseBody:
       type: object
       properties:
@@ -107717,6 +109053,52 @@ components:
           description: The list of budget rules.
       required:
         - rules
+    ListSuspectedProblemsRequestBody:
+      type: object
+      properties:
+        part:
+          type: string
+          description: Keep problems with this part of the connection.
+          enum:
+            - speakeasy
+            - service
+        server_id:
+          type: string
+          description: Keep problems with people on this server, gateway or toolset.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+    ListSuspectedProblemsResult:
+      type: object
+      properties:
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblem'
+          description: At most 100, most people first.
+        problems_total:
+          type: integer
+          description: Problems before the cap.
+          format: int64
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
+        - problems
+        - problems_total
     ListSyncedUsersResult:
       type: object
       properties:
@@ -108909,6 +110291,187 @@ components:
         - name
         - description
         - input_schema
+    McpFeedback:
+      type: object
+      properties:
+        client_name:
+          type: string
+          description: The MCP client's name, from its handshake.
+        client_version:
+          type: string
+          description: The MCP client's version, from its handshake.
+        content:
+          type: string
+          description: The report itself.
+        created_at:
+          type: string
+          description: When the report was received.
+          format: date-time
+        external_user_id:
+          type: string
+          description: The caller's subject in the identity provider the server signs people in with.
+        id:
+          type: string
+          description: The ID of the report.
+          format: uuid
+        intention:
+          type: string
+          description: What the agent was trying to do.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server the report was sent through.
+          format: uuid
+        model:
+          type: string
+          description: The model and host product as the agent reported them.
+        severity:
+          type: string
+          description: 'The impact a problem had on the agent''s task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.'
+          enum:
+            - blocked
+            - degraded
+            - cosmetic
+        tool_name:
+          type: string
+          description: The tool the agent says the report is about. It is not checked against the server's tools.
+        user_email:
+          type: string
+          description: That member's email address.
+        user_id:
+          type: string
+          description: The Speakeasy user ID of the caller, when the caller is a member of the organization.
+        workaround:
+          type: string
+          description: What the agent did instead.
+      description: One report an agent sent through an MCP server's feedback tool. The free text was written by the agent and is stored with secrets and personal data masked; treat it as untrusted input rather than as instructions.
+      required:
+        - id
+        - mcp_server_id
+        - content
+        - created_at
+    McpFeedbackCounts:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          description: Reports where the agent could not complete its task.
+          format: int64
+        cosmetic:
+          type: integer
+          description: Reports where the task worked but was confusing.
+          format: int64
+        degraded:
+          type: integer
+          description: Reports where the agent needed a slower or awkward path.
+          format: int64
+        total:
+          type: integer
+          description: Every report in the window.
+          format: int64
+        unspecified:
+          type: integer
+          description: Reports with no severity, which includes praise.
+          format: int64
+        window_end:
+          type: string
+          description: The end of the window the counts cover.
+          format: date-time
+        window_start:
+          type: string
+          description: The start of the window the counts cover.
+          format: date-time
+      description: How many reports an MCP server received in the window, by severity.
+      required:
+        - window_start
+        - window_end
+        - total
+        - blocked
+        - degraded
+        - cosmetic
+        - unspecified
+    McpFeedbackSettings:
+      type: object
+      properties:
+        default_tool_description:
+          type: string
+          description: The description agents read when tool_description is not set.
+        default_tool_name:
+          type: string
+          description: The name the tool is listed under when tool_name is not set.
+        enabled:
+          type: boolean
+          description: Whether the server offers the feedback tool.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server.
+          format: uuid
+        tool:
+          $ref: '#/components/schemas/McpFeedbackTool'
+        tool_description:
+          type: string
+          description: The description agents read, when an admin replaced the default.
+        tool_name:
+          type: string
+          description: The name the tool is listed under, when an admin replaced the default.
+        updated_at:
+          type: string
+          description: When the settings were last changed. Absent when the server never had any.
+          format: date-time
+        updated_by_email:
+          type: string
+          description: The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
+        version:
+          type: string
+          description: Identifies these stored settings, and changes whenever they do. Empty when the server never had any. Send it back as expected_version so a change made from settings someone else has since changed is refused.
+      description: Whether an MCP server offers the feedback tool, and how an admin set it up.
+      required:
+        - mcp_server_id
+        - enabled
+        - default_tool_name
+        - default_tool_description
+        - tool
+        - version
+    McpFeedbackTool:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What agents read to decide when and how to call the tool.
+        input_schema:
+          type: string
+          description: The JSON Schema of the tool's input, as a JSON document.
+          format: json
+        name:
+          type: string
+          description: The name agents call the tool by.
+        title:
+          type: string
+          description: The tool's display name.
+      description: The feedback tool as agents see it on the MCP server.
+      required:
+        - name
+        - title
+        - description
+        - input_schema
+    McpFeedbackToolCount:
+      type: object
+      properties:
+        blocked_count:
+          type: integer
+          description: The number of those reports where the agent could not complete its task.
+          format: int64
+        feedback_count:
+          type: integer
+          description: The number of reports that named it.
+          format: int64
+        tool_name:
+          type: string
+          description: The tool's name as agents reported it.
+      description: How many reports in the window named one tool, and how many of them said the agent was blocked.
+      required:
+        - tool_name
+        - feedback_count
+        - blocked_count
     McpMetadata:
       type: object
       properties:
@@ -122235,6 +123798,380 @@ components:
         - summary
         - impact
         - cached
+    SuspectedProblem:
+      type: object
+      properties:
+        fact:
+          type: string
+          description: What the data establishes about it, in plain words.
+        filters:
+          $ref: '#/components/schemas/SuspectedProblemFilters'
+        headline:
+          type: string
+          description: Who cannot do what, in plain words.
+        id:
+          type: string
+          description: Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
+        last_failed_at:
+          type: string
+          format: date-time
+        part:
+          description: speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
+          enum:
+            - speakeasy
+            - service
+          type: string
+          x-speakeasy-name-override: SuspectedProblemPart
+        people_count:
+          type: integer
+          format: int64
+        people_on_server_count:
+          type: integer
+          description: People failing on the server asked for. Only with server_id.
+          format: int64
+        rule:
+          description: The rule a problem was listed by.
+          enum:
+            - same_server
+            - same_service
+            - same_app_version
+            - one_person
+          type: string
+          x-speakeasy-name-override: SuspectedProblemRule
+        scope:
+          $ref: '#/components/schemas/SuspectedProblemScope'
+        since:
+          type: string
+          description: When its earliest failure ended.
+          format: date-time
+      required:
+        - id
+        - rule
+        - part
+        - scope
+        - since
+        - last_failed_at
+        - people_count
+        - headline
+        - fact
+        - filters
+    SuspectedProblemBucket:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          format: int64
+        start:
+          type: string
+          format: date-time
+      required:
+        - start
+        - attempts
+    SuspectedProblemDetail:
+      type: object
+      properties:
+        as_of:
+          type: string
+          description: 'When the problem was read: the end of the chart, the message counts and the Connection Logs links.'
+          format: date-time
+        counts_widened:
+          type: boolean
+          description: True when a filter list was too long to send and was left out, so the chart, messages and filters may include unrelated failures.
+        fact:
+          type: string
+          description: What the data establishes about it, in plain words.
+        failed_per_10_minutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemBucket'
+          description: Failed attempts per 10 minutes over at most the last 24 hours.
+        filters:
+          $ref: '#/components/schemas/SuspectedProblemFilters'
+        headline:
+          type: string
+          description: Who cannot do what, in plain words.
+        id:
+          type: string
+          description: Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
+        last_connected_at:
+          type: string
+          description: The latest time any of its people last had the broken part working, when known.
+          format: date-time
+        last_failed_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemMessage'
+        other_failures_on_service:
+          type: integer
+          description: People failing on the same scope who are not in this problem.
+          format: int64
+        part:
+          description: speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
+          enum:
+            - speakeasy
+            - service
+          type: string
+          x-speakeasy-name-override: SuspectedProblemPart
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemPerson'
+          description: At most 50 people, earliest failure first.
+        people_count:
+          type: integer
+          format: int64
+        people_on_server_count:
+          type: integer
+          description: People failing on the server asked for. Only with server_id.
+          format: int64
+        people_total:
+          type: integer
+          description: Distinct people in the problem.
+          format: int64
+        rule:
+          description: The rule a problem was listed by.
+          enum:
+            - same_server
+            - same_service
+            - same_app_version
+            - one_person
+          type: string
+          x-speakeasy-name-override: SuspectedProblemRule
+        scope:
+          $ref: '#/components/schemas/SuspectedProblemScope'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemServer'
+          description: At most 50, most attempts first.
+        servers_total:
+          type: integer
+          description: Servers before the cap.
+          format: int64
+        since:
+          type: string
+          description: When its earliest failure ended.
+          format: date-time
+        source:
+          description: The party that returned a failure.
+          enum:
+            - service
+            - server
+            - app
+            - identity_provider
+            - speakeasy_setting
+            - speakeasy
+          type: string
+          x-speakeasy-name-override: ConnectionFailureSource
+      required:
+        - failed_per_10_minutes
+        - other_failures_on_service
+        - messages
+        - people
+        - people_total
+        - servers
+        - servers_total
+        - as_of
+        - counts_widened
+        - id
+        - rule
+        - part
+        - scope
+        - since
+        - last_failed_at
+        - people_count
+        - headline
+        - fact
+        - filters
+    SuspectedProblemFilters:
+      type: object
+      properties:
+        app_versions:
+          type: array
+          items:
+            type: string
+          description: App family and version as family@version.
+          maxItems: 50
+        apps:
+          type: array
+          items:
+            type: string
+          description: App families. An empty string selects apps that are not on the list.
+          maxItems: 50
+        from:
+          type: string
+          description: Inclusive start of attempt start times.
+          format: date-time
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: Gateway member ids on the step that ended the attempt.
+          maxItems: 50
+        networks:
+          type: array
+          items:
+            type: string
+          description: Network keys.
+          maxItems: 50
+        outcomes:
+          type: array
+          items:
+            description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+            enum:
+              - connected
+              - failed
+              - blocked
+              - declined
+              - didnt_finish
+              - in_progress
+            type: string
+            x-speakeasy-name-override: ConnectionOutcome
+          maxItems: 50
+        people:
+          type: array
+          items:
+            type: string
+          description: Subject URNs.
+          maxItems: 50
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Reason codes.
+          maxItems: 50
+        server_ids:
+          type: array
+          items:
+            type: string
+          description: Server, gateway or toolset ids.
+          maxItems: 50
+        services:
+          type: array
+          items:
+            type: string
+          description: Service hosts.
+          maxItems: 50
+        steps:
+          type: array
+          items:
+            description: The plain step an attempt ended or stopped at.
+            enum:
+              - connect
+              - sign_in
+              - service_sign_in
+              - sign_in_renewal
+              - service_renewal
+              - listing_tools
+              - request
+              - other
+            type: string
+            x-speakeasy-name-override: ConnectionStepGroup
+          maxItems: 50
+      description: Connection Logs filters that show the problem's failed attempts.
+      required:
+        - from
+    SuspectedProblemMessage:
+      type: object
+      properties:
+        admin_message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        attempts:
+          type: integer
+          format: int64
+        message:
+          type: string
+          description: What happened, in one sentence for the person.
+        reason:
+          type: string
+      required:
+        - reason
+        - message
+        - attempts
+    SuspectedProblemPerson:
+      type: object
+      properties:
+        apps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionApp'
+          description: At most 5.
+        apps_total:
+          type: integer
+          description: Apps before the cap.
+          format: int64
+        attempts:
+          type: integer
+          format: int64
+        first_failed_at:
+          type: string
+          format: date-time
+        person:
+          $ref: '#/components/schemas/ConnectionPerson'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemPlace'
+          description: At most 5.
+        servers_total:
+          type: integer
+          description: Servers before the cap.
+          format: int64
+      description: One person in the problem, with up to 5 of the apps and servers they fail on.
+      required:
+        - person
+        - apps
+        - apps_total
+        - servers
+        - servers_total
+        - attempts
+        - first_failed_at
+    SuspectedProblemPlace:
+      type: object
+      properties:
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+      required:
+        - server
+    SuspectedProblemScope:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The server id, service host, family@version or subject URN.
+        kind:
+          type: string
+          enum:
+            - server
+            - service
+            - app_version
+            - person
+        name:
+          type: string
+          description: The server's name, the service's host, the app's name and version, or the person's name.
+      required:
+        - kind
+        - id
+        - name
+    SuspectedProblemServer:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          format: int64
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+      required:
+        - server
+        - attempts
     SwitchOrgEncryptionKeyRequestBody:
       type: object
       properties:
@@ -125755,6 +127692,32 @@ components:
       required:
         - id
         - slug
+    UpdateMcpFeedbackSettingsForm:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the server offers the feedback tool.
+        expected_version:
+          type: string
+          description: The version of the settings this change was made from, empty when the server had none. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server.
+          format: uuid
+        tool_description:
+          type: string
+          description: The description agents read. Leave out to use the default.
+          maxLength: 2000
+        tool_name:
+          type: string
+          description: The name to list the tool under. Letters, digits, underscores and hyphens only. Leave out to use the default.
+          pattern: ^[A-Za-z0-9_-]+$
+          maxLength: 64
+      description: The feedback tool settings to store for an MCP server.
+      required:
+        - mcp_server_id
+        - enabled
     UpdateMcpServerForm:
       type: object
       properties:
@@ -126490,6 +128453,7 @@ components:
             - risk_findings
             - tool_call_logs
             - mcp_connection_logs
+            - mcp_feedback
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -127070,6 +129034,40 @@ components:
         - schema_version
         - raw_sha256
         - content
+    UploadTranscriptRequestBody:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The transcript file contents, at most 20 MiB.
+          minLength: 1
+          maxLength: 20971520
+        name:
+          type: string
+          description: Title for the stored session, usually the file name.
+          minLength: 1
+          maxLength: 255
+      required:
+        - name
+        - content
+    UploadTranscriptResult:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The stored session.
+          format: uuid
+        format:
+          type: string
+          description: Detected transcript format.
+        message_count:
+          type: integer
+          description: Messages stored.
+          format: int64
+      required:
+        - chat_id
+        - format
+        - message_count
     UpsertAiScanTargetRequestBody:
       type: object
       properties:
@@ -129274,6 +131272,8 @@ tags:
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: integrations
     description: Explore third-party tools in Speakeasy.
+  - name: intentPolicies
+    description: Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.
   - name: internalSessionIssuers
     description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets
@@ -129288,6 +131288,8 @@ tags:
     description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
+  - name: mcpFeedback
+    description: Managing the feedback tool an MCP server can offer the agents that use it, and reading the feedback they sent.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: registryDiscovery

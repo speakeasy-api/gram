@@ -706,7 +706,7 @@ describe("KillswitchEditorSheet", () => {
     );
     expect(
       screen
-        .getByRole("link", { name: "View this member in MCP Sessions" })
+        .getByRole("link", { name: "View their connections in MCP Sign-in" })
         .getAttribute("href"),
     ).toBe("/example/mcp-sessions?subjectUrn=user%3Auser-1");
   });

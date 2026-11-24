@@ -1441,6 +1441,480 @@ func EncodeListDeniedClientsError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
+// EncodeListSuspectedProblemsResponse returns an encoder for responses
+// returned by the mcpConnectionHealth listSuspectedProblems endpoint.
+func EncodeListSuspectedProblemsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*mcpconnectionhealth.ListSuspectedProblemsResult)
+		enc := encoder(ctx, w)
+		body := NewListSuspectedProblemsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListSuspectedProblemsRequest returns a decoder for requests sent to
+// the mcpConnectionHealth listSuspectedProblems endpoint.
+func DecodeListSuspectedProblemsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpconnectionhealth.ListSuspectedProblemsPayload, error) {
+	return func(r *http.Request) (*mcpconnectionhealth.ListSuspectedProblemsPayload, error) {
+		var payload *mcpconnectionhealth.ListSuspectedProblemsPayload
+		var (
+			body ListSuspectedProblemsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateListSuspectedProblemsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewListSuspectedProblemsPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListSuspectedProblemsError returns an encoder for errors returned by
+// the listSuspectedProblems mcpConnectionHealth endpoint.
+func EncodeListSuspectedProblemsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListSuspectedProblemsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetSuspectedProblemResponse returns an encoder for responses returned
+// by the mcpConnectionHealth getSuspectedProblem endpoint.
+func EncodeGetSuspectedProblemResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*mcpconnectionhealth.GetSuspectedProblemResult)
+		enc := encoder(ctx, w)
+		body := NewGetSuspectedProblemResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetSuspectedProblemRequest returns a decoder for requests sent to the
+// mcpConnectionHealth getSuspectedProblem endpoint.
+func DecodeGetSuspectedProblemRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpconnectionhealth.GetSuspectedProblemPayload, error) {
+	return func(r *http.Request) (*mcpconnectionhealth.GetSuspectedProblemPayload, error) {
+		var payload *mcpconnectionhealth.GetSuspectedProblemPayload
+		var (
+			body GetSuspectedProblemRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateGetSuspectedProblemRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetSuspectedProblemPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetSuspectedProblemError returns an encoder for errors returned by the
+// getSuspectedProblem mcpConnectionHealth endpoint.
+func EncodeGetSuspectedProblemError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSuspectedProblemGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // unmarshalConnectionAttemptFiltersRequestBodyToMcpconnectionhealthConnectionAttemptFilters
 // builds a value of type *mcpconnectionhealth.ConnectionAttemptFilters from a
 // value of type *ConnectionAttemptFiltersRequestBody.
@@ -1920,6 +2394,300 @@ func marshalMcpconnectionhealthConnectionDeniedClientToConnectionDeniedClientRes
 	}
 	if v.App != nil {
 		res.App = marshalMcpconnectionhealthConnectionAppToConnectionAppResponseBody(v.App)
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemToSuspectedProblemResponseBody
+// builds a value of type *SuspectedProblemResponseBody from a value of type
+// *mcpconnectionhealth.SuspectedProblem.
+func marshalMcpconnectionhealthSuspectedProblemToSuspectedProblemResponseBody(v *mcpconnectionhealth.SuspectedProblem) *SuspectedProblemResponseBody {
+	res := &SuspectedProblemResponseBody{
+		ID:                  v.ID,
+		Rule:                string(v.Rule),
+		Part:                string(v.Part),
+		Since:               v.Since,
+		LastFailedAt:        v.LastFailedAt,
+		PeopleCount:         v.PeopleCount,
+		PeopleOnServerCount: v.PeopleOnServerCount,
+		Headline:            v.Headline,
+		Fact:                v.Fact,
+	}
+	if v.Scope != nil {
+		res.Scope = marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody(v.Scope)
+	}
+	if v.Filters != nil {
+		res.Filters = marshalMcpconnectionhealthSuspectedProblemFiltersToSuspectedProblemFiltersResponseBody(v.Filters)
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody
+// builds a value of type *SuspectedProblemScopeResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemScope.
+func marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody(v *mcpconnectionhealth.SuspectedProblemScope) *SuspectedProblemScopeResponseBody {
+	res := &SuspectedProblemScopeResponseBody{
+		Kind: v.Kind,
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemFiltersToSuspectedProblemFiltersResponseBody
+// builds a value of type *SuspectedProblemFiltersResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemFilters.
+func marshalMcpconnectionhealthSuspectedProblemFiltersToSuspectedProblemFiltersResponseBody(v *mcpconnectionhealth.SuspectedProblemFilters) *SuspectedProblemFiltersResponseBody {
+	res := &SuspectedProblemFiltersResponseBody{
+		From: v.From,
+	}
+	if v.Outcomes != nil {
+		res.Outcomes = make([]string, len(v.Outcomes))
+		for i, val := range v.Outcomes {
+			res.Outcomes[i] = string(val)
+		}
+	}
+	if v.Steps != nil {
+		res.Steps = make([]string, len(v.Steps))
+		for i, val := range v.Steps {
+			res.Steps[i] = string(val)
+		}
+	}
+	if v.ServerIds != nil {
+		res.ServerIds = make([]string, len(v.ServerIds))
+		for i, val := range v.ServerIds {
+			res.ServerIds[i] = val
+		}
+	}
+	if v.MemberIds != nil {
+		res.MemberIds = make([]string, len(v.MemberIds))
+		for i, val := range v.MemberIds {
+			res.MemberIds[i] = val
+		}
+	}
+	if v.People != nil {
+		res.People = make([]string, len(v.People))
+		for i, val := range v.People {
+			res.People[i] = val
+		}
+	}
+	if v.Networks != nil {
+		res.Networks = make([]string, len(v.Networks))
+		for i, val := range v.Networks {
+			res.Networks[i] = val
+		}
+	}
+	if v.Apps != nil {
+		res.Apps = make([]string, len(v.Apps))
+		for i, val := range v.Apps {
+			res.Apps[i] = val
+		}
+	}
+	if v.AppVersions != nil {
+		res.AppVersions = make([]string, len(v.AppVersions))
+		for i, val := range v.AppVersions {
+			res.AppVersions[i] = val
+		}
+	}
+	if v.Reasons != nil {
+		res.Reasons = make([]string, len(v.Reasons))
+		for i, val := range v.Reasons {
+			res.Reasons[i] = val
+		}
+	}
+	if v.Services != nil {
+		res.Services = make([]string, len(v.Services))
+		for i, val := range v.Services {
+			res.Services[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailResponseBody
+// builds a value of type *SuspectedProblemDetailResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemDetail.
+func marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailResponseBody(v *mcpconnectionhealth.SuspectedProblemDetail) *SuspectedProblemDetailResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &SuspectedProblemDetailResponseBody{
+		LastConnectedAt:        v.LastConnectedAt,
+		OtherFailuresOnService: v.OtherFailuresOnService,
+		PeopleTotal:            v.PeopleTotal,
+		ServersTotal:           v.ServersTotal,
+		AsOf:                   v.AsOf,
+		CountsWidened:          v.CountsWidened,
+		ID:                     v.ID,
+		Rule:                   string(v.Rule),
+		Part:                   string(v.Part),
+		Since:                  v.Since,
+		LastFailedAt:           v.LastFailedAt,
+		PeopleCount:            v.PeopleCount,
+		PeopleOnServerCount:    v.PeopleOnServerCount,
+		Headline:               v.Headline,
+		Fact:                   v.Fact,
+	}
+	if v.Source != nil {
+		source := string(*v.Source)
+		res.Source = &source
+	}
+	if v.FailedPer10Minutes != nil {
+		res.FailedPer10Minutes = make([]*SuspectedProblemBucketResponseBody, len(v.FailedPer10Minutes))
+		for i, val := range v.FailedPer10Minutes {
+			if val == nil {
+				res.FailedPer10Minutes[i] = nil
+				continue
+			}
+			res.FailedPer10Minutes[i] = marshalMcpconnectionhealthSuspectedProblemBucketToSuspectedProblemBucketResponseBody(val)
+		}
+	} else {
+		res.FailedPer10Minutes = []*SuspectedProblemBucketResponseBody{}
+	}
+	if v.Messages != nil {
+		res.Messages = make([]*SuspectedProblemMessageResponseBody, len(v.Messages))
+		for i, val := range v.Messages {
+			if val == nil {
+				res.Messages[i] = nil
+				continue
+			}
+			res.Messages[i] = marshalMcpconnectionhealthSuspectedProblemMessageToSuspectedProblemMessageResponseBody(val)
+		}
+	} else {
+		res.Messages = []*SuspectedProblemMessageResponseBody{}
+	}
+	if v.People != nil {
+		res.People = make([]*SuspectedProblemPersonResponseBody, len(v.People))
+		for i, val := range v.People {
+			if val == nil {
+				res.People[i] = nil
+				continue
+			}
+			res.People[i] = marshalMcpconnectionhealthSuspectedProblemPersonToSuspectedProblemPersonResponseBody(val)
+		}
+	} else {
+		res.People = []*SuspectedProblemPersonResponseBody{}
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*SuspectedProblemServerResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalMcpconnectionhealthSuspectedProblemServerToSuspectedProblemServerResponseBody(val)
+		}
+	} else {
+		res.Servers = []*SuspectedProblemServerResponseBody{}
+	}
+	if v.Scope != nil {
+		res.Scope = marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody(v.Scope)
+	}
+	if v.Filters != nil {
+		res.Filters = marshalMcpconnectionhealthSuspectedProblemFiltersToSuspectedProblemFiltersResponseBody(v.Filters)
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemBucketToSuspectedProblemBucketResponseBody
+// builds a value of type *SuspectedProblemBucketResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemBucket.
+func marshalMcpconnectionhealthSuspectedProblemBucketToSuspectedProblemBucketResponseBody(v *mcpconnectionhealth.SuspectedProblemBucket) *SuspectedProblemBucketResponseBody {
+	res := &SuspectedProblemBucketResponseBody{
+		Start:    v.Start,
+		Attempts: v.Attempts,
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemMessageToSuspectedProblemMessageResponseBody
+// builds a value of type *SuspectedProblemMessageResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemMessage.
+func marshalMcpconnectionhealthSuspectedProblemMessageToSuspectedProblemMessageResponseBody(v *mcpconnectionhealth.SuspectedProblemMessage) *SuspectedProblemMessageResponseBody {
+	res := &SuspectedProblemMessageResponseBody{
+		Reason:       v.Reason,
+		Message:      v.Message,
+		AdminMessage: v.AdminMessage,
+		Attempts:     v.Attempts,
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemPersonToSuspectedProblemPersonResponseBody
+// builds a value of type *SuspectedProblemPersonResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemPerson.
+func marshalMcpconnectionhealthSuspectedProblemPersonToSuspectedProblemPersonResponseBody(v *mcpconnectionhealth.SuspectedProblemPerson) *SuspectedProblemPersonResponseBody {
+	res := &SuspectedProblemPersonResponseBody{
+		AppsTotal:     v.AppsTotal,
+		ServersTotal:  v.ServersTotal,
+		Attempts:      v.Attempts,
+		FirstFailedAt: v.FirstFailedAt,
+	}
+	if v.Person != nil {
+		res.Person = marshalMcpconnectionhealthConnectionPersonToConnectionPersonResponseBody(v.Person)
+	}
+	if v.Apps != nil {
+		res.Apps = make([]*ConnectionAppResponseBody, len(v.Apps))
+		for i, val := range v.Apps {
+			if val == nil {
+				res.Apps[i] = nil
+				continue
+			}
+			res.Apps[i] = marshalMcpconnectionhealthConnectionAppToConnectionAppResponseBody(val)
+		}
+	} else {
+		res.Apps = []*ConnectionAppResponseBody{}
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*SuspectedProblemPlaceResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody(val)
+		}
+	} else {
+		res.Servers = []*SuspectedProblemPlaceResponseBody{}
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody
+// builds a value of type *SuspectedProblemPlaceResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemPlace.
+func marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody(v *mcpconnectionhealth.SuspectedProblemPlace) *SuspectedProblemPlaceResponseBody {
+	res := &SuspectedProblemPlaceResponseBody{}
+	if v.Server != nil {
+		res.Server = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Server)
+	}
+	if v.Member != nil {
+		res.Member = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Member)
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemServerToSuspectedProblemServerResponseBody
+// builds a value of type *SuspectedProblemServerResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemServer.
+func marshalMcpconnectionhealthSuspectedProblemServerToSuspectedProblemServerResponseBody(v *mcpconnectionhealth.SuspectedProblemServer) *SuspectedProblemServerResponseBody {
+	res := &SuspectedProblemServerResponseBody{
+		Attempts: v.Attempts,
+	}
+	if v.Server != nil {
+		res.Server = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Server)
+	}
+	if v.Member != nil {
+		res.Member = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Member)
 	}
 
 	return res

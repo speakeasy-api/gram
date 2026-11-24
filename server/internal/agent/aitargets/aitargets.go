@@ -183,18 +183,37 @@ func (t Target) Clone() Target {
 	return out
 }
 
-// Defaults is the code-owned set an empty catalog is seeded from; after that
-// Postgres is the source of truth. Derived from the aivendors registry, so a
-// product declared once is both admissible and blockable.
-//
-// A product with no CIMD document carries detection names only, and a vendor
-// key covering more than one product names neither — GatewayMatchersFor
-// derives both rules.
-func Defaults() []Target {
-	products := aivendors.ScanProducts()
+// Defaults projects a catalog snapshot into device scan targets.
+// Products without install signatures remain available to admission only.
+func Defaults(catalog *aivendors.Snapshot) []Target {
+	shared := catalogDefaultsOf(catalog).targets
+	targets := make([]Target, 0, len(shared))
+	for _, target := range shared {
+		targets = append(targets, target.Clone())
+	}
+	return targets
+}
+
+type catalogDefaultsKey struct{}
+
+// catalogDefaults is computed once per catalog snapshot and shared; never mutate it.
+type catalogDefaults struct {
+	targets     []Target
+	listVersion int32
+}
+
+func catalogDefaultsOf(catalog *aivendors.Snapshot) catalogDefaults {
+	return aivendors.Derived(catalog, catalogDefaultsKey{}, func(catalog *aivendors.Snapshot) catalogDefaults {
+		targets := projectDefaults(catalog)
+		return catalogDefaults{targets: targets, listVersion: ListVersion(targets)}
+	})
+}
+
+func projectDefaults(catalog *aivendors.Snapshot) []Target {
+	products := catalog.ScanProducts()
 	targets := make([]Target, 0, len(products))
 	for _, product := range products {
-		matchers := aivendors.GatewayMatchersFor(product)
+		matchers := catalog.GatewayMatchersFor(product)
 		target := Target{
 			ID:          product.ID,
 			DisplayName: product.DisplayName,
@@ -209,7 +228,7 @@ func Defaults() []Target {
 			GatewayClient: GatewayClient{
 				CIMDVendorKeys:  matchers.VendorKeys,
 				OAuthClientIDs:  matchers.ClientIDs,
-				ClientInfoNames: product.ClientInfoNames,
+				ClientInfoNames: orNil(product.ClientInfoNames),
 			},
 		}
 		if product.VersionPlistKey != "" {
@@ -222,7 +241,7 @@ func Defaults() []Target {
 
 // Snapshot is an immutable view of the served catalog at one list version.
 type Snapshot struct {
-	// ListVersion is the catalog revision, echoed by agents on receipts.
+	// ListVersion identifies the built-in targets, echoed by agents on receipts.
 	ListVersion int32
 
 	// ETag fingerprints the schema version, ListVersion, and the served
@@ -281,7 +300,8 @@ type Envelope struct {
 	// SchemaVersion is SchemaVersion at the time of serving.
 	SchemaVersion int `json:"schema_version"`
 
-	// ListVersion is the catalog revision the targets were read at.
+	// ListVersion identifies the built-in scan list devices are served; not
+	// ordered.
 	ListVersion int32 `json:"list_version"`
 
 	// ETag fingerprints the list.

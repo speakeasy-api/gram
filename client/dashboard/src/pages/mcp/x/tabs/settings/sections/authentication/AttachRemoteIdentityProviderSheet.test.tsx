@@ -343,7 +343,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     expect(await screen.findByText("Elsewhere (Other project)")).toBeTruthy();
     expect(
       screen.getByText(
-        /1 more server you don't have access to shares this user session issuer and may be affected/,
+        /1 more server you don't have access to shares this MCP sign-in and may be affected/,
       ),
     ).toBeTruthy();
     const confirm = screen.getAllByRole("button", {

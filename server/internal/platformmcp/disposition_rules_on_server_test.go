@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,9 +21,7 @@ func TestDispositionRulesOnServer(t *testing.T) {
 	server := authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(projectID))
 	rule := func(scope authz.Scope, resource string, keys map[string]string) authz.Grant {
 		selector := authz.NewSelector(scope, resource)
-		for key, value := range keys {
-			selector[key] = value
-		}
+		maps.Copy(selector, keys)
 		grant := authz.NewGrantWithSelector(scope, selector)
 		grant.PrincipalUrn = role
 		return grant

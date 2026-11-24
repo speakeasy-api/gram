@@ -419,7 +419,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // describeCachedMember applies current tool permissions to stored definitions.
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"

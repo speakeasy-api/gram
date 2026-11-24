@@ -208,6 +208,9 @@ type unavailableMember struct {
 type gatewayTool struct {
 	entry  *toolListEntry
 	member metaMember
+
+	// local reports that the tool is one of the member's local tools.
+	local bool
 }
 
 // collectGatewayTools describes members' permission-filtered catalogs under
@@ -242,7 +245,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			continue
 		}
 		if captured != nil {
-			captured[member.slug] = catalog
+			captured[member.slug] = catalog.withoutLocalTools()
 		}
 		for _, entry := range catalog.entries {
 			qualified := *entry
@@ -251,7 +254,8 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 				return nil, nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
 			}
 			names[qualified.Name] = true
-			tools = append(tools, gatewayTool{entry: &qualified, member: member})
+			_, local := catalog.local[entry.Name]
+			tools = append(tools, gatewayTool{entry: &qualified, member: member, local: local})
 			if len(tools) > toolfilter.MaxTools {
 				return nil, nil, oops.E(oops.CodeRequestTooLarge, errConsentInventoryTooManyTools, "gateway inventory exceeds %d tools", toolfilter.MaxTools)
 			}

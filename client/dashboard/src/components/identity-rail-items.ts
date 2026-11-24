@@ -41,7 +41,7 @@ export function identityRailItems(
         // because it is what is most often changed on an agent: a server
         // added, or an expired connection signed in again.
         key: "mcp-sign-in",
-        title: "MCP sign-in",
+        title: "Server sign-in",
         href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
         active: detail.mcpSignIn.active,
       },

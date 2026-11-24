@@ -25,7 +25,7 @@ export type HealthProviderSegment = (typeof HEALTH_PROVIDER_SEGMENTS)[number];
 const DEFAULT_PROVIDER_SLUG = "default";
 
 /**
- * The MCP Authentication Providers this project's servers can use: the
+ * The MCP sign-ins this project's servers can use: the
  * organization-wide ones first, then the project's own, each by name. Read
  * through the project, so anyone who can see its sessions can pick one.
  */
@@ -41,7 +41,7 @@ export function useProjectProviders(): {
   return { providers: issuers, isLoading, isError };
 }
 
-/** The provider this project's MCP Sessions opened on last, by id. */
+/** The provider this project's MCP Sign-in opened on last, by id. */
 export function useLastProvider(): readonly [
   string | null,
   (issuerId: string) => void,
@@ -54,7 +54,7 @@ export function useLastProvider(): readonly [
 }
 
 /**
- * Which provider MCP Sessions opens on: the one asked for, else the one
+ * Which provider MCP Sign-in opens on: the one asked for, else the one
  * picked last, else the organization's default, else the first listed.
  */
 export function initialProvider(

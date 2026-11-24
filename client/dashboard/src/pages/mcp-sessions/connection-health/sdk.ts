@@ -3,14 +3,18 @@ import { mcpConnectionHealthGetAttempt } from "@gram/client/funcs/mcpConnectionH
 import { mcpConnectionHealthGetAttemptCounts } from "@gram/client/funcs/mcpConnectionHealthGetAttemptCounts.js";
 import { mcpConnectionHealthGetSessionActivity } from "@gram/client/funcs/mcpConnectionHealthGetSessionActivity.js";
 import { mcpConnectionHealthGetSignInSummary } from "@gram/client/funcs/mcpConnectionHealthGetSignInSummary.js";
+import { mcpConnectionHealthGetSuspectedProblem } from "@gram/client/funcs/mcpConnectionHealthGetSuspectedProblem.js";
 import { mcpConnectionHealthListAttempts } from "@gram/client/funcs/mcpConnectionHealthListAttempts.js";
 import { mcpConnectionHealthListDeniedClients } from "@gram/client/funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListSuspectedProblems } from "@gram/client/funcs/mcpConnectionHealthListSuspectedProblems.js";
 import type { ConnectionAttemptDetail } from "@gram/client/models/components/connectionattemptdetail.js";
 import type { ConnectionAttemptFilters } from "@gram/client/models/components/connectionattemptfilters.js";
 import type { ConnectionAttemptRow } from "@gram/client/models/components/connectionattemptrow.js";
 import type { ConnectionAttemptStep } from "@gram/client/models/components/connectionattemptstep.js";
 import type { ConnectionPerson } from "@gram/client/models/components/connectionperson.js";
 import type { ConnectionServer } from "@gram/client/models/components/connectionserver.js";
+import type { SuspectedProblem as SdkSuspectedProblem } from "@gram/client/models/components/suspectedproblem.js";
+import type { SuspectedProblemDetail as SdkSuspectedProblemDetail } from "@gram/client/models/components/suspectedproblemdetail.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { RETENTION_MS } from "./filters";
 import type {
@@ -21,10 +25,14 @@ import type {
   AttemptStep,
   DeniedClientsResponse,
   GetAttemptResponse,
+  GetSuspectedProblemResponse,
   ListAttemptsRequest,
+  ListSuspectedProblemsResponse,
   ListAttemptsResponse,
   Outcome,
   Person,
+  ProblemPart,
+  ProblemRule,
   ServerKind,
   ServerRef,
   SessionActivityResponse,
@@ -32,6 +40,8 @@ import type {
   Source,
   StepGroup,
   SummaryBucket,
+  SuspectedProblem,
+  SuspectedProblemDetail,
   ViewerScope,
 } from "./types";
 
@@ -46,20 +56,26 @@ function since(from: string): Date {
   return new Date(Math.max(Date.parse(from), oldest));
 }
 
+function serverOf(ref: ConnectionServer): ServerRef {
+  return { id: ref.id, kind: ref.kind as ServerKind, name: ref.name };
+}
+
 function server(ref: ConnectionServer | undefined): ServerRef | undefined {
-  return ref && { id: ref.id, kind: ref.kind as ServerKind, name: ref.name };
+  return ref && serverOf(ref);
+}
+
+function personOf(ref: ConnectionPerson): Person {
+  return {
+    subjectUrn: ref.subjectUrn,
+    kind: ref.kind as Person["kind"],
+    userId: ref.userId,
+    name: ref.name,
+    email: ref.email,
+  };
 }
 
 function person(ref: ConnectionPerson | undefined): Person | undefined {
-  return (
-    ref && {
-      subjectUrn: ref.subjectUrn,
-      kind: ref.kind as Person["kind"],
-      userId: ref.userId,
-      name: ref.name,
-      email: ref.email,
-    }
-  );
+  return ref && personOf(ref);
 }
 
 function row(r: ConnectionAttemptRow | ConnectionAttemptDetail): AttemptRow {
@@ -286,5 +302,113 @@ export async function listDeniedClients(
       networks: c.networks,
       lastAt: iso(c.lastAt),
     })),
+  };
+}
+
+function problem(
+  p: SdkSuspectedProblem | SdkSuspectedProblemDetail,
+): SuspectedProblem {
+  return {
+    id: p.id,
+    headline: p.headline,
+    fact: p.fact,
+    since: iso(p.since),
+    lastFailedAt: iso(p.lastFailedAt),
+    peopleCount: p.peopleCount,
+    peopleOnServerCount: p.peopleOnServerCount,
+    scope: {
+      kind: p.scope.kind as SuspectedProblem["scope"]["kind"],
+      id: p.scope.id,
+      name: p.scope.name,
+    },
+    rule: p.suspectedProblemRule as ProblemRule,
+    part: p.suspectedProblemPart as ProblemPart,
+    filters: {
+      from: iso(p.filters.from),
+      outcomes: p.filters.outcomes as Outcome[] | undefined,
+      serverIds: p.filters.serverIds,
+      memberIds: p.filters.memberIds,
+      people: p.filters.people,
+      apps: p.filters.apps,
+      appVersions: p.filters.appVersions,
+      reasons: p.filters.reasons,
+    },
+  };
+}
+
+function problemDetail(d: SdkSuspectedProblemDetail): SuspectedProblemDetail {
+  return {
+    ...problem(d),
+    source: d.connectionFailureSource as Source | undefined,
+    failedPer10Minutes: d.failedPer10Minutes.map((b) => ({
+      start: iso(b.start),
+      attempts: b.attempts,
+    })),
+    lastConnectedAt: d.lastConnectedAt && iso(d.lastConnectedAt),
+    otherFailuresOnService: d.otherFailuresOnService,
+    messages: d.messages,
+    people: d.people.map((p) => ({
+      person: personOf(p.person),
+      apps: p.apps,
+      appsTotal: p.appsTotal,
+      servers: p.servers.map((s) => ({
+        server: serverOf(s.server),
+        member: server(s.member),
+      })),
+      serversTotal: p.serversTotal,
+      attempts: p.attempts,
+      firstFailedAt: iso(p.firstFailedAt),
+    })),
+    peopleTotal: d.peopleTotal,
+    serversTotal: d.serversTotal,
+    asOf: iso(d.asOf),
+    countsWidened: d.countsWidened,
+    servers: d.servers.map((s) => ({
+      server: serverOf(s.server),
+      member: server(s.member),
+      attempts: s.attempts,
+    })),
+  };
+}
+
+export async function listSuspectedProblems(
+  client: GramCore,
+  gramProject: string,
+  request: {
+    userSessionIssuerId: string;
+    serverId?: string;
+    part?: ProblemPart;
+  },
+): Promise<ListSuspectedProblemsResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthListSuspectedProblems(client, {
+      gramProject,
+      listSuspectedProblemsRequestBody: request,
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    problems: result.problems.map(problem),
+    problemsTotal: result.problemsTotal,
+  };
+}
+
+export async function getSuspectedProblem(
+  client: GramCore,
+  gramProject: string,
+  request: { userSessionIssuerId: string; id: string; serverId?: string },
+): Promise<GetSuspectedProblemResponse> {
+  const result = await unwrapAsync(
+    mcpConnectionHealthGetSuspectedProblem(client, {
+      gramProject,
+      getSuspectedProblemRequestBody: request,
+    }),
+  );
+  return {
+    loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
+    found: result.found,
+    problem: result.problem && problemDetail(result.problem),
   };
 }

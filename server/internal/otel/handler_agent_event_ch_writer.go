@@ -112,7 +112,7 @@ func (w *AgentEventLogCHWriter) HandleBatch(ctx context.Context, messages []*ote
 	observedAt := w.now().UnixNano()
 	rows := make([]chrepo.AgentEventRow, 0, len(messages))
 	for _, message := range messages {
-		if isConnectionLogRecord(message) {
+		if isConnectionLogRecord(message) || isFeedbackLogRecord(message) {
 			continue
 		}
 		row, skipReason := agentEventRowFromLog(message, observedAt)
