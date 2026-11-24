@@ -4443,12 +4443,6 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	if err != nil {
 		return fmt.Errorf("self-heal: list chat messages: %w", err)
 	}
-	// A shadow that cannot be opened fails self-heal rather than rewriting
-	// history from plaintext that the shadow contradicts.
-	if err := s.openTranscriptShadows(ctx, chatRow.OrganizationID, projectID, messages); err != nil {
-		return fmt.Errorf("self-heal: %w", err)
-	}
-
 	var currentGen int32
 	userMessages := make([]chatrepo.ChatMessage, 0, len(messages))
 	for _, m := range messages {
@@ -4461,6 +4455,12 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	}
 	if len(userMessages) > selfHealUserMessageCap {
 		userMessages = userMessages[len(userMessages)-selfHealUserMessageCap:]
+	}
+	// Open only the user messages self-heal keeps. A shadow among them that
+	// cannot be opened fails self-heal rather than rewriting history from
+	// plaintext that the shadow contradicts. Messages it drops are not read.
+	if err := s.openTranscriptShadows(ctx, chatRow.OrganizationID, projectID, userMessages); err != nil {
+		return fmt.Errorf("self-heal: %w", err)
 	}
 
 	nextGen := currentGen + 1

@@ -119,8 +119,9 @@ makes no KMS call, and a page with no shadows makes no key lookup at all.
 
 Assistant history uses the same `LoadMany` semantics. The runtime bootstrap
 replays the opened bodies, and a stale or unauthentic shadow fails the
-bootstrap. Self-heal opens the user messages it keeps the same way; if it cannot
-open them, it fails the event and writes no new generation, so a broken shadow
+bootstrap. Self-heal opens only the user messages it keeps, the same way, and
+never reads the replies and tool messages it drops. If it cannot open a kept
+message, it fails the event and writes no new generation, so a broken shadow
 never erases history. Kit transcript projection still merges new updates into
 the plaintext row inside the chat writer's transaction.
 

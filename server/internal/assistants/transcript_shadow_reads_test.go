@@ -202,7 +202,29 @@ func TestSelfHealCorruptHistory_ReadEnabledProjectOpensEncryptedShadows(t *testi
 	f.core.SetTranscriptShadowReads(f.store, f.projectID)
 
 	require.NoError(t, f.core.selfHealCorruptHistory(t.Context(), f.chatID, f.projectID, f.assistantID))
-	require.Equal(t, map[string]int64{"success": 2}, f.readOutcomes(t))
+	// Only the kept user prompt is opened; the dropped reply is not read.
+	require.Equal(t, map[string]int64{"success": 1}, f.readOutcomes(t))
+	after := f.messages(t)
+	require.Len(t, after, 2, "recovery notice plus the one user prompt")
+	require.Equal(t, "keep this prompt", after[1].Content)
+}
+
+func TestSelfHealCorruptHistory_StaleShadowOnDroppedReplyDoesNotBlockRecovery(t *testing.T) {
+	t.Parallel()
+	f := newShadowHistoryFixture(t, "assistants_shadow_self_heal_dropped", "keep this prompt", "broken reply")
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), f.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
+	f.core.SetChatMessageWriter(chatWriter)
+	messages := f.messages(t)
+	f.capture(t, messages[0].ID, messages[1].ID)
+	// The reply self-heal drops has a stale shadow. Self-heal never reads it,
+	// so recovery still runs.
+	_, err := fixturerepo.New(f.conn).ChangeContent(t.Context(), messages[1].ID, uuid.NullUUID{UUID: f.projectID, Valid: true})
+	require.NoError(t, err)
+	f.core.SetTranscriptShadowReads(f.store, f.projectID)
+
+	require.NoError(t, f.core.selfHealCorruptHistory(t.Context(), f.chatID, f.projectID, f.assistantID))
+	require.Equal(t, map[string]int64{"success": 1}, f.readOutcomes(t))
 	after := f.messages(t)
 	require.Len(t, after, 2, "recovery notice plus the one user prompt")
 	require.Equal(t, "keep this prompt", after[1].Content)
