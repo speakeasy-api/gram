@@ -139,7 +139,7 @@ func requireAuthClientSetup(t *testing.T, resp *httptest.ResponseRecorder, err e
 
 // Two remote servers share one user session issuer but use different upstream
 // clients. Each forwards only its own client's credential, a server issued
-// after the credential fails closed into reconnect, and a server needing no
+// after issuance requires sign-in setup, and a server needing no
 // upstream authentication calls anonymously.
 func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	t.Parallel()
@@ -265,7 +265,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 
 // An anonymous session is served through its recorded choices like any other
 // session: its chosen client forwards its own connection, and a server
-// configured after it was issued asks it to reconnect rather than serving
+// configured after it was issued asks for sign-in setup rather than serving
 // through the issuer's clients.
 func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T) {
 	t.Parallel()

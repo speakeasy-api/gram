@@ -438,7 +438,8 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 }
 
 // Failure to read another user's attachment consent must refuse serving,
-// even when the organization is not enrolled in typed consent.
+// even without typed consent enrollment. The connect-equivalent test
+// control reads consent only for shadowing and is never refused by it.
 func TestAttachedConsentReadFailureRefusesMandatoryServing(t *testing.T) {
 	t.Parallel()
 

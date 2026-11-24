@@ -312,6 +312,9 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
+	if err == nil && len(resolved) == 0 {
+		err = remotesessions.ErrNoValidToken
+	}
 	// A service account's credential is the server's, shared by every
 	// caller: the agent's sign-in step does not set it.
 	if err != nil && clientType == authClientTypeServiceAccount {
@@ -325,9 +328,6 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
-	if err == nil && len(resolved) == 0 {
-		err = remotesessions.ErrNoValidToken
-	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
@@ -484,11 +484,5 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 			return none, noCredential, agentServerAccessError(target.slug)
 		}
 	}
-	// A gap leaves the registration serving its token without the auth client
-	// it named, so that client did not sign the call in.
-	servedClientID := res.clientID
-	if res.outcome == authClientGap {
-		servedClientID = uuid.Nil
-	}
-	return connection, servedCredential(servedClientID, permit.ClientType, connection.owner), nil
+	return connection, servedCredential(res.clientID, permit.ClientType, connection.owner), nil
 }

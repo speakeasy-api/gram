@@ -748,8 +748,8 @@ func (s *Service) resolveUpstreamResource(
 // its own OAuth where applicable).
 //
 // upstream is the resolved credential forwarded to the remote server. It's
-// only populated when the caller ran the issuer gate; otherwise it's empty
-// and the proxy does not forward an Authorization header upstream. A self
+// populated by issuer-gated resolution or a selected ungated agent key.
+// Without a credential, the proxy forwards no Authorization header. A self
 // client's credential is replaced and retried once when the upstream rejects
 // it, and a rejection that survives answers with the administrator's repair.
 //
@@ -1111,7 +1111,7 @@ func (s *Service) prepareProxyBackendContext(
 			if err != nil {
 				return denied(fmt.Errorf("public identity auth: %w", err))
 			}
-			if err := s.refuseForeignCallerOutsideTypedServing(ctx, organizationID); err != nil {
+			if err := s.refuseForeignCaller(ctx, organizationID); err != nil {
 				return denied(err)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)

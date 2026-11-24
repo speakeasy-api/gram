@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -408,7 +409,7 @@ func (s *Service) dialMetaMember(
 	callerIdentity string,
 ) (memberDial, error) {
 	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity, true)
-	dial.fix = func() memberFix {
+	dial.fix = sync.OnceValue(func() memberFix {
 		fix := gate.memberFix(member)
 		if fix.url == "" && dial.configuredHeaders && member.authClient != nil && member.authClient.headersOnly() && codeConnectAvailable(&gate) {
 			// A refused static choice can suggest a separate personal offer.
@@ -419,7 +420,7 @@ func (s *Service) dialMetaMember(
 			}
 		}
 		return fix
-	}
+	})
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
 		s.metrics.RecordMetaMemberDispatch(ctx, backend, mcpmetrics.MetaDispatchAmbiguous)

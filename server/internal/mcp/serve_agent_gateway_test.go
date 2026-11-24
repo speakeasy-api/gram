@@ -701,10 +701,6 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	require.Zero(t, upstream.requestCount(), "a disconnected member must not dial")
 }
 
-// An agent whose delegated connection stops working cannot sign in itself.
-// The tool error and connection_status send it to someone who can edit it,
-// with the agent's MCP sign-in page, and never to a gateway administrator.
-// They name no one and hand the agent no credential.
 // The attached session also belongs to the key's authorizer. Disconnect the
 // source as well as the attachment so there is no independently authorized
 // connection left for the agent to use.
@@ -721,6 +717,10 @@ func disconnectOwnerAttachedMember(t *testing.T, ctx context.Context, seeded own
 	require.Len(t, deleted, 1)
 }
 
+// An agent whose delegated connection stops working cannot sign in itself.
+// The tool error and connection_status send it to someone who can edit it,
+// with the agent's MCP sign-in page, and never to a gateway administrator.
+// They name no one and hand the agent no credential.
 func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)

@@ -173,7 +173,8 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		if err != nil {
 			return m, fmt.Errorf("prepare mandatory authorization: %w", err)
 		}
-		authorization, ok = grantAuthorizationFromContext(prepared)
+		ctx = prepared
+		authorization, ok = grantAuthorizationFromContext(ctx)
 	}
 	if !ok {
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonNoPolicy), nil

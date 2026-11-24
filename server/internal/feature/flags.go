@@ -218,7 +218,7 @@ const (
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
 	// records where they disagree, without changing any response.
-	// Targeted locally with the organization ID as the distinct ID.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
@@ -230,7 +230,7 @@ const (
 	// wherever a request reads the server's associations and no credential
 	// choice governs; elsewhere the request is recorded as a governing choice
 	// or as not having read the associations, and keeps the column.
-	// Targeted locally with the organization ID as the distinct ID.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
 
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
@@ -240,7 +240,7 @@ const (
 	// do not protect owner blocks, so enable it only once every replica reads
 	// them; that release is then the rollback floor. Off, unavailable or
 	// failing, no such grant is written; reading and enforcing existing ones,
-	// and protecting existing blocks, never depend on it. Targeted locally with the organization ID as the distinct ID.
+	// and protecting existing blocks, never depend on it. Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 
 	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP

@@ -733,7 +733,7 @@ func (s *Service) refuseForeignCaller(ctx context.Context, organizationID string
 	return oops.E(oops.CodeForbidden, nil, "this credential belongs to another organization, and this MCP server only accepts its own organization's credentials").LogWarn(ctx, s.logger, attr.SlogOrganizationID(organizationID))
 }
 
-// Hosted and ordinary ungated admission are outside the typed serving path.
+// Hosted admission is outside the typed serving path.
 // Preserve their existing foreign-caller policy.
 func (s *Service) refuseForeignCallerOutsideTypedServing(ctx context.Context, organizationID string) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
