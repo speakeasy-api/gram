@@ -134,15 +134,21 @@ type attemptFacts struct {
 	NamedFamily  string `ch:"named_family"`
 	NamedVersion string `ch:"named_version"`
 
-	// EndingSubject is the person on the row End decides the attempt by; Subjects counts the attempt's distinct people.
+	// EndingSubject is the subject on the row End decides the attempt by.
 	EndingSubject string `ch:"ending_subject"`
-	Subjects      uint64 `ch:"subjects"`
 
-	// SignInMembers, SignInClients and SignInTimes are the member, service connection
-	// and time of each row where the person's sign-in to a service worked.
-	SignInMembers []string    `ch:"sign_in_members"`
-	SignInClients []string    `ch:"sign_in_clients"`
-	SignInTimes   []time.Time `ch:"sign_in_times"`
+	// Users counts the attempt's distinct user subjects.
+	Users uint64 `ch:"users"`
+
+	// FirstUser is the earliest user subject on the attempt, empty when none.
+	FirstUser string `ch:"first_user"`
+
+	// SignInMembers, SignInClients, SignInSubjects and SignInTimes are the member, service
+	// connection, subject and time of each row where a sign-in to a service worked.
+	SignInMembers  []string    `ch:"sign_in_members"`
+	SignInClients  []string    `ch:"sign_in_clients"`
+	SignInSubjects []string    `ch:"sign_in_subjects"`
+	SignInTimes    []time.Time `ch:"sign_in_times"`
 
 	// Issuers are the providers recorded on the attempt's rows.
 	Issuers []string `ch:"issuers"`
@@ -158,6 +164,9 @@ var serviceSignInRows = `(
 // namedClientRows are the rows whose family NamedClient accepts.
 var namedClientRows = `client_family NOT IN ('', '` + FamilyOther + `', '` + FamilyScript + `', '` + FamilyBrowser + `')`
 
+// userRows are the rows whose subject is a user.
+var userRows = `startsWith(subject_urn, '` + string(urn.SessionSubjectKindUser) + `:')`
+
 // episodeColumns adds what episodes need to an attempt's summary.
 var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
@@ -169,16 +178,18 @@ var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
 		argMinIf(subject_urn, (event_time, step, outcome, reason, subject_urn), is_final),
 		argMax(subject_urn, (event_time, step, reason, subject_urn))) AS ending_subject,
-	uniqExactIf(subject_urn, subject_urn != '') AS subjects,
+	uniqExactIf(subject_urn, ` + userRows + `) AS users,
+	argMinIf(subject_urn, (event_time, subject_urn), ` + userRows + `) AS first_user,
 	argMinIf(client_family, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_family,
 	argMinIf(client_version, (event_time, client_family, client_version), ` + namedClientRows + `) AS named_version,
 	if(countIf(client_family NOT IN ('', 'browser')) > 0,
 		argMinIf(client_version, (event_time, client_family, client_version), client_family NOT IN ('', 'browser')),
 		argMinIf(client_version, (event_time, client_version), client_family = 'browser')) AS version,
-	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignInRows + `) AS sign_ins,
+	groupArrayIf((member_id, remote_session_client_id, event_time, subject_urn), ` + serviceSignInRows + `) AS sign_ins,
 	arrayMap(x -> toString(x.1), sign_ins) AS sign_in_members,
 	arrayMap(x -> toString(x.2), sign_ins) AS sign_in_clients,
 	arrayMap(x -> x.3, sign_ins) AS sign_in_times,
+	arrayMap(x -> toString(x.4), sign_ins) AS sign_in_subjects,
 	groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS issuers`
 
 // episodeHaving keeps the attempts that can be a failure or show a part working: ones
@@ -331,26 +342,28 @@ func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now ti
 		if e.Outcome == OutcomeConnected && (e.Step == StepInboundToken.name || e.Step == StepSignInRenewal.name ||
 			(e.Step == StepInboundConsent.name && a.AppKey == AppFirstParty.key)) {
 			s.at = e.At
-			if who := a.signedInSubject(); who != "" {
+			if who := a.credited(a.EndingSubject); who != "" {
 				ev.signIns[who] = append(ev.signIns[who], s)
 			}
 		}
 		s.part = PartServiceSignIn
 		for i, at := range a.SignInTimes {
 			s.member, s.remoteClientID, s.at = a.SignInMembers[i], a.SignInClients[i], at
-			ev.signIns[a.SubjectURN] = append(ev.signIns[a.SubjectURN], s)
+			if who := a.credited(a.SignInSubjects[i]); who != "" {
+				ev.signIns[who] = append(ev.signIns[who], s)
+			}
 		}
 	}
 	return ev
 }
 
-// signedInSubject is the person on the ending row, else the attempt's only person, else none.
-func (a attemptFacts) signedInSubject() string {
+// credited is the row's subject, else the attempt's only user, else none; a non-user subject is credited only to itself.
+func (a attemptFacts) credited(rowSubject string) string {
 	switch {
-	case a.EndingSubject != "":
-		return a.EndingSubject
-	case a.Subjects == 1:
-		return a.SubjectURN
+	case rowSubject != "":
+		return rowSubject
+	case a.Users == 1:
+		return a.FirstUser
 	}
 	return ""
 }

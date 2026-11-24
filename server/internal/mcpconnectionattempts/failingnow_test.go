@@ -285,33 +285,47 @@ func (f *failingFixture) unnamedServed(p urn.SessionSubject) Served {
 	return s
 }
 
+// unnamedFamilies are the client families an unnamed app's rows can carry.
+var unnamedFamilies = []struct{ name, family string }{
+	{"no family", ""},
+	{"other", FamilyOther},
+	{"script", FamilyScript},
+	{"browser", FamilyBrowser},
+}
+
 // An unnamed app that gave up its expired registration and signed in under another one got in.
 func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnSignInThere(t *testing.T) {
 	t.Parallel()
-	for _, family := range []string{"", FamilyOther, FamilyScript, FamilyBrowser} {
-		f := newFailingFixture(t)
-		p := person()
-		f.unnamedRenewalsFail(p, client(family))
-		got := f.failing()
-		require.Len(t, got, 1, "family %q", family)
-		require.Equal(t, PartAppSignIn, got[0].Part)
-		require.Equal(t, f.at(96*time.Hour), got[0].LastWorkedAt.UTC())
+	for _, tc := range unnamedFamilies {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFailingFixture(t)
+			p := person()
+			f.unnamedRenewalsFail(p, client(tc.family))
+			got := f.failing()
+			require.Len(t, got, 1)
+			require.Equal(t, PartAppSignIn, got[0].Part)
+			require.Equal(t, f.at(96*time.Hour), got[0].LastWorkedAt.UTC())
 
-		f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
-		require.Empty(t, f.failing(), "family %q", family)
+			f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+			require.Empty(t, f.failing())
+		})
 	}
 }
 
 func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnServedRequestThere(t *testing.T) {
 	t.Parallel()
-	for _, family := range []string{"", FamilyOther, FamilyScript, FamilyBrowser} {
-		f := newFailingFixture(t)
-		p := person()
-		f.unnamedRenewalsFail(p, client(family))
-		require.Len(t, f.failing(), 1, "family %q", family)
+	for _, tc := range unnamedFamilies {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFailingFixture(t)
+			p := person()
+			f.unnamedRenewalsFail(p, client(tc.family))
+			require.Len(t, f.failing(), 1)
 
-		f.answered(f.unnamedServed(p), 10*time.Minute)
-		require.Empty(t, f.failing(), "family %q", family)
+			f.answered(f.unnamedServed(p), 10*time.Minute)
+			require.Empty(t, f.failing())
+		})
 	}
 }
 
@@ -394,6 +408,66 @@ func TestFailingNow_AnAccountSwitchEndsOnlyThePersonHandedTheSignIn(t *testing.T
 	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute), Subject(&b))
 	require.NoError(t, err)
 	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{started, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, a.String(), got[0].SubjectURN)
+}
+
+// An ending row naming no one is credited to the attempt's only user, whatever other subjects it carries.
+func TestFailingNow_ASubjectlessSignInIsCreditedToTheAttemptsOnlyUser(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	key, agent := urn.NewAPIKeySubject(uuid.New()), urn.NewAgentSubject(uuid.New())
+	f.unnamedRenewalsFail(p)
+	attempt := AttemptAt(uuid.New(), f.at(22*time.Minute), f.direct(AppOtherMetadataURL))
+	var rows []Row
+	for i, who := range []urn.SessionSubject{key, p, agent} {
+		r, err := RowAt(attempt, StepInboundSignIn, ResultComplete, false, f.at(22*time.Minute-time.Duration(i)*time.Second), Subject(&who))
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, append(rows, issued)))
+	require.Empty(t, f.failing())
+}
+
+// A sign-in handed to a non-user, such as an agent approved at consent, never ends a person's failure.
+func TestFailingNow_ASignInHandedToANonUserLeavesThePersonFailing(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	agent := urn.NewAgentSubject(uuid.New())
+	f.unnamedRenewalsFail(p)
+	attempt := AttemptAt(uuid.New(), f.at(21*time.Minute), f.direct(AppOtherMetadataURL))
+	consented, err := RowAt(attempt, StepInboundConsent, ResultAccepted, false, f.at(21*time.Minute), Subject(&p))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(20*time.Minute), Subject(&agent))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{consented, issued}))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, p.String(), got[0].SubjectURN)
+}
+
+// A service sign-in is credited to the subject on its own row, so one made after an account switch is the new person's.
+func TestFailingNow_AServiceSignInAfterAnAccountSwitchEndsOnlyThatPersonsFailure(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	a, b := person(), person()
+	f.attempt(f.direct(AppDCR), 50*time.Minute, StepProviderRefresh, CodeProviderUnavailable, Subject(&a))
+	f.attempt(f.direct(AppDCR), 50*time.Minute, StepProviderRefresh, CodeProviderUnavailable, Subject(&b))
+	require.Len(t, f.failing(), 2)
+
+	attempt := AttemptAt(uuid.New(), f.at(32*time.Minute), f.direct(AppDCR))
+	consent, err := RowAt(attempt, StepInboundConsent, ResultReviewShown, false, f.at(32*time.Minute), Subject(&a))
+	require.NoError(t, err)
+	signedIn, err := RowAt(attempt, StepProviderSignIn, ResultSignedIn, false, f.at(31*time.Minute), Subject(&b), Member(f.server))
+	require.NoError(t, err)
+	issued, err := RowAt(attempt, StepInboundToken, ResultCodeIssued, true, f.at(30*time.Minute), Subject(&b))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{consent, signedIn, issued}))
 	got := f.failing()
 	require.Len(t, got, 1)
 	require.Equal(t, a.String(), got[0].SubjectURN)
