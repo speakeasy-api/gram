@@ -30,11 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	chrepo "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
@@ -84,7 +82,6 @@ type Service struct {
 	audit  *audit.Logger
 	celEng *celenv.Engine
 	cache  cache.Cache
-	flags  feature.Provider
 	// signaler is optional; nil disables mutation-triggered re-evaluation.
 	signaler EvaluationSignaler
 }
@@ -99,7 +96,6 @@ func NewService(
 	auditLogger *audit.Logger,
 	celEng *celenv.Engine,
 	cacheImpl cache.Cache,
-	flags feature.Provider,
 	signaler EvaluationSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("spendrules"))
@@ -114,7 +110,6 @@ func NewService(
 		audit:    auditLogger,
 		celEng:   celEng,
 		cache:    cacheImpl,
-		flags:    flags,
 		signaler: signaler,
 	}
 }
@@ -870,12 +865,6 @@ func (s *Service) refreshGateRules(ctx context.Context, organizationID string, q
 	if s.cache == nil {
 		return nil
 	}
-	if !s.budgetsEnabled(ctx, organizationID) {
-		if err := WriteGateRules(ctx, s.cache, organizationID, GateRules{SourceUpdatedAt: time.Now().UTC(), Rules: nil}); err != nil {
-			return fmt.Errorf("clear disabled gate rules: %w", err)
-		}
-		return nil
-	}
 	if err := WriteGateRulesFromDB(ctx, s.cache, queries, organizationID, time.Now().UTC()); err != nil {
 		return fmt.Errorf("refresh gate rules from db: %w", err)
 	}
@@ -889,27 +878,6 @@ func (s *Service) refreshGateRulesAfterCommit(ctx context.Context, organizationI
 			attr.SlogOrganizationID(organizationID),
 		)
 	}
-}
-
-func (s *Service) budgetsEnabled(ctx context.Context, organizationID string) bool {
-	if s.flags == nil {
-		return false
-	}
-
-	var groups map[string]string
-	org, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization slug for budgets flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
-	}
-
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagBudgets, organizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "budgets flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return on
 }
 
 // ruleSlug derives the URN slug for a new rule from its name, appending a

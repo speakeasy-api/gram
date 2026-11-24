@@ -105,7 +105,7 @@ func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return false
 	}
 	// Targeted by PostHog organization group (org slug), matching how the
-	// dashboard evaluates it and how FlagBudgets is rolled out.
+	// dashboard evaluates it.
 	// Evaluating the flag without the org group would silently change the
 	// question asked: a rollout targeted by organization group cannot match,
 	// yet a user- or global-level rule could still answer true and hand back

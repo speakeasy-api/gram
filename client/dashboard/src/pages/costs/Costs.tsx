@@ -7,7 +7,6 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { BudgetsContent } from "@/pages/budgets/Budgets";
 import { useMemo, useState, type JSX } from "react";
 import { useLocation } from "react-router";
@@ -38,32 +37,13 @@ function useCostsBreadcrumbSubstitutions(): Record<string, string> {
   }, [location.pathname]);
 }
 
-// New cost-taxonomy dashboard. Part of the Observe surface, gated on org:admin
-// so basic members (synced via directory/SCIM) don't see it by default.
-function NewCostsPage(): JSX.Element {
-  const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
-
-  return (
-    <WorkbenchPage
-      scope="org:admin"
-      breadcrumbSubstitutions={breadcrumbSubstitutions}
-    >
-      {/* WorkbenchPage owns overflow-hidden; the explorer expects its container
-          to scroll (matching the Costs tab in TabbedCostsPage). */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <CostsExplorer />
-      </div>
-    </WorkbenchPage>
-  );
-}
-
 // The Costs page with a Budgets tab beside the cost explorer. Tab state is
 // local (PolicyCenter pattern): the drill URL under /costs/... keeps working
 // and always lands on the Costs tab. The tab strip lives inside the content
 // column — aligned with each tab's max-width content, like PolicyCenter's
 // Policies/Exclusions strip — not up in the page chrome beside the
 // breadcrumbs.
-function TabbedCostsPage(): JSX.Element {
+export default function Costs(): JSX.Element {
   const [activeTab, setActiveTab] = useState<CostsTab>("costs");
   const breadcrumbSubstitutions = useCostsBreadcrumbSubstitutions();
 
@@ -105,13 +85,4 @@ function TabbedCostsPage(): JSX.Element {
       </Tabs>
     </WorkbenchPage>
   );
-}
-
-// Budgets remains independently gated because the same flag also controls
-// spend-rule enforcement on the server.
-export default function Costs(): JSX.Element {
-  const telemetry = useTelemetry();
-  const budgetsEnabled = telemetry.isFeatureEnabled("gram-budgets") ?? false;
-
-  return budgetsEnabled ? <TabbedCostsPage /> : <NewCostsPage />;
 }
