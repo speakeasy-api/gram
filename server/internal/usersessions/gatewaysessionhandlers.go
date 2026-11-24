@@ -240,7 +240,7 @@ func (s *Service) ListGatewaySessions(ctx context.Context, payload *gen.ListGate
 	for i, row := range rows {
 		viewRows[i] = repo.ListUserSessionsByProjectIDRow(row)
 	}
-	upstreams, err := s.loadUpstreamsForSessions(ctx, scope.projects, scope.organizationID, viewRows)
+	upstreams, err := s.loadUpstreamsForSessions(ctx, scope.projects, scope.organizationID, scope.gatewayID, true, viewRows)
 	if err != nil {
 		return nil, err
 	}
