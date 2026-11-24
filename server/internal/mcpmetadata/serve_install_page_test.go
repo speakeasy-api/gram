@@ -1680,7 +1680,7 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	ingress, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: "tailscale", Hostname: "private-test",
 		EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Enabled: true, IdentityRequired: false, CredentialsEncrypted: conv.ToPGText("ciphertext"),
+		Enabled: true, IdentityRequired: false,
 		AttestorNamespace: "private-test", AttestorServiceAccount: "private-test", ProviderResources: []byte(`{}`),
 	})
 	require.NoError(t, err)
@@ -2104,7 +2104,7 @@ func TestServeInstallPage_PrivateMetaBackedEndpoint_NetworkIngressAdmission(t *t
 			ingress, err := networkingress_repo.New(ti.conn).CreateNetworkIngress(ctx, networkingress_repo.CreateNetworkIngressParams{
 				ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: "tailscale", Hostname: "private-meta-test",
 				EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				Enabled: true, IdentityRequired: false, CredentialsEncrypted: conv.ToPGText("ciphertext"),
+				Enabled: true, IdentityRequired: false,
 				AttestorNamespace: "private-meta-test", AttestorServiceAccount: "private-meta-test", ProviderResources: []byte(`{}`),
 			})
 			require.NoError(t, err)

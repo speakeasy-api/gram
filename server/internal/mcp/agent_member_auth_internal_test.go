@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -40,7 +41,7 @@ func TestAgentMemberSelectedResolution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "selected-member", backend: metaMemberBackendProxied,
 				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, upstreamUnavailable: tc.unavailable}
 			calls := 0
@@ -73,7 +74,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 	for _, clientType := range []string{"", authClientTypeStaticCredential, authClientTypePassThrough} {
 		t.Run("no-oauth/"+clientType, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied}
 			resolution := authClientResolution{outcome: authClientNoAuth}
 			if clientType != "" {
@@ -110,7 +111,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 				t.Parallel()
 				checked := uuid.New()
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
-				s := &Service{upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				agent := uuid.New()
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
@@ -238,6 +239,67 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 	}
 }
 
+// An agent gateway member serves a connection another member attached to the
+// agent, for a key that member did not issue: the attachment is their consent.
+// It serves only while their own live policy still allows the connection.
+func TestAgentMemberServesAnotherMembersAttachedConnection(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "agent_member_lender_attachment")
+	require.NoError(t, err)
+	personal := personalAuthGrant()
+	connectOnly := []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)}
+	cases := []struct {
+		name    string
+		lender  []authz.Grant
+		allowed bool
+	}{
+		{"the lender's attachment serves a key from another member", []authz.Grant{personal}, true},
+		{"the lender's revoked policy refuses", connectOnly, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			client := f.oauthClient(authClientTypeRemoteSession)
+			f.enforce()
+			f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
+				AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
+					return authz.PrincipalCredentialAdmission{
+						OwnerUserID: "user_owner", Credential: []authz.Grant{personal}, Agent: []authz.Grant{personal}, Owner: []authz.Grant{personal},
+						Authorizer: authz.RepresentedUserPolicy{UserID: "user_owner", Policy: []authz.Grant{personal}}, LegacyAuthCeiling: false,
+					}, nil
+				},
+				LoadUserPolicy: func(_ context.Context, _ string, userID string) ([]authz.Grant, bool, error) {
+					if userID != "user_lender" {
+						return nil, false, errors.New("only the lender's policy is read")
+					}
+					return tc.lender, true, nil
+				},
+			})
+			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
+			session := uuid.New()
+			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_lender"}, attached: true, err: nil, asked: nil}
+			source := &agentMemberOutageTokens{fakeUpstreamTokens: &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}}
+			f.service.upstreamTokens = source
+			agentID := uuid.New()
+			ctx := admittedAgentContext(t, f.orgID, agentID)
+			gate := &metaGateContext{agentID: agentID, organizationID: f.orgID, servedCredentials: map[uuid.UUID]contextvalues.UpstreamCredential{}}
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+
+			tokens, err := f.service.agentMemberClientTokens(ctx, gate, member, f.issuerID, f.registration, "")
+			if !tc.allowed {
+				require.Error(t, err)
+				require.Empty(t, source.subjects, "a refused member reads no credential")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, session, tokens[source.issuerID].RemoteSessionID, "the attached connection serves, pinned")
+			require.Equal(t, []urn.SessionSubject{urn.NewAgentSubject(agentID)}, source.subjects)
+			require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: client.String(), AuthClientType: authClientTypeRemoteSession, ConnectionOwnerUserID: "user_lender"}, gate.servedCredentials[f.registration])
+		})
+	}
+}
+
 // agentMemberOutageTokens injects outages into both token lookup paths.
 // Enforced members use the typed lookup rather than the legacy sign-in lookup.
 type agentMemberOutageTokens struct {
@@ -263,7 +325,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 					want = urn.NewUserSubject(owner)
 				}
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
-				s := &Service{upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},

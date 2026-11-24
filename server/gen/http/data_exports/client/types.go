@@ -4134,8 +4134,8 @@ func ValidateCreateRouteResponseBody(body *CreateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs" || *body.DataSource == "mcp_feedback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -4183,8 +4183,8 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs" || *body.DataSource == "mcp_feedback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -6798,8 +6798,8 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs"}))
+		if !(*body.DataSource == "product_telemetry" || *body.DataSource == "risk_findings" || *body.DataSource == "tool_call_logs" || *body.DataSource == "mcp_connection_logs" || *body.DataSource == "mcp_feedback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

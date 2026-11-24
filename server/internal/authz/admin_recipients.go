@@ -26,7 +26,7 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 		ResourceKind:    "",
 		ResourceID:      organizationID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 		probe:           false,
 		anyOf:           nil,

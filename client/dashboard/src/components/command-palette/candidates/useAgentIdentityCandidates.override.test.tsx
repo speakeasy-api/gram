@@ -52,7 +52,7 @@ it("never reuses unrestricted action candidates while loading an override invent
       ),
     },
   );
-  // The agent, its Agent sign-in and MCP sign-in tabs, and its permissions.
+  // The agent, its Agent sign-in and Server sign-in tabs, and its permissions.
   await waitFor(() => expect(result.current).toHaveLength(4));
 
   act(() => {

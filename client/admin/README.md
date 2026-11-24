@@ -173,3 +173,17 @@ show absolute inclusive bounds, never stale relative labels. Custom edits and
 Cancel do not alter the applied dates. Custom fields intentionally use text with
 strict validation: native date inputs can erase incomplete/invalid drafts into
 an empty value, which would otherwise silently remove an optional bound.
+
+## Test rendering and queries
+
+Use `renderRouteTree` for route integration tests and `renderWithApp` for isolated
+components. Both helpers await an asynchronous `act` around the initial render
+so React can flush the work started by mounting. Keep `findBy`/`waitFor` for DOM,
+focus, and requests that complete later; the helper does not guarantee that all
+queries have finished. Loading-state tests should control the request promise
+explicitly so they can assert both pending and completed behavior.
+
+Scope accessible queries to the relevant dialog, region, or row with `within`,
+retaining role, accessible-name, and visibility checks. Query portaled content
+from its actual container. Reuse element references only while they remain
+mounted; reacquire them after closing/reopening a dialog or navigating.

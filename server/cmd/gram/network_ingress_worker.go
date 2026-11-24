@@ -16,14 +16,10 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
-	authorizationv1 "k8s.io/api/authorization/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -39,30 +35,6 @@ func validateNetworkIngressWorkerTemporalTLS(environment, cert, key string) erro
 	}
 	if environment != "local" && cert == "" {
 		return errors.New("private ingress Temporal mTLS is required outside local development")
-	}
-	return nil
-}
-
-func checkNetworkIngressWorkerKubernetes(ctx context.Context, clientset kubernetes.Interface) error {
-	if _, err := clientset.Discovery().ServerVersion(); err != nil {
-		return fmt.Errorf("check Kubernetes API: %w", err)
-	}
-	review, err := clientset.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, &authorizationv1.SelfSubjectAccessReview{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{},
-		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authorizationv1.ResourceAttributes{
-				Namespace: "", Verb: "list", Group: "", Version: "v1", Resource: "namespaces", Subresource: "", Name: "", FieldSelector: nil, LabelSelector: nil,
-			},
-			NonResourceAttributes: nil,
-		},
-		Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false, Denied: false, Reason: "", EvaluationError: ""},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("check Kubernetes RBAC: %w", err)
-	}
-	if !review.Status.Allowed {
-		return errors.New("check Kubernetes RBAC: namespace inventory is not allowed")
 	}
 	return nil
 }
@@ -123,12 +95,6 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err := validateNetworkIngressWorkerTemporalTLS(c.String("environment"), c.String("temporal-client-cert"), c.String("temporal-client-key")); err != nil {
 				return err
 			}
-			if c.Bool("network-ingress-operator-provider-enabled") && c.String("network-ingress-operator-namespace") == "" {
-				return errors.New("private ingress operator namespace is required for observation and cleanup")
-			}
-			if !c.Bool("network-ingress-operator-provider-enabled") && !c.Bool("network-ingress-gateway-enabled") {
-				return errors.New("private ingress reconciler needs the operator provider or the tailnet gateway enabled")
-			}
 
 			serviceName := "gram-network-ingress-worker"
 			serviceEnv := c.String("environment")
@@ -145,7 +111,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
+				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
@@ -198,13 +164,6 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if config.ProviderMutationsEnabled && encryptionClient == nil {
 				return errors.New("private ingress encryption key is required when provider mutations are enabled")
 			}
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, serviceEnv, "", "", "")
-			if err != nil {
-				return fmt.Errorf("create Kubernetes client: %w", err)
-			}
-			if config.OperatorProviderEnabled && (k8sClient.Clientset == nil || k8sClient.DynamicClient == nil) {
-				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients while the operator provider is enabled")
-			}
 			publicationRequester := plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}
 			// Gateway auth keys and node state are sealed under each
 			// organization's key, which the reconciler mints on first use.
@@ -217,7 +176,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return err
 			}
 			defer lockDB.Close()
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, k8sClient, config, publicationRequester)
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, orgEncryption.NetworkIngressCredentials(logger, encryptionClient), orgEncryption.Service, orgEncryption.Provisioner, config, publicationRequester)
 			if err != nil {
 				return err
 			}
@@ -236,15 +195,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				[]*o11y.NamedResource[client.Client]{{Name: "network-ingress", Resource: temporalEnv.Client()}},
 			)
 			healthMux := http.NewServeMux()
-			healthMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-				if config.OperatorProviderEnabled {
-					if err := checkNetworkIngressWorkerKubernetes(r.Context(), k8sClient.Clientset); err != nil {
-						http.Error(w, "kubernetes dependency unavailable", http.StatusServiceUnavailable)
-						return
-					}
-				}
-				healthHandler.ServeHTTP(w, r)
-			})
+			healthMux.Handle("GET /healthz", healthHandler)
 			healthMux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			})

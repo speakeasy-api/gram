@@ -132,6 +132,16 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 
 	checks := []postflightCountCheck{
 		{
+			what:  "mcp server feedback settings",
+			count: byProject(s.q.ServerFeedbackCountConfigs),
+			fail:  postflightMustEqual(1, "expected 1 server with feedback settings, found %d"),
+		},
+		{
+			what:  "mcp server feedback reports",
+			count: byProject(s.q.ServerFeedbackCountReports),
+			fail:  postflightMustEqual(int64(len(serverFeedbackReports)), fmt.Sprintf("expected %d mcp server feedback reports, found %%d", len(serverFeedbackReports))),
+		},
+		{
 			what:  "remote server tool metadata",
 			count: byProject(s.q.PostflightCountToolMetadata),
 			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
@@ -461,7 +471,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(7, "expected 7 gateway members, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -486,7 +496,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(3, "expected 3 gateway endpoints, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.

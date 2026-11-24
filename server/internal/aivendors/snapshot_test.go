@@ -1,0 +1,375 @@
+package aivendors
+
+import (
+	"cmp"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestSnapshotSpecificityAndExplicitPatternFlag(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "broad", VendorKey: "shared", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "specific", VendorKey: "shared", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "exact", VendorKey: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: true}}},
+		{ID: "literal-star", VendorKey: "literal", Documents: []Document{{URL: "https://literal.example.com/*/client.json", Enabled: true, Pattern: false}}},
+	}
+	snapshot := NewSnapshot(products)
+	got, ok := snapshot.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "specific", got.ProductID)
+	got, ok = snapshot.CatalogPreset("https://example.com/oauth/exact/client.json")
+	require.True(t, ok)
+	require.Equal(t, "exact", got.ProductID)
+	_, ok = snapshot.CatalogPreset("https://literal.example.com/some-client/client.json")
+	require.False(t, ok)
+	got, ok = snapshot.CatalogPreset("https://literal.example.com/*/client.json")
+	require.True(t, ok)
+	require.False(t, got.IsPattern())
+	require.False(t, snapshot.BlockableVendorKey("shared"))
+	require.True(t, snapshot.BlockableVendorKey("exact"))
+	require.Equal(t, snapshot.Fingerprint(), NewSnapshot(products).Fingerprint())
+}
+
+func TestSnapshotEqualSpecificityIsStable(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "second", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "first", Documents: []Document{{URL: "https://example.com/*/tenant/client.json", Enabled: true, Pattern: true}}},
+	}
+	first := NewSnapshot(products)
+	slices.Reverse(products)
+	second := NewSnapshot(products)
+	a, ok := first.CatalogPreset("https://example.com/oauth/tenant/client.json")
+	require.True(t, ok)
+	b, ok := second.CatalogPreset("https://example.com/oauth/tenant/client.json")
+	require.True(t, ok)
+	require.Equal(t, "first", a.ProductID)
+	require.Equal(t, a, b)
+}
+
+func TestSnapshotKeepsInputOrder(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "broad", VendorKey: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "specific", VendorKey: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+	}
+	forward := NewSnapshot(products)
+	got, ok := forward.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "specific", got.ProductID, "the more specific pattern wins even when listed second")
+	require.Equal(t, "broad", forward.Products()[0].ID)
+	require.Equal(t, "broad", forward.Catalog()[0].ProductID)
+	slices.Reverse(products)
+	reversed := NewSnapshot(products)
+	got, ok = reversed.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "specific", got.ProductID)
+	require.Equal(t, "specific", reversed.Products()[0].ID)
+	require.Equal(t, "specific", reversed.Catalog()[0].ProductID)
+	require.NotEqual(t, forward.Fingerprint(), reversed.Fingerprint(), "listing order is content")
+}
+
+func TestSnapshotPatternPriorityIgnoresInputOrder(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: true}}},
+		{ID: "tenant-b", Documents: []Document{{URL: "https://example.com/*/tenant/client.json", Enabled: true, Pattern: true}}},
+		{ID: "tenant-a", Documents: []Document{{URL: "https://example.com/*/tenant/client.json?v=1", Enabled: true, Pattern: true}}},
+	}
+	want := map[string]string{
+		"https://example.com/oauth/some-client/client.json": "specific",
+		"https://example.com/oauth/exact/client.json":       "exact",
+		"https://example.com/other/some-client/client.json": "broad",
+		"https://example.com/oauth/tenant/client.json":      "tenant-b",
+		"https://example.com/other/tenant/client.json":      "tenant-b",
+		"https://example.com/other/tenant/client.json?v=1":  "tenant-a",
+		"https://example.com/oauth/client.json":             "",
+	}
+	reference := NewSnapshot(products)
+	orders := [][]Product{slices.Clone(products), slices.Clone(products)}
+	slices.Reverse(orders[1])
+	orders = append(orders, append(slices.Clone(products[2:]), products[:2]...))
+	for i, order := range orders {
+		snapshot := NewSnapshot(order)
+		for clientID, productID := range want {
+			got, ok := snapshot.CatalogPreset(clientID)
+			require.Equal(t, productID != "", ok, "order %d: %s", i, clientID)
+			require.Equal(t, productID, got.ProductID, "order %d: %s", i, clientID)
+			ref, _ := reference.CatalogPreset(clientID)
+			require.Equal(t, ref, got, "order %d: %s", i, clientID)
+		}
+	}
+}
+
+func TestSnapshotIdenticalPatternsPreferLowerProductID(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "vendor-b", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "vendor-a", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+	}
+	for range 2 {
+		got, ok := NewSnapshot(products).CatalogPreset("https://example.com/oauth/some-client/client.json")
+		require.True(t, ok)
+		require.Equal(t, "vendor-a", got.ProductID)
+		slices.Reverse(products)
+	}
+}
+
+func TestSnapshotDisabledDocumentsKeepTheirMatch(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: false, Pattern: true}}},
+		{ID: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: false}}},
+		{ID: "peer", Documents: []Document{
+			{URL: "https://example.com/peer/*/a.json", Enabled: false, Pattern: true},
+			{URL: "https://example.com/peer/*/a.json", Enabled: true, Pattern: true},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: false},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: true},
+		}},
+	}
+	snapshot := NewSnapshot(products)
+	require.Len(t, snapshot.Catalog(), 7, "disabled documents are still listed")
+	unknown := []struct {
+		name     string
+		clientID string
+	}{
+		{name: "disabled specific pattern", clientID: "https://example.com/oauth/some-client/client.json"},
+		{name: "disabled exact URL", clientID: "https://example.com/oauth/exact/client.json"},
+	}
+	for _, tc := range unknown {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := snapshot.CatalogPreset(tc.clientID)
+			require.False(t, ok, "the client is unknown, not the broader pattern's product")
+		})
+	}
+	known := []struct {
+		name     string
+		clientID string
+		product  string
+	}{
+		{name: "broad pattern elsewhere", clientID: "https://example.com/other/some-client/client.json", product: "broad"},
+		{name: "enabled pattern beside a disabled twin", clientID: "https://example.com/peer/x/a.json", product: "peer"},
+		{name: "enabled exact URL beside a disabled twin", clientID: "https://example.com/peer/exact/b.json", product: "peer"},
+	}
+	for _, tc := range known {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := snapshot.CatalogPreset(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, tc.product, got.ProductID)
+			require.True(t, got.Enabled)
+		})
+	}
+}
+
+func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
+	t.Parallel()
+	empty := Product{ID: "p", Signatures: Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}}, ClientInfoNames: []string{}, Aliases: []Alias{}, Documents: []Document{}}
+	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
+}
+
+func TestCompiledSnapshotIsTheRegistryInDatabaseOrder(t *testing.T) {
+	t.Parallel()
+	snapshot := CompiledSnapshot()
+	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
+	byURL := func(a, b Document) int { return strings.Compare(a.URL, b.URL) }
+	want := Products()
+	for i := range want {
+		want[i].Family = ""
+		want[i].Aliases = nil
+		slices.SortFunc(want[i].Documents, byURL)
+	}
+	slices.SortFunc(want, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
+	require.Equal(t, want, snapshot.Products())
+	var documents []Preset
+	for _, entry := range CIMDDocuments() {
+		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
+		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
+	}
+	slices.SortFunc(documents, func(a, b Preset) int {
+		return cmp.Or(strings.Compare(a.ProductID, b.ProductID), strings.Compare(a.URL, b.URL))
+	})
+	require.Equal(t, documents, snapshot.Catalog())
+	for _, p := range Products() {
+		want, got := GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p)
+		require.Equal(t, want.VendorKeys, got.VendorKeys, p.ID)
+		require.Equal(t, want.ClientIDs, got.ClientIDs, p.ID, "matchers follow the given product's document order")
+		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
+	}
+}
+
+func TestSnapshotOwnsAllMutableData(t *testing.T) {
+	t.Parallel()
+	products := Products()
+	snapshot := NewSnapshot(products)
+	fingerprint := snapshot.Fingerprint()
+	expectedProducts := Products()
+	expectedCatalog := slices.Clone(snapshot.Catalog())
+	products[0].Documents[0].URL = "https://changed.example.com/input.json"
+	copied := snapshot.Products()
+	copied[0].Documents[0].URL = "https://changed.example.com/copy.json"
+	for i := range copied {
+		for _, values := range [][]string{
+			copied[i].Signatures.BundleIDs,
+			copied[i].Signatures.Binaries,
+			copied[i].Signatures.ConfigDirs,
+			copied[i].Signatures.ProcessNames,
+			copied[i].ClientInfoNames,
+		} {
+			if len(values) > 0 {
+				values[0] = "changed"
+			}
+		}
+		if len(copied[i].Aliases) > 0 {
+			copied[i].Aliases[0].Name = "changed"
+		}
+		if len(copied[i].Documents) > 0 {
+			copied[i].Documents[0].DisplayName = "changed"
+		}
+	}
+	presets := snapshot.Catalog()
+	presets[0].URL = "https://changed.example.com/preset.json"
+	presets[0].Enabled = !presets[0].Enabled
+	require.Equal(t, expectedProducts, snapshot.Products())
+	require.Equal(t, expectedCatalog, snapshot.Catalog())
+	require.Equal(t, fingerprint, NewSnapshot(snapshot.Products()).Fingerprint())
+	require.Equal(t, fingerprint, snapshot.Fingerprint())
+}
+
+func swappedSnapshot() *Snapshot {
+	products := Products()
+	products[0].DisplayName = "Swapped"
+	return NewSnapshot(products)
+}
+
+func TestPinnedSnapshotSurvivesPublish(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	ctx := store.Pin(t.Context())
+	next := swappedSnapshot()
+	store.Publish(next)
+	require.Same(t, initial, store.SnapshotFor(ctx))
+	require.Same(t, initial, store.SnapshotFor(store.Pin(ctx)), "an existing pin is kept")
+	require.Same(t, next, store.SnapshotFor(t.Context()))
+}
+
+func TestMiddlewarePinsOneSnapshotPerRequest(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	next := swappedSnapshot()
+	var first, second *Snapshot
+	handler := store.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		first = store.SnapshotFor(r.Context())
+		store.Publish(next)
+		second = store.SnapshotFor(r.Context())
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Same(t, initial, first)
+	require.Same(t, initial, second)
+	require.Same(t, next, store.Snapshot())
+}
+
+func TestMiddlewareWithoutStoreFailsWhenRegistered(t *testing.T) {
+	t.Parallel()
+	var store *Store
+	require.Panics(t, func() { store.Middleware(http.NotFoundHandler()) })
+}
+
+func TestDerivedComputesOncePerSnapshot(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	calls := 0
+	compute := func(*Snapshot) int {
+		calls++
+		return calls
+	}
+	first := NewSnapshot(Products())
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 2, Derived(NewSnapshot(Products()), key{}, compute))
+}
+
+func TestDerivedComputesOnceUnderConcurrentFirstReads(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	snapshot := NewSnapshot(Products())
+	var calls atomic.Int32
+	release := make(chan struct{})
+	compute := func(*Snapshot) int {
+		calls.Add(1)
+		<-release
+		return 7
+	}
+	var wg sync.WaitGroup
+	var started atomic.Int32
+	results := make([]int, 16)
+	for i := range results {
+		wg.Go(func() {
+			started.Add(1)
+			results[i] = Derived(snapshot, key{}, compute)
+		})
+	}
+	require.Eventually(t, func() bool { return started.Load() == int32(len(results)) && calls.Load() > 0 }, 5*time.Second, time.Millisecond)
+	close(release)
+	wg.Wait()
+	require.Equal(t, int32(1), calls.Load())
+	for _, got := range results {
+		require.Equal(t, 7, got)
+	}
+}
+
+func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	snapshot := NewSnapshot(Products())
+	require.Equal(t, 1, Derived(snapshot, key{}, func(*Snapshot) int { return 1 }))
+	require.Panics(t, func() { Derived(snapshot, key{}, func(*Snapshot) string { return "" }) })
+}
+
+func TestPublishReplacesTheBuiltInCatalogWithoutCarryingDerivedValues(t *testing.T) {
+	t.Parallel()
+	store := NewStore(builtInSnapshot(removals{products: nil, documents: nil}))
+	type key struct{}
+	computed := 0
+	count := func(*Snapshot) int { computed++; return computed }
+	require.Equal(t, 1, Derived(store.Snapshot(), key{}, count))
+	equal := NewSnapshot(store.Snapshot().Products())
+	require.Equal(t, store.Snapshot().Fingerprint(), equal.Fingerprint())
+	store.Publish(equal)
+	require.Same(t, equal, store.Snapshot(), "a database snapshot replaces the built-in one even with equal content")
+	require.Equal(t, 2, Derived(store.Snapshot(), key{}, count), "derived values belong to the snapshot that computed them")
+	store.Publish(NewSnapshot(store.Snapshot().Products()))
+	require.Same(t, equal, store.Snapshot(), "an equal database snapshot is not republished")
+}
+
+func TestPublishRejectsNil(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	require.Panics(t, func() { store.Publish(nil) })
+	require.Same(t, initial, store.Snapshot())
+}
+
+func TestPinBelongsToItsStore(t *testing.T) {
+	t.Parallel()
+	first := NewStore(NewSnapshot(Products()))
+	second := NewStore(NewSnapshot(Products()))
+	ctx := first.Pin(t.Context())
+	require.Same(t, first.Snapshot(), first.SnapshotFor(ctx))
+	require.Same(t, second.Snapshot(), second.SnapshotFor(ctx))
+}

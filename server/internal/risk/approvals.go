@@ -117,7 +117,7 @@ func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (
 	if !enforced {
 		return false, nil
 	}
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	isAdmin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
 	}
@@ -129,7 +129,7 @@ func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.Au
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil

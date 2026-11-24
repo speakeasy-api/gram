@@ -34,6 +34,9 @@ jobs:
       verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
+      client-test-shared: ${{ steps.filter.outputs.client-test-shared }}
+      client-test-dashboard: ${{ steps.filter.outputs.client-test-dashboard }}
+      client-test-admin: ${{ steps.filter.outputs.client-test-admin }}
       tooling: ${{ steps.gates.outputs.tooling }}
       cli: ${{ steps.gates.outputs.cli }}
       hooks: ${{ steps.gates.outputs.hooks }}
@@ -2626,100 +2629,91 @@ jobs:
         if: success()
         run: aube store prune
 
-  client-test:
-    name: client-test
+  client-test-dashboard:
+    name: client-test (dashboard)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
       !cancelled() &&
       needs.changes.outputs.verify == 'true' &&
-      needs.changes.outputs.client == 'true'
+      needs.changes.outputs.client == 'true' &&
+      (
+        needs.changes.outputs.client-test-dashboard == 'true' ||
+        needs.changes.outputs.client-test-shared == 'true' ||
+        github.event_name == 'merge_group' ||
+        contains(github.event.pull_request.labels.*.name, 'ci:full')
+      )
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
-      - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+      - name: Set up client tests
+        id: setup
+        uses: ./.github/workflows/composite/client-test-setup # zizmor: ignore[self-repository]
         with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      - name: Install dependencies
-        run: aube install --frozen-lockfile
-
-      # Restore after installation, which can replace node_modules.
-      - name: Vitest cache key
-        id: vitest-cache-key
-        uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
-
-      - name: Restore Vitest module cache
-        id: vitest-cache
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules/.vitest-cache
-          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
-          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
-
-      # A pull request run only executes the test files whose module graph
-      # reaches a file the pull request changed (vitest --changed). The whole
-      # suite still runs when anything outside the two apps' sources changed
-      # that the tests could depend on (dependencies, configuration, shared
-      # test setup, this workflow), with the ci:full label, and always in the
-      # merge queue. A fixture a test reads from disk without importing it is
-      # invisible to the module graph; the merge queue is what catches that.
-      - name: Select tests
-        id: select
-        env:
-          SELECTIVE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full') }}
-        run: |
-          set -euo pipefail
-          if [[ "$SELECTIVE" != "true" ]]; then
-            echo "Running every test file."
-            exit 0
-          fi
-          # HEAD is the pull request merge commit; its first parent is the base.
-          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
-          watched='^(\.github/|client/|e2e/|sdks/typescript/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$)'
-          sources='^client/(dashboard|admin)/src/'
-          shared='^client/(dashboard|admin)/src/test/'
-          forcing=$(git diff --name-only HEAD^1 HEAD | grep -E "$watched" | grep -Ev "$sources" || true)
-          forcing+=$(git diff --name-only HEAD^1 HEAD | grep -E "$shared" || true)
-          if [[ -n "$forcing" ]]; then
-            echo "Running every test file because these changed:"
-            head -20 <<< "$forcing"
-            exit 0
-          fi
-          echo "Running only the test files affected by this pull request."
-          echo "args=--changed HEAD^1 --passWithNoTests" >> "$GITHUB_OUTPUT"
+          suite: dashboard
 
       - name: Test
         run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/dashboard
         env:
-          VITEST_ARGS: ${{ steps.select.outputs.args }}
+          VITEST_ARGS: ${{ steps.setup.outputs.test-args }}
+
+      - name: Save Vitest module cache
+        if: success() && steps.setup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.setup.outputs.cache-prefix }}${{ github.sha }}
+
+      # Main reuses the exact successful queue revision instead of running
+      # these suites again. PR artifacts are never eligible for promotion.
+      - name: Upload queue module transforms
+        if: success() && github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.setup.outputs.cache-prefix }}${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: node_modules/.vitest-cache
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 1
+
+      - name: Prune aube store
+        if: success()
+        run: aube store prune
+
+  client-test-admin:
+    name: client-test (admin)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: |
+      !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
+      needs.changes.outputs.client == 'true' &&
+      (
+        needs.changes.outputs.client-test-admin == 'true' ||
+        needs.changes.outputs.client-test-shared == 'true' ||
+        github.event_name == 'merge_group' ||
+        contains(github.event.pull_request.labels.*.name, 'ci:full')
+      )
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Set up client tests
+        id: setup
+        uses: ./.github/workflows/composite/client-test-setup # zizmor: ignore[self-repository]
+        with:
+          suite: admin
 
       - name: Test admin
         run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/admin
         env:
-          VITEST_ARGS: ${{ steps.select.outputs.args }}
+          VITEST_ARGS: ${{ steps.setup.outputs.test-args }}
 
       - name: Test registry editor in Chrome
         working-directory: e2e
@@ -2730,12 +2724,12 @@ jobs:
           aube run test:registry-editor
 
       - name: Save Vitest module cache
-        if: success() && steps.vitest-cache.outputs.cache-hit != 'true'
+        if: success() && steps.setup.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: node_modules/.vitest-cache
-          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
+          key: ${{ steps.setup.outputs.cache-prefix }}${{ github.sha }}
 
       # Main reuses the exact successful queue revision instead of running
       # these suites again. PR artifacts are never eligible for promotion.
@@ -2744,7 +2738,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}-attempt-${{ github.run_attempt }}
+          name: ${{ steps.setup.outputs.cache-prefix }}${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: node_modules/.vitest-cache
           include-hidden-files: true
           if-no-files-found: error
@@ -2758,7 +2752,11 @@ jobs:
   # Like the image retagging jobs, publish the queue's output for this exact
   # main commit rather than repeating work. No required check depends on this.
   vitest-module-cache:
-    name: Publish main Vitest module cache
+    name: Publish main Vitest module cache (${{ matrix.app }})
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [dashboard, admin]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -2783,12 +2781,15 @@ jobs:
       - name: Vitest cache key
         id: vitest-cache-key
         uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+        with:
+          suite: ${{ matrix.app }}
 
       - name: Find verified queue artifact
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
           CACHE_PREFIX: ${{ steps.vitest-cache-key.outputs.prefix }}
+          CACHE_SUITE: ${{ matrix.app }}
         run: node .github/scripts/vitest-cache-source.mjs
 
       - name: Download verified module transforms
@@ -3375,7 +3376,8 @@ jobs:
       - docker-build-pystreams
       - client-build-lint
       - tooling-lint
-      - client-test
+      - client-test-dashboard
+      - client-test-admin
       - sdk-gen-check
       - cli-build-lint
       - hooks-build-test

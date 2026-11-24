@@ -2,7 +2,8 @@
 -- Returns the device agent's full plugin set for an org, marketplace-first.
 --
 -- The base is the org's *published* marketplaces (plugin_github_connections rows
--- with a marketplace_token), scoped so the device agent isn't flooded with every
+-- with a marketplace token: its hash, or until the marketplace token backfill
+-- moves it, the plaintext column), scoped so the device agent isn't flooded with every
 -- project: the org's default project always appears (marketplace + its
 -- observability plugin when the project has not disabled it, synthesized in the
 -- view layer) as the org-wide baseline, while a non-default project appears only
@@ -28,7 +29,13 @@ SELECT
   pr.slug AS project_slug,
   om.slug AS organization_slug,
   om.name AS organization_name,
+  -- The marketplace token as the connection stores it. Package
+  -- marketplacetokens opens it into the install URL.
+  pgc.organization_id AS connection_organization_id,
   pgc.marketplace_token,
+  pgc.marketplace_token_hash,
+  pgc.marketplace_token_encrypted,
+  pgc.marketplace_token_org_encrypted,
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
@@ -97,7 +104,7 @@ LEFT JOIN plugins p
       AND pa.principal_urn = ANY(@principal_urns::text[])
   )
 WHERE pr.organization_id = @organization_id
-  AND pgc.marketplace_token IS NOT NULL
+  AND (pgc.marketplace_token_hash IS NOT NULL OR pgc.marketplace_token IS NOT NULL)
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
     -- always surface its marketplace + observability (when enabled), even when
@@ -547,7 +554,9 @@ VALUES (
   @client_info_names::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
-SET display_name = EXCLUDED.display_name
+-- A definition makes the row the organization's own, so drop any product link.
+SET ai_product_id = NULL
+  , display_name = EXCLUDED.display_name
   , category = EXCLUDED.category
   , bundle_ids = EXCLUDED.bundle_ids
   , binaries = EXCLUDED.binaries
@@ -561,10 +570,11 @@ SET display_name = EXCLUDED.display_name
 RETURNING *;
 
 -- name: SetAIScanTargetStatus :one
-INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
-VALUES (@organization_id, @id, @status, sqlc.narg('rationale'))
+INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
+VALUES (@organization_id, @id, sqlc.narg('ai_product_id'), @status, sqlc.narg('rationale'))
 ON CONFLICT (organization_id, id) DO UPDATE
-SET status = EXCLUDED.status
+SET ai_product_id = COALESCE(ai_scan_targets.ai_product_id, EXCLUDED.ai_product_id)
+  , status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
 RETURNING *;
@@ -611,3 +621,19 @@ ORDER BY id;
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- Only decision-only rows may take a catalog link; an ID match is not enough.
+-- name: GetAIScanTargetCatalogState :one
+SELECT
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id AND p.deleted IS FALSE) AS product_exists,
+  EXISTS (
+    SELECT 1 FROM ai_scan_targets t
+    WHERE t.organization_id = @organization_id AND t.id = @id
+      AND NOT (
+        t.display_name IS NULL AND t.category IS NULL AND t.version_plist_key IS NULL
+        AND cardinality(t.bundle_ids) = 0 AND cardinality(t.binaries) = 0
+        AND cardinality(t.config_dirs) = 0 AND cardinality(t.process_names) = 0
+        AND cardinality(t.cimd_vendor_keys) = 0 AND cardinality(t.oauth_client_ids) = 0
+        AND cardinality(t.client_info_names) = 0
+      )
+  ) AS has_definition;

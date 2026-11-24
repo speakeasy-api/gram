@@ -131,7 +131,7 @@ WHERE organization_id = $6
   AND id = $7
   AND status = 'pending'
   AND deleted IS FALSE
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DecideAccessRequestParams struct {
@@ -170,6 +170,8 @@ func (q *Queries) DecideAccessRequest(ctx context.Context, arg DecideAccessReque
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -565,7 +567,7 @@ func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPReso
 }
 
 const getAccessRequest = `-- name: GetAccessRequest :one
-SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
 FROM access_requests
 LEFT JOIN principal_grants
   ON principal_grants.id = access_requests.temporary_grant_id
@@ -602,6 +604,8 @@ func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestPara
 		&i.AccessRequest.DecidedAt,
 		&i.AccessRequest.TemporaryGrantID,
 		&i.AccessRequest.ChallengeIds,
+		&i.AccessRequest.RequestedDurationSeconds,
+		&i.AccessRequest.RequestedUntil,
 		&i.AccessRequest.ExpiresAt,
 		&i.AccessRequest.CreatedAt,
 		&i.AccessRequest.UpdatedAt,
@@ -613,7 +617,7 @@ func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestPara
 }
 
 const getAccessRequestForUpdate = `-- name: GetAccessRequestForUpdate :one
-SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 FROM access_requests
 WHERE organization_id = $1
   AND id = $2
@@ -644,6 +648,8 @@ func (q *Queries) GetAccessRequestForUpdate(ctx context.Context, arg GetAccessRe
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1113,7 +1119,7 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPendingAccessRequest = `-- name: GetPendingAccessRequest :one
-SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 FROM access_requests
 WHERE organization_id = $1
   AND requester_user_id = $2
@@ -1152,6 +1158,8 @@ func (q *Queries) GetPendingAccessRequest(ctx context.Context, arg GetPendingAcc
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1343,7 +1351,7 @@ INSERT INTO access_requests (organization_id, requester_user_id, scope, selector
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
 DO NOTHING
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertAccessRequestParams struct {
@@ -1385,6 +1393,8 @@ func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessReque
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2164,7 +2174,7 @@ func (q *Queries) ListAccessRequestPeople(ctx context.Context, ids []string) ([]
 }
 
 const listAccessRequests = `-- name: ListAccessRequests :many
-SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.requested_duration_seconds, access_requests.requested_until, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
 FROM access_requests
 LEFT JOIN principal_grants
   ON principal_grants.id = access_requests.temporary_grant_id
@@ -2225,6 +2235,8 @@ func (q *Queries) ListAccessRequests(ctx context.Context, arg ListAccessRequests
 			&i.AccessRequest.DecidedAt,
 			&i.AccessRequest.TemporaryGrantID,
 			&i.AccessRequest.ChallengeIds,
+			&i.AccessRequest.RequestedDurationSeconds,
+			&i.AccessRequest.RequestedUntil,
 			&i.AccessRequest.ExpiresAt,
 			&i.AccessRequest.CreatedAt,
 			&i.AccessRequest.UpdatedAt,
@@ -3439,13 +3451,23 @@ func (q *Queries) ListManagedAssistantAgentIDs(ctx context.Context, arg ListMana
 
 const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
 WITH active_users AS (
-  SELECT users.id AS user_id
+  SELECT users.id AS user_id, users.email
   FROM users
   JOIN organization_user_relationships AS our ON our.user_id = users.id
   WHERE our.organization_id = $1
     AND users.id = ANY($2::text[])
     AND users.deleted_at IS NULL
     AND our.deleted_at IS NULL
+),
+profiles AS (
+  SELECT DISTINCT ON (active_users.user_id) active_users.user_id, d.id, d.attributes
+  FROM active_users
+  JOIN directory_users AS d
+    ON d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
+  ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
 )
 SELECT user_id, ('user:' || user_id)::text AS principal_urn
 FROM active_users
@@ -3465,6 +3487,50 @@ LEFT JOIN global_roles
 WHERE ora.organization_id = $1
   AND ora.deleted_at IS NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+UNION
+SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+FROM profiles
+JOIN directory_role_mappings AS drm
+  ON drm.organization_id = $1
+  AND drm.deleted IS FALSE
+WHERE (
+    (
+      drm.source_kind = 'group'
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        JOIN directory_groups AS dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = drm.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE m.directory_user_id = profiles.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_roles AS r
+      WHERE drm.role_urn = 'role:organization:' || r.id::text
+        AND r.organization_id = drm.organization_id
+        AND r.deleted IS FALSE
+        AND r.workos_deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM global_roles AS g
+      WHERE drm.role_urn = 'role:global:' || g.id::text
+        AND g.deleted IS FALSE
+        AND g.workos_deleted IS FALSE
+    )
+  )
 `
 
 type ListMemberPrincipalsByUsersParams struct {
@@ -3477,7 +3543,12 @@ type ListMemberPrincipalsByUsersRow struct {
 	PrincipalUrn string
 }
 
-// Resolve active user and role principals together for a requested set of owners.
+// Resolve active user and role principals together for a requested set of
+// owners. Roles come from direct assignments and from directory role
+// mappings, with the same rules as ListUserRolePrincipals: the profile is the
+// directory user linked to the member, falling back to an unlinked directory
+// user with the same email, and a mapping applies when its group contains the
+// profile or its attribute value matches it.
 func (q *Queries) ListMemberPrincipalsByUsers(ctx context.Context, arg ListMemberPrincipalsByUsersParams) ([]ListMemberPrincipalsByUsersRow, error) {
 	rows, err := q.db.Query(ctx, listMemberPrincipalsByUsers, arg.OrganizationID, arg.UserIds)
 	if err != nil {
@@ -5389,7 +5460,7 @@ WHERE organization_id = $1
   AND requester_user_id = $3
   AND status = 'pending'
   AND deleted IS FALSE
-RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type WithdrawAccessRequestParams struct {
@@ -5415,6 +5486,8 @@ func (q *Queries) WithdrawAccessRequest(ctx context.Context, arg WithdrawAccessR
 		&i.DecidedAt,
 		&i.TemporaryGrantID,
 		&i.ChallengeIds,
+		&i.RequestedDurationSeconds,
+		&i.RequestedUntil,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

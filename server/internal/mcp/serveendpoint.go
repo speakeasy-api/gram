@@ -102,6 +102,9 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 		// The private ingress has already established its own network admission,
 		// workload identity, organization, namespace, and Host authority. A custom
 		// domain's public-edge IP allowlist does not govern this separate surface.
+		// Endpoint resolution on this surface only admits endpoints owned by
+		// the ingress's organization, so it attributes the exchange directly.
+		metering.AttributeMCPBandwidth(ctx, origin.OrganizationID, projectID)
 		return false, nil
 	}
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
@@ -774,7 +777,7 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.SnapshotFor(ctx), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -994,7 +997,7 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.SnapshotFor(ctx), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,
@@ -1008,7 +1011,7 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoRoute) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		tagTunnelOutage(w, err)
 		return err
@@ -1053,7 +1056,7 @@ func (s *Service) prepareProxyBackendContext(
 	// it and trust the gate.
 	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
 	organizationID := projectWithOrganization.ID
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(mcpServer.ID), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 	denied := func(err error) (context.Context, string, error) {
 		s.newMandatoryShadow(ctx, organizationID).shadowRequire(ctx, mandatorySurfaceProxiedConnect, err, connect)
 		return nil, "", err
@@ -1124,7 +1127,7 @@ func (s *Service) prepareProxyBackendContext(
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		if mcpaccess.IsServerPermissionDenied(err) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		return nil, "", err
 	}
@@ -1167,7 +1170,7 @@ func (s *Service) authorizeProxyBackendAccess(
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(mcpServer.ID), authz.ProjectIDOf(projectID)).Connect()
 	prepared, err := s.prepareProxyBackendAccess(ctx, logger, mcpServer.Visibility)
 	if err != nil {
 		s.newMandatoryShadow(ctx, organizationID).shadowRequireServer(ctx, surface, err, mandatoryVisibility(mcpServer.Visibility == mcpservers.VisibilityPublic), connect)

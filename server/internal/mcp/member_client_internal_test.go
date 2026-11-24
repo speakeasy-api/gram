@@ -18,6 +18,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,7 +86,9 @@ func memberClientFixture(t *testing.T, endpoint string) (*Service, memberProxyBu
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	return &Service{guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
+	return &Service{
+		aiCatalog:      aivendorstest.NewStore(),
+		guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
 		return &proxy.Proxy{
 			GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: tp.Tracer("test"),
 			NonStreamingTimeout: 5 * time.Second, StreamingTimeout: 5 * time.Second,
@@ -133,8 +136,9 @@ func TestMemberClientPreservesRichToolResult(t *testing.T) {
 			defer cancel()
 			session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 			require.NoError(t, err)
-			got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 			require.NoError(t, err)
+			require.True(t, isError, "the SDK's own decode of the result reports isError")
 			require.NoError(t, session.Close())
 			require.Equal(t, result, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 		})
@@ -265,7 +269,7 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
+	raw, _, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	require.True(t, ok)
@@ -290,7 +294,7 @@ func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
+	_, _, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
 	require.Error(t, err)
 	require.True(t, invocation.rejected)
 	require.NoError(t, session.Close())
@@ -346,8 +350,9 @@ func TestMemberClientCapturesFinalMultiRoundTripResult(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
-	got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+	got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 	require.NoError(t, err)
+	require.False(t, isError)
 	require.NoError(t, session.Close())
 	require.Equal(t, final, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 	mu.Lock()
@@ -650,7 +655,7 @@ func TestMemberClientTunneledDeadlineNeedsAForward(t *testing.T) {
 			attempt := newMemberAttempt(build)
 			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), memberAttemptKey{}, attempt), 300*time.Millisecond)
 			defer cancel()
-			_, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			_, _, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 			require.Error(t, err)
 			require.Equal(t, tc.forward, attempt.forwarded())
 

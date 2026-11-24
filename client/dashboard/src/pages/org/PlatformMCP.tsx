@@ -1226,19 +1226,21 @@ function PlatformMCPInstallMethodBody({
     id: PlatformMCPInstallMethod;
     title: string;
     description: string;
+    recommended?: boolean;
   }> = supportsPackages
     ? [
         {
           id: "marketplace",
           title: "Install from the Speakeasy marketplace",
+          recommended: true,
           description:
-            "Recommended. Install the reviewed plugin and receive future updates from the public GitHub marketplace.",
+            "Install the reviewed plugin and receive future updates from the public GitHub marketplace.",
         },
         {
           id: "manual",
           title: "Connect the MCP manually",
           description:
-            "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
+            "Configure only the remote MCP without the reviewed catalogue workflow skill.",
         },
       ]
     : // The marketplace route is listed only where a reviewed package exists.
@@ -1282,9 +1284,14 @@ function PlatformMCPInstallMethodBody({
                 className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
               >
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-foreground text-sm font-medium">
-                    {method.title}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-foreground text-sm font-medium">
+                      {method.title}
+                    </p>
+                    {method.recommended && (
+                      <Badge variant="success">Recommended</Badge>
+                    )}
+                  </div>
                   <p className="text-muted-foreground text-xs">
                     {method.description}
                   </p>
