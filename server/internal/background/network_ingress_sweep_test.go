@@ -23,7 +23,7 @@ func TestNetworkIngressSweepWorkflowUsesCombinedActivityRetryBudgets(t *testing.
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	var activityNames []string
-	for _, name := range []string{"SweepNetworkIngresses", "FindNetworkIngressOrphans"} {
+	for _, name := range []string{"SweepNetworkIngresses", networkIngressOrphanInventoryActivityName} {
 		env.RegisterActivityWithOptions(func(ctx context.Context) error {
 			info := activity.GetInfo(ctx)
 			require.Equal(t, networkIngressSweepActivityTimeout, info.StartToCloseTimeout)
@@ -36,7 +36,7 @@ func TestNetworkIngressSweepWorkflowUsesCombinedActivityRetryBudgets(t *testing.
 	env.ExecuteWorkflow(NetworkIngressSweepWorkflow)
 
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, []string{"SweepNetworkIngresses", "FindNetworkIngressOrphans"}, activityNames)
+	require.Equal(t, []string{"SweepNetworkIngresses"}, activityNames, "new runs no longer inventory operator resources")
 	require.Greater(t, networkIngressSweepExecutionTimeout, 2*networkIngressSweepActivityRetryBudget)
 	require.Equal(t, networkIngressSweepWorkflowOverhead, networkIngressSweepExecutionTimeout-2*networkIngressSweepActivityRetryBudget)
 }

@@ -14,7 +14,13 @@ import (
 // subject is a Speakeasy user; pass nil for apikey/anonymous subjects or when the
 // user could not be resolved.
 func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectEmail *string) *types.RemoteSession {
-	var refreshExpiresAt *string
+	// A NULL access expiry means the upstream reported none, which readers
+	// treat as non-expiring. Formatting the zero time would send year 0001
+	// instead, which reads as a connection that ended two thousand years ago.
+	var accessExpiresAt, refreshExpiresAt *string
+	if row.AccessExpiresAt.Valid {
+		accessExpiresAt = new(row.AccessExpiresAt.Time.Format(time.RFC3339))
+	}
 	if row.RefreshExpiresAt.Valid {
 		v := row.RefreshExpiresAt.Time.Format(time.RFC3339)
 		refreshExpiresAt = &v
@@ -38,7 +44,7 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		IdentitySource:         conv.FromPGText[string](row.IdentitySource),
 		UserSessionIssuerID:    row.UserSessionIssuerID.String(),
 		RemoteSessionClientID:  row.RemoteSessionClientID.String(),
-		AccessExpiresAt:        row.AccessExpiresAt.Time.Format(time.RFC3339),
+		AccessExpiresAt:        accessExpiresAt,
 		RefreshExpiresAt:       refreshExpiresAt,
 		HasRefreshToken:        upstreamtokens.Has(upstreamtokens.Stored(row.RefreshTokenEncrypted, row.RefreshTokenOrgEncrypted)),
 		Scopes:                 row.Scopes,

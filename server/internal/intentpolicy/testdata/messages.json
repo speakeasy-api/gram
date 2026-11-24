@@ -1,0 +1,45 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "List the files and push the branch." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Listing files first." },
+        {
+          "type": "tool_use",
+          "id": "toolu_1",
+          "name": "Bash",
+          "input": { "command": "ls -la" }
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_2",
+          "name": "mcp__github__create_issue",
+          "input": { "title": "demo" }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_1",
+          "content": "README.md\nmain.go"
+        },
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_2",
+          "content": [{ "type": "text", "text": "created #1" }]
+        }
+      ]
+    },
+    { "role": "assistant", "content": "Done." }
+  ],
+  "tools": []
+}

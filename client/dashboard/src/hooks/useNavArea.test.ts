@@ -35,6 +35,12 @@ describe("useNavArea", () => {
     );
   });
 
+  it("keeps intent policies in the Security and Policy area", () => {
+    expect(areaAt("/org/projects/proj/security/intent-policies")).toBe(
+      "Security and Policy",
+    );
+  });
+
   it("leaves ungrouped project pages without an area", () => {
     expect(areaAt("/org/projects/proj")).toBeUndefined();
   });

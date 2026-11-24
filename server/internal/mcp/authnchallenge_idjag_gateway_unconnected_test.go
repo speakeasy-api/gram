@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -118,9 +119,7 @@ func (f idJAGGatewayFixture) exchange(t *testing.T, ctx context.Context, slug st
 		"client_id":  {f.clientID},
 		"assertion":  {f.signer.sign(t, idJAGGatewayUpstreamIssuer, resource, resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())},
 	}
-	for key, value := range form {
-		values[key] = value
-	}
+	maps.Copy(values, form)
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	routeCtx := chi.NewRouteContext()
