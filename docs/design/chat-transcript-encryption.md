@@ -131,7 +131,8 @@ allowlist check is an in-memory lookup and adds no query. A stale or
 unauthentic shadow fails the read: the error is logged and counted as `stale`,
 and that request's hashed attachments are stored without a prompt match rather
 than matched against plaintext. Attachments without a hash still go to the
-latest prompt. Hook writes that skip a message already stored, and the Claude
+latest prompt. Any other read failure, such as a database or key provider
+error, fails the attachment write like any other failure on that path. Hook writes that skip a message already stored, and the Claude
 transcript upload, compare external message IDs rather than bodies, so they
 read no body.
 

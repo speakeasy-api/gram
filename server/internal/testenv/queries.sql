@@ -2796,16 +2796,9 @@ WHERE id = @id;
 
 -- name: TryAcquireChatPromptCorrelationLockFixture :one
 -- Test-only non-blocking probe of the production per-chat prompt correlation
--- lock key. It takes a session lock when the key is free: release it with
--- ReleaseChatPromptCorrelationLockFixture on the same connection.
-SELECT pg_try_advisory_lock(hashtextextended(
+-- lock key. Run it outside a transaction: the transaction-level lock it takes
+-- when the key is free is released when the statement ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended(
   'chat-prompt-correlation:' || (@project_id::uuid)::text || ':' || (@chat_id::uuid)::text,
   0
 ))::boolean AS acquired;
-
--- name: ReleaseChatPromptCorrelationLockFixture :one
--- Test-only release of a lock TryAcquireChatPromptCorrelationLockFixture took.
-SELECT pg_advisory_unlock(hashtextextended(
-  'chat-prompt-correlation:' || (@project_id::uuid)::text || ':' || (@chat_id::uuid)::text,
-  0
-))::boolean AS released;

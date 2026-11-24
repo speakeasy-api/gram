@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
 
 // transcriptShadowReader opens the encrypted shadows of stored chat messages.
@@ -45,6 +47,15 @@ func (s *Service) readsTranscriptShadows(projectID uuid.UUID) bool {
 	}
 	_, enabled := s.transcriptShadowReadProjects[projectID]
 	return enabled
+}
+
+// brokenTranscriptShadow reports whether a shadow read failed because a
+// shadow is stale or not authentic. That stays true until the message is
+// captured again, unlike a database, key or provider failure.
+func brokenTranscriptShadow(err error) bool {
+	return errors.Is(err, transcriptstore.ErrStale) ||
+		errors.Is(err, transcriptcrypto.ErrUnauthentic) ||
+		errors.Is(err, orgencryption.ErrInvalidCiphertext)
 }
 
 // promptShadowPageSize bounds how many prompts one LoadMany call opens. An

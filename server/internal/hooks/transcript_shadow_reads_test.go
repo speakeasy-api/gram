@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -48,10 +49,17 @@ type recordingShadowReader struct {
 	// lockFree, when set, reports whether the chat's prompt correlation lock
 	// is free at the moment of each LoadMany call.
 	lockFree func(ctx context.Context) bool
+
+	// fail, when set, is returned by every LoadMany call instead of opening
+	// the shadows.
+	fail error
 }
 
 func (r *recordingShadowReader) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
-	opened, err := r.store.LoadMany(ctx, organizationID, projectID, messageIDs)
+	opened, err := map[uuid.UUID]transcriptcrypto.Message(nil), r.fail
+	if r.fail == nil {
+		opened, err = r.store.LoadMany(ctx, organizationID, projectID, messageIDs)
+	}
 	load := shadowLoad{requested: slices.Clone(messageIDs), opened: make([]uuid.UUID, 0, len(opened)), err: err, lockFree: true}
 	if r.lockFree != nil {
 		load.lockFree = r.lockFree(ctx)
@@ -108,7 +116,7 @@ func newShadowReadFixture(t *testing.T) (context.Context, shadowReadFixture) {
 // through a recording wrapper around the fixture's store.
 func (f shadowReadFixture) readThrough(projectID uuid.UUID) *recordingShadowReader {
 	f.ti.service.SetTranscriptShadowReads(f.store, projectID)
-	reader := &recordingShadowReader{store: f.store, mu: sync.Mutex{}, loads: nil, lockFree: nil}
+	reader := &recordingShadowReader{store: f.store, mu: sync.Mutex{}, loads: nil, lockFree: nil, fail: nil}
 	f.ti.service.transcriptShadow = reader
 	return reader
 }
@@ -176,21 +184,11 @@ func (f shadowReadFixture) attachmentRows(ctx context.Context, t *testing.T, par
 }
 
 // correlationLockFree reports whether no transaction holds the chat's prompt
-// correlation lock. The probe takes the lock only when it is free and releases
-// it on the same connection.
+// correlation lock. The probe runs as one autocommit statement, so a lock it
+// takes is gone when the statement ends.
 func (f shadowReadFixture) correlationLockFree(ctx context.Context) bool {
-	probe, err := f.ti.conn.Acquire(ctx)
-	if err != nil {
-		return false
-	}
-	defer probe.Release()
-	q := testrepo.New(probe)
-	free, err := q.TryAcquireChatPromptCorrelationLockFixture(ctx, testrepo.TryAcquireChatPromptCorrelationLockFixtureParams{ProjectID: f.projectID, ChatID: f.chatID})
-	if err != nil || !free {
-		return false
-	}
-	released, err := q.ReleaseChatPromptCorrelationLockFixture(ctx, testrepo.ReleaseChatPromptCorrelationLockFixtureParams{ProjectID: f.projectID, ChatID: f.chatID})
-	return err == nil && released
+	free, err := testrepo.New(f.ti.conn).TryAcquireChatPromptCorrelationLockFixture(ctx, testrepo.TryAcquireChatPromptCorrelationLockFixtureParams{ProjectID: f.projectID, ChatID: f.chatID})
+	return err == nil && free
 }
 
 // attachmentParents maps each stored attachment's external ID to its parent
@@ -310,6 +308,48 @@ func TestIngest_ShadowReadProjectStoresAttachmentsUnmatchedOnAStaleShadow(t *tes
 	require.ErrorIs(t, loads[0].err, transcriptstore.ErrStale)
 }
 
+func TestIngest_ShadowReadProjectFailsTheWriteOnAnotherReadError(t *testing.T) {
+	t.Parallel()
+	ctx, f := newShadowReadFixture(t)
+	f.capture()
+	reader := f.readThrough(f.projectID)
+	// A database or key provider failure may pass on retry, unlike a broken
+	// shadow, so it must not store the attachments without their prompt.
+	reader.fail = errors.New("invented database outage")
+	prompt := f.submitPrompt(ctx, t, "Chart the invented river")
+
+	f.attachToPrompt(ctx, t, "Chart the invented river")
+
+	require.Empty(t, f.attachmentRows(ctx, t, prompt), "the write fails and stores nothing")
+	require.Len(t, reader.recorded(), 1)
+}
+
+func TestIngest_ShadowReadProjectSkipsShadowsForAttachmentsItWouldNotStore(t *testing.T) {
+	t.Parallel()
+	ctx, f := newShadowReadFixture(t)
+	f.capture()
+	reader := f.readThrough(f.projectID)
+	f.submitPrompt(ctx, t, "Trace the invented trail")
+
+	// An attachment with no content is never stored, so its hash must not
+	// make the request open shadows.
+	promptSHA256 := testPromptSHA256("Trace the invented trail")
+	payload := canonicalIngestPayload("claude", "assistant.responded", f.sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+			EntryUUID:      "attachment-" + uuid.NewString(),
+			PromptSha256:   &promptSHA256,
+			AttachmentKind: "file",
+			Content:        "  ",
+		}},
+	}
+	res, err := f.ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	require.Empty(t, reader.recorded())
+}
+
 func TestIngest_ShadowReadProjectStopsOpeningOnceEveryHashMatches(t *testing.T) {
 	t.Parallel()
 	ctx, f := newShadowReadFixture(t)
@@ -388,4 +428,23 @@ func TestIngest_OtherProjectsMatchPromptAttachmentsFromPlaintext(t *testing.T) {
 
 	require.Equal(t, map[string]uuid.UUID{entry: prompt}, f.attachmentParents(ctx, t, prompt))
 	require.Empty(t, reader.recorded(), "a project off the read allowlist never opens shadows")
+}
+
+func TestBrokenTranscriptShadowSeparatesIntegrityFromOtherFailures(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		err    error
+		broken bool
+	}{
+		"stale":              {err: fmt.Errorf("open: %w", transcriptstore.ErrStale), broken: true},
+		"wrong identity":     {err: fmt.Errorf("open: %w", transcriptcrypto.ErrUnauthentic), broken: true},
+		"invalid ciphertext": {err: fmt.Errorf("open: %w", orgencryption.ErrInvalidCiphertext), broken: true},
+		"database":           {err: errors.New("invented database outage"), broken: false},
+		"canceled":           {err: context.Canceled, broken: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.broken, brokenTranscriptShadow(tc.err))
+		})
+	}
 }

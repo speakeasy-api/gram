@@ -2033,10 +2033,17 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	var shadowBodies map[uuid.UUID]string
 	if len(wantedHashes) > 0 && s.readsTranscriptShadows(projectID) {
 		opened, shadowErr := s.openPromptShadows(ctx, authCtx.ActiveOrganizationID, chatID, projectID, wantedHashes)
+		if shadowErr != nil && !brokenTranscriptShadow(shadowErr) {
+			// A database, key or provider failure may pass, so it fails the
+			// write like any other failure here.
+			return fmt.Errorf("open prompt attachment parent candidates: %w", shadowErr)
+		}
 		if shadowErr != nil {
-			// The read fails, not the write: plaintext must not stand in for
-			// a broken shadow, but the attachments are still stored, without
-			// a prompt match, as when no prompt has their hash.
+			// A stale or unauthentic shadow stays broken until the message is
+			// captured again. The read fails, not the write: plaintext must
+			// not stand in for the shadow, but the attachments are still
+			// stored, without a prompt match, as when no prompt has their
+			// hash, so the chat's later attachments are not lost with them.
 			s.logger.ErrorContext(ctx, "could not open prompt bodies from encrypted shadows, storing prompt attachments without a prompt match",
 				attr.SlogEvent("hooks_ingest_prompt_attachment_shadow_read_failed"),
 				attr.SlogError(shadowErr),
@@ -2250,12 +2257,12 @@ func promptBodyHash(body string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// promptAttachmentHashes returns the prompt hashes the attachments name. Only
-// these attachments read stored prompt bodies.
+// promptAttachmentHashes returns the prompt hashes named by the attachments
+// the write would store, the only ones that read stored prompt bodies.
 func promptAttachmentHashes(attachments []*gen.HookPromptAttachmentEntry) map[string]struct{} {
 	hashes := map[string]struct{}{}
 	for _, attachment := range attachments {
-		if attachment == nil {
+		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
 			continue
 		}
 		if hash := strings.ToLower(strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, ""))); hash != "" {

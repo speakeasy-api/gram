@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -134,13 +135,17 @@ func decrypt(ctx context.Context, e cryptor, identity Identity, ciphertext strin
 	}
 	var p payload
 	if err := json.Unmarshal(plaintext, &p); err != nil {
-		return Message{}, errors.New("decode transcript payload")
+		return Message{}, fmt.Errorf("decode transcript payload: %w", ErrUnauthentic)
 	}
 	if p.Version != version || p.Identity != identity || p.Message == nil {
-		return Message{}, errors.New("invalid transcript version or identity")
+		return Message{}, fmt.Errorf("invalid transcript version or identity: %w", ErrUnauthentic)
 	}
 	return *p.Message, nil
 }
+
+// ErrUnauthentic marks a payload that decrypts but is not this message's: it
+// does not decode, or it carries another version or identity.
+var ErrUnauthentic = errors.New("transcript payload is not authentic")
 
 // operationError preserves classification without displaying provider details.
 type operationError struct {
