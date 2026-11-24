@@ -109,7 +109,8 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
-    k.key_encrypted AS api_key_encrypted
+    k.key_encrypted AS api_key_encrypted,
+    k.key_org_encrypted AS api_key_org_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL

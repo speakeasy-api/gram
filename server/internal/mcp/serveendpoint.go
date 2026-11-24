@@ -103,6 +103,9 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 		// The private ingress has already established its own network admission,
 		// workload identity, organization, namespace, and Host authority. A custom
 		// domain's public-edge IP allowlist does not govern this separate surface.
+		// Endpoint resolution on this surface only admits endpoints owned by
+		// the ingress's organization, so it attributes the exchange directly.
+		metering.AttributeMCPBandwidth(ctx, origin.OrganizationID, projectID)
 		return false, nil
 	}
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {

@@ -35,6 +35,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -880,7 +881,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
-				UserSessionIssuerID: issuerID, ConnectionOwner: "",
+				UserSessionIssuerID: issuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 			}, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
@@ -1170,7 +1171,7 @@ func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger
 	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
 	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
 	if stale.saved {
-		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
 	}
 	return message, remedy
 }

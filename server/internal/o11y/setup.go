@@ -24,19 +24,31 @@ import (
 	"goa.design/clue/clue"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 )
 
 type SetupOTelSDKOptions struct {
 	ServiceName    string
 	ServiceVersion string
 	GitSHA         string
-	EnableTracing  bool
-	EnableMetrics  bool
+
+	// Partition is the Speakeasy partition the process runs in. It is added
+	// to the resource so every span and metric carries it. SetupOTelSDK
+	// rejects a partition that partition.Parse does not accept, including
+	// the empty zero value.
+	Partition partition.Partition
+
+	EnableTracing bool
+	EnableMetrics bool
 }
 
 // SetupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDKOptions) (shutdown func(context.Context) error, err error) {
+	if _, err := partition.Parse(options.Partition.String()); err != nil {
+		return nil, fmt.Errorf("otel resource partition: %w", err)
+	}
+
 	logger = logger.With(attr.SlogComponent("otel"))
 	var shutdownFuncs []func(context.Context) error
 
@@ -114,6 +126,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		options.ServiceName,
 		options.ServiceVersion,
 		options.GitSHA,
+		options.Partition,
 		metricExporter,
 		spanExporter,
 		prop,
@@ -145,6 +158,7 @@ func newClueConfig(
 	svcName string,
 	svcVersion string,
 	gitSHA string,
+	part partition.Partition,
 	metricExporter sdkmetric.Exporter,
 	spanExporter sdktrace.SpanExporter,
 	propagators propagation.TextMapPropagator,
@@ -159,6 +173,7 @@ func newClueConfig(
 			semconv.ServiceVersionKey.String(svcVersion),
 			attr.DataDogGitCommitSHA(gitSHA),
 			attr.DataDogGitRepoURL("github.com/speakeasy-api/gram"),
+			attr.Partition(part),
 		))
 	if err != nil {
 		return nil, fmt.Errorf("create resource: %w", err)

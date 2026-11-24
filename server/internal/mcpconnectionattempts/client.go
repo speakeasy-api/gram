@@ -78,6 +78,11 @@ func genericFamily(family string) bool {
 	return family == "" || family == FamilyOther || family == FamilyScript
 }
 
+// namedClient reports whether a family names one AI app, not a script, a browser or nothing.
+func namedClient(family string) bool {
+	return !genericFamily(family) && family != FamilyBrowser
+}
+
 // clientVersionShape is what a version may look like, so caller text never reaches the column.
 var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.]{1,16})?$`)
 
@@ -216,7 +221,7 @@ func (r *Recorder) stampClient(row *Row) {
 	if genericFamily(row.ClientFamily) && client.present {
 		// A browser User-Agent is generic too, so it can't replace a name the session reported.
 		family, version := classifyUserAgent(client.userAgent)
-		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
+		if row.ClientFamily == "" || namedClient(family) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}

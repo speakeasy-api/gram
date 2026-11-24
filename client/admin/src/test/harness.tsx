@@ -7,7 +7,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { render, type RenderResult } from "@testing-library/react";
+import { act, render, type RenderResult } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 // `queryClient` is for a test whose subject is what the page does with a record
@@ -43,12 +43,12 @@ export async function renderRouteTree(
   // render paints an empty document and every caller needs findBy*.
   await router.load();
 
-  return {
-    router,
-    ...render(
+  const rendered = await act(async () =>
+    render(
       <QueryClientProvider client={client}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     ),
-  };
+  );
+  return { router, ...rendered };
 }

@@ -147,6 +147,19 @@ describe("useProjectNavRoutes", () => {
     expect(sessions()?.resourceId).toBe("project_b");
   });
 
+  it.each(["enabled", "disabled"] as const)(
+    "never marks MCP Sessions as beta with connection health %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.mcpConnectionHealth] = { status };
+      const { result } = renderNav();
+      const sessions = result.current.find(
+        (entry) => entry.route.href() === routes.mcpSessions.href(),
+      );
+      expect(sessions).toBeTruthy();
+      expect(sessions?.route.stage).toBeUndefined();
+    },
+  );
+
   it("keeps Agent Sessions discoverable for members who can read their own history", () => {
     const { result } = renderNav();
     const sessions = result.current.find(

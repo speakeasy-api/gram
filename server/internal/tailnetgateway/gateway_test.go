@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -258,7 +259,7 @@ func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterP
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
 		Tag: networkingress.DefaultGatewayTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
-		ApprovalGrace: 0, MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
+		ApprovalGrace: 0, MaxHosts: 10, TsnetPortBase: 0, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
 	}
 	for _, apply := range configure {
 		apply(&cfg, runtime)
@@ -630,6 +631,82 @@ func TestGatewayFillsHostCapInOnePoll(t *testing.T) {
 	require.Len(t, f.runtime.started(), 2, "one poll fills the cap, and no further")
 }
 
+func TestGatewayAssignsFixedTsnetPorts(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayports", 0, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.MaxHosts = 2
+		cfg.TsnetPortBase = 29000
+	})
+	var ids []uuid.UUID
+	for _, name := range []string{"gateway-port-a", "gateway-port-b"} {
+		ingressID, orgID := seedIngress(t, f.db, name)
+		f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+		ids = append(ids, ingressID)
+	}
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 2)
+	ports := map[uint16]bool{}
+	for _, node := range f.runtime.started() {
+		ports[node.spec.Port] = true
+	}
+	require.Equal(t, map[uint16]bool{29000: true, 29001: true}, ports, "each node gets its own port from the range")
+
+	// Stopping a host hands its port back once the node has closed, so a
+	// new host can start in the full range.
+	require.NoError(t, testrepo.New(f.db).SetNetworkIngressEnabledFixture(ctx, testrepo.SetNetworkIngressEnabledFixtureParams{Enabled: false, ID: ids[0]}))
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	var stopped *fakeNode
+	for _, node := range f.runtime.started() {
+		if node.spec.IngressID == ids[0] {
+			stopped = node
+		}
+	}
+	require.NotNil(t, stopped)
+	require.True(t, stopped.isClosed())
+	freed := stopped.spec.Port
+
+	ingressID, orgID := seedIngress(t, f.db, "gateway-port-c")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 2)
+	started := f.runtime.started()
+	require.Len(t, started, 3)
+	require.Equal(t, freed, started[2].spec.Port, "the freed port is reused")
+}
+
+func TestGatewayReleasesPortWhenStartFails(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayportfail", 0, func(cfg *tailnetgateway.Config, r *fakeRuntime) {
+		cfg.MaxHosts = 1
+		cfg.TsnetPortBase = 29000
+		r.failStart = errors.New("bring tsnet node up: timed out")
+	})
+	ingressID, orgID := seedIngress(t, f.db, "gateway-port-fail")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		row := f.slotRow(t, ingressID, orgID, 0)
+		assert.Equal(c, string(tailnetgateway.NodeStatusError), row.Status)
+	}, 5*time.Second, 20*time.Millisecond)
+
+	// With its one port released, the next start gets it again rather than
+	// failing for want of a port.
+	f.runtime.mu.Lock()
+	f.runtime.failStart = nil
+	f.runtime.mu.Unlock()
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	other, otherOrg := seedIngress(t, f.db, "gateway-port-fail-next")
+	f.seedSlot(t, other, otherOrg, 0, "tskey-auth-one-shot")
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	require.Equal(t, uint16(29000), f.runtime.started()[0].spec.Port)
+}
+
 func TestGatewayStopsHostsConcurrently(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -904,9 +981,12 @@ func TestConfigValidate(t *testing.T) {
 	valid := tailnetgateway.Config{
 		Ordinal: 0, PodName: "", Shard: "shared", StateDir: "/tmp/x", Tag: "tag:speakeasy", Namer: networkingress.ProductionNamer{},
 		Upstream: &url.URL{Scheme: "https", Host: "listener"}, UpstreamTransport: http.DefaultTransport, TokenPath: "/token",
-		PollInterval: time.Second, DrainTimeout: time.Second, StartTimeout: time.Second, MaxHosts: 1, ReconcileTaskQueue: "", ControlURL: "",
+		PollInterval: time.Second, DrainTimeout: time.Second, StartTimeout: time.Second, MaxHosts: 1, TsnetPortBase: 0, ReconcileTaskQueue: "", ControlURL: "",
 	}
 	require.NoError(t, valid.Validate())
+	fixedPorts := valid
+	fixedPorts.TsnetPortBase = 65535
+	require.NoError(t, fixedPorts.Validate(), "a one-port range ending at 65535 fits")
 	cases := map[string]func(c *tailnetgateway.Config){
 		"negative ordinal": func(c *tailnetgateway.Config) { c.Ordinal = -1 },
 		"empty shard":      func(c *tailnetgateway.Config) { c.Shard = "" },
@@ -920,6 +1000,14 @@ func TestConfigValidate(t *testing.T) {
 		"no transport": func(c *tailnetgateway.Config) { c.UpstreamTransport = nil },
 		"no token":     func(c *tailnetgateway.Config) { c.TokenPath = "" },
 		"zero hosts":   func(c *tailnetgateway.Config) { c.MaxHosts = 0 },
+		"port range past 65535": func(c *tailnetgateway.Config) {
+			c.TsnetPortBase = 65500
+			c.MaxHosts = 100
+		},
+		"host count that overflows the range check": func(c *tailnetgateway.Config) {
+			c.TsnetPortBase = 29000
+			c.MaxHosts = math.MaxInt
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

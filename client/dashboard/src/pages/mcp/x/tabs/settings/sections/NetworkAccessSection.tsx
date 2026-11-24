@@ -207,6 +207,9 @@ function NetworkAccessSectionContent({
     [endpoints, ingress],
   );
   const featureQuerySuccessful = features.isSuccess;
+  // An organization without private access can only be public, so the picker
+  // has nothing to offer; the footer names the one next step instead.
+  const notEntitled = featureQuerySuccessful && !entitled;
   const ingressQuerySuccessful = canReadIngress && ingressResult.isSuccess;
   const privateChoicesAvailable =
     featureQuerySuccessful &&
@@ -439,7 +442,12 @@ function NetworkAccessSectionContent({
               onValueChange={(value) =>
                 setDraft(value as UpdateMcpServerFormNetworkAccessMode)
               }
-              disabled={isUpdating || !supportsEditing}
+              disabled={
+                isUpdating ||
+                !supportsEditing ||
+                (notEntitled &&
+                  currentMode === McpServerNetworkAccessMode.PublicOnly)
+              }
             >
               <SelectTrigger
                 id="mcp-network-access-mode"
@@ -471,12 +479,14 @@ function NetworkAccessSectionContent({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <FieldDescription>
-              Private modes are available only while the organization is
-              entitled and its private ingress is online.
-            </FieldDescription>
+            {notEntitled ? null : (
+              <FieldDescription>
+                Private modes are available only while the organization&apos;s
+                private ingress is online.
+              </FieldDescription>
+            )}
           </Field>
-          {canReadIngress && (
+          {canReadIngress && !notEntitled && (
             <Button asChild variant="secondary" size="sm">
               <orgRoutes.domains.Link>
                 Configure organization network access
