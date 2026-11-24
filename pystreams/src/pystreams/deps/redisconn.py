@@ -262,6 +262,7 @@ _ENDPOINT_KWARGS: Final = frozenset(
         "connection_class",
         "ssl_context",
         "server_hostname",
+        "redis_connect_func",
     }
 )
 
