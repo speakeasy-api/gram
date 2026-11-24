@@ -12,10 +12,12 @@ use http::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
+use rmcp::model::ClientRequest;
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
 use thiserror::Error;
 
 use crate::errors::RunnerError;
+use crate::telemetry::McpTraceHeaders;
 
 // Liberal retry bounds for every runner-originated request: chat
 // completions, MCP, /threads/turn, bootstrap. A turn that bubbles a
@@ -84,9 +86,29 @@ impl Middleware for TokenRegistry {
     }
 }
 
+/// Stamps the current span's W3C trace context on every outbound request.
+/// Runs inside each request's future, so the context is the span the caller
+/// awaited the request under (for example agentkit's `chat` span).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TraceContextMiddleware;
+
+#[async_trait]
+impl Middleware for TraceContextMiddleware {
+    async fn handle(
+        &self,
+        mut req: reqwest::Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<reqwest::Response> {
+        crate::telemetry::inject_current_trace_context(req.headers_mut());
+        next.run(req, extensions).await
+    }
+}
+
 pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
     let client = ClientBuilder::new(client)
         .with(retry_middleware())
+        .with(TraceContextMiddleware)
         .with(registry)
         .build();
     Http::new(client)
@@ -103,7 +125,10 @@ fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
 /// the management-API bootstrap call so a transient 5xx or network blip does
 /// not strand the VM's first turn for an assistant.
 pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
-    ClientBuilder::new(client).with(retry_middleware()).build()
+    ClientBuilder::new(client)
+        .with(retry_middleware())
+        .with(TraceContextMiddleware)
+        .build()
 }
 
 /// `McpHttpClient` impl that sends one fixed bearer for the lifetime of a
@@ -152,7 +177,13 @@ impl McpHttpClient for McpSessionClient {
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.bearer();
-        let headers = self.merged_headers(custom_headers);
+        let mut headers = self.merged_headers(custom_headers);
+        // Tool calls carry the trace context agentkit's request decorator
+        // captured for them, so the server's MCP request links to the runner
+        // trace.
+        if let Some(McpTraceHeaders(trace)) = call_trace_headers(&message) {
+            headers.extend(trace.clone());
+        }
         RmcpStreamableHttpClient::post_message(
             &self.inner,
             uri,
@@ -179,7 +210,7 @@ impl McpHttpClient for McpSessionClient {
     async fn get_stream(
         &self,
         uri: Arc<str>,
-        session_id: Arc<str>,
+        session_id: Option<Arc<str>>,
         last_event_id: Option<String>,
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
@@ -198,10 +229,51 @@ impl McpHttpClient for McpSessionClient {
     }
 }
 
+/// The trace headers attached to a `tools/call` request, if any.
+fn call_trace_headers(message: &ClientJsonRpcMessage) -> Option<&McpTraceHeaders> {
+    match message {
+        ClientJsonRpcMessage::Request(request) => match &request.request {
+            ClientRequest::CallToolRequest(call) => call.extensions.get::<McpTraceHeaders>(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_call_tool_requests_carry_trace_headers() {
+        use rmcp::model::{
+            CallToolRequest, CallToolRequestParams, JsonRpcRequest, NumberOrString, PingRequest,
+        };
+        let mut trace = HashMap::new();
+        trace.insert(
+            HeaderName::from_static("traceparent"),
+            HeaderValue::from_static("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"),
+        );
+        let mut call = CallToolRequest::new(CallToolRequestParams::new("platform_overview"));
+        call.extensions.insert(McpTraceHeaders(trace.clone()));
+        let message = |request| {
+            ClientJsonRpcMessage::Request(JsonRpcRequest {
+                jsonrpc: Default::default(),
+                id: NumberOrString::Number(1),
+                request,
+            })
+        };
+        let call = message(ClientRequest::CallToolRequest(call));
+        assert_eq!(
+            call_trace_headers(&call).map(|McpTraceHeaders(h)| h),
+            Some(&trace)
+        );
+        assert!(
+            call_trace_headers(&message(ClientRequest::PingRequest(PingRequest::default())))
+                .is_none()
+        );
+    }
 
     #[test]
     fn scalar_bearer_recovers_after_lock_poison() {
