@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthenticationSectionBody } from "./AuthenticationSection";
+import {
+  AuthenticationSection,
+  AuthenticationSectionBody,
+} from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
 
 const {
@@ -65,9 +68,11 @@ vi.mock("./UserSessionIssuerField", () => ({
   ),
 }));
 
-vi.mock("./authTarget", () => ({
-  useMcpServerAuthTarget: vi.fn(),
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => vi.fn(),
 }));
+vi.mock("./SetupStepBanner", () => ({ SetupStepBanner: () => null }));
 
 vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
   useServerClientAssociations: (...args: unknown[]) =>
@@ -223,25 +228,43 @@ afterEach(() => {
 });
 
 describe("AuthenticationSectionBody", () => {
-  it("records no upstream authentication on the hosted server only", () => {
+  it("opts out the selected hosted server, not the server representing its toolset", () => {
     useServerClientAssociations.mockReturnValue({
       data: { associations: [] },
       isLoading: false,
     });
     render(
-      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+      <AuthenticationSection
+        mcpServer={{
+          id: "second-server",
+          projectId: "project-id",
+          userSessionIssuerId: "user-session-issuer",
+          toolsetId: "toolset-id",
+          toolset: {
+            id: "toolset-id",
+            hostingMcpServerId: "first-server",
+            name: "Shared toolset",
+            slug: "shared-toolset",
+            toolCount: 0,
+            toolSelectionMode: "static",
+          },
+          visibility: "private",
+          networkAccessMode: "public_only",
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        }}
+      />,
     );
 
     fireEvent.click(
       screen.getByRole("button", { name: "No upstream authentication" }),
     );
 
+    expect(saveNoUpstream).toHaveBeenCalledTimes(1);
     expect(saveNoUpstream).toHaveBeenCalledWith({
       request: {
         setMcpServerUpstreamAuthRequirementRequestBody: {
-          mcpServerId:
-            standardTargetWithSessionIssuer.mcpServerId ??
-            standardTargetWithSessionIssuer.attachImpactTarget.toolsetId,
+          mcpServerId: "second-server",
           requiresUpstreamAuth: false,
         },
       },

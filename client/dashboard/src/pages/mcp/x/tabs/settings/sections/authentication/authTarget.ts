@@ -1,4 +1,3 @@
-import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import {
@@ -77,7 +76,7 @@ export function useMcpServerAuthTarget(
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
       kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
-      hosted: standsInForToolset(mcpServer),
+      hosted: mcpServer.toolsetId !== undefined,
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
