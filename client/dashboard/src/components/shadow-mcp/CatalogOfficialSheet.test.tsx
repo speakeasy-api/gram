@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   statuses: [] as Array<Record<string, unknown>>,
   reset: vi.fn(),
   signInReady: true,
+  orgAdmin: true,
   signInUnavailable: false,
   detailsLoading: false,
   detailsError: false,
@@ -45,7 +46,10 @@ vi.mock("@gram/client/react-query/mcpRegistriesGetServerDetails.js", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true, isLoading: false }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || mocks.orgAdmin,
+    isLoading: false,
+  }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
   useAgentCredentialFields: () => ({ authorizationValue: "" }),
@@ -208,6 +212,7 @@ describe("CatalogOfficialSheet", () => {
     mocks.fetchQuery.mockReset();
     mocks.reset.mockReset();
     mocks.signInReady = true;
+    mocks.orgAdmin = true;
     mocks.signInUnavailable = false;
     mocks.detailsLoading = false;
     mocks.detailsError = false;
@@ -346,6 +351,29 @@ describe("CatalogOfficialSheet", () => {
         "Add or turn on an upstream credential above to enable this server.",
       ),
     ).toBeTruthy();
+  });
+
+  it("hands off incomplete setup to an admin without prompting project writers to add credentials", async () => {
+    mocks.orgAdmin = false;
+    mocks.signInReady = false;
+    installWith([
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ]);
+
+    expect(
+      await screen.findByText(/Ask an organization admin to open this server/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Add or turn on an upstream credential above/),
+    ).toBeNull();
+    const turnOn = screen.getByRole("button", { name: "Turn on and link" });
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows why turning the server on failed", async () => {

@@ -506,6 +506,7 @@ export function CatalogOfficialSheet({
           {stage.kind === "sign-in" ? (
             <TurnOnAndLink
               mcpServerId={stage.mcpServerId}
+              canManageCredentials={!rbacLoading && canManageCredentials}
               onLinked={(mcpServer) =>
                 void finish(
                   mcpServer.id,
@@ -584,13 +585,15 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
 
 /**
  * Turns the new server on, then links it. A server people cannot sign in to
- * would fail every call, so the admin saves the client above first.
+ * would fail every call, so an admin sets up an upstream credential first.
  */
 function TurnOnAndLink({
   mcpServerId,
+  canManageCredentials,
   onLinked,
 }: {
   mcpServerId: string;
+  canManageCredentials: boolean;
   onLinked: (mcpServer: McpServer) => void;
 }) {
   const client = useSdkClient();
@@ -645,7 +648,7 @@ function TurnOnAndLink({
         {failed ??
           (unavailable
             ? "Could not verify upstream sign-in."
-            : signInOpen && !checking
+            : signInOpen && !checking && canManageCredentials
               ? "Add or turn on an upstream credential above to enable this server."
               : "")}
       </Text>
