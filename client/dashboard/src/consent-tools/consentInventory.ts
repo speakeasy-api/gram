@@ -106,7 +106,8 @@ export async function fetchConsentInventory(
                 : init?.signal,
         }),
       requestInit: {
-        credentials: "omit",
+        // Federated sign-ins bind the challenge to a host-only browser cookie.
+        credentials: "same-origin",
         headers: {
           "Gram-Consent-State": state,
           "Gram-Consent-Csrf": csrfToken,
