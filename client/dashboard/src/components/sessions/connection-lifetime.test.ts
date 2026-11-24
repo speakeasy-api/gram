@@ -106,6 +106,37 @@ describe("connectionLifetime", () => {
     expect(connectionLifetimeLabel(lifetime, now)).toBe("Never expires");
   });
 
+  it("reads an access token with no expiry as having no end", () => {
+    const lifetime = connectionLifetime({ hasRefreshToken: false }, now);
+    expect(lifetime).toEqual({ kind: "never" });
+    expect(lifetimeEndingSoon(lifetime)).toBe(false);
+    expect(connectionLifetimeLabel(lifetime, now)).toBe("Never expires");
+  });
+
+  it("keeps a non-expiring access token working after its refresh token lapses", () => {
+    expect(
+      connectionLifetime(
+        { refreshExpiresAt: hours(-1), hasRefreshToken: true },
+        now,
+      ),
+    ).toEqual({ kind: "never" });
+  });
+
+  it("ends a non-expiring access token at the authorization deadline", () => {
+    expect(
+      connectionLifetime(
+        { authorizationExpiresAt: hours(2), hasRefreshToken: false },
+        now,
+      ),
+    ).toEqual({ kind: "expires", at: hours(2), soon: true });
+    expect(
+      connectionLifetime(
+        { authorizationExpiresAt: hours(-2), hasRefreshToken: false },
+        now,
+      ),
+    ).toEqual({ kind: "ended", at: hours(-2) });
+  });
+
   it("ends a refreshing connection at its refresh token's expiry", () => {
     const lifetime = connectionLifetime(
       {

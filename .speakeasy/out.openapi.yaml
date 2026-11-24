@@ -32364,6 +32364,290 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListIntegrations
+  /rpc/intentPolicies.analyzeSession:
+    post:
+      description: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.
+      operationId: analyzeIntentSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeSessionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntentSessionAnalysis'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: analyzeSession intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: analyzeSession
+      x-speakeasy-react-hook:
+        name: AnalyzeIntentSession
+        type: mutation
+  /rpc/intentPolicies.getGuardrail:
+    get:
+      description: 'Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.'
+      operationId: getIntentGuardrail
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntentGuardrail'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getGuardrail intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: getGuardrail
+      x-speakeasy-react-hook:
+        name: IntentGuardrail
+  /rpc/intentPolicies.uploadTranscript:
+    post:
+      description: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.
+      operationId: uploadIntentTranscript
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadTranscriptRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadTranscriptResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: uploadTranscript intentPolicies
+      tags:
+        - intentPolicies
+      x-speakeasy-name-override: uploadTranscript
+      x-speakeasy-react-hook:
+        name: UploadIntentTranscript
+        type: mutation
   /rpc/internalSessionIssuers.get:
     get:
       description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
@@ -92622,6 +92906,39 @@ components:
         - mode
         - enabled
         - signal_ids
+    AnalyzeSessionRequestBody:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The chat session to analyze.
+          format: uuid
+        evaluator:
+          type: string
+          description: The label evaluator.
+          enum:
+            - jev
+            - gemini
+        generation:
+          type: integer
+          description: Chat generation to analyze. Defaults to the latest.
+          format: int32
+          minimum: 0
+        limit:
+          type: integer
+          description: Most tool calls to analyze from offset. Defaults to all, up to 200.
+          format: int32
+          minimum: 1
+          maximum: 200
+        offset:
+          type: integer
+          description: Index of the first tool call to analyze, for analyzing a session in batches. Totals still count every call.
+          default: 0
+          format: int32
+          minimum: 0
+      required:
+        - chat_id
+        - evaluator
     AnthropicInferenceConfig:
       type: object
       properties:
@@ -105094,6 +105411,387 @@ components:
       required:
         - version
         - created_at
+    IntentAnalysisTotals:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          description: Block decisions, including evaluator failures.
+          format: int64
+        calls:
+          type: integer
+          description: Tool calls in the session.
+          format: int64
+        clarified:
+          type: integer
+          description: Clarify decisions.
+          format: int64
+        cost_usd:
+          type: number
+          description: Summed evaluator cost.
+          format: double
+        judged:
+          type: integer
+          description: Tool calls assessed.
+          format: int64
+        latency_ms:
+          type: integer
+          description: Summed evaluator latency.
+          format: int64
+        permitted:
+          type: integer
+          description: Permit decisions.
+          format: int64
+      required:
+        - calls
+        - judged
+        - blocked
+        - clarified
+        - permitted
+        - cost_usd
+        - latency_ms
+    IntentCallAssessment:
+      type: object
+      properties:
+        arguments:
+          type: string
+          description: Arguments exactly as recorded.
+        decided_by:
+          type: array
+          items:
+            type: string
+          description: Contracts that produced the decision.
+        decision:
+          type: string
+          description: Combined decision.
+          enum:
+            - permit
+            - clarify
+            - block
+        evaluator_error:
+          type: string
+          description: Set when the evaluator failed to answer every label.
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelValue'
+          description: Inferred labels in guardrail order; missing labels are absent.
+        mcp_function:
+          type: string
+          description: MCP function, for MCP tools.
+        mcp_server:
+          type: string
+          description: MCP server, for MCP tools.
+        message_id:
+          type: string
+          description: Assistant message that carried the call.
+          format: uuid
+        occurred_at:
+          type: string
+          description: When the call was recorded.
+          format: date-time
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentContractOutcome'
+          description: Every contract's result, in guardrail order.
+        seq:
+          type: integer
+          description: Message sequence number.
+          format: int64
+        tool_call_id:
+          type: string
+          description: Provider call id.
+        tool_name:
+          type: string
+          description: Raw tool name.
+        usage:
+          $ref: '#/components/schemas/IntentCallUsage'
+      required:
+        - message_id
+        - seq
+        - tool_call_id
+        - tool_name
+        - arguments
+        - occurred_at
+        - labels
+        - decision
+        - decided_by
+        - outcomes
+        - usage
+    IntentCallUsage:
+      type: object
+      properties:
+        cost_usd:
+          type: number
+          description: Provider-reported cost; zero when unreported.
+          format: double
+        input_tokens:
+          type: integer
+          description: Prompt tokens.
+          format: int64
+        latency_ms:
+          type: integer
+          description: Evaluator latency.
+          format: int64
+        output_tokens:
+          type: integer
+          description: Completion tokens.
+          format: int64
+      required:
+        - input_tokens
+        - output_tokens
+        - cost_usd
+        - latency_ms
+    IntentCondition:
+      type: object
+      properties:
+        join:
+          type: string
+          description: Links the clause to the previous one; empty on the first clause.
+          enum:
+            - ""
+            - and
+            - or
+        label:
+          type: string
+          description: Label key the clause reads. Empty for a shell command pattern.
+        op:
+          type: string
+          description: How the label compares to values.
+          enum:
+            - ""
+            - is
+            - is not
+            - includes
+            - includes anything other than
+        pattern:
+          type: string
+          description: Regular expression a shell command must match, for a pattern clause.
+        values:
+          type: array
+          items:
+            type: string
+          description: 'Values compared: "true" for a yes/no label, else option keys. Several read as any of.'
+      required:
+        - join
+        - label
+        - op
+        - values
+        - pattern
+    IntentContract:
+      type: object
+      properties:
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentCondition'
+          description: When the contract fires, for display.
+        expression:
+          type: string
+          description: CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
+        id:
+          type: string
+          description: Stable contract id.
+        name:
+          type: string
+          description: Display name.
+        outcome:
+          type: string
+          description: Decision when the contract fires.
+          enum:
+            - block
+            - clarify
+        statement:
+          type: string
+          description: Grounding statement the contract enforces.
+      required:
+        - id
+        - name
+        - statement
+        - outcome
+        - conditions
+        - expression
+    IntentContractOutcome:
+      type: object
+      properties:
+        contract_id:
+          type: string
+          description: Contract id.
+        error:
+          type: string
+          description: Evaluation error, when any.
+        inputs:
+          type: object
+          description: Every label or tool path the contract reads, with its value (null when missing).
+          additionalProperties: true
+        result:
+          type: string
+          description: permit, clarify, block, or abstain; absent when the contract errored.
+      required:
+        - contract_id
+        - inputs
+    IntentEvaluatorDescriptor:
+      type: object
+      properties:
+        evaluator:
+          type: string
+          description: Evaluator kind.
+        model:
+          type: string
+          description: Model id.
+        prompt_version:
+          type: string
+          description: Question compilation version.
+        provider:
+          type: string
+          description: Inference transport.
+      required:
+        - evaluator
+        - provider
+        - model
+        - prompt_version
+    IntentGuardrail:
+      type: object
+      properties:
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentContract'
+          description: Contracts evaluated over the labels.
+        id:
+          type: string
+          description: Guardrail id.
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelQuestion'
+          description: Labels inferred for every call.
+        statements:
+          type: array
+          items:
+            type: string
+          description: Grounding statements fed to the evaluator.
+        version:
+          type: string
+          description: Guardrail version.
+      required:
+        - id
+        - version
+        - statements
+        - questions
+        - contracts
+    IntentLabelOption:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the option means.
+        key:
+          type: string
+          description: Option value exposed to contracts.
+        ordinal:
+          type: integer
+          description: Order of the option; higher is better understood.
+          format: int64
+        uncertain:
+          type: boolean
+          description: True when the option reports rank -1.
+      required:
+        - key
+        - description
+        - ordinal
+        - uncertain
+    IntentLabelQuestion:
+      type: object
+      properties:
+        instructions:
+          type: string
+          description: The question the evaluator answers.
+        key:
+          type: string
+          description: Label key, read by contracts as label.<key>.
+        kind:
+          type: string
+          description: Question shape.
+          enum:
+            - noul
+            - multi_noul
+            - choice
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentLabelOption'
+          description: Values of a choice or multi_noul label.
+      required:
+        - key
+        - kind
+        - instructions
+        - options
+    IntentLabelValue:
+      type: object
+      properties:
+        distribution:
+          type: object
+          description: Per-option probabilities, when the evaluator gives them.
+          additionalProperties:
+            type: number
+            format: double
+        key:
+          type: string
+          description: Label key.
+        probability:
+          type: number
+          description: Probability of the selected value.
+          format: double
+        rank:
+          type: integer
+          description: Ordinal rank; -1 when categorical or uncertain.
+          format: int64
+        rationale:
+          type: string
+          description: Evaluator explanation, when given.
+        value:
+          description: Boolean, string, or list of strings, by label kind.
+      required:
+        - key
+        - value
+        - rank
+        - probability
+    IntentSessionAnalysis:
+      type: object
+      properties:
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentCallAssessment'
+          description: One entry per judged call, in session order.
+        chat_id:
+          type: string
+          description: The analyzed session.
+          format: uuid
+        evaluator:
+          $ref: '#/components/schemas/IntentEvaluatorDescriptor'
+        generation:
+          type: integer
+          description: The analyzed chat generation.
+          format: int32
+        guardrail_version:
+          type: string
+          description: Guardrail version applied.
+        limit_hit:
+          type: boolean
+          description: True when the session had more calls than were judged.
+        totals:
+          $ref: '#/components/schemas/IntentAnalysisTotals'
+      required:
+        - chat_id
+        - generation
+        - guardrail_version
+        - evaluator
+        - assessments
+        - totals
+        - limit_hit
     InternalSessionIssuer:
       type: object
       properties:
@@ -114383,7 +115081,7 @@ components:
       properties:
         access_expires_at:
           type: string
-          description: Upstream access-token expiry. Independent of refresh_expires_at.
+          description: Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.
           format: date-time
         authorization_expires_at:
           type: string
@@ -114447,7 +115145,6 @@ components:
         - subject_urn
         - user_session_issuer_id
         - remote_session_client_id
-        - access_expires_at
         - has_refresh_token
         - scopes
         - created_at
@@ -127739,6 +128436,40 @@ components:
         - schema_version
         - raw_sha256
         - content
+    UploadTranscriptRequestBody:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The transcript file contents, at most 20 MiB.
+          minLength: 1
+          maxLength: 20971520
+        name:
+          type: string
+          description: Title for the stored session, usually the file name.
+          minLength: 1
+          maxLength: 255
+      required:
+        - name
+        - content
+    UploadTranscriptResult:
+      type: object
+      properties:
+        chat_id:
+          type: string
+          description: The stored session.
+          format: uuid
+        format:
+          type: string
+          description: Detected transcript format.
+        message_count:
+          type: integer
+          description: Messages stored.
+          format: int64
+      required:
+        - chat_id
+        - format
+        - message_count
     UpsertAiScanTargetRequestBody:
       type: object
       properties:
@@ -129943,6 +130674,8 @@ tags:
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: integrations
     description: Explore third-party tools in Speakeasy.
+  - name: intentPolicies
+    description: Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.
   - name: internalSessionIssuers
     description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets

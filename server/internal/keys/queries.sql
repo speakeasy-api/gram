@@ -165,6 +165,57 @@ WHERE organization_id = @organization_id
   AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, project_id, name;
 
+-- name: RevokeStalePluginAPIKeys :many
+-- Revokes plugin-minted keys nobody needs any more: plugins-hooks-* and
+-- plugins-mcp-* (publish) and plugins-hooks-download-* (ZIP download). Claude
+-- web keys are left alone because each member already keeps only one. Provenance
+-- is proven the same way as the rotation queries above. A key is kept while any
+-- of these holds:
+--
+--   * it was created within the retention window;
+--   * it was created within the retention window up to and including the
+--     project's latest publish, so the current plugin generation keeps working
+--     however long ago it shipped. Revoked publish keys still count as
+--     publishes; a download minted after the latest publish gets no extra time;
+--   * it was used within the retention window.
+WITH plugin_keys AS (
+  SELECT id, project_id, name, created_at, last_accessed_at, deleted
+  FROM api_keys
+  WHERE name ~ '^plugins-(mcp|hooks|hooks-download)-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+    AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+),
+last_publish AS (
+  SELECT project_id, max(created_at) AS published_at
+  FROM plugin_keys
+  WHERE project_id IS NOT NULL
+    AND name ~ '^plugins-(mcp|hooks)-[0-9]{8}-'
+  GROUP BY project_id
+),
+stale AS (
+  SELECT k.id
+  FROM plugin_keys k
+  LEFT JOIN last_publish lp ON lp.project_id = k.project_id
+  WHERE k.deleted IS FALSE
+    AND k.created_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day')
+    AND (
+      lp.published_at IS NULL
+      OR k.created_at < lp.published_at - (sqlc.arg(retention_days)::int * interval '1 day')
+      OR k.created_at > lp.published_at
+    )
+    AND (k.last_accessed_at IS NULL OR k.last_accessed_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day'))
+  ORDER BY k.created_at
+  LIMIT sqlc.arg(batch_size)
+)
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id IN (SELECT id FROM stale)
+  AND deleted IS FALSE
+  -- Rechecked here so a use recorded while this statement waited on the row
+  -- still spares the key.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day'))
+RETURNING id, organization_id, project_id, name, scopes;
+
 -- name: ListAPIKeysByOrganization :many
 -- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
 -- whose created_by_user_id is not a users.id is unusable (auth's join drops

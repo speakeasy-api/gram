@@ -4,6 +4,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -16,6 +17,7 @@ import {
 } from "./mcp-server-kind";
 import { McpKindBadge } from "./McpKindBadge";
 import { SpeakeasyMark } from "./ProjectGatewayCard";
+import type { ProjectGatewayEntryStatus } from "./useProjectGatewayEntry";
 import { Link2, Network } from "lucide-react";
 
 /** Table rows of the /mcp listing; gateways and servers share Name, Kind, Address, Contents. */
@@ -24,9 +26,11 @@ const CELL = "px-3 py-3";
 
 function NameCell({
   name,
+  muted = false,
   children,
 }: {
   name: string;
+  muted?: boolean;
   children?: React.ReactNode;
 }): JSX.Element {
   return (
@@ -35,6 +39,7 @@ function NameCell({
         <Text
           variant="subheading"
           as="div"
+          muted={muted}
           className="group-hover:text-primary min-w-0 truncate text-sm transition-colors"
           title={name}
         >
@@ -110,20 +115,29 @@ export function GatewayTableRow({
 /** The project's gateway: every server in the project a person can reach. */
 export function ProjectGatewayTableRow({
   url,
-  isOff,
+  status,
 }: {
   url: string | undefined;
-  isOff: boolean;
+  status: ProjectGatewayEntryStatus;
 }): JSX.Element {
   const routes = useRoutes();
+  const isDisabled = status === "off" || status === "unavailable";
   return (
     <DotRow
       href={routes.mcp.projectGateway.href()}
       ariaLabel="Open Project Gateway"
-      icon={<SpeakeasyMark className="h-5 w-5" />}
+      className={cn(isDisabled && "bg-muted/30")}
+      icon={
+        <SpeakeasyMark
+          className={cn("h-5 w-5", isDisabled && "opacity-50 grayscale")}
+        />
+      }
     >
-      <NameCell name="Project Gateway">
-        {isOff && <Badge variant="warning">Off</Badge>}
+      <NameCell name="Project Gateway" muted={isDisabled}>
+        {status === "off" && <Badge variant="warning">Off</Badge>}
+        {status === "unavailable" && (
+          <Badge variant="warning">Unavailable</Badge>
+        )}
       </NameCell>
       <td className={CELL}>
         <McpKindBadge kind="gateway" />

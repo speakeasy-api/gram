@@ -160,6 +160,10 @@ const (
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
 	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
 	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
+	AICatalogSeedVersionKey          = attribute.Key("gram.ai_catalog.seed.version")
+	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
+	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
+	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -501,19 +505,6 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
-	// NetworkIngressKubernetesReasonKey is the machine-readable reason of a
-	// failed Kubernetes API call (for example Conflict or Forbidden).
-	NetworkIngressKubernetesReasonKey = attribute.Key("gram.network_ingress.kubernetes.reason")
-
-	// NetworkIngressKubernetesStatusCodeKey is the HTTP status of a failed
-	// Kubernetes API call.
-	NetworkIngressKubernetesStatusCodeKey = attribute.Key("gram.network_ingress.kubernetes.status_code")
-
-	// NetworkIngressKubernetesResourceKey is the type a failed Kubernetes API
-	// call addressed, qualified by its API group. The API server reports the
-	// plural resource for most failures (tailnets.tailscale.com) but the Kind
-	// for validation failures (Tailnet.tailscale.com), so filter on both.
-	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
 
 	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
 	TailnetGatewayTsnetPortKey    = attribute.Key("gram.tailnet_gateway.tsnet_port")
@@ -1218,6 +1209,9 @@ const (
 	// InferenceMessageCountKey is the number of conversation messages in an
 	// Anthropic inference frame.
 	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
+	// TranscriptShadowMessageCountKey is the number of chat messages in one
+	// encrypted transcript shadow capture batch.
+	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -2607,18 +2601,6 @@ func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
 
 func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
-}
-
-func SlogNetworkIngressKubernetesReason[V ~string](v V) slog.Attr {
-	return slog.String(string(NetworkIngressKubernetesReasonKey), string(v))
-}
-
-func SlogNetworkIngressKubernetesStatusCode(v int32) slog.Attr {
-	return slog.Int(string(NetworkIngressKubernetesStatusCodeKey), int(v))
-}
-
-func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
-	return slog.String(string(NetworkIngressKubernetesResourceKey), v)
 }
 
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
@@ -4622,6 +4604,10 @@ func SlogInferenceMessageCount(v int) slog.Attr {
 	return slog.Int(string(InferenceMessageCountKey), v)
 }
 
+func TranscriptShadowMessageCount(v int) attribute.KeyValue {
+	return TranscriptShadowMessageCountKey.Int(v)
+}
+
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
 func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
 func SlogRegistryInvalidPaths(v []string) slog.Attr {
@@ -4630,4 +4616,16 @@ func SlogRegistryInvalidPaths(v []string) slog.Attr {
 func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
 func SlogRegistrySeedOutcome(v string) slog.Attr {
 	return slog.String(string(RegistrySeedOutcomeKey), v)
+}
+func SlogAICatalogSeedVersion(v string) slog.Attr {
+	return slog.String(string(AICatalogSeedVersionKey), v)
+}
+func SlogAICatalogProductsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogProductsInsertedKey), v)
+}
+func SlogAICatalogDocumentsInserted(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDocumentsInsertedKey), v)
+}
+func SlogAICatalogDecisionsLinked(v int64) slog.Attr {
+	return slog.Int64(string(AICatalogDecisionsLinkedKey), v)
 }

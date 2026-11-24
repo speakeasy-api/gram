@@ -752,7 +752,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
           }}
         />
       </Page.Header>
-      <Page.Body fullHeight className="pb-8">
+      {/* Until the server is known, the page loader stands in for the whole
+          body: a placeholder title, the raw slug and a skeleton read as a
+          page that loaded empty rather than one still on its way. */}
+      <Page.Body fullHeight className="pb-8" isLoading={pageLoading}>
         {/* Organization admin to view: the server and users reads behind
             this page both require org:admin, so a narrower gate would show
             the chrome and rename control over a detail that never loads. */}
@@ -786,9 +789,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
               )}
             </Page.Section.CTA>
             <Page.Section.Body>
-              {pageLoading ? (
-                <SkeletonTable />
-              ) : serverQuery.error || !server ? (
+              {serverQuery.error || !server ? (
                 <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
                   <Text variant="body" className="font-medium">
                     Shadow MCP server could not be loaded

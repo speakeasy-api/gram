@@ -145,6 +145,8 @@ type Endpoints struct {
 	GetOrganizationHooksRollout             goa.Endpoint
 	SetOrganizationHooksRollout             goa.Endpoint
 	ClearOrganizationHooksRollout           goa.Endpoint
+	ListTailscaleOAuthMigration             goa.Endpoint
+	RunTailscaleOAuthMigrationStep          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -298,6 +300,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -431,6 +435,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
 	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
 	e.ClearOrganizationHooksRollout = m(e.ClearOrganizationHooksRollout)
+	e.ListTailscaleOAuthMigration = m(e.ListTailscaleOAuthMigration)
+	e.RunTailscaleOAuthMigrationStep = m(e.RunTailscaleOAuthMigrationStep)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3340,5 +3346,51 @@ func NewClearOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.ClearOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewListTailscaleOAuthMigrationEndpoint returns an endpoint function that
+// calls the method "listTailscaleOAuthMigration" of service "admin".
+func NewListTailscaleOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTailscaleOAuthMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTailscaleOAuthMigration(ctx, p)
+	}
+}
+
+// NewRunTailscaleOAuthMigrationStepEndpoint returns an endpoint function that
+// calls the method "runTailscaleOAuthMigrationStep" of service "admin".
+func NewRunTailscaleOAuthMigrationStepEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunTailscaleOAuthMigrationStepPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunTailscaleOAuthMigrationStep(ctx, p)
 	}
 }

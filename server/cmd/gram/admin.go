@@ -47,7 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -584,13 +586,21 @@ func newAdminCommand() *cli.Command {
 				// service, so organization encryption is built, and required,
 				// alongside it. Building it here stops admin at startup when it
 				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for organization
-				// encryption counts, backfills and finalization.
+				// TODO(AIM-1007): pass it to the admin service for the OAuth use
+				// cases' counts, backfills and finalization. Tailscale OAuth
+				// clients are wired below.
 				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
 				if err != nil {
 					return err
 				}
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}

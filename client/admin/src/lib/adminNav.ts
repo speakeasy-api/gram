@@ -120,6 +120,13 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/tailscale-oauth-migration",
+        label: "Tailscale OAuth migration",
+        keywords:
+          "tailscale private network ingress oauth credentials organization encryption kms backfill finalize",
+        icon: KeyRoundIcon,
+      },
+      {
         to: "/platform-credentials",
         label: "Platform credentials",
         keywords:
