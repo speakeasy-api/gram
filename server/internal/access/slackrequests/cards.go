@@ -92,8 +92,10 @@ func pendingCard(in cardInput, endOfDay time.Time) slackdm.Message {
 		options = append(options, slackdm.Option{Text: slackdm.TextObject{Type: "plain_text", Text: "End of day"}, Value: endOfDayKey + "|" + strconv.FormatInt(endOfDay.Unix(), 10)})
 	}
 	initial := requestedWindowIndex(in.RequestedDuration)
-	if !in.RequestedUntil.IsZero() && !endOfDay.IsZero() {
-		// End of day carries the requester's own deadline; open on it.
+	if !in.RequestedUntil.IsZero() && endOfDay.Equal(in.RequestedUntil) {
+		// End of day carries the requester's own deadline; open on it. When
+		// the card fell back to the reader's end of day, it is not what was
+		// asked for, so the card opens on the fixed windows instead.
 		initial = len(options) - 1
 	}
 	menu := slackdm.Element{

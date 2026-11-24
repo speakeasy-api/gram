@@ -198,7 +198,7 @@ func (s *Service) resolveMember(ctx context.Context, vouchedEmail *string, what 
 	}
 	// Charged per member after the membership check, so addresses outside
 	// the organization never create limiter state.
-	if err := allowMemberCall(ctx, s.logger, s.connectionsLimiter, member, "sign-in state reads"); err != nil {
+	if err := allowMemberCall(ctx, s.logger, s.connectionsLimiter, member, what); err != nil {
 		return agentMember{}, err
 	}
 	return member, nil
@@ -276,7 +276,7 @@ func (s *Service) memberServers(ctx context.Context, member agentMember) ([]repo
 
 // allowMemberCall charges one call to the member's budget on limiter. A nil
 // limiter is unlimited, and a limiter store outage fails open: it isn't a
-// throttle. what names the calls in the refusal.
+// throttle. what names what the calls read or change, for the refusal.
 func allowMemberCall(ctx context.Context, logger *slog.Logger, limiter *ratelimit.Limiter, member agentMember, what string) error {
 	if limiter == nil {
 		return nil
@@ -287,7 +287,7 @@ func allowMemberCall(ctx context.Context, logger *slog.Logger, limiter *ratelimi
 		logger.WarnContext(ctx, "agent member rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(member.organizationID))
 		return nil
 	case !res.Allowed:
-		return oops.E(oops.CodeRateLimitExceeded, nil, "too many %s; retry shortly", what)
+		return oops.E(oops.CodeRateLimitExceeded, nil, "too many requests for %s; retry shortly", what)
 	}
 	return nil
 }

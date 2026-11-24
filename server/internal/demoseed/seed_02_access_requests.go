@@ -15,13 +15,14 @@ import (
 
 // demoAccessRequestCount is how many access requests the seed writes, for
 // the postflight.
-const demoAccessRequestCount = 3
+const demoAccessRequestCount = 4
 
 // seedRolesAccessRequests gives the Access Requests tab pending requests to
 // review and a denied one in its history: Amara asks for the demo project's
-// tool logs, Priya asks to connect to Linear for two hours, and Lucas, an
-// admin, denied Hana's request to view environments, which hold secret
-// values. None holds the scope they asked for.
+// tool logs, Hana asks to edit skills for two hours, Jonas asks to manage
+// environments until the end of his day, and Lucas, an admin, denied Hana's
+// request to view environments, which hold secret values. None holds the
+// scope they asked for.
 func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	org := s.orgID()
 	if err := s.q.RolesDeleteAccessRequests(ctx, org); err != nil {
@@ -36,7 +37,11 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("encode demo access request selector: %w", err)
 	}
-	linearSelector, err := json.Marshal(authz.NewSelector(authz.ScopeMCPConnect, s.det("mcpserver-linear").String()))
+	skillSelector, err := json.Marshal(authz.NewSelector(authz.ScopeSkillWrite, authz.WildcardResource))
+	if err != nil {
+		return fmt.Errorf("encode demo access request selector: %w", err)
+	}
+	environmentWriteSelector, err := json.Marshal(authz.NewSelector(authz.ScopeEnvironmentWrite, authz.WildcardResource))
 	if err != nil {
 		return fmt.Errorf("encode demo access request selector: %w", err)
 	}
@@ -65,11 +70,11 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 		{
 			ID:                       s.det("access-request-duration"),
 			OrganizationID:           org,
-			RequesterUserID:          s.userID("priya"),
-			Scope:                    string(authz.ScopeMCPConnect),
-			Selector:                 linearSelector,
-			ResourceName:             conv.ToPGText("Linear"),
-			Message:                  conv.ToPGText("Blocked connecting to Linear while triaging this sprint's bugs."),
+			RequesterUserID:          s.userID("hana"),
+			Scope:                    string(authz.ScopeSkillWrite),
+			Selector:                 skillSelector,
+			ResourceName:             conv.ToPGTextEmpty(""),
+			Message:                  conv.ToPGText("Fixing a typo in the refunds skill before this afternoon's support rotation."),
 			Status:                   "pending",
 			DecidedByUserID:          conv.ToPGTextEmpty(""),
 			DecidedVia:               conv.ToPGTextEmpty(""),
@@ -78,6 +83,24 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 			RequestedUntil:           noDeadline,
 			ExpiresAt:                conv.ToPGTimestamptz(s.now.Add(23 * time.Hour)),
 			CreatedAt:                conv.ToPGTimestamptz(s.now.Add(-1 * time.Hour)),
+		},
+		{
+			ID:                       s.det("access-request-deadline"),
+			OrganizationID:           org,
+			RequesterUserID:          s.userID("jonas"),
+			Scope:                    string(authz.ScopeEnvironmentWrite),
+			Selector:                 environmentWriteSelector,
+			ResourceName:             conv.ToPGTextEmpty(""),
+			Message:                  conv.ToPGText("Rotating the staging API credentials today."),
+			Status:                   "pending",
+			DecidedByUserID:          conv.ToPGTextEmpty(""),
+			DecidedVia:               conv.ToPGTextEmpty(""),
+			DecidedAt:                noDecision,
+			RequestedDurationSeconds: noDuration,
+			// The end of Jonas's day, as his own client worked it out.
+			RequestedUntil: conv.ToPGTimestamptz(s.now.Add(7 * time.Hour)),
+			ExpiresAt:      conv.ToPGTimestamptz(s.now.Add(23*time.Hour + 30*time.Minute)),
+			CreatedAt:      conv.ToPGTimestamptz(s.now.Add(-30 * time.Minute)),
 		},
 		{
 			ID:                       s.det("access-request-denied"),

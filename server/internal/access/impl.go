@@ -1727,8 +1727,34 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
-	resourceID := conv.PtrValOr(payload.ResourceID, "")
-	manageAccessLink := s.manageAccessLink(ctx, logger, org.Slug, org.DefaultHost, "roles", ac.ActiveOrganizationID, ac.UserID, payload.Scope, resourceID, storedView)
+	// The query params let the dashboard open a pre-filled grant dialog for
+	// the requester and scope. Resolve an MCP's project from the
+	// tenant-qualified resource rather than trusting browser state or a
+	// client-supplied project id.
+	link := accessLink{
+		OrgSlug:         org.Slug,
+		DefaultHost:     org.DefaultHost,
+		Tab:             accessLinkTabRoles,
+		RequesterUserID: ac.UserID,
+		Scope:           payload.Scope,
+		ResourceID:      conv.PtrValOr(payload.ResourceID, ""),
+		ProjectID:       "",
+		RequestID:       "",
+	}
+	if storedView != nil {
+		link.RequestID = storedView.ID
+	}
+	if link.ResourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
+		projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, link.ResourceID)
+		if resolveErr != nil {
+			logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+				attr.SlogError(resolveErr),
+			)
+		} else {
+			link.ProjectID = projectID
+		}
+	}
+	manageAccessLink := s.accessLinkURL(link)
 
 	// Name the permission the way the role editor does, so the admin reads
 	// "View tool logs" rather than a slug. An unknown slug is sent as is.
@@ -1782,36 +1808,60 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
 }
 
-// manageAccessLink builds the dashboard link on an Access page tab that opens
-// a pre-filled grant dialog for the requester and scope, and the stored
-// request when there is one. An MCP's project is resolved from the
-// tenant-qualified resource rather than trusting browser state or a
-// client-supplied project id. It is empty when the deployment has no site
-// URL.
-func (s *Service) manageAccessLink(ctx context.Context, logger *slog.Logger, orgSlug string, defaultHost pgtype.Text, tab, organizationID, requesterUserID, scope, resourceID string, stored *gen.AccessRequest) string {
-	siteURL := s.orgHosts.SiteURL(defaultHost)
+// Access page tabs an access request link can open on.
+const (
+	accessLinkTabRoles    = "roles"
+	accessLinkTabRequests = "requests"
+)
+
+// accessLink is a dashboard link that opens a pre-filled grant dialog on an
+// Access page tab.
+type accessLink struct {
+	// OrgSlug and DefaultHost name the organization and the host its
+	// dashboard is served on.
+	OrgSlug     string
+	DefaultHost pgtype.Text
+
+	// Tab is the Access page tab, one of the accessLinkTab constants.
+	Tab string
+
+	// RequesterUserID is the member the dialog grants to.
+	RequesterUserID string
+
+	// Scope is the scope the dialog grants.
+	Scope string
+
+	// ResourceID is the resource the scope applies to, or empty for every
+	// resource of its kind.
+	ResourceID string
+
+	// ProjectID is the project an MCP resource belongs to, resolved from the
+	// tenant-qualified resource, or empty.
+	ProjectID string
+
+	// RequestID is the stored request the dialog decides, or empty.
+	RequestID string
+}
+
+// accessLinkURL renders link, or returns empty when the deployment has no
+// site URL.
+func (s *Service) accessLinkURL(link accessLink) string {
+	siteURL := s.orgHosts.SiteURL(link.DefaultHost)
 	if siteURL == nil {
 		return ""
 	}
-	accessURL := siteURL.JoinPath(orgSlug, "access", tab)
+	accessURL := siteURL.JoinPath(link.OrgSlug, "access", link.Tab)
 	q := url.Values{}
-	q.Set("grant_user", requesterUserID)
-	q.Set("scope", scope)
-	if stored != nil {
-		q.Set("request", stored.ID)
+	q.Set("grant_user", link.RequesterUserID)
+	q.Set("scope", link.Scope)
+	if link.RequestID != "" {
+		q.Set("request", link.RequestID)
 	}
-	if resourceID != "" {
-		q.Set("resource_id", resourceID)
-		if strings.HasPrefix(scope, "mcp:") {
-			projectID, resolveErr := s.resourceProjectID(ctx, organizationID, resourceID)
-			if resolveErr != nil {
-				logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-					attr.SlogError(resolveErr),
-				)
-			} else {
-				q.Set("project_id", projectID)
-			}
-		}
+	if link.ResourceID != "" {
+		q.Set("resource_id", link.ResourceID)
+	}
+	if link.ProjectID != "" {
+		q.Set("project_id", link.ProjectID)
 	}
 	accessURL.RawQuery = q.Encode()
 	return accessURL.String()

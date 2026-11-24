@@ -192,7 +192,9 @@ func TestPendingCardOffersTheRequestersDeadlineAsEndOfDay(t *testing.T) {
 	require.Equal(t, in.RequestedUntil.Unix(), chosen.Unix(), "approving End of day gives access until the time asked for")
 
 	in.RequestedUntil = now.Add(5 * time.Minute)
-	require.Equal(t, access.EndOfDay(now, loc), cardEndOfDay(in, now, loc), "a deadline too close falls back to the reader's end of day")
+	fallback := cardEndOfDay(in, now, loc)
+	require.Equal(t, access.EndOfDay(now, loc), fallback, "a deadline too close falls back to the reader's end of day")
+	require.Equal(t, "1 hour", actionElements(t, in, fallback)[0].InitialOption.Text.Text, "the fallback is not what was asked for, so the menu does not open on it")
 	in.RequestedUntil = time.Time{}
 	require.Equal(t, access.EndOfDay(now, loc), cardEndOfDay(in, now, loc))
 }

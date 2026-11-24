@@ -44,6 +44,11 @@ func (s *Service) accessRequestMember(ctx context.Context) (*contextvalues.AuthC
 	if !ok || authCtx == nil {
 		return nil, agentMember{}, oops.C(oops.CodeUnauthorized)
 	}
+	// The flag comes first, so every caller reads the endpoint as absent
+	// while access requests are off.
+	if s.accessRequests == nil || !s.accessRequests.AccessRequestsEnabled(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+		return nil, agentMember{}, oops.C(oops.CodeNotFound)
+	}
 	if slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String()) {
 		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "access requests require a per-user agent key; the org install key cannot act for a member")
 	}
@@ -59,9 +64,6 @@ func (s *Service) accessRequestMember(ctx context.Context) (*contextvalues.AuthC
 	if authCtx.UserID == "" {
 		return nil, agentMember{}, oops.C(oops.CodeUnauthorized)
 	}
-	if s.accessRequests == nil || !s.accessRequests.AccessRequestsEnabled(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
-		return nil, agentMember{}, oops.C(oops.CodeNotFound)
-	}
 
 	member, err := s.memberFor(ctx, nil, "access requests")
 	if err != nil {
@@ -72,7 +74,7 @@ func (s *Service) accessRequestMember(ctx context.Context) (*contextvalues.AuthC
 	if member.userID == "" || member.userID != authCtx.UserID {
 		return nil, agentMember{}, oops.E(oops.CodeForbidden, nil, "the enrolled user is not a member of this organization")
 	}
-	if err := allowMemberCall(ctx, s.logger, s.accessRequestsLimiter, member, "access request calls"); err != nil {
+	if err := allowMemberCall(ctx, s.logger, s.accessRequestsLimiter, member, "pending access requests"); err != nil {
 		return nil, agentMember{}, err
 	}
 	return authCtx, member, nil

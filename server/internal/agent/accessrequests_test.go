@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -117,6 +119,9 @@ func TestListPendingAccessRequests_NotFoundWhileRolloutOff(t *testing.T) {
 
 	_, err := ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
 	requireCode(t, err, oops.CodeNotFound)
+	// The org install key reads the endpoint as absent too, not refused.
+	_, err = ti.service.ListPendingAccessRequests(ctx, &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
+	requireCode(t, err, oops.CodeNotFound)
 }
 
 func TestListPendingAccessRequests_NotFoundWithoutAccessService(t *testing.T) {
@@ -178,4 +183,68 @@ func seedPendingRequest(t *testing.T, ctx context.Context, ti *testInstance, org
 	})
 	require.NoError(t, err)
 	return row.ID
+}
+
+func TestListPendingAccessRequests_ReturnsAtMostFifty(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	attachAccessRequests(t, ti, true)
+	grantOrgAdmin(t, ctx, ti, mockidp.MockUserID)
+	for i := range 55 {
+		seedPendingRequest(t, ctx, ti, ti.orgID, fmt.Sprintf("member-%d", i))
+	}
+
+	res, err := ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, res.Requests, 50)
+}
+
+func TestListPendingAccessRequests_RateLimitedPerMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	attachAccessRequests(t, ti, true)
+	ti.service.WithAccessRequestsLimiter(ratelimit.New(ratelimit.NewRedisStore(ti.redis), "test-agent-access-requests-"+uuid.NewString(), ratelimit.PerMinute(1)))
+
+	_, err := ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
+	require.NoError(t, err)
+	_, err = ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
+	requireCode(t, err, oops.CodeRateLimitExceeded)
+}
+
+func TestListPendingAccessRequests_ShowsDeadlinesAndServerProjects(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	attachAccessRequests(t, ti, true)
+	grantOrgAdmin(t, ctx, ti, mockidp.MockUserID)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	plugin := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering")
+	server, _ := seedPluginMCPServer(t, ctx, ti.conn, ti.orgID, ti.projectID, plugin, "Linear", 1)
+	until := time.Now().Add(6 * time.Hour).UTC().Truncate(time.Second)
+
+	selector, err := authz.NewSelector(authz.ScopeMCPConnect, server.String()).MarshalJSON()
+	require.NoError(t, err)
+	row, err := accessrepo.New(ti.conn).InsertAccessRequest(ctx, accessrepo.InsertAccessRequestParams{
+		OrganizationID:           ti.orgID,
+		RequesterUserID:          "another-member",
+		Scope:                    string(authz.ScopeMCPConnect),
+		Selector:                 selector,
+		ResourceName:             pgtype.Text{String: "Linear", Valid: true},
+		Message:                  pgtype.Text{String: "", Valid: false},
+		ChallengeIds:             []string{},
+		RequestedDurationSeconds: pgtype.Int4{Int32: 0, Valid: false},
+		RequestedUntil:           pgtype.Timestamptz{Time: until, InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:                pgtype.Timestamptz{Time: time.Now().Add(access.AccessRequestTTL), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Len(t, res.Requests, 1)
+	pending := res.Requests[0]
+	require.Equal(t, row.ID.String(), pending.ID)
+	require.Nil(t, pending.RequestedDurationSeconds)
+	require.Equal(t, until.Format(time.RFC3339), *pending.RequestedUntil)
+	require.Equal(t, "Linear", *pending.ResourceName)
+	require.Contains(t, pending.DecideURL, "resource_id="+server.String())
+	require.Contains(t, pending.DecideURL, "project_id="+ti.projectID.String(), "the server's project is resolved for the dialog")
 }
