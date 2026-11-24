@@ -1,6 +1,7 @@
 package activities_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -179,4 +180,46 @@ func TestGenerateChatTitle_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	require.Equal(t, "Pin Build Image Digest", tc.get(t).Title.String)
 	require.Equal(t, "user: Can we pin the build image to a fixed digest?\nassistant: changed", *stub.prompt.Load())
 	require.Empty(t, shadows.readMessages(t))
+}
+
+// Every later turn of a titled chat schedules title generation; it must leave
+// the title alone without opening the transcript, so even a stale shadow does
+// not fail the run.
+func TestGenerateChatTitle_TitledChatOpensNoShadows(t *testing.T) {
+	t.Parallel()
+
+	tc := newTitleTestChat(t, "generatetitle_shadow_titled", "Warehouse Label Printer Fix")
+	question := tc.addMessageID(t, "user", "The label printer in the warehouse keeps skipping every other label.")
+	answer := tc.addMessageID(t, "assistant", "Recalibrate the gap sensor, then reload the roll with the labels facing out.")
+	shadows := newTitleShadowStore(t, tc)
+	shadows.capture(t, tc, question, answer)
+	_, err := fixturerepo.New(tc.conn).ChangeContent(t.Context(), answer, uuid.NullUUID{UUID: tc.projectID, Valid: true})
+	require.NoError(t, err)
+
+	stub := &titleCompletionStub{title: "Unused"}
+	require.NoError(t, tc.runWithShadow(t, stub, shadows.store, tc.projectID))
+
+	require.Equal(t, "Warehouse Label Printer Fix", tc.get(t).Title.String)
+	require.Zero(t, stub.calls.Load())
+	require.Empty(t, shadows.readMessages(t))
+}
+
+// Only the turns sent to the model are opened, not the whole transcript.
+func TestGenerateChatTitle_OpensOnlyTheTurnsItSends(t *testing.T) {
+	t.Parallel()
+
+	tc := newTitleTestChat(t, "generatetitle_shadow_turns", chat.DefaultChatTitle)
+	ids := make([]uuid.UUID, 0, 10)
+	for i := range 5 {
+		ids = append(ids, tc.addMessageID(t, "user", fmt.Sprintf("Question %d about rotating the staging database password.", i)))
+		ids = append(ids, tc.addMessageID(t, "assistant", fmt.Sprintf("Answer %d: rotate it in the secret store, then restart the app.", i)))
+	}
+	shadows := newTitleShadowStore(t, tc)
+	shadows.capture(t, tc, ids...)
+
+	stub := &titleCompletionStub{title: "Staging Password Rotation"}
+	require.NoError(t, tc.runWithShadow(t, stub, shadows.store, tc.projectID))
+
+	require.Equal(t, "Staging Password Rotation", tc.get(t).Title.String)
+	require.Equal(t, map[string]int64{"success": 6}, shadows.readMessages(t))
 }

@@ -127,18 +127,24 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	if err != nil {
 		return fmt.Errorf("list chat messages: %w", err)
 	}
-	if err := g.openTranscriptShadows(ctx, chatRow.OrganizationID, chatRow.ProjectID, messages); err != nil {
-		return err
-	}
 
+	// Decide from the loaded rows before opening any shadow: every later turn
+	// of a titled chat schedules this activity, and it must not open the
+	// transcript only to leave the title alone. A current shadow opens to the
+	// same body as its row, so the decision is the same either way.
 	if !titleIsUpForGrabs(stored, messages) {
 		return nil
 	}
-
-	contextStr := buildTitleContext(messages)
-	if len(contextStr) < 20 {
+	turns := titleContextTurns(messages)
+	if len(formatTitleContext(turns)) < 20 {
 		return nil // Not enough context yet — will retry on next completion.
 	}
+
+	// Only the turns sent to the model are opened.
+	if err := g.openTranscriptShadows(ctx, chatRow.OrganizationID, chatRow.ProjectID, turns); err != nil {
+		return err
+	}
+	contextStr := formatTitleContext(turns)
 
 	title := g.generateTitle(ctx, args.OrgID, chatRow.ProjectID.String(), contextStr)
 	if title == defaultChatTitle {
@@ -221,19 +227,37 @@ func titleIsUpForGrabs(title string, messages []repo.ChatMessage) bool {
 // single string suitable for LLM title generation, cutting each turn to
 // maxTitleMessageRunes.
 func buildTitleContext(messages []repo.ChatMessage) string {
-	lines := make([]string, 0, titleContextMessages)
-	for _, msg := range slices.Backward(messages) { // Start from the last message and work backwards to make sure we capture the most recent messages
+	return formatTitleContext(titleContextTurns(messages))
+}
 
-		content := chat.StripLeadingEnvelopes(msg.Content)
-		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
+// titleContextTurns picks the last titleContextMessages user and assistant
+// messages with content, in chronological order.
+func titleContextTurns(messages []repo.ChatMessage) []repo.ChatMessage {
+	turns := make([]repo.ChatMessage, 0, titleContextMessages)
+	for _, msg := range slices.Backward(messages) { // Start from the last message and work backwards to make sure we capture the most recent messages
+		if (msg.Role != "user" && msg.Role != "assistant") || chat.StripLeadingEnvelopes(msg.Content) == "" {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%s: %s", msg.Role, truncateRunes(content, maxTitleMessageRunes)))
-		if len(lines) >= titleContextMessages {
+		turns = append(turns, msg)
+		if len(turns) >= titleContextMessages {
 			break
 		}
 	}
-	slices.Reverse(lines) // Restore chronological order for the model.
+	slices.Reverse(turns) // Restore chronological order for the model.
+	return turns
+}
+
+// formatTitleContext renders turns as "role: content" lines, cutting each
+// turn to maxTitleMessageRunes.
+func formatTitleContext(turns []repo.ChatMessage) string {
+	lines := make([]string, 0, len(turns))
+	for _, msg := range turns {
+		content := chat.StripLeadingEnvelopes(msg.Content)
+		if content == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", msg.Role, truncateRunes(content, maxTitleMessageRunes)))
+	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 

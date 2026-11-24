@@ -117,8 +117,10 @@ unexpected error: it means capture or the data is broken, and plaintext must not
 hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
 
-The worker's `GenerateChatTitle` activity opens the messages it names a chat
-from the same way, with the same fallback. A stale shadow fails the activity
+The worker's `GenerateChatTitle` activity reads the same way. It first decides
+from the loaded rows whether the title can change, so a titled chat opens no
+shadows. It then opens only the turns it sends to the title model, with the
+same plaintext fallback as `chat.load`. A stale shadow fails the activity
 without retries, because it stays stale until capture or backfill refreshes it.
 A shadow that does not decrypt fails with the same opaque error as a key outage,
 so the workflow's normal retries apply. The chat keeps its stand-in title.
