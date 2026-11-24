@@ -2785,3 +2785,11 @@ UPDATE network_ingress_certificate_states
 SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
+
+-- name: SetAPIKeyActivityFixture :exec
+-- Backdates a key's creation and last use so the plugin key reaper sees it as
+-- old or recently used.
+UPDATE api_keys
+SET created_at = @created_at
+  , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;
