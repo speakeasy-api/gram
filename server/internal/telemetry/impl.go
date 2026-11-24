@@ -4199,6 +4199,10 @@ func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uu
 	return ids, nil
 }
 
+// historicalAgentGatewayPathPrefix matches telemetry recorded while the retired
+// agent gateway serving route existed. It must not be used to serve requests.
+const historicalAgentGatewayPathPrefix = "/agent-mcp/"
+
 // agentGatewayName names the gateway that serves an agent.
 func agentGatewayName(agentName string) string {
 	return agentName + " gateway"
@@ -4337,9 +4341,21 @@ func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owne
 	if err != nil {
 		return nil, err
 	}
+	agents, err := owners.Agents(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	organizationPath := "/" + mcproute.OrganizationGateway.String() + "/" + organization.Slug
-	candidates := make([]gatewayCandidate, 0, len(projects)+1)
-	suffixes := make([]string, 0, len(projects)+1)
+	candidates := make([]gatewayCandidate, 0, len(agents)+len(projects)+1)
+	suffixes := make([]string, 0, len(agents)+len(projects)+1)
+	// These matchers preserve historical telemetry readability only. The agent
+	// gateway HTTP route is retired and is not registered from this package.
+	for _, agent := range agents {
+		candidates = append(candidates, agentGatewayCandidate(authCtx, agent))
+		suffixes = append(suffixes, historicalAgentGatewayPathPrefix+agent.ID.String())
+	}
 	candidates = append(candidates, organizationGatewayCandidate(owners.organizationID, organization))
 	suffixes = append(suffixes, organizationPath)
 	// A deleted project's slug can be taken again. Its URL names its gateway

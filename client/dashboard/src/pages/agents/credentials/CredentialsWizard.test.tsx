@@ -529,6 +529,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requiredClientIds = {};
   mocks.projectId = "project_one";
+  mocks.projectGatewayURL =
+    "https://api.example.test/mcp/gateway/example/projects/main";
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
   mocks.canIngestHooks = false;

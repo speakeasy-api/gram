@@ -565,13 +565,23 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	now := time.Now().UTC()
 
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support bot",
+	})
+	require.NoError(t, err)
 	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, uuid.MustParse(ti.projectID))
 	require.NoError(t, err)
 
+	agentGatewayID := agentgateway.GatewayID(agent.ID).String()
+	agentGatewayURL := "https://app.example.com/agent-mcp/" + agent.ID.String()
 	orgGatewayURL := "https://app.example.com/mcp/gateway/" + organization.Slug
 	calls := []struct {
 		call       openClawGatewayCall
@@ -582,7 +592,16 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 		// project slug or agent id the page is found by.
 		page [3]string
 	}{
-
+		{
+			call:       openClawGatewayCall{conversationID: "conv-agent-ok", toolName: "speakeasy__list_servers", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: false},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+			page: [3]string{"agent", "", agent.ID.String()},
+		},
+		{
+			call:       openClawGatewayCall{conversationID: "conv-agent-blocked", toolName: "speakeasy__delete_server", serverName: "speakeasy", url: agentGatewayURL, preServerName: "", preURLOnly: true},
+			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: agentGatewayID, label: "Support bot gateway",
+			page: [3]string{"agent", "", agent.ID.String()},
+		},
 		{
 			call:       openClawGatewayCall{conversationID: "conv-org", toolName: "org__search", serverName: "org", url: orgGatewayURL, preServerName: "", preURLOnly: false},
 			targetType: repo.ToolUsageTargetTypeMetaMCP, targetID: orggateway.GatewayID(ti.orgID).String(), label: organization.Name,
@@ -631,6 +650,9 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 		require.Equal(t, tc.page, targetGatewayPage(raw.Traces[0]), "raw path: %s", tc.call.toolName)
 	}
 
+	filtered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, MetaMcpServerIds: []string{agentGatewayID}})
+	require.NoError(t, err)
+	require.Len(t, filtered.Traces, 2, "the agent gateway filter covers both agent gateway calls")
 }
 
 // targetGatewayPage is where a trace says the gateway it reached has its
