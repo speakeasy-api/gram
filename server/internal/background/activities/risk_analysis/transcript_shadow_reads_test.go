@@ -1,6 +1,7 @@
 package risk_analysis_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -155,7 +156,10 @@ func executeShadowBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, tr shadowT
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("execute analyze batch: %w", err)
+	}
+	return nil
 }
 
 func requirePublishedTrajectory(t *testing.T, published []*riskv1.PromptInjectionAnalysis, tr shadowTrajectory) {
