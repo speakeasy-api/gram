@@ -61,8 +61,8 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
-	// Refuse a save if the user session issuer also serves another MCP server.
-	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Refuse a save if the user session issuer also serves another MCP server. Set
+	// this to require a dedicated user session issuer for the target server.
 	// Explicitly assign a dedicated issuer before retrying.
 	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
@@ -229,8 +229,8 @@ type ListServerClientAssociationsResponseBody struct {
 type AttachServerClientAssociationResponseBody struct {
 	// The server's association with the client.
 	Association *ServerClientAssociationResponseBody `form:"association" json:"association" xml:"association"`
-	// The issuers of gateways fronting the server that this attach bound the
-	// client to. Empty when they already held it.
+	// Deprecated: always empty. This field is retained for compatibility; attach
+	// no longer binds the client to user session issuers.
 	BoundUserSessionIssuerIds []string `form:"bound_user_session_issuer_ids" json:"bound_user_session_issuer_ids" xml:"bound_user_session_issuer_ids"`
 }
 
