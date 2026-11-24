@@ -484,9 +484,11 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 		f := newEnforcedCallerFixture(t, pool)
 		f.sourceHeader("X-Upstream-Key", true, text("stored"), pgtype.Text{})
 		authentication, _, selected, header, err := serve(t, f)
-		require.Error(t, err)
+		var setup *oops.ShareableError
+		require.ErrorAs(t, err, &setup)
+		require.Equal(t, oops.CodeFailedPrecondition, setup.Code)
 		require.True(t, selected)
-		require.NotEmpty(t, header.Get("WWW-Authenticate"))
+		require.Empty(t, header.Get("WWW-Authenticate"))
 		require.False(t, authentication.chosenNoAuth)
 	})
 

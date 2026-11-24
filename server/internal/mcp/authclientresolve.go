@@ -848,7 +848,7 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
-		needsSetup, err := s.directOAuthReconnectNeedsSetup(ctx, authentication)
+		needsSetup, err := s.directReconnectNeedsSetup(ctx, authentication)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
 		}
@@ -880,11 +880,11 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	return res.choice, nil
 }
 
-// directOAuthReconnectNeedsSetup detects a legacy OAuth connection that a
-// new consent cannot turn into a typed serving choice. It inspects only
+// directReconnectNeedsSetup detects upstream setup that a new consent
+// cannot turn into a typed serving choice. It inspects only
 // configuration; it never resolves credentials. Once typed consent supports
 // explicit no-auth for a detached offer, reconnect remains valid.
-func (s *Service) directOAuthReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
+func (s *Service) directReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
 	endpoint := authentication.endpoint
 	if endpoint.UserSessionIssuerID == uuid.Nil ||
 		(authentication.subject.Kind != urn.SessionSubjectKindUser && authentication.subject.Kind != urn.SessionSubjectKindAnonymous) {
@@ -899,11 +899,12 @@ func (s *Service) directOAuthReconnectNeedsSetup(ctx context.Context, authentica
 	if !known || len(offer.clients) != 0 {
 		return false, nil
 	}
-	if !offer.pending {
-		typedConsent, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-		if err != nil || typedConsent {
-			return false, err
-		}
+	if offer.pending {
+		return true, nil
+	}
+	typedConsent, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil || typedConsent {
+		return false, err
 	}
 	associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
 	return len(associated[serverID]) > 0, err
