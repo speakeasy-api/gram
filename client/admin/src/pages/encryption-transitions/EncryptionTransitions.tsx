@@ -4,11 +4,17 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useRouter,
+  useSearch,
+} from "@tanstack/react-router";
 import { toast } from "sonner";
 import type { AdminOrganizationEncryptionTransitionRow } from "@gram/admin-client/models/components/adminorganizationencryptiontransitionrow";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,6 +74,14 @@ const DEFAULT_BATCH = 10;
  */
 export const ENROLL_INTERVAL_MS = 1000;
 
+type Selection = {
+  /** The use case the rows were selected for; a bulk enroll uses it. */
+  useCase: string;
+  rows: Map<string, AdminOrganizationEncryptionTransitionRow>;
+};
+
+const NO_SELECTION: Selection = { useCase: "", rows: new Map() };
+
 function enrollable(row: AdminOrganizationEncryptionTransitionRow): boolean {
   return row.state === "platform_key" && !row.disabled;
 }
@@ -83,9 +97,7 @@ export function EncryptionTransitions(): JSX.Element {
   const navigate = useNavigate({ from: "/encryption-transitions" });
   const client = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
-  const [selected, setSelected] = useState<
-    Map<string, AdminOrganizationEncryptionTransitionRow>
-  >(new Map());
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
   const [batchSize, setBatchSize] = useState(String(DEFAULT_BATCH));
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
     null,
@@ -94,8 +106,12 @@ export function EncryptionTransitions(): JSX.Element {
     Map<string, { name: string; message: string }>
   >(new Map());
   // Checked between enrollments, so Stop ends the batch after the enrollment
-  // in flight.
+  // in flight. Leaving the page stops it too, so no batch runs unseen.
   const stopRequested = useRef(false);
+  useOnUnmount(() => {
+    stopRequested.current = true;
+  });
+  const router = useRouter();
 
   const page = search.page ?? 0;
   const query = useQuery({
@@ -111,6 +127,12 @@ export function EncryptionTransitions(): JSX.Element {
   // The URL names the use case the admin chose; a list still loading for it
   // must not leave a bulk action on the previous use case's placeholder data.
   const useCase = search.useCase ?? query.data?.useCase ?? "";
+  // While the list for a new filter loads, the previous list stays on screen;
+  // its rows cannot be selected.
+  const stale = query.isPlaceholderData;
+  // A selection made for another use case does not carry over.
+  const selected =
+    selection.useCase === useCase ? selection.rows : NO_SELECTION.rows;
   const rows = query.data?.organizations ?? [];
   const counts = new Map(
     (query.data?.stateCounts ?? []).map((count) => [
@@ -120,16 +142,18 @@ export function EncryptionTransitions(): JSX.Element {
   );
 
   function filterBy(next: EncryptionTransitionsSearch) {
-    setSelected(new Map());
+    setSelection(NO_SELECTION);
     void navigate({ search: next, replace: true });
   }
 
   function toggle(row: AdminOrganizationEncryptionTransitionRow) {
-    setSelected((current) => {
-      const next = new Map(current);
+    setSelection((current) => {
+      const next = new Map(
+        current.useCase === useCase ? current.rows : undefined,
+      );
       if (next.has(row.organizationId)) next.delete(row.organizationId);
       else next.set(row.organizationId, row);
-      return next;
+      return { useCase, rows: next };
     });
   }
 
@@ -139,13 +163,15 @@ export function EncryptionTransitions(): JSX.Element {
       toast.error("Enter how many organizations to select.");
       return;
     }
+    const requested = useCase;
+    const requestedSearch = search.useCase;
     try {
       // Disabled organizations are skipped, so page until enough are found.
       const next: AdminOrganizationEncryptionTransitionRow[] = [];
       for (let offset = 0; next.length < size; offset += NEXT_CANDIDATE_LIMIT) {
         const page = await client.fetchQuery(
           organizationEncryptionTransitionsQuery({
-            useCase,
+            useCase: requested,
             state: "platform_key",
             limit: NEXT_CANDIDATE_LIMIT,
             offset,
@@ -156,7 +182,14 @@ export function EncryptionTransitions(): JSX.Element {
         );
         if (!page.hasMore) break;
       }
-      setSelected(new Map(next.map((row) => [row.organizationId, row])));
+      // Drop a response for a use case the admin has since left.
+      const current = router.state.location
+        .search as EncryptionTransitionsSearch;
+      if (current.useCase !== requestedSearch) return;
+      setSelection({
+        useCase: requested,
+        rows: new Map(next.map((row) => [row.organizationId, row])),
+      });
       if (next.length < size) {
         toast.info(
           `Only ${pluralize(next.length, "organization")} can be enrolled.`,
@@ -168,12 +201,13 @@ export function EncryptionTransitions(): JSX.Element {
   }
 
   async function enrollSelected() {
+    const batchUseCase = selection.useCase;
     const batch = [...selected.values()];
-    if (batch.length === 0) return;
+    if (batch.length === 0 || batchUseCase !== useCase) return;
     const ok = await confirm({
-      title: `Enroll ${pluralize(batch.length, "organization")} for ${labelForUseCase(useCase)}?`,
+      title: `Enroll ${pluralize(batch.length, "organization")} for ${labelForUseCase(batchUseCase)}?`,
       description:
-        "Provisions each organization's key, then writes both copies of every new value. They are enrolled one at a time, about one a second, because each can mint a KMS key. A failure doesn't stop the rest. Keep this tab open until it finishes; enrollments already done stay done if it is interrupted.",
+        "Provisions each organization's key, then writes both copies of every new value. They are enrolled one at a time, about one a second, because each can mint a KMS key. A failure doesn't stop the rest. Stay on this page until it finishes: leaving it stops the batch after the current organization, and enrollments already done stay done.",
       details: (
         <ul className="list-disc pl-5">
           {batch.map((row) => (
@@ -195,7 +229,7 @@ export function EncryptionTransitions(): JSX.Element {
       if (stopRequested.current) break;
       attempted++;
       try {
-        await enrollOrganizationEncryption(row.organizationId, useCase);
+        await enrollOrganizationEncryption(row.organizationId, batchUseCase);
       } catch (e) {
         failed.set(row.organizationId, {
           name: row.name,
@@ -206,7 +240,7 @@ export function EncryptionTransitions(): JSX.Element {
     }
     setBulk(null);
     setFailures(failed);
-    setSelected(new Map());
+    setSelection(NO_SELECTION);
     await client.invalidateQueries({
       queryKey: organizationEncryptionTransitionsKeyPrefix,
     });
@@ -315,14 +349,14 @@ export function EncryptionTransitions(): JSX.Element {
         <Button
           variant="outline"
           size="sm"
-          disabled={running || !useCase}
+          disabled={running || stale || !useCase}
           onClick={() => void selectNext()}
         >
           Select next in platform key
         </Button>
         <Button
           size="sm"
-          disabled={running || selected.size === 0}
+          disabled={running || stale || selected.size === 0}
           onClick={() => void enrollSelected()}
         >
           {bulk
@@ -344,7 +378,7 @@ export function EncryptionTransitions(): JSX.Element {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setSelected(new Map())}
+            onClick={() => setSelection(NO_SELECTION)}
           >
             Clear selection
           </Button>
@@ -426,7 +460,7 @@ export function EncryptionTransitions(): JSX.Element {
                         <Checkbox
                           aria-label={`Select ${row.name}`}
                           checked={selected.has(row.organizationId)}
-                          disabled={running}
+                          disabled={running || stale}
                           onCheckedChange={() => toggle(row)}
                         />
                       )}

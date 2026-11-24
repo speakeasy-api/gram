@@ -1,3 +1,5 @@
+import type { AdminOrganizationEncryption } from "@gram/admin-client/models/components/adminorganizationencryption";
+
 import { badgeTone } from "@/lib/badgeTone";
 
 export const TRANSITION_STATES = [
@@ -90,4 +92,41 @@ export function formatTimestamp(date: Date | undefined): string {
     dateStyle: "medium",
     timeStyle: "short",
   })} UTC`;
+}
+
+/** How often the page refreshes while a backfill or clear may be running. */
+const REFRESH_WHILE_RUNNING_MS = 10_000;
+
+/**
+ * How long the page keeps refreshing after a run is requested, before the
+ * stored state shows it started. A queued run waits for a worker, so the
+ * first refresh can still read the state from before it.
+ */
+const REFRESH_AFTER_REQUEST_MS = 3 * 60_000;
+
+/** Whether a backfill or a clear may be running for any use case. */
+function runInProgress(encryption: AdminOrganizationEncryption): boolean {
+  return encryption.useCases.some(
+    (useCase) =>
+      transitionPhase(useCase.state, useCase.platformCopiesClearedAt) ===
+        "clearing" ||
+      (useCase.state === "dual_write" &&
+        useCase.lastBackfillStartedAt !== undefined &&
+        useCase.lastBackfillCompletedAt === undefined),
+  );
+}
+
+/**
+ * How often to refresh the page: while a backfill or clear may be running, and
+ * for a while after one was requested, before the stored state shows it.
+ */
+export function encryptionRefreshInterval(
+  encryption: AdminOrganizationEncryption | undefined,
+  requestedAt: number | null,
+  now: number,
+): number | false {
+  const running = encryption !== undefined && runInProgress(encryption);
+  const recentlyRequested =
+    requestedAt !== null && now - requestedAt < REFRESH_AFTER_REQUEST_MS;
+  return running || recentlyRequested ? REFRESH_WHILE_RUNNING_MS : false;
 }

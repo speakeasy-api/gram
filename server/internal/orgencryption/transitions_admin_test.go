@@ -35,14 +35,14 @@ func TestTransitions_FinalizeRefusesWhenTheUnreadableCountDiffersFromTheAcknowle
 	ti := newTransitionInstance(t)
 	ti.readyToFinalize(t)
 
-	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
+	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: new(int64(0))}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrUnreadableCountChanged)
 
 	transition, err := ti.transitions.GetFresh(t.Context(), ti.orgID, useCase)
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.TransitionStateDualWrite, transition.State, "a refused finalize changes nothing")
 
-	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 1}, orgencryption.SystemActor())
+	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: new(int64(1))}, orgencryption.SystemActor())
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.TransitionStateOrgKMS, finalized.State)
 }
@@ -56,14 +56,14 @@ type racingClearStore struct {
 	race func(ctx context.Context)
 }
 
-func (r *racingClearStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+func (r *racingClearStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	n, err := r.fakeCopyStore.ClearPlatformCopies(ctx, organizationID, generation, limit)
 	r.once.Do(func() { r.race(ctx) })
 
 	return n, err
 }
 
-func TestTransitions_ClearReportsSuccessWhenAnotherClearFinishedFirst(t *testing.T) {
+func TestTransitions_ClearRefusesWhileAnotherClearRuns(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -78,12 +78,22 @@ func TestTransitions_ClearReportsSuccessWhenAnotherClearFinishedFirst(t *testing
 
 	cleared, err := ti.transitions.ClearPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{racing}, orgencryption.SystemActor())
 	require.NoError(t, err)
-	require.NoError(t, raceErr)
+	require.ErrorIs(t, raceErr, orgencryption.ErrClearRunning, "a second clear does not run beside the first")
 	require.NotNil(t, cleared.PlatformCopiesClearedAt)
 
 	count, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionOrganizationEncryptionTransitionClearPlatformCopies)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), count, "only the clear that finished first records the event")
+	require.Equal(t, int64(1), count)
+
+	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionOrganizationEncryptionTransitionClearPlatformCopies)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.InDelta(t, 1, metadata["cleared_values"], 0, "the event counts the copy the clear destroyed")
+
+	again, err := ti.transitions.ClearPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{ti.store}, orgencryption.SystemActor())
+	require.NoError(t, err, "the lock is released once the clear ends")
+	require.Equal(t, cleared.PlatformCopiesClearedAt, again.PlatformCopiesClearedAt)
 }
 
 func TestMigrator_RunOnDemandFinishesTheClearAfterFinalize(t *testing.T) {

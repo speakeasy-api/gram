@@ -61,8 +61,8 @@ func (c *countingCopyStore) Count(context.Context, string) (orgencryption.CopyCo
 	return c.counts, nil
 }
 
-func (c *countingCopyStore) ClearPlatformCopies(context.Context, string, int64, int32) (int64, error) {
-	return 0, nil
+func (c *countingCopyStore) ClearPlatformCopies(context.Context, string, int64, int32) (orgencryption.ClearedCopies, error) {
+	return orgencryption.ClearedCopies{PlatformOnly: 0, BesideOrgCopy: 0, Empty: 0}, nil
 }
 
 // recordingRunStarter records the runs started and fails with err.
@@ -74,10 +74,18 @@ type recordingRunStarter struct {
 }
 
 func (r *recordingRunStarter) StartOrganizationEncryptionRun(_ context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error {
+	return r.record("backfill", organizationID, useCase, actor)
+}
+
+func (r *recordingRunStarter) StartOrganizationEncryptionClear(_ context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error {
+	return r.record("clear", organizationID, useCase, actor)
+}
+
+func (r *recordingRunStarter) record(kind string, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.runs = append(r.runs, organizationID+" "+string(useCase))
+	r.runs = append(r.runs, kind+" "+organizationID+" "+string(useCase))
 	r.actors = append(r.actors, actor.Principal.String())
 
 	return r.err
@@ -276,7 +284,7 @@ func TestOrganizationEncryption_RunNeedsAnEnrolledOrganization(t *testing.T) {
 
 	_, err = f.svc.RunOrganizationEncryption(ctx, payload)
 	require.NoError(t, err)
-	require.Equal(t, []string{"org_enc_run " + string(testEncryptionUseCase)}, f.runs.started())
+	require.Equal(t, []string{"backfill org_enc_run " + string(testEncryptionUseCase)}, f.runs.started())
 }
 
 func TestOrganizationEncryption_RunIsUnavailableWithoutTemporal(t *testing.T) {
@@ -343,7 +351,7 @@ func TestOrganizationEncryption_FinalizeMovesToOrgKMSAndStartsClearing(t *testin
 	require.NoError(t, err)
 	require.Equal(t, string(orgencryption.TransitionStateOrgKMS), result.UseCase.State)
 	require.True(t, result.ClearingStarted)
-	require.Equal(t, []string{"org_enc_finalize " + string(testEncryptionUseCase)}, f.runs.started())
+	require.Equal(t, []string{"clear org_enc_finalize " + string(testEncryptionUseCase)}, f.runs.started(), "finalize starts a clear, never a backfill that could already be running")
 	require.Equal(t, []string{"user:oidc-subject-encryption"}, f.runs.actors, "the clear is attributed to the staff member who finalized")
 
 	record, err := audittest.LatestAuditLogByAction(ctx, f.conn, audit.ActionOrganizationEncryptionTransitionFinalize)
@@ -352,6 +360,10 @@ func TestOrganizationEncryption_FinalizeMovesToOrgKMSAndStartsClearing(t *testin
 
 	_, err = f.svc.RollbackOrganizationEncryption(ctx, &gen.RollbackOrganizationEncryptionPayload{OrganizationID: "org_enc_finalize", UseCase: string(testEncryptionUseCase)})
 	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = f.svc.RunOrganizationEncryption(ctx, &gen.RunOrganizationEncryptionPayload{OrganizationID: "org_enc_finalize", UseCase: string(testEncryptionUseCase)})
+	require.NoError(t, err)
+	require.Equal(t, "clear org_enc_finalize "+string(testEncryptionUseCase), f.runs.started()[1], "resuming an unfinished clear starts a clear")
 }
 
 func TestOrganizationEncryption_FinalizeSucceedsWhenClearingCannotStart(t *testing.T) {

@@ -93,6 +93,10 @@ const (
 	// so clearing stops and reports it instead of looping.
 	maxClearPasses = 5
 
+	// clearUnlockTimeout bounds releasing the clear lock, which runs after the
+	// clear's own context may have ended.
+	clearUnlockTimeout = 30 * time.Second
+
 	// clearBatchSize is how many platform-key copies one clear statement
 	// destroys, keeping each statement's row locks short.
 	clearBatchSize = 500
@@ -393,11 +397,12 @@ type FinalizeRequest struct {
 	// the use case.
 	Stores []CopyStore
 
-	// ExpectedUnreadable is the number of unreadable values the caller
-	// acknowledged would be destroyed. Finalize refuses when the count under
-	// the state row lock differs, so the count acknowledged is the count
-	// destroyed.
-	ExpectedUnreadable int64
+	// ExpectedUnreadable, when set, is the number of unreadable values the
+	// caller acknowledged would be destroyed. Finalize refuses when the count
+	// under the state row lock differs, so the count acknowledged is the
+	// count destroyed. Nil asks for no acknowledgement, for callers whose
+	// operators do not confirm a count.
+	ExpectedUnreadable *int64
 }
 
 // Finalize moves a use case from dual_write to org_kms. Under the state row
@@ -451,8 +456,8 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values still wait for an organization-key copy", ErrFinalizeBlocked, counts.Waiting)
 			case counts.Unattributed > 0:
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are stored without an organization", ErrFinalizeBlocked, counts.Unattributed)
-			case req.ExpectedUnreadable != counts.Unreadable:
-				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are unreadable, not the %d acknowledged", ErrUnreadableCountChanged, counts.Unreadable, req.ExpectedUnreadable)
+			case req.ExpectedUnreadable != nil && *req.ExpectedUnreadable != counts.Unreadable:
+				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are unreadable, not the %d acknowledged", ErrUnreadableCountChanged, counts.Unreadable, *req.ExpectedUnreadable)
 			}
 
 			row, err := updateTransitionState(ctx, q, *before, TransitionStateOrgKMS)
@@ -557,6 +562,23 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 
 	logger := t.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogOrgEncryptionUseCase(useCase))
 
+	// One clear at a time per organization and use case, so the clear that
+	// records completion is the one that destroyed the copies and its audit
+	// event counts them all.
+	unlock, err := t.lockClear(ctx, logger, organizationID, useCase)
+	if err != nil {
+		return Transition{}, err
+	}
+	defer unlock()
+
+	// Another clear may have finished while this one waited to start.
+	if current, err = t.GetFresh(ctx, organizationID, useCase); err != nil {
+		return Transition{}, err
+	}
+	if current.PlatformCopiesClearedAt != nil {
+		return current, nil
+	}
+
 	var cleared int64
 	for pass := range maxClearPasses {
 		n, err := clearStores(ctx, organizationID, current.Generation, stores)
@@ -610,6 +632,42 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 	}
 
 	return after, err
+}
+
+// lockClear takes the session advisory lock that keeps a second clear of the
+// same organization and use case from running at once, on a connection held
+// until the returned unlock runs. It returns ErrClearRunning without waiting
+// when another clear holds the lock. A connection whose unlock fails is closed
+// rather than returned to the pool still holding the lock.
+func (t *Transitions) lockClear(ctx context.Context, logger *slog.Logger, organizationID string, useCase UseCase) (func(), error) {
+	conn, err := t.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire connection for clear lock: %w", err)
+	}
+
+	params := repo.TryLockEncryptionClearParams{OrganizationID: organizationID, UseCase: string(useCase)}
+	locked, err := repo.New(conn).TryLockEncryptionClear(ctx, params)
+	if err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("take clear lock: %w", err)
+	}
+	if !locked {
+		conn.Release()
+		return nil, ErrClearRunning
+	}
+
+	return func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), clearUnlockTimeout)
+		defer cancel()
+
+		if _, err := repo.New(conn).UnlockEncryptionClear(unlockCtx, repo.UnlockEncryptionClearParams(params)); err != nil {
+			logger.ErrorContext(unlockCtx, "release clear lock; closing its connection", attr.SlogError(err))
+			if err := conn.Conn().Close(unlockCtx); err != nil {
+				logger.ErrorContext(unlockCtx, "close clear lock connection", attr.SlogError(err))
+			}
+		}
+		conn.Release()
+	}, nil
 }
 
 // StragglerCount reports the platform-key copies one column held after its

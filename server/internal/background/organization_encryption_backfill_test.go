@@ -418,3 +418,26 @@ func TestOrganizationEncryptionBackfill_OnDemandRunsAsTheStaffMemberWhoAskedForI
 
 	require.Equal(t, []string{staff.String(), orgencryption.SystemActor().Principal.String()}, migrator.actors, "a run without an actor is the system's")
 }
+
+func TestOrganizationEncryptionClearOrganizationWorkflowID_DiffersFromTheBackfill(t *testing.T) {
+	t.Parallel()
+
+	backfill := OrganizationEncryptionBackfillOrganizationWorkflowID("main", "org_a", orgencryption.UseCaseOAuthClientSecrets)
+	clearID := OrganizationEncryptionClearOrganizationWorkflowID("main", "org_a", orgencryption.UseCaseOAuthClientSecrets)
+	require.NotEqual(t, backfill, clearID, "a backfill still closing must not stand in for the clear finalize starts")
+	require.NotEqual(t, clearID, OrganizationEncryptionClearOrganizationWorkflowID("preview", "org_a", orgencryption.UseCaseOAuthClientSecrets), "scoped by queue")
+}
+
+func TestOrganizationEncryptionBackfill_SkipsAClearAnotherRunHolds(t *testing.T) {
+	t.Parallel()
+
+	migrator := &fakeOrganizationEncryptionMigrator{
+		finalized: []orgencryption.Transition{stalledClear("org_held")},
+		errs:      map[string]error{"org_held": orgencryption.ErrClearRunning},
+	}
+
+	result, err := newBackfillActivities(t, migrator).Backfill(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Skipped)
+	require.Zero(t, result.Failed)
+}

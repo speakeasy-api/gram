@@ -159,3 +159,87 @@ describe("EncryptionTransitions", () => {
     ).toBe("unchecked");
   });
 });
+
+describe("EncryptionTransitions after leaving or switching", () => {
+  it("stops a batch after the current enrollment when the page unmounts", async () => {
+    mocks.list.mockResolvedValue(aList([aRow("a"), aRow("b"), aRow("c")]));
+    let finishFirst: () => void = () => {};
+    mocks.enroll.mockImplementation((organizationID: string) =>
+      organizationID === "a"
+        ? new Promise((resolve) => {
+            finishFirst = () => resolve({});
+          })
+        : Promise.resolve({}),
+    );
+    const { unmount } = await mount();
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    for (const id of ["a", "b", "c"]) {
+      fireEvent.click(
+        screen.getByRole("checkbox", { name: `Select Org ${id}` }),
+      );
+    }
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enroll selected (3)" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      screen
+        .getAllByRole("button", { name: "Enroll" })
+        .find((button) => dialog.contains(button))!,
+    );
+    await waitFor(() => expect(mocks.enroll).toHaveBeenCalledTimes(1));
+
+    unmount();
+    finishFirst();
+    await new Promise((resolve) => {
+      setTimeout(resolve, ENROLL_INTERVAL_MS + 300);
+    });
+    expect(mocks.enroll).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a select-next response for a use case the admin has left", async () => {
+    let answerClientSecrets: (
+      list: AdminOrganizationEncryptionTransitionList,
+    ) => void = () => {};
+    mocks.list.mockImplementation(
+      (request: { useCase?: string; limit?: number }) => {
+        if (
+          request.limit === 200 &&
+          request.useCase === "oauth-client-secrets"
+        ) {
+          return new Promise((resolve) => {
+            answerClientSecrets = resolve;
+          });
+        }
+        return Promise.resolve({
+          ...aList([aRow("a"), aRow("b")]),
+          useCase: request.useCase ?? "oauth-client-secrets",
+        });
+      },
+    );
+    const { router } = await mount();
+
+    expect(await screen.findByText("Org a")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Batch size"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select next in platform key" }),
+    );
+
+    await router.navigate({
+      to: "/encryption-transitions",
+      search: { useCase: "oauth-session-tokens" },
+    });
+    answerClientSecrets(aList([aRow("a"), aRow("b")]));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Enroll selected (0)" }),
+      "the late client-secrets candidates are not selected for session tokens",
+    ).toBeTruthy();
+  });
+});

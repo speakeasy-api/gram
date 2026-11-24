@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminOrganizationEncryption } from "@gram/admin-client/models/components/adminorganizationencryption";
 import type { AdminOrganizationEncryptionUseCase } from "@gram/admin-client/models/components/adminorganizationencryptionusecase";
 
+import { encryptionRefreshInterval } from "@/lib/organizationEncryption";
 import { Encryption } from "@/pages/organization/Encryption";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -131,5 +132,36 @@ describe("Encryption", () => {
     await waitFor(() =>
       expect(mocks.run).toHaveBeenCalledWith(ORG.id, "oauth-client-secrets"),
     );
+  });
+});
+
+describe("encryptionRefreshInterval", () => {
+  const idle = anEncryption(
+    aUseCase({ state: "dual_write", generation: 1, finalizeBlockers: [] }),
+  );
+
+  it("keeps refreshing after a run is requested, before the run shows as started", () => {
+    const now = Date.parse("2026-11-24T12:00:00Z");
+    expect(encryptionRefreshInterval(idle, null, now)).toBe(false);
+    expect(encryptionRefreshInterval(idle, now - 30_000, now)).toBeGreaterThan(
+      0,
+    );
+    expect(encryptionRefreshInterval(idle, now - 10 * 60_000, now)).toBe(false);
+  });
+
+  it("refreshes while a backfill or clear may be running", () => {
+    const now = Date.parse("2026-11-24T12:00:00Z");
+    const running = anEncryption(
+      aUseCase({
+        state: "dual_write",
+        generation: 1,
+        lastBackfillStartedAt: new Date(now - 60_000),
+      }),
+    );
+    const clearing = anEncryption(
+      aUseCase({ state: "org_kms", generation: 2 }),
+    );
+    expect(encryptionRefreshInterval(running, null, now)).toBeGreaterThan(0);
+    expect(encryptionRefreshInterval(clearing, null, now)).toBeGreaterThan(0);
   });
 });

@@ -19,6 +19,7 @@ import {
   runOrganizationEncryption,
 } from "@/lib/gramAdminClient";
 import {
+  encryptionRefreshInterval,
   formatDuration,
   formatTimestamp,
   pluralize,
@@ -44,21 +45,6 @@ function Row({
   );
 }
 
-/** How often the page refreshes while a backfill or clear may be running. */
-const REFRESH_WHILE_RUNNING_MS = 10_000;
-
-/** Whether a backfill or a clear may be running for any use case. */
-function runInProgress(encryption: AdminOrganizationEncryption): boolean {
-  return encryption.useCases.some(
-    (useCase) =>
-      transitionPhase(useCase.state, useCase.platformCopiesClearedAt) ===
-        "clearing" ||
-      (useCase.state === "dual_write" &&
-        useCase.lastBackfillStartedAt !== undefined &&
-        useCase.lastBackfillCompletedAt === undefined),
-  );
-}
-
 export function EncryptionRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
@@ -67,14 +53,15 @@ export function EncryptionRoute(): JSX.Element | null {
 }
 
 export function Encryption({ org }: { org: AdminOrganization }): JSX.Element {
+  // Set when a run or finalize is accepted, so polling starts before a worker
+  // records that the run began.
+  const [requestedAt, setRequestedAt] = useState<number | null>(null);
   const query = useQuery({
     ...organizationEncryptionQuery(org.id),
     // Runs and clears happen in the background, so poll while one may be
     // under way and stop once nothing is.
     refetchInterval: (current) =>
-      current.state.data && runInProgress(current.state.data)
-        ? REFRESH_WHILE_RUNNING_MS
-        : false,
+      encryptionRefreshInterval(current.state.data, requestedAt, Date.now()),
   });
 
   if (query.isPending) {
@@ -95,15 +82,23 @@ export function Encryption({ org }: { org: AdminOrganization }): JSX.Element {
     );
   }
 
-  return <EncryptionView org={org} encryption={query.data} />;
+  return (
+    <EncryptionView
+      org={org}
+      encryption={query.data}
+      onRunRequested={() => setRequestedAt(Date.now())}
+    />
+  );
 }
 
 function EncryptionView({
   org,
   encryption,
+  onRunRequested,
 }: {
   org: AdminOrganization;
   encryption: AdminOrganizationEncryption;
+  onRunRequested: () => void;
 }): JSX.Element {
   const config = encryption.config;
 
@@ -154,6 +149,7 @@ function EncryptionView({
           org={org}
           encryption={encryption}
           useCase={useCase}
+          onRunRequested={onRunRequested}
         />
       ))}
     </div>
@@ -164,10 +160,12 @@ function UseCaseSection({
   org,
   encryption,
   useCase,
+  onRunRequested,
 }: {
   org: AdminOrganization;
   encryption: AdminOrganizationEncryption;
   useCase: AdminOrganizationEncryptionUseCase;
+  onRunRequested: () => void;
 }): JSX.Element {
   const client = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
@@ -243,7 +241,10 @@ function UseCaseSection({
   async function run() {
     await act(
       phase === "clearing" ? "Resuming" : "Starting",
-      () => runOrganizationEncryption(org.id, useCase.useCase),
+      async () => {
+        await runOrganizationEncryption(org.id, useCase.useCase);
+        onRunRequested();
+      },
       phase === "clearing"
         ? `Requested clearing ${label} for ${org.name}`
         : `Requested a backfill of ${label} for ${org.name}; it waits for any run already in progress`,
@@ -260,6 +261,7 @@ function UseCaseSection({
         useCase: useCase.useCase,
         ...submission,
       });
+      onRunRequested();
       toast.success(
         result.clearingStarted
           ? `Finalized ${label} for ${org.name}; clearing platform-key copies`

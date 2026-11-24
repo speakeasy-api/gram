@@ -34,12 +34,19 @@ const (
 	organizationEncryptionDetailMaxLen = 300
 )
 
-// OrganizationEncryptionRunStarter starts an on-demand run for one
-// organization's use case: a backfill and verification in dual_write, or
-// finishing the clear after finalize in org_kms. It joins a run already in
-// progress.
+// OrganizationEncryptionRunStarter starts on-demand runs for one
+// organization's use case, joining a run of the same kind already in
+// progress. Backfills and clears run under different workflow ids, so a
+// backfill that is still closing never stands in for the clear finalize
+// starts.
 type OrganizationEncryptionRunStarter interface {
+	// StartOrganizationEncryptionRun starts a backfill and verification in
+	// dual_write.
 	StartOrganizationEncryptionRun(ctx context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error
+
+	// StartOrganizationEncryptionClear starts finishing the clear of a
+	// finalized use case's platform-key copies.
+	StartOrganizationEncryptionClear(ctx context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error
 }
 
 // OrganizationEncryption is what the admin API needs to report and change
@@ -221,7 +228,11 @@ func (s *Service) RunOrganizationEncryption(ctx context.Context, payload *gen.Ru
 		return nil, oops.E(oops.CodeConflict, nil, "the platform-key copies are already cleared; there is nothing left to run").LogInfo(ctx, logger)
 	}
 
-	if err := s.orgEncryption.Runs.StartOrganizationEncryptionRun(ctx, organizationID, move.UseCase, encryptionActor(ctx)); err != nil {
+	start := s.orgEncryption.Runs.StartOrganizationEncryptionRun
+	if transition.State == orgencryption.TransitionStateOrgKMS {
+		start = s.orgEncryption.Runs.StartOrganizationEncryptionClear
+	}
+	if err := start(ctx, organizationID, move.UseCase, encryptionActor(ctx)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error starting the organization encryption run").LogError(ctx, logger)
 	}
 
@@ -244,7 +255,7 @@ func (s *Service) FinalizeOrganizationEncryption(ctx context.Context, payload *g
 	finalized, err := s.orgEncryption.Transitions.Finalize(ctx, organizationID, move.UseCase, orgencryption.FinalizeRequest{
 		MinimumDualWrite:   organizationEncryptionMinimumDualWrite,
 		Stores:             move.Stores,
-		ExpectedUnreadable: payload.AcknowledgedUnreadableValues,
+		ExpectedUnreadable: new(payload.AcknowledgedUnreadableValues),
 	}, actor)
 	if err != nil {
 		return nil, mapOrganizationEncryptionError(ctx, logger, err, "finalize")
@@ -258,7 +269,7 @@ func (s *Service) FinalizeOrganizationEncryption(ctx context.Context, payload *g
 	// this does not start.
 	clearingStarted := false
 	if s.orgEncryption.Runs != nil {
-		if err := s.orgEncryption.Runs.StartOrganizationEncryptionRun(ctx, organizationID, move.UseCase, actor); err != nil {
+		if err := s.orgEncryption.Runs.StartOrganizationEncryptionClear(ctx, organizationID, move.UseCase, actor); err != nil {
 			logger.ErrorContext(ctx, "start clearing platform-key copies after finalize", attr.SlogError(err))
 		} else {
 			clearingStarted = true

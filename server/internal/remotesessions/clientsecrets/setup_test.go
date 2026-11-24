@@ -167,7 +167,7 @@ func (ti *testInstance) finalize(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: stores, ExpectedUnreadable: 0}, orgencryption.SystemActor())
+	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: stores, ExpectedUnreadable: nil}, orgencryption.SystemActor())
 	require.NoError(t, err)
 
 	_, err = ti.transitions.ClearPlatformCopies(t.Context(), ti.orgID, orgencryption.UseCaseOAuthClientSecrets, stores, orgencryption.SystemActor())

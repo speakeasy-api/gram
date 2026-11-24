@@ -647,3 +647,13 @@ WHERE v.organization_id = @organization_id
     WHERE t.organization_id = v.organization_id AND t.use_case = @use_case
     FOR KEY SHARE
   ), 0) = @decided_generation::bigint;
+
+-- name: TryLockEncryptionClear :one
+-- Takes the session advisory lock that serializes clearing one organization's
+-- platform-key copies for a use case, without waiting. The caller holds its
+-- connection until it unlocks.
+SELECT pg_try_advisory_lock(hashtextextended('orgencryption-clear:' || @organization_id::text || ':' || @use_case::text, 0))::boolean AS locked;
+
+-- name: UnlockEncryptionClear :one
+-- Releases the lock TryLockEncryptionClear took on the same connection.
+SELECT pg_advisory_unlock(hashtextextended('orgencryption-clear:' || @organization_id::text || ':' || @use_case::text, 0))::boolean AS unlocked;

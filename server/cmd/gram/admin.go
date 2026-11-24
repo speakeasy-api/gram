@@ -582,8 +582,9 @@ func newAdminCommand() *cli.Command {
 			}
 			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			// Built whether or not the application key is set: the remote
-			// session service needs both, but the organization encryption
-			// transition methods need only organization encryption. Building
+			// session service and the Tailscale OAuth client migration need
+			// both, but the organization encryption transition methods need
+			// only organization encryption. Building
 			// it here stops admin at startup when it is misconfigured.
 			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
 			if err != nil {
