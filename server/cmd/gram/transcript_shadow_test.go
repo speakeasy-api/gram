@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -35,9 +36,10 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.Nil(t, shadow.Store)
+	require.Nil(t, shadow.Assets)
 	require.Empty(t, shadow.ReadProjectIDs)
 }
 
@@ -66,7 +68,7 @@ func TestTranscriptShadowRejectsReadsWithoutCapture(t *testing.T) {
 	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowReadProjectsFlag: "10000000-0000-4000-8000-000000000001"})
-	_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	_, err := configureTranscriptShadow(t.Context(), c, nil, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.EqualError(t, err, "chat transcript shadow reads require the same projects to capture shadows")
 }
 
@@ -96,7 +98,7 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
-			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 			require.Error(t, err)
 		})
 	}
@@ -208,7 +210,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 				// Empty dependencies would panic if provisioning or activation were
 				// attempted. A nonexistent project also proves schema runs first.
 				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
-				_, err := configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
+				_, err := configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, assetstest.NewTestBlobStore(t), orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
 				}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")

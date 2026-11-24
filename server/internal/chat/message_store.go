@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -117,6 +119,12 @@ type ChatMessageWriter struct {
 	// transcriptShadow is opt-in shadow storage, not an encrypted-only rollout.
 	transcriptShadow         *transcriptstore.Store
 	transcriptShadowProjects map[uuid.UUID]struct{}
+	// sealedAssets writes encrypted copies of uploaded message bodies and
+	// content parts for the same projects. Nil writes plaintext objects only.
+	sealedAssets *transcriptstore.AssetStore
+	// projectOrganizations caches project to organization lookups for asset
+	// sealing, which runs before any message transaction opens.
+	projectOrganizations sync.Map
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
 	turnStream  *TurnStream
@@ -134,6 +142,8 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		observers:                nil,
 		transcriptShadow:         nil,
 		transcriptShadowProjects: nil,
+		sealedAssets:             nil,
+		projectOrganizations:     sync.Map{},
 		shutdownCtx:              ctx,
 		cancel:                   cancel,
 		turnStream:               nil,
@@ -158,6 +168,49 @@ func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, p
 		w.transcriptShadowProjects[projectID] = struct{}{}
 	}
 	return w
+}
+
+// WithSealedAssets also seals every message body and content part object the
+// writer uploads for the transcript shadow projects. The sealed copy sits next
+// to the plaintext object, which stays in place. Configure it with
+// WithTranscriptShadow, before serving requests.
+func (w *ChatMessageWriter) WithSealedAssets(store *transcriptstore.AssetStore) *ChatMessageWriter {
+	w.sealedAssets = store
+	return w
+}
+
+// assetSealer returns the function that seals one uploaded object for
+// projectID, or nil when the project does not capture encrypted copies.
+func (w *ChatMessageWriter) assetSealer(projectID uuid.UUID) sealAssetFunc {
+	if w == nil || w.sealedAssets == nil {
+		return nil
+	}
+	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
+		return nil
+	}
+	return func(ctx context.Context, kind transcriptcrypto.AssetKind, chatID uuid.UUID, objectPath string, body []byte) error {
+		organizationID, err := w.projectOrganization(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		identity := transcriptcrypto.AssetIdentity{Kind: kind, ProjectID: projectID, ChatID: chatID, SHA256: transcriptcrypto.ContentHash(body)}
+		if err := w.sealedAssets.Seal(ctx, organizationID, identity, objectPath, body); err != nil {
+			return fmt.Errorf("seal encrypted transcript asset: %w", err)
+		}
+		return nil
+	}
+}
+
+func (w *ChatMessageWriter) projectOrganization(ctx context.Context, projectID uuid.UUID) (string, error) {
+	if org, ok := w.projectOrganizations.Load(projectID); ok {
+		return org.(string), nil //nolint:forcetypeassert // only strings are stored
+	}
+	org, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("resolve project organization for asset sealing: %w", err)
+	}
+	w.projectOrganizations.Store(projectID, org)
+	return org, nil
 }
 
 func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
@@ -223,6 +276,7 @@ func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectI
 		err      error
 	}
 	results := make([]uploadResult, len(contents))
+	seal := w.assetSealer(projectID)
 	var group errgroup.Group
 	group.SetLimit(maxConcurrentChatAssetWork)
 	for assetPath, leader := range leaders {
@@ -241,6 +295,12 @@ func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectI
 			if err := writer.Close(); err != nil {
 				results[leader] = uploadResult{assetURL: "", err: fmt.Errorf("close content part asset: %w", err)}
 				return nil
+			}
+			if seal != nil {
+				if err := seal(ctx, transcriptcrypto.AssetContentPart, chatID, assetPath, content); err != nil {
+					results[leader] = uploadResult{assetURL: "", err: err}
+					return nil
+				}
 			}
 			results[leader] = uploadResult{assetURL: assetURL.String(), err: nil}
 			return nil
@@ -893,7 +953,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 		return nil
 	}
 
-	pendingWrites, err := prepareMessages(ctx, w.logger, w.assetStorage, pending)
+	pendingWrites, err := prepareMessages(ctx, w.logger, w.assetStorage, w.assetSealer(projectID), pending)
 	if err != nil {
 		return fmt.Errorf("prepare pending chat messages: %w", err)
 	}
@@ -967,7 +1027,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if len(rows) == 0 {
 		return nil
 	}
-	writes, err := prepareMessages(ctx, w.logger, w.assetStorage, rows)
+	writes, err := prepareMessages(ctx, w.logger, w.assetStorage, w.assetSealer(projectID), rows)
 	if err != nil {
 		return err
 	}

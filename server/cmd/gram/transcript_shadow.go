@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
@@ -44,6 +45,14 @@ type transcriptShadow struct {
 	// Store seals and opens shadow copies.
 	Store *transcriptstore.Store
 
+	// Assets seals and opens encrypted copies of message body, content part
+	// and chat attachment objects for the same projects.
+	Assets *transcriptstore.AssetStore
+
+	// ProjectIDs are the projects that capture shadows and encrypted asset
+	// copies.
+	ProjectIDs []uuid.UUID
+
 	// ReadProjectIDs are the projects whose chat reads open shadows instead of
 	// plaintext. Every one also captures shadows.
 	ReadProjectIDs []uuid.UUID
@@ -52,8 +61,8 @@ type transcriptShadow struct {
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
 // writes, and optionally reads. Plaintext remains authoritative for every other
 // project; startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
-	none := transcriptShadow{Store: nil, ReadProjectIDs: nil}
+func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, assetStorage assets.BlobStore, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
+	none := transcriptShadow{Store: nil, Assets: nil, ProjectIDs: nil, ReadProjectIDs: nil}
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	readValues := c.StringSlice(chatTranscriptShadowReadProjectsFlag)
 	if c.IsSet(chatTranscriptShadowReadProjectsFlag) && len(readValues) == 0 {
@@ -80,8 +89,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow requires database and writer")
+	if db == nil || writer == nil || assetStorage == nil {
+		return none, fmt.Errorf("chat transcript shadow requires database, writer and asset storage")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
@@ -109,13 +118,17 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
+	assetStore, err := transcriptstore.NewAssetStore(assetStorage, orgEncryption.Service, tracerProvider, meterProvider)
+	if err != nil {
+		return none, fmt.Errorf("create chat transcript shadow asset store: %w", err)
+	}
 	for _, org := range organizations {
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
-	writer.WithTranscriptShadow(store, projectIDs...)
-	return transcriptShadow{Store: store, ReadProjectIDs: readProjectIDs}, nil
+	writer.WithTranscriptShadow(store, projectIDs...).WithSealedAssets(assetStore)
+	return transcriptShadow{Store: store, Assets: assetStore, ProjectIDs: projectIDs, ReadProjectIDs: readProjectIDs}, nil
 }
 
 // transcriptShadowReadProjects parses the read allowlist and requires it to be

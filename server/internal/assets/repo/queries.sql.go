@@ -269,7 +269,7 @@ func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([
 }
 
 const getChatAttachmentAssetURL = `-- name: GetChatAttachmentAssetURL :one
-SELECT name, url, content_type, content_length, updated_at
+SELECT name, url, sha256, organization_id, content_type, content_length, updated_at
 FROM assets
 WHERE
   id = $1 AND kind = 'chat_attachment'
@@ -283,11 +283,13 @@ type GetChatAttachmentAssetURLParams struct {
 }
 
 type GetChatAttachmentAssetURLRow struct {
-	Name          string
-	Url           string
-	ContentType   string
-	ContentLength int64
-	UpdatedAt     pgtype.Timestamptz
+	Name           string
+	Url            string
+	Sha256         string
+	OrganizationID pgtype.Text
+	ContentType    string
+	ContentLength  int64
+	UpdatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAttachmentAssetURLParams) (GetChatAttachmentAssetURLRow, error) {
@@ -296,6 +298,8 @@ func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAtta
 	err := row.Scan(
 		&i.Name,
 		&i.Url,
+		&i.Sha256,
+		&i.OrganizationID,
 		&i.ContentType,
 		&i.ContentLength,
 		&i.UpdatedAt,
