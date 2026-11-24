@@ -2850,10 +2850,12 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   -- configured/not-configured state.
   credentials_encrypted TEXT,
   -- The same credential document sealed with the organization's key for the
-  -- tailscale-oauth-clients use case. Which of the two copies is written and
-  -- read follows the organization's transition state for that use case
-  -- (package orgencryption); credentials_encrypted is dropped by a later
-  -- contract migration once every organization has moved.
+  -- tailscale-oauth-clients use case. A row holds the platform-key copy
+  -- (credentials_encrypted), this copy, or both while the organization moves:
+  -- the organization's transition state for that use case (package
+  -- orgencryption) decides which copies are written and read.
+  -- credentials_encrypted is dropped by a later contract migration once every
+  -- organization has moved.
   credentials_org_encrypted TEXT,
   attestor_namespace TEXT NOT NULL,
   attestor_service_account TEXT NOT NULL,
