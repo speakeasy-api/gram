@@ -266,6 +266,21 @@ func TestOrganizationEncryptionBackfill_TimingsFitTheActivity(t *testing.T) {
 	require.Less(t, organizationEncryptionBackfillStartToClose*organizationEncryptionBackfillMaxAttempts, organizationEncryptionBackfillRunTimeout, "every attempt fits the run")
 }
 
+func TestOrganizationEncryptionBackfill_RetriesStartAfterADeadWorkersClaimExpires(t *testing.T) {
+	t.Parallel()
+
+	// The hourly activity claims an organization right after a heartbeat, so
+	// Temporal notices a dead worker a heartbeat timeout after the claim at
+	// the earliest, and retries after the retry interval.
+	require.GreaterOrEqual(t, organizationEncryptionBackfillHeartbeatTimeout+organizationEncryptionBackfillRetryInterval, orgencryption.RunLease)
+
+	// An on-demand attempt claims within its first minute. Its retry starts
+	// StartToClose plus the retry interval after the attempt started.
+	const claimWithin = time.Minute
+	require.GreaterOrEqual(t, organizationEncryptionBackfillOrganizationStartToClose+organizationEncryptionBackfillOrganizationRetryInterval, claimWithin+orgencryption.RunLease)
+	require.Less(t, organizationEncryptionBackfillOrganizationStartToClose*organizationEncryptionBackfillOrganizationMaxAttempts+organizationEncryptionBackfillOrganizationRetryInterval*3, organizationEncryptionBackfillOrganizationRunTimeout, "every attempt and its backoff fits the run")
+}
+
 func requireApplicationError(t *testing.T, err error, errorType string) {
 	t.Helper()
 

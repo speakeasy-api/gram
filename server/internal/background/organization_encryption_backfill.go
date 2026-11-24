@@ -59,6 +59,9 @@ const (
 	// organizationEncryptionBackfillHeartbeatTimeout is how long Temporal
 	// waits between heartbeats before treating the worker as gone. The
 	// activity heartbeats before each item, so the gap is at most one item.
+	// It exceeds orgencryption.RunLease, so when a worker dies holding a
+	// claim, the claim has expired by the time the retry reaches that
+	// organization.
 	organizationEncryptionBackfillHeartbeatTimeout = organizationEncryptionBackfillItemTimeout + time.Minute
 
 	// organizationEncryptionBackfillBudget is how long the activity keeps
@@ -79,6 +82,13 @@ const (
 	// organizationEncryptionBackfillOrganizationMaxAttempts retries an
 	// on-demand run through a short key or database outage.
 	organizationEncryptionBackfillOrganizationMaxAttempts = 3
+
+	// organizationEncryptionBackfillOrganizationRetryInterval is the wait
+	// before the first retry of an on-demand run. With StartToClose it puts
+	// the retry at least orgencryption.RunLease after any claim the failed
+	// attempt made in its first minute, so a retry after a worker died finds
+	// the claim expired instead of failing as already running.
+	organizationEncryptionBackfillOrganizationRetryInterval = time.Minute
 
 	// organizationEncryptionBackfillOrganizationRunTimeout covers every
 	// attempt of the on-demand activity and the backoff between them.
@@ -164,7 +174,7 @@ func OrganizationEncryptionBackfillOrganizationWorkflow(ctx workflow.Context, pa
 		StartToCloseTimeout: organizationEncryptionBackfillOrganizationStartToClose,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    organizationEncryptionBackfillOrganizationMaxAttempts,
-			InitialInterval:    organizationEncryptionBackfillRetryInterval,
+			InitialInterval:    organizationEncryptionBackfillOrganizationRetryInterval,
 			BackoffCoefficient: 2,
 			MaximumInterval:    5 * time.Minute,
 			NonRetryableErrorTypes: []string{

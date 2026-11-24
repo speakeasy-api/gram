@@ -192,7 +192,7 @@ func (m *Migrator) backfillDue(ctx context.Context, row repo.OrganizationEncrypt
 		// A run holds the claim, or its process died before it recorded its
 		// end. Once the claim expires nothing would pick it up otherwise,
 		// and finalize refuses until a run completes.
-		return now.Sub(started.Time) >= runLease
+		return now.Sub(started.Time) >= RunLease
 	}
 
 	cleanlyVerified := verified.Valid && !verified.Time.Before(row.StateChangedAt.Time) && (!started.Valid || !verified.Time.Before(started.Time))

@@ -36,16 +36,18 @@ const (
 	// activity timeouts and heartbeats from it.
 	MaxRunDuration = 5 * time.Minute
 
-	// runLease is how long a run's claim on the transition row holds. It is
-	// twice MaxRunDuration, so a run that is still going never loses its
-	// claim, while the claim of a run whose process died expires in time for
-	// the next hourly backfill, which then picks the organization up again.
-	runLease = 2 * MaxRunDuration
-
 	// recordTimeout bounds the bookkeeping write that ends a run. It runs
 	// after the run's own deadline may have passed, so a run cut short still
 	// records that it ended.
 	recordTimeout = 30 * time.Second
+
+	// RunLease is how long a run's claim on the transition row holds. A live
+	// run never holds it longer than MaxRunDuration plus recordTimeout, and
+	// its end is recorded only on its own claim, so the lease only has to
+	// outlast that. It is kept short so that a retry of a run whose process
+	// died finds the claim expired: callers start retries at least RunLease
+	// after the claim was made.
+	RunLease = MaxRunDuration + time.Minute
 )
 
 // RunResult reports one run for an organization and use case.
@@ -137,7 +139,7 @@ func (r *Runner) Run(ctx context.Context, organizationID string, useCase UseCase
 		OrganizationID: organizationID,
 		UseCase:        string(useCase),
 		Generation:     d.Generation,
-		Lease:          conv.PtrToPGInterval(new(runLease)),
+		Lease:          conv.PtrToPGInterval(new(RunLease)),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

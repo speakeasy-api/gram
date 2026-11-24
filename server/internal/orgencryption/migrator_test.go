@@ -372,7 +372,7 @@ func TestMigrator_ListDueBackfillsOffersARunThatNeverEndedOnceItsClaimExpires(t 
 	ti.setRunTimes(t, ti.orgID, new(time.Now().Add(-time.Minute)), nil, &verified)
 	require.Empty(t, dueOrganizations(t, migrator), "a run holds the claim")
 
-	ti.setRunTimes(t, ti.orgID, new(time.Now().Add(-2*orgencryption.MaxRunDuration-time.Minute)), nil, &verified)
+	ti.setRunTimes(t, ti.orgID, new(time.Now().Add(-orgencryption.RunLease-time.Minute)), nil, &verified)
 	require.Equal(t, []string{ti.orgID}, dueOrganizations(t, migrator), "the run's process died and its claim expired")
 
 	result, err := migrator.Backfill(t.Context(), ti.orgID, useCase)
