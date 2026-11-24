@@ -24,7 +24,7 @@ export function identityModeCards(upstreamName: string): IdentityModeCard[] {
   return [
     {
       value: "user",
-      title: "User Identity",
+      title: "User identity",
       description: `Each user signs in to ${upstreamName} as themselves and keeps their own permissions.`,
       icon: <UserRound aria-hidden="true" className="size-4" />,
     },

@@ -118,11 +118,11 @@ func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {
 	grants, unevaluated := roleAuthzGrants(role)
 	require.False(t, unevaluated)
 
-	serverAllowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, server, uuid.NewString()))
+	serverAllowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom(uuid.NewString())).Connect())
 	require.NoError(t, err)
 	require.True(t, serverAllowed, "a tool-specific exclusion does not block the server-level check")
 
-	toolAllowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(server, authz.MCPToolCallDimensions{Tool: tool, ProjectID: uuid.NewString()}))
+	toolAllowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(server), authz.ProjectIDFrom(uuid.NewString())).ToolCall(tool, ""))
 	require.NoError(t, err)
 	require.False(t, toolAllowed)
 }

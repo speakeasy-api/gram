@@ -13,6 +13,7 @@ const accessRequests = vi.hoisted(() => ({
   on: false,
   catalogueLoaded: true,
   grantable: new Set<string>(),
+  updatedAt: 0,
   pending: [] as {
     scope: string;
     selector: { resourceId: string };
@@ -69,8 +70,10 @@ vi.mock("@gram/client/react-query/accessRequests.js", () => ({
         status: request?.status ?? item.status ?? "pending",
       })),
     },
+    dataUpdatedAt: accessRequests.updatedAt,
     refetch: () => Promise.resolve(),
   }),
+  invalidateAllAccessRequests: () => Promise.resolve(),
 }));
 const toast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -99,6 +102,7 @@ afterEach(() => {
   accessRequests.catalogueLoaded = true;
   accessRequests.grantable = new Set();
   accessRequests.pending = [];
+  accessRequests.updatedAt = 0;
   mutateAsync.mockClear();
   toast.success.mockClear();
   toast.error.mockClear();
@@ -201,33 +205,61 @@ describe("RequestScopeAccess", () => {
     expect(screen.getByRole("button", { name: "Request Access" })).toBeTruthy();
   });
 
-  it("tells the requester once their pending request is approved", () => {
+  it("offers the request again when it was decided before the list saw it pending", async () => {
     accessRequests.on = true;
     accessRequests.grantable = new Set(["log:read"]);
-    accessRequests.pending = [
-      { scope: "log:read", selector: { resourceId: "project-1" } },
-    ];
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
     const { rerender } = render(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
-    expect(screen.getByText("Request pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
 
-    accessRequests.pending = [
-      {
-        scope: "log:read",
-        selector: { resourceId: "project-1" },
-        status: "approved",
-        grantExpiresAt: new Date(2026, 10, 19, 14, 30),
-      },
-    ];
+    // The first list read after the request no longer holds it.
+    accessRequests.updatedAt = Date.now() + 1_000;
     rerender(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
 
-    expect(toast.success).toHaveBeenCalledTimes(1);
-    expect(toast.success).toHaveBeenCalledWith("Access approved until 14:30.");
-    // Lists fetched before the approval were filtered, not refused, so every
-    // query refetches, not only the grants.
-    expect(invalidateQueries).toHaveBeenCalledWith();
+    expect(
+      await screen.findByRole("button", { name: "Request Access" }),
+    ).toBeTruthy();
+  });
+
+  it("offers the request again once the pending request is decided", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    const { rerender } = render(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+
+    // The pending list picks the request up, then drops it once an admin
+    // decides it and the app-wide watcher refreshes the list.
+    accessRequests.pending = [
+      { scope: "log:read", selector: { resourceId: "project-1" } },
+    ];
+    accessRequests.updatedAt = Date.now() + 1_000;
+    rerender(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+    expect(screen.getByText("Request pending")).toBeTruthy();
+    accessRequests.pending = [];
+    accessRequests.updatedAt = Date.now() + 2_000;
+    rerender(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Request Access" }),
+    ).toBeTruthy();
   });
 });

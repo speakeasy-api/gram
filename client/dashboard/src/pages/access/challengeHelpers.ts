@@ -106,6 +106,8 @@ export function reasonLabel(reason: Reason): string {
       return "API keys bypass role checks — access was allowed directly.";
     case "dev_override":
       return "Access allowed via a development override.";
+    case "connection_owner_mismatch":
+      return "This connection belongs to another member and works only for them.";
   }
   return "Authorization status unavailable.";
 }

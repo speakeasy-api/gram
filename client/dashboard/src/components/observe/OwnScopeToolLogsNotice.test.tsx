@@ -13,6 +13,11 @@ vi.mock("@gram/client/react-query/accessRequests.js", () => ({
     data: { requests: [] },
     refetch: () => Promise.resolve(),
   }),
+  invalidateAllAccessRequests: () => Promise.resolve(),
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1" }),

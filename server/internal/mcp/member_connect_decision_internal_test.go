@@ -80,7 +80,7 @@ func TestMemberConnectDecision_RecordsOnlyNamedServers(t *testing.T) {
 				shadow := s.newMandatoryShadow(ctx, shadowOrg)
 				allowed := []uuid.UUID{}
 				for _, id := range []uuid.UUID{granted, denied} {
-					refusal, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceGatewayMember, mcpservers.VisibilityPrivate, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), project.String()))
+					refusal, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceGatewayMember, mcpservers.VisibilityPrivate, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(project)).Connect())
 					require.NoError(t, err)
 					if refusal == nil {
 						allowed = append(allowed, id)

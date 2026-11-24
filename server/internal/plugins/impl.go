@@ -57,11 +57,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -191,6 +193,14 @@ type Service struct {
 	// host, which generated plugins use for server routes and MCP addresses.
 	// Nil, or an organization without a stored platform host, uses serverURL.
 	orgHosts *orghost.Resolver
+
+	// staffOrg is the deployment's Speakeasy staff organization, which always
+	// receives the current hooksGeneratorVersion immediately.
+	staffOrg staff.Organization
+
+	// marketplaceTokens mints a connection's marketplace token on its first
+	// publish and opens it to show the marketplace URL again.
+	marketplaceTokens *marketplacetokens.Tokens
 }
 
 var (
@@ -211,6 +221,8 @@ func NewService(
 	serverURL string,
 	features feature.Provider,
 	publisher PluginPublishSignaler,
+	staffOrg staff.Organization,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -236,6 +248,8 @@ func NewService(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
+		marketplaceTokens:     marketplaceTokens,
 	}
 }
 
@@ -252,6 +266,8 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	staffOrg staff.Organization,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -274,6 +290,8 @@ func NewPublisher(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
+		marketplaceTokens:     marketplaceTokens,
 	}
 }
 
@@ -391,7 +409,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 // implying organization scopes. An existing organization reader retains read
 // access even if plugin writes are explicitly excluded.
 func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthContext) error {
-	reader, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	reader, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
 	if err != nil {
 		return fmt.Errorf("evaluate plugin read access: %w", err)
 	}
@@ -407,7 +425,7 @@ func (s *Service) requirePluginRead(ctx context.Context, ac *contextvalues.AuthC
 // filterPluginAudience keeps recipient identities and counts on the same
 // admin-only boundary as the assignment management API, including mutations.
 func (s *Service) filterPluginAudience(ctx context.Context, ac *contextvalues.AuthContext, plugin *gen.Plugin) (*gen.Plugin, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -1366,7 +1384,7 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1393,7 +1411,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1543,7 +1561,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, nil, err
 	}
 
@@ -1623,7 +1641,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, nil, err
 	}
 
@@ -1636,7 +1654,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "no published marketplace found; publish plugins first")
 	}
 
-	if !conn.MarketplaceToken.Valid || s.serverURL == "" {
+	if !marketplacetokens.FromConnection(conn).Has() || s.serverURL == "" {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "marketplace URL not available; publish plugins first")
 	}
 
@@ -1648,7 +1666,11 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
 	}
 
-	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+	token, err := s.marketplaceTokens.Open(ctx, s.db, marketplacetokens.FromConnection(conn))
+	if err != nil {
+		return nil, nil, marketplacetokens.OpenError(ctx, s.logger, err, ac.ActiveOrganizationID)
+	}
+	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, token)
 
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
@@ -1776,7 +1798,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		return nil, err
 	}
 
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin administrator access: %w", err)
 	}
@@ -1857,8 +1879,12 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
-			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {
-				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+			if stored := marketplacetokens.FromConnection(conn); admin && stored.Has() && s.serverURL != "" {
+				token, err := s.marketplaceTokens.Open(ctx, s.db, stored)
+				if err != nil {
+					return nil, marketplacetokens.OpenError(ctx, s.logger, err, ac.ActiveOrganizationID)
+				}
+				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, token)
 				result.MarketplaceURL = &marketplaceURL
 			}
 			// Only a successful publish moves updated_at (recording or dropping
@@ -2179,7 +2205,7 @@ type PublishProjectInput struct {
 	// version gating: every publish path is gated unconditionally inside
 	// publishProject, so no caller can force a hooks upgrade onto an org the
 	// rollout hasn't cleared. The only lever to advance hooks is the org's
-	// rollout pin in the admin dashboard (plus the hardcoded canary, and the
+	// rollout pin in the admin dashboard (plus the staff organization canary, and the
 	// legacy hooks-rollout flag for orgs no pin covers yet).
 	SkipIfUnchanged bool
 	// IncludePausedPlugins makes this a manual sync, like the dashboard's
@@ -2333,7 +2359,9 @@ func CurrentHooksGeneratorVersion() (int, error) {
 }
 
 // hooksRolloutEligible reports whether the org is cleared to receive the current
-// hooksGeneratorVersion. Canary orgs always are. Otherwise the org's effective
+// hooksGeneratorVersion. The staff organization, the canary, always is: that is
+// configuration rather than a pin so a missing or mistaken pin can never strand
+// our own team on a stale hooks version. Otherwise the org's effective
 // rollout pin — its override, or else the platform-wide default, both set from
 // the admin dashboard — must reach the current version. Until a default pin
 // exists, an org without an override falls back to the legacy FlagHooksRollout
@@ -2341,7 +2369,7 @@ func CurrentHooksGeneratorVersion() (int, error) {
 // a parse error all mean "not eligible", so the org keeps its published hooks
 // rather than rolling forward on an incomplete signal.
 func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	if hooksrollout.IsCanary(orgSlug) {
+	if s.staffOrg.Is(orgID) {
 		return true
 	}
 
@@ -2502,7 +2530,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// automated rollout, a dashboard publish, a marketplace rename, an
 	// browser-login toggle) can force a hooks change onto an org that the
 	// rollout hasn't cleared. The single lever to advance an org is its rollout
-	// pin in the admin dashboard (plus the hardcoded canary, and the legacy
+	// pin in the admin dashboard (plus the staff organization canary, and the legacy
 	// hooks-rollout flag for orgs no pin covers yet); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
 	// published hooks verbatim (both version AND config), because regenerating
@@ -2973,7 +3001,7 @@ func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -3010,7 +3038,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -3519,25 +3547,26 @@ func (s *Service) persistPluginAPIKeys(
 		}
 	}
 
-	// Mint a candidate marketplace token for first-time publishes. The upsert
-	// preserves any existing token via COALESCE, so passing a fresh value on
-	// every publish never overwrites a token that's already minted — token
-	// rotation goes through a dedicated path.
-	candidateToken, err := generateMarketplaceToken()
-	if err != nil {
-		return fmt.Errorf("generate marketplace token: %w", err)
-	}
-	if _, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
+	conn, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
 		ProjectID:                input.ProjectID,
+		OrganizationID:           conv.ToPGText(input.OrganizationID),
 		InstallationID:           s.github.InstallationID,
 		RepoOwner:                repoOwner,
 		RepoName:                 repoName,
-		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
 		PublishedHooksConfig:     hooksConfigJSON,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
+	}
+
+	// A first publish mints the connection's marketplace token. The upsert
+	// holds the row's lock until commit, so a concurrent publish cannot mint a
+	// second one, and a connection that already holds a token keeps it: token
+	// rotation goes through a dedicated path.
+	if err := s.marketplaceTokens.Ensure(ctx, tx, conn); err != nil {
+		return fmt.Errorf("ensure marketplace token: %w", err)
 	}
 
 	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{

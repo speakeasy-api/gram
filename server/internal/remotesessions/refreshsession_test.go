@@ -130,7 +130,8 @@ func TestRefreshSession(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.HasRefreshToken)
 
-	gotExpiry, err := time.Parse(time.RFC3339, result.AccessExpiresAt)
+	require.NotNil(t, result.AccessExpiresAt)
+	gotExpiry, err := time.Parse(time.RFC3339, *result.AccessExpiresAt)
 	require.NoError(t, err)
 	require.True(t, gotExpiry.After(time.Now().Add(90*time.Minute)), "access expiry should reflect the upstream's 2h expires_in, not the stale 1h")
 

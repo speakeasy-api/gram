@@ -80,6 +80,11 @@ func genericFamily(family string) bool {
 	return family == "" || family == FamilyOther || family == FamilyScript
 }
 
+// namedClient reports whether a family names one AI app, not a script, a browser or nothing.
+func namedClient(family string) bool {
+	return !genericFamily(family) && family != FamilyBrowser
+}
+
 // documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
 var documentFamilies = func() map[string]string {
 	families := make(map[string]string)
@@ -229,7 +234,7 @@ func (r *Recorder) stampClient(row *Row) {
 	if genericFamily(row.ClientFamily) && client.present {
 		// A browser User-Agent is generic too, so it can't replace a name the session reported.
 		family, version := classifyUserAgent(client.userAgent)
-		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
+		if row.ClientFamily == "" || namedClient(family) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}

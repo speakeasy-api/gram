@@ -26,6 +26,11 @@ vi.mock("@gram/client/react-query/accessRequests.js", () => ({
     data: { requests: [] },
     refetch: () => Promise.resolve(),
   }),
+  invalidateAllAccessRequests: () => Promise.resolve(),
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }),
 }));
 const functionsAvailability = vi.hoisted(() => ({ available: true }));
 vi.mock("@/hooks/useFunctionsAvailability", () => ({

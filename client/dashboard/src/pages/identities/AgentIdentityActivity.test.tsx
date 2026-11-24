@@ -413,3 +413,30 @@ it("shows failed authorization reads as an error rather than no checks", () => {
   expect(screen.getByText("This panel could not be loaded.")).toBeTruthy();
   expect(screen.queryByText(/No authorization checks recorded/)).toBeNull();
 });
+it("names the server a refused upstream credential was used on, and says why", () => {
+  mocks.challenges.mockImplementation(({ outcome }: { outcome: string }) =>
+    outcome === "deny"
+      ? {
+          data: {
+            challenges: [
+              row("deny", "mcp:auth", "client_example", 9, {
+                resourceKind: "mcp_auth_client",
+                selector: { mcp_server_id: "server_ops" },
+                reason: "connection_owner_mismatch",
+              }),
+            ],
+            total: 1,
+          },
+        }
+      : { data: { challenges: [], total: 0 } },
+  );
+  renderChecks();
+  // The row names the server, not the credential's id.
+  expect(screen.getByText("Acme Ops")).toBeTruthy();
+  expect(screen.queryByText(/client_example/)).toBeNull();
+  expect(
+    screen.getByText(
+      /This connection belongs to another member and works only for them\./,
+    ),
+  ).toBeTruthy();
+});
