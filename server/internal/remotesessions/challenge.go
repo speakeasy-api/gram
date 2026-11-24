@@ -2152,8 +2152,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	// The client lock serializes publication with registration deletion and
-	// issuer retirement. A rejected exchange leaves its upstream revoke armed.
-
+	// issuer retirement. If the client is already gone, the binding check
+	// below rejects the exchange and leaves its upstream revoke armed.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)

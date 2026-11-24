@@ -228,6 +228,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		// No matching grant is an idempotent no-op. Only a typed offer can
+		// authorize disconnecting this subject’s grant across issuers.
 		var derr error
 		if projectID, ok := offered[client.ID]; ok {
 			_, derr = s.remoteChallengeMgr.DisconnectAuthClientRemoteSession(ctx, subject, projectID, endpoint.OrganizationID, client.ID)
@@ -333,8 +335,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
-		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead. Managed policies ignore this action:
+		// Clients without a matching grant update zero rows. Without a typed
+		// offer, a grant issued on a different sign-in does not match. Managed policies ignore this action:
 		// their effective value comes from organization policy, while the stored
 		// user preference remains intact if the organization later restores
 		// user-controlled refresh.
