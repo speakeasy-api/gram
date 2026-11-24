@@ -4,9 +4,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -96,7 +104,75 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 		}
 	}
 	err = pgx.BeginFunc(t.Context(), db, func(tx pgx.Tx) error {
-		return core.ensureManagedOrganizationRead(t.Context(), tx, "org-test", project, ordinary.ID, "user-1")
+		return core.ensureManagedOrganizationRead(t.Context(), tx, "org-test", project, ordinary.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"))
 	})
 	require.ErrorIs(t, err, errManagedOrganizationReadTarget, "ordinary assistants cannot receive the managed ceiling")
+}
+
+func TestRepairManagedCeilingsAtTurnStart(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "managed_ceiling_repair")
+	require.NoError(t, err)
+	ctx := t.Context()
+	project := newProvisioningProject(t, db, "managed-ceiling-repair")
+	core := newProvisioningCore(t, db)
+	_, err = core.EnableManagedAssistant(ctx, "org-test", project, "user-1", true)
+	require.NoError(t, err)
+	managed, err := core.GetManagedAssistant(ctx, project)
+	require.NoError(t, err)
+	require.NotNil(t, managed.AgentID)
+	managedAgent := uuid.MustParse(*managed.AgentID)
+	ordinary, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Ordinary assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, ordinary.AgentID)
+
+	agents := agentrepo.New(db)
+	ceilings := func(agentID uuid.UUID) map[string]int {
+		rows, err := agents.ListAgentPolicyGrants(ctx, agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
+		require.NoError(t, err)
+		counts := map[string]int{}
+		for _, row := range rows {
+			if row.Scope == string(authz.ScopeOrgRead) || row.Scope == string(authz.ScopeProjectRead) {
+				counts[row.Scope]++
+			}
+		}
+		return counts
+	}
+
+	// A managed assistant provisioned before the project ceiling existed holds
+	// only the org ceiling.
+	rows, err := agents.ListAgentPolicyGrants(ctx, agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: managedAgent})
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeProjectRead) {
+			continue
+		}
+		_, err = agents.DeleteAgentPolicyGrant(ctx, agentrepo.DeleteAgentPolicyGrantParams{OrganizationID: "org-test", AgentID: managedAgent, GrantID: row.ID})
+		require.NoError(t, err)
+	}
+	require.Equal(t, map[string]int{string(authz.ScopeOrgRead): 1}, ceilings(managedAgent))
+
+	want := map[string]int{string(authz.ScopeOrgRead): 1, string(authz.ScopeProjectRead): 1}
+	// Turn start runs the repair before anything else. The empty thread, event
+	// and identity fail credential minting afterwards; only the repair matters.
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
+	core.assistantTokens = assistanttokens.New("test-jwt-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+	_, _ = core.mintTurnCredential(ctx, managed, assistantThreadRecord{}, assistantThreadEventRecord{}, turnIdentity{})
+	require.Equal(t, want, ceilings(managedAgent), "the first turn repairs the missing project ceiling")
+	repaired, err := agents.ListAgentPolicyGrants(ctx, agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: managedAgent})
+	require.NoError(t, err)
+	require.True(t, hasManagedCeiling(repaired, authz.NewGrant(authz.ScopeProjectRead, project.String())), "the repaired grant is permanent and covers this project")
+	entry, err := audittest.LatestAuditLogByAction(ctx, db, audit.ActionAgentPolicyGrantCreate)
+	require.NoError(t, err)
+	require.Equal(t, managedCeilingRepairActor.String(), entry.ActorType+":"+entry.ActorID, "the repair is audited as the system repair actor")
+
+	// A second process has not repaired this assistant yet, so it runs the
+	// repair again and adds nothing.
+	newProvisioningCore(t, db).repairManagedCeilings(ctx, managed)
+	require.Equal(t, want, ceilings(managedAgent), "the repair is idempotent")
+
+	core.repairManagedCeilings(ctx, ordinary)
+	require.Empty(t, ceilings(uuid.MustParse(*ordinary.AgentID)), "ordinary assistants never receive the managed ceilings")
 }

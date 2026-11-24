@@ -379,3 +379,18 @@ func TestDefine_RefusesADuplicateName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, OutcomeDeclined, meaning.Outcome)
 }
+
+func TestCatalog_EveryCodeHasAnAdministratorSentenceInTheThirdPerson(t *testing.T) {
+	t.Parallel()
+	require.Len(t, adminMeanings, len(catalog))
+	for _, code := range Codes() {
+		meaning, ok := MeaningOf(code)
+		require.True(t, ok, code)
+		require.NotEmpty(t, meaning.WhatHappenedForAdmin, code)
+		for _, text := range []string{meaning.WhatHappenedForAdmin, meaning.Technical} {
+			for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r < 'a' || r > 'z' }) {
+				require.NotContains(t, []string{"i", "me", "my", "mine", "myself", "we", "us", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves"}, word, code)
+			}
+		}
+	}
+}

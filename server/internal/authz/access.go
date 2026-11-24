@@ -17,7 +17,10 @@ type Check struct {
 	// exact refuses every grant key the check leaves out, even one its
 	// scope opens. Blocks, exemptions, containment, direct overrides of a
 	// tool call, auth client checks and risk policy bypass checks are matched
-	// exactly. Only authz constructors and engine paths set it.
+	// exactly. One exception: a block limited to a tool or a disposition
+	// still matches a tool call that leaves that key out, because the missing
+	// value may be the one blocked (blockCoversMissingValue). Only authz
+	// constructors and engine paths set it.
 	exact bool
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
@@ -122,6 +125,9 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 	for key, grantVal := range grant {
 		checkVal, ok := carried[key]
 		if !ok {
+			if c.blockCoversMissingValue(key) {
+				continue
+			}
 			if !c.mayOmit(key) {
 				missing = append(missing, key)
 			}
@@ -132,6 +138,22 @@ func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool
 		}
 	}
 	return missing, len(missing) == 0
+}
+
+// blockCoversMissingValue reports whether a block's limit on key applies to a
+// tool call that does not carry key. Allows never match a value the call does
+// not carry (absence is not permission), so a missing value is refused either
+// way; this only decides whether a block still takes the call away.
+//
+// For example, an administrator blocks destructive tools on server X
+// (mcp:blocked_connect on X with disposition=destructive). A user calls a tool
+// on X whose annotations could not be read, so the call carries no
+// disposition. Under exact matching the block would not match, and the
+// user's allow on X would let a possibly destructive call through. Here the
+// block applies: a value we do not know may be the one blocked. The same holds
+// for a block on a named tool and a call that names no tool.
+func (c Check) blockCoversMissingValue(key string) bool {
+	return (key == SelectorKeyDisposition || key == SelectorKeyTool) && c.isToolCall() && IsBlocklistScope(c.Scope)
 }
 
 // mayOmit reports whether the check may leave out a key that a grant of its

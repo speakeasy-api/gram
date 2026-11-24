@@ -11,6 +11,16 @@ export const PROVIDER_TABS = [
 ] as const;
 export type ProviderTab = (typeof PROVIDER_TABS)[number];
 
+/** With connection health: Overview first, and Connection Logs beside Connections. */
+export const HEALTH_PROVIDER_SEGMENTS = [
+  "overview",
+  "connections",
+  "connection-logs",
+  "mcp-servers",
+  "settings",
+] as const;
+export type HealthProviderSegment = (typeof HEALTH_PROVIDER_SEGMENTS)[number];
+
 /** The slug the organization's own provider is created with. */
 const DEFAULT_PROVIDER_SLUG = "default";
 
@@ -69,4 +79,12 @@ export function providerScopeLabel(
   provider: Pick<UserSessionIssuer, "projectId">,
 ): string {
   return provider.projectId === "" ? "Organization-wide" : "This project";
+}
+
+/** The client access mode as Settings words it. */
+export function clientAccessLabel(mode: string): string {
+  if (mode === "presets") return "Known clients";
+  // "reporting" is a legacy value that admits what "open" admits.
+  if (mode === "open" || mode === "reporting") return "Any client";
+  return "Off";
 }

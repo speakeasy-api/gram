@@ -176,6 +176,48 @@ func TestReadAttemptsFixCandidatesOnly(t *testing.T) {
 	require.Equal(t, map[uuid.UUID]Outcome{connected.ID(): OutcomeConnected, failed.ID(): OutcomeFailed, stopped.ID(): OutcomeFailed}, got, "the open attempt has no reason; the stopped one ended on its last reason")
 }
 
+// The people range is read within one organization, and still selects whole attempts.
+func TestReadAttemptsByPeopleFailingStaysInTheOrganization(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	org, otherOrg := "org-"+uuid.NewString(), "org-"+uuid.NewString()
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	person := Subject(&subject)
+	failedHere := AttemptAt(uuid.New(), day.Add(time.Hour), ServerScope(org, uuid.New(), uuid.New(), AppDCR))
+	connectedHere := AttemptAt(uuid.New(), day.Add(2*time.Hour), ServerScope(org, uuid.New(), uuid.New(), AppDCR))
+	failedElsewhere := AttemptAt(uuid.New(), day.Add(time.Hour), ServerScope(otherOrg, uuid.New(), uuid.New(), AppDCR))
+	var rows []Row
+	add := func(a Attempt, step Step, what Happened, final bool, after time.Duration, opts ...Option) {
+		row, err := RowAt(a, step, what, final, a.StartedAt().Add(after), opts...)
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	add(failedHere, StepInboundToken, CodeInvalidGrant, true, time.Minute, person)
+	add(failedHere, StepDiscoveryMember, ResultListed, false, 2*time.Minute, Member(uuid.New()))
+	add(connectedHere, StepInboundToken, ResultCodeIssued, true, time.Minute, person)
+	add(failedElsewhere, StepInboundToken, CodeInvalidGrant, true, time.Minute, person)
+	require.NoError(t, AppendRows(t.Context(), ch, rows))
+
+	read := func(organizationID string) map[uuid.UUID]AttemptSummary {
+		filter := AttemptFilter{
+			StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: uuid.Nil, ServerID: "",
+			PeopleFailingFrom: day, PeopleFailingBefore: day.AddDate(0, 0, 1), FixCandidatesOnly: false,
+		}
+		got := map[uuid.UUID]AttemptSummary{}
+		require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) { got[s.AttemptID] = s }))
+		return got
+	}
+	here := read(org)
+	require.Len(t, here, 2)
+	require.Contains(t, here, connectedHere.ID())
+	require.Equal(t, StepDiscoveryMember.String(), here[failedHere.ID()].LastStep, "the row naming no person is read with its attempt")
+	elsewhere := read(otherOrg)
+	require.Len(t, elsewhere, 1)
+	require.Contains(t, elsewhere, failedElsewhere.ID())
+}
+
 func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
 	t.Parallel()
 	ch, err := infra.NewClickhouseClient(t)

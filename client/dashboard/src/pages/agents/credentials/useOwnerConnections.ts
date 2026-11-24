@@ -5,6 +5,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
 import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
+import { isForbiddenError } from "@/lib/errors";
 import {
   offersPersonalSignIn,
   serverConnection,
@@ -162,6 +163,15 @@ export function useOwnerConnections(
         issuer.userSessionIssuerId === server.issuerId,
     );
   /**
+   * Whether the viewer may not read the agent's attachments on a server's
+   * issuer. Their own connection is still read and shown; only the agent's
+   * assignment is unknown to them.
+   */
+  const bindingsHidden = (server: InventoryServer): boolean => {
+    const read = bindings[issuerIndex(server)];
+    return !!agentId && !!read?.isError && isForbiddenError(read.error);
+  };
+  /**
    * What people call each upstream registration, read from the auth clients
    * of every listed server. An issuer shared across the organization lists
    * registrations that belong to other servers, and those servers' own auth
@@ -233,12 +243,15 @@ export function useOwnerConnections(
     const authRead = auth[personal.indexOf(server)];
     const sessionRead = sessions[projects.indexOf(server.projectSlug)];
     const clientRead = signIns(server);
-    const bindingRead = bindings[issuerIndex(server)];
+    // An attachment the viewer may not read is no failure of their own
+    // connection, which is read without it.
+    const hidden = bindingsHidden(server);
+    const bindingRead = hidden ? undefined : bindings[issuerIndex(server)];
     if (
       authRead?.isError ||
       sessionRead?.isError ||
       clientRead.isError ||
-      (agentId && bindingRead?.isError)
+      (agentId && !hidden && bindingRead?.isError)
     ) {
       byServer.set(server.id, { status: "error" });
       continue;
@@ -247,7 +260,7 @@ export function useOwnerConnections(
       !authRead?.data ||
       !sessionRead?.data ||
       !clientRead.data ||
-      (agentId && !bindingRead?.data)
+      (agentId && !hidden && !bindingRead?.data)
     ) {
       byServer.set(server.id, { status: "checking" });
       continue;
@@ -278,6 +291,13 @@ export function useOwnerConnections(
       // checking or error state stands.
       const authRead = auth[personal.indexOf(server)];
       if (shared(server) || !authRead?.data || authRead.isError) continue;
+      if (bindingsHidden(server)) {
+        // A failed read of the viewer's own connection stays an error: it
+        // is theirs to retry, and the tab counts it.
+        if (byServer.get(server.id)?.status !== "error")
+          assignedByServer.set(server.id, { status: "forbidden" });
+        continue;
+      }
       const clientsRead = signIns(server);
       const bindingRead = bindings[issuerIndex(server)];
       if (

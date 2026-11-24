@@ -201,6 +201,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		return err
 	}
 	rows = append(rows, tokenRows...)
+	healthRows, err := s.connectionHealthRows()
+	if err != nil {
+		return err
+	}
+	rows = append(rows, healthRows...)
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
@@ -226,9 +231,14 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			msg:      "demo seed postflight: connection attempts must cover several clients and some repeats",
 		},
 		{
-			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(client_family != 'browser' AND step NOT IN ('inbound_token', 'mcp_request', 'provider_refresh', 'sign_in_renewal')) FROM mcp_connection_events WHERE organization_id = @org) > 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
+			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(client_family != 'browser' AND step NOT IN ('inbound_token', 'mcp_request', 'provider_refresh', 'sign_in_renewal', 'discovery_listing', 'discovery_member')) FROM mcp_connection_events WHERE organization_id = @org) > 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
 			settings: "",
 			msg:      "demo seed postflight: sign-in rows come from a browser, and only one-row requests carry repeats",
+		},
+		{
+			cond:     `(SELECT uniqExact(attempt_id) FROM mcp_connection_events WHERE organization_id = @org AND user_session_issuer_id = @health_issuer) < 2000 OR (SELECT uniqExact(subject_urn) FROM mcp_connection_events WHERE organization_id = @org AND user_session_issuer_id = @health_issuer AND subject_urn != '') < 20`,
+			settings: "",
+			msg:      "demo seed postflight: the connection health provider needs a month of attempts from its people",
 		},
 	})
 }

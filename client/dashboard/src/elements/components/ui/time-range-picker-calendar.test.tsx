@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TimeRangePicker } from "./time-range-picker";
 
-vi.mock("@/elements/lib/errorTracking", () => ({ trackError: vi.fn() }));
 afterEach(() => {
   cleanup();
   vi.useRealTimers();

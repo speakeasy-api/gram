@@ -70,7 +70,7 @@ WHERE organization_id = $2
   AND key_hash = $4
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type AddOpenRouterAPIKeyDisableCauseParams struct {
@@ -91,8 +91,8 @@ func (q *Queries) AddOpenRouterAPIKeyDisableCause(ctx context.Context, arg AddOp
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.KeyType,
-		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -145,42 +145,64 @@ INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
   , key_encrypted
+  , key_org_encrypted
   , key_hash
   , monthly_credits
   , disable_causes
-) VALUES (
-    $1
-  , $2
-  , $3
-  , $4
-  , $5
-  , '{}'::text[]
 )
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+SELECT
+    v.organization_id
+  , v.key_type
+  , v.key_encrypted
+  , v.key_org_encrypted
+  , v.key_hash
+  , v.monthly_credits
+  , '{}'::text[]
+FROM (
+  SELECT
+      $1::text AS organization_id
+    , $2::text AS key_type
+    , $3::text AS key_encrypted
+    , $4::text AS key_org_encrypted
+    , $5::text AS key_hash
+    , $6::bigint AS monthly_credits
+) AS v
+WHERE COALESCE((
+  SELECT t.generation FROM organization_encryption_transitions AS t
+  WHERE t.organization_id = v.organization_id AND t.use_case = 'ai-provider-keys'
+  FOR KEY SHARE
+), 0) = $7
+RETURNING organization_id, key_type, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
-	OrganizationID string
-	KeyType        string
-	KeyEncrypted   pgtype.Text
-	KeyHash        string
-	MonthlyCredits int64
+	OrganizationID    string
+	KeyType           string
+	KeyEncrypted      pgtype.Text
+	KeyOrgEncrypted   pgtype.Text
+	KeyHash           string
+	MonthlyCredits    int64
+	DecidedGeneration int64
 }
 
+// Stores both copies of the key sealed under the decided transition
+// generation. No rows means the transition moved; aiproviderkeys seals again.
 func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRouterAPIKeyParams) (OpenrouterApiKey, error) {
 	row := q.db.QueryRow(ctx, createOpenRouterAPIKey,
 		arg.OrganizationID,
 		arg.KeyType,
 		arg.KeyEncrypted,
+		arg.KeyOrgEncrypted,
 		arg.KeyHash,
 		arg.MonthlyCredits,
+		arg.DecidedGeneration,
 	)
 	var i OpenrouterApiKey
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.KeyType,
-		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -223,7 +245,7 @@ func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRo
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -241,8 +263,8 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.KeyType,
-		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -423,7 +445,7 @@ WHERE organization_id = $4
   AND key_hash = $6
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type RemoveOpenRouterAPIKeyDisableCauseParams struct {
@@ -448,8 +470,8 @@ func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg Re
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.KeyType,
-		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -469,7 +491,7 @@ SET monthly_credits = $1, key_hash = $2,
 WHERE organization_id = $3
   AND key_type = $4
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
@@ -490,8 +512,8 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.KeyType,
-		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
