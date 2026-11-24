@@ -881,3 +881,27 @@ func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T)
 		})
 	}
 }
+
+// The surviving server-registration mirror is not a typed offer. Repair must
+// not infer an auth client from it, even with a matching saved registration.
+func TestReconcileUserSessionSelectionsDoesNotInferOfferFromAssociation(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newFixture(t)
+	server, registration := f.server(), f.client("subject")
+	f.associate(server, registration)
+	credential := f.interactiveCredential()
+	f.oauthSelection(credential, server, registration)
+
+	tx := testenv.BeginTx(t, ctx, f.pool)
+	require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
+	skipped, err := ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer(), []uuid.UUID{server})
+	require.NoError(t, err)
+	require.Zero(t, skipped)
+	require.NoError(t, tx.Commit(ctx))
+
+	choice := f.selection(credential, server)
+	require.False(t, choice.AuthClientID.Valid)
+	require.Equal(t, registration, choice.RemoteSessionClientID.UUID)
+}
