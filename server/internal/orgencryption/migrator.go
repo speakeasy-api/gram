@@ -277,17 +277,16 @@ func (m *Migrator) SweepStragglers(ctx context.Context, organizationID string, u
 
 	var cleared int64
 	for _, straggler := range stragglers {
-		cleared += straggler.Cleared
+		cleared += straggler.Cleared.Total()
 		m.logger.ErrorContext(ctx, "platform-key copies found after clearing finished",
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogOrgEncryptionUseCase(useCase),
 			attr.SlogOrgEncryptionSourceColumn(straggler.Columns.PlatformColumn),
-			attr.SlogOrgEncryptionPlatformOnlyCount(straggler.PlatformOnly),
-			attr.SlogOrgEncryptionBesideOrgCopyCount(straggler.BesideOrgCopy),
-			attr.SlogOrgEncryptionClearedCount(straggler.Cleared),
+			attr.SlogOrgEncryptionPlatformOnlyCount(straggler.Cleared.PlatformOnly),
+			attr.SlogOrgEncryptionBesideOrgCopyCount(straggler.Cleared.BesideOrgCopy),
 		)
-		m.recordStragglers(ctx, useCase, straggler.Columns.PlatformColumn, StragglerKindPlatformOnly, straggler.PlatformOnly)
-		m.recordStragglers(ctx, useCase, straggler.Columns.PlatformColumn, StragglerKindBesideOrgCopy, straggler.BesideOrgCopy)
+		m.recordStragglers(ctx, useCase, straggler.Columns.PlatformColumn, StragglerKindPlatformOnly, straggler.Cleared.PlatformOnly)
+		m.recordStragglers(ctx, useCase, straggler.Columns.PlatformColumn, StragglerKindBesideOrgCopy, straggler.Cleared.BesideOrgCopy)
 	}
 
 	if sweepErr != nil {

@@ -390,6 +390,41 @@ func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
 	require.False(t, ti.stored(t, sealed.ID).AccessTokenEncrypted.Valid, "clearing still removes '' beside an organization-key copy")
 }
 
+func TestCopyStoreClearReportsWhatItDestroyedByKind(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	alone := ti.createSession(t)
+	beside := ti.createSession(t)
+
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: alone, orgCopy: nullText()},
+		{session: beside, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	access := upstreamtokens.CopyStores(ti.conn)[0]
+	cleared, err := access.ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}, cleared)
+	require.False(t, ti.stored(t, alone.ID).AccessTokenEncrypted.Valid)
+	require.True(t, ti.stored(t, beside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy stays")
+}
+
 // remoteSessionStores are the CopyStores of the remote session columns.
 func remoteSessionStores(conn *pgxpool.Pool) []orgencryption.CopyStore {
 	var stores []orgencryption.CopyStore

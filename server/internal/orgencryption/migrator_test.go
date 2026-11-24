@@ -238,7 +238,7 @@ func TestTransitions_SweepPlatformCopiesClearsStragglersWithoutChangingState(t *
 
 	stragglers, err := ti.transitions.SweepPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{ti.store})
 	require.NoError(t, err)
-	require.Equal(t, []orgencryption.StragglerCount{{Columns: fakeColumns, PlatformOnly: 1, BesideOrgCopy: 1, Cleared: 2}}, stragglers)
+	require.Equal(t, []orgencryption.StragglerCount{{Columns: fakeColumns, Cleared: orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}}}, stragglers)
 	require.False(t, ti.store.get("late").Platform.Valid)
 	require.False(t, ti.store.get("both").Platform.Valid)
 	require.True(t, ti.store.get("both").Org.Valid, "the organization-key copy stays")
@@ -435,4 +435,37 @@ func TestMigrator_ListDueBackfillsOffersTheLeastRecentlyAttemptedFirst(t *testin
 	ti.setRunTimes(t, other, &older, &older, nil)
 
 	require.Equal(t, []string{never, other, ti.orgID}, dueOrganizations(t, ti.migrator(t)))
+}
+
+// arrivingStore lands a platform-only copy just before its first clear, as a
+// writer that bypassed the fence would between a count and the clear.
+type arrivingStore struct {
+	*fakeCopyStore
+
+	ti      *transitionInstance
+	arrived bool
+}
+
+func (a *arrivingStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
+	if !a.arrived {
+		a.arrived = true
+		a.put(organizationID, "arrived", orgencryption.Copies{Platform: conv.ToPGText("late platform-key copy"), Org: orgencryption.ErasedCopies().Org})
+	}
+
+	return a.fakeCopyStore.ClearPlatformCopies(ctx, organizationID, generation, limit)
+}
+
+func TestTransitions_SweepPlatformCopiesReportsWhatTheClearDestroyed(t *testing.T) {
+	t.Parallel()
+
+	ti := newTransitionInstance(t)
+	ti.enroll(t)
+	ti.finalize(t)
+	_, err := ti.transitions.ClearPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{ti.store}, orgencryption.SystemActor())
+	require.NoError(t, err)
+	ti.store.put(ti.orgID, "both", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "both")), Org: conv.ToPGText("organization-key copy")})
+
+	stragglers, err := ti.transitions.SweepPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{&arrivingStore{fakeCopyStore: ti.store, ti: ti, arrived: false}})
+	require.NoError(t, err)
+	require.Equal(t, []orgencryption.StragglerCount{{Columns: fakeColumns, Cleared: orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}}}, stragglers, "a platform-only copy that lands just before the clear is reported as platform-only")
 }

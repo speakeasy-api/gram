@@ -13,22 +13,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const clearEMACredentialAccessTokenPlatformCopies = `-- name: ClearEMACredentialAccessTokenPlatformCopies :execrows
-UPDATE remote_session_ema_credentials AS c
-SET access_token_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM remote_session_ema_credentials AS target
-    WHERE target.organization_id = $1::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearEMACredentialAccessTokenPlatformCopies = `-- name: ClearEMACredentialAccessTokenPlatformCopies :one
+WITH cleared AS (
+    UPDATE remote_session_ema_credentials AS c
+    SET access_token_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM remote_session_ema_credentials AS target
+        WHERE target.organization_id = $1::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.access_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearEMACredentialAccessTokenPlatformCopiesParams struct {
@@ -37,32 +44,45 @@ type ClearEMACredentialAccessTokenPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-// Destroys up to limit platform-key copies of the organization's EMA access
-// tokens after finalize. The organization-key copy stays.
-func (q *Queries) ClearEMACredentialAccessTokenPlatformCopies(ctx context.Context, arg ClearEMACredentialAccessTokenPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearEMACredentialAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearEMACredentialAccessTokenPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearRemoteSessionAccessTokenPlatformCopies = `-- name: ClearRemoteSessionAccessTokenPlatformCopies :execrows
-UPDATE remote_sessions AS s
-SET access_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+// Destroys up to limit platform-key copies of the organization's EMA access
+// tokens after finalize. The organization-key copy stays.
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearEMACredentialAccessTokenPlatformCopies(ctx context.Context, arg ClearEMACredentialAccessTokenPlatformCopiesParams) (ClearEMACredentialAccessTokenPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearEMACredentialAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearEMACredentialAccessTokenPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearRemoteSessionAccessTokenPlatformCopies = `-- name: ClearRemoteSessionAccessTokenPlatformCopies :one
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET access_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM remote_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.access_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearRemoteSessionAccessTokenPlatformCopiesParams struct {
@@ -71,14 +91,20 @@ type ClearRemoteSessionAccessTokenPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearRemoteSessionAccessTokenPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the organization's access
 // tokens after finalize. The organization-key copy stays.
-func (q *Queries) ClearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionAccessTokenPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRemoteSessionAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionAccessTokenPlatformCopiesParams) (ClearRemoteSessionAccessTokenPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearRemoteSessionAccessTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearRemoteSessionAccessTokenPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const clearRemoteSessionOrganizationFixture = `-- name: ClearRemoteSessionOrganizationFixture :one
@@ -125,22 +151,29 @@ func (q *Queries) ClearRemoteSessionOrganizationFixture(ctx context.Context, id 
 	return i, err
 }
 
-const clearRemoteSessionRefreshTokenPlatformCopies = `-- name: ClearRemoteSessionRefreshTokenPlatformCopies :execrows
-UPDATE remote_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearRemoteSessionRefreshTokenPlatformCopies = `-- name: ClearRemoteSessionRefreshTokenPlatformCopies :one
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET refresh_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM remote_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearRemoteSessionRefreshTokenPlatformCopiesParams struct {
@@ -149,32 +182,45 @@ type ClearRemoteSessionRefreshTokenPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-// Destroys up to limit platform-key copies of the organization's refresh
-// tokens after finalize. The organization-key copy stays.
-func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionRefreshTokenPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRemoteSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearRemoteSessionRefreshTokenPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearTrustedIssuerSessionIdentityAssertionPlatformCopies = `-- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :execrows
-UPDATE trusted_issuer_sessions AS s
-SET identity_assertion_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.identity_assertion_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+// Destroys up to limit platform-key copies of the organization's refresh
+// tokens after finalize. The organization-key copy stays.
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionRefreshTokenPlatformCopiesParams) (ClearRemoteSessionRefreshTokenPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearRemoteSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearRemoteSessionRefreshTokenPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearTrustedIssuerSessionIdentityAssertionPlatformCopies = `-- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :one
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET identity_assertion_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.identity_assertion_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.identity_assertion_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams struct {
@@ -183,32 +229,45 @@ type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-// Destroys up to limit platform-key copies of the value after finalize. The
-// organization-key copy stays.
-func (q *Queries) ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionIdentityAssertionPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearTrustedIssuerSessionNoncePlatformCopies = `-- name: ClearTrustedIssuerSessionNoncePlatformCopies :execrows
-UPDATE trusted_issuer_sessions AS s
-SET nonce_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.nonce_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams) (ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionIdentityAssertionPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearTrustedIssuerSessionNoncePlatformCopies = `-- name: ClearTrustedIssuerSessionNoncePlatformCopies :one
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET nonce_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.nonce_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.nonce_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearTrustedIssuerSessionNoncePlatformCopiesParams struct {
@@ -217,32 +276,45 @@ type ClearTrustedIssuerSessionNoncePlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-// Destroys up to limit platform-key copies of the value after finalize. The
-// organization-key copy stays.
-func (q *Queries) ClearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionNoncePlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionNoncePlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearTrustedIssuerSessionNoncePlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearTrustedIssuerSessionRefreshTokenPlatformCopies = `-- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :execrows
-UPDATE trusted_issuer_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionNoncePlatformCopiesParams) (ClearTrustedIssuerSessionNoncePlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionNoncePlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearTrustedIssuerSessionNoncePlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearTrustedIssuerSessionRefreshTokenPlatformCopies = `-- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :one
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET refresh_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams struct {
@@ -251,32 +323,45 @@ type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-// Destroys up to limit platform-key copies of the value after finalize. The
-// organization-key copy stays.
-func (q *Queries) ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearTrustedIssuerSessionUpstreamSubjectPlatformCopies = `-- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :execrows
-UPDATE trusted_issuer_sessions AS s
-SET upstream_subject_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = $1::text
-      AND target.upstream_subject_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND s.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = $3
+// Destroys up to limit platform-key copies of the value after finalize. The
+// organization-key copy stays.
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams) (ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearTrustedIssuerSessionUpstreamSubjectPlatformCopies = `-- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :one
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET upstream_subject_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = $1::text
+          AND target.upstream_subject_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND s.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (s.upstream_subject_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams struct {
@@ -285,14 +370,20 @@ type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the value after finalize. The
 // organization-key copy stays.
-func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearTrustedIssuerSessionUpstreamSubjectPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams) (ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionUpstreamSubjectPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countEMACredentialAccessTokenCopies = `-- name: CountEMACredentialAccessTokenCopies :one

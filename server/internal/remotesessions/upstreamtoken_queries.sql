@@ -126,24 +126,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND COALESCE(p.organization_id, c.organization_id) = @organization_id::text);
 
--- name: ClearRemoteSessionAccessTokenPlatformCopies :execrows
+-- name: ClearRemoteSessionAccessTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's access
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_sessions AS s
-SET access_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET access_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM remote_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.access_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListRemoteSessionRefreshTokensWaiting :many
 -- Refresh tokens of the organization with a platform-key copy and no
@@ -220,24 +229,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND COALESCE(p.organization_id, c.organization_id) = @organization_id::text);
 
--- name: ClearRemoteSessionRefreshTokenPlatformCopies :execrows
+-- name: ClearRemoteSessionRefreshTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's refresh
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET refresh_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM remote_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: SetEMACredentialAccessToken :one
 -- Stores an EMA credential's access token as the copies sealed under the
@@ -327,24 +345,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.access_token_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearEMACredentialAccessTokenPlatformCopies :execrows
+-- name: ClearEMACredentialAccessTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's EMA access
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_session_ema_credentials AS c
-SET access_token_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM remote_session_ema_credentials AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE remote_session_ema_credentials AS c
+    SET access_token_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM remote_session_ema_credentials AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.access_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: SetTrustedIssuerSessionTokens :one
 -- Stores, keeps or erases each value of a trusted issuer session as the
@@ -466,24 +493,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET identity_assertion_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.identity_assertion_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET identity_assertion_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.identity_assertion_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.identity_assertion_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionRefreshTokensWaiting :many
 -- Trusted issuer session refresh tokens of the organization with a platform-key copy
@@ -561,24 +597,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET refresh_token_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionUpstreamSubjectsWaiting :many
 -- Trusted issuer session upstream subjects of the organization with a platform-key copy
@@ -656,24 +701,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET upstream_subject_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.upstream_subject_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET upstream_subject_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.upstream_subject_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.upstream_subject_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionNoncesWaiting :many
 -- Trusted issuer session nonces of the organization with a platform-key copy
@@ -751,24 +805,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionNoncePlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionNoncePlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET nonce_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.nonce_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET nonce_encrypted = NULL
+    WHERE s.id IN (
+        SELECT target.id FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.nonce_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND s.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.nonce_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: GetRemoteSessionRowFixture :one
 -- Test fixture: the session row as stored, soft-deleted or not.

@@ -71,6 +71,23 @@ type CopyCounts struct {
 	PlatformCopies int64
 }
 
+// ClearedCopies counts the platform-key copies one clear destroyed.
+type ClearedCopies struct {
+	// PlatformOnly counts copies with no organization-key copy beside them,
+	// read in the statement that cleared them. Clearing destroyed these
+	// values: nothing reads a platform-key copy in org_kms.
+	PlatformOnly int64
+
+	// BesideOrgCopy counts copies beside an organization-key copy, read in
+	// the statement that cleared them. Clearing them lost nothing.
+	BesideOrgCopy int64
+}
+
+// Total is how many platform-key copies the clear destroyed.
+func (c ClearedCopies) Total() int64 {
+	return c.PlatformOnly + c.BesideOrgCopy
+}
+
 // CopyStore is how the helper reaches the two stored copies of one value, a
 // pair of columns in a feature's table. A feature implements it with its own
 // sqlc queries, one per method. Every query covers every row that holds
@@ -105,6 +122,7 @@ type CopyStore interface {
 
 	// ClearPlatformCopies sets the platform-key copy to NULL on up to limit
 	// rows of the organization that still hold one, fenced on generation,
-	// and returns how many it cleared.
-	ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error)
+	// and returns how many it cleared, by whether each stood beside an
+	// organization-key copy as the clearing statement saw the row.
+	ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (ClearedCopies, error)
 }

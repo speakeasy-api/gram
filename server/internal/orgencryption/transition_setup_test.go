@@ -235,24 +235,28 @@ func (c *fakeCopyStore) Count(_ context.Context, organizationID string) (orgencr
 	return counts, nil
 }
 
-func (c *fakeCopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+func (c *fakeCopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 
+	var cleared orgencryption.ClearedCopies
 	fenced, err := c.fenced(ctx, organizationID, generation)
 	if err != nil || fenced {
-		return 0, err
+		return cleared, err
 	}
 
-	var cleared int64
 	for _, id := range c.sortedIDs(organizationID, "", func(row fakeRow) bool { return row.platform.Valid }) {
-		if cleared == int64(limit) {
+		if cleared.Total() == int64(limit) {
 			break
 		}
 		row := c.store.rows[id]
+		if row.org.Valid {
+			cleared.BesideOrgCopy++
+		} else {
+			cleared.PlatformOnly++
+		}
 		row.platform = pgtype.Text{String: "", Valid: false}
 		c.store.rows[id] = row
-		cleared++
 	}
 
 	return cleared, nil

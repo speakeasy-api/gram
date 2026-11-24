@@ -186,24 +186,33 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE c.organization_id = @organization_id::text
    OR (c.organization_id IS NULL AND p.organization_id = @organization_id::text);
 
--- name: ClearMarketplaceTokenPlatformCopies :execrows
+-- name: ClearMarketplaceTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's tokens after
 -- finalize. The hash and the organization-key copy stay.
-UPDATE plugin_github_connections AS c
-SET marketplace_token_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM plugin_github_connections AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.marketplace_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'marketplace-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE plugin_github_connections AS c
+    SET marketplace_token_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM plugin_github_connections AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.marketplace_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'marketplace-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.marketplace_token_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: GetGitHubConnectionRowFixture :one
 -- Test fixture: the connection row as stored.

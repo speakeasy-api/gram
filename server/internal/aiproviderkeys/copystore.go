@@ -22,7 +22,7 @@ type copyQueries struct {
 	sealWaiting func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, rowID, platform, org string) (int64, error)
 	listSealed  func(ctx context.Context, q *repo.Queries, organizationID string, after string, limit int32) ([]orgencryption.SealedValue, error)
 	count       func(ctx context.Context, q *repo.Queries, organizationID string) (orgencryption.CopyCounts, error)
-	clear       func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error)
+	clear       func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error)
 }
 
 // CopyStore is how the orgencryption backfill, verification and finalize
@@ -85,10 +85,10 @@ func (c *CopyStore) Count(ctx context.Context, organizationID string) (orgencryp
 	return counts, nil
 }
 
-func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	cleared, err := c.queries.clear(ctx, repo.New(c.db), organizationID, generation, limit)
 	if err != nil {
-		return 0, fmt.Errorf("clear %s: %w", c.columns.PlatformColumn, err)
+		return orgencryption.ClearedCopies{}, fmt.Errorf("clear %s: %w", c.columns.PlatformColumn, err)
 	}
 
 	return cleared, nil
@@ -165,8 +165,12 @@ var aiIntegrationQueries = copyQueries{
 		row, err := q.CountAIIntegrationConfigAPIKeyCopies(ctx, organizationID)
 		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
 	},
-	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
-		return q.ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx, repo.ClearAIIntegrationConfigAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
+		row, err := q.ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx, repo.ClearAIIntegrationConfigAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+		if err != nil {
+			return orgencryption.ClearedCopies{}, fmt.Errorf("clear AI integration config API key platform copies: %w", err)
+		}
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
 	},
 }
 
@@ -202,8 +206,12 @@ var modelProviderQueries = copyQueries{
 		row, err := q.CountModelProviderKeyCopies(ctx, organizationID)
 		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
 	},
-	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
-		return q.ClearModelProviderKeyPlatformCopies(ctx, repo.ClearModelProviderKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
+		row, err := q.ClearModelProviderKeyPlatformCopies(ctx, repo.ClearModelProviderKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+		if err != nil {
+			return orgencryption.ClearedCopies{}, fmt.Errorf("clear model provider key platform copies: %w", err)
+		}
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
 	},
 }
 
@@ -227,7 +235,11 @@ var openRouterQueries = copyQueries{
 		row, err := q.CountOpenRouterAPIKeyCopies(ctx, organizationID)
 		return counts(row.Waiting, row.Unreadable, row.PlatformCopies), err
 	},
-	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (int64, error) {
-		return q.ClearOpenRouterAPIKeyPlatformCopies(ctx, repo.ClearOpenRouterAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+	clear: func(ctx context.Context, q *repo.Queries, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
+		row, err := q.ClearOpenRouterAPIKeyPlatformCopies(ctx, repo.ClearOpenRouterAPIKeyPlatformCopiesParams{OrganizationID: organizationID, LimitValue: limit, DecidedGeneration: generation})
+		if err != nil {
+			return orgencryption.ClearedCopies{}, fmt.Errorf("clear OpenRouter API key platform copies: %w", err)
+		}
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
 	},
 }

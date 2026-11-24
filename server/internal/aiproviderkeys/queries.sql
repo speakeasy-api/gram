@@ -67,22 +67,31 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.api_key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :execrows
-UPDATE ai_integration_configs AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM ai_integration_configs AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE ai_integration_configs AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM ai_integration_configs AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListModelProviderKeyWaiting :many
 SELECT c.id, c.api_key_encrypted::text AS platform_copy
@@ -142,22 +151,31 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.api_key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearModelProviderKeyPlatformCopies :execrows
-UPDATE model_provider_keys AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM model_provider_keys AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearModelProviderKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE model_provider_keys AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM model_provider_keys AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListOpenRouterAPIKeyWaiting :many
 SELECT c.key_type, c.key_encrypted::text AS platform_copy
@@ -217,19 +235,28 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearOpenRouterAPIKeyPlatformCopies :execrows
-UPDATE openrouter_api_keys AS c
-SET key_encrypted = NULL
-WHERE c.key_type IN (
-    SELECT target.key_type FROM openrouter_api_keys AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.key_encrypted IS NOT NULL
-    ORDER BY target.key_type
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearOpenRouterAPIKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE openrouter_api_keys AS c
+    SET key_encrypted = NULL
+    WHERE c.key_type IN (
+        SELECT target.key_type FROM openrouter_api_keys AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.key_encrypted IS NOT NULL
+        ORDER BY target.key_type
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;

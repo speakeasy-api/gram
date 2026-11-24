@@ -81,22 +81,29 @@ func (q *Queries) ClearRemoteSessionClientSecret(ctx context.Context, arg ClearR
 	return i, err
 }
 
-const clearRemoteSessionClientSecretPlatformCopies = `-- name: ClearRemoteSessionClientSecretPlatformCopies :execrows
-UPDATE remote_session_clients AS c
-SET client_secret_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM remote_session_clients AS target
-    WHERE target.organization_id = $1::text
-      AND target.client_secret_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearRemoteSessionClientSecretPlatformCopies = `-- name: ClearRemoteSessionClientSecretPlatformCopies :one
+WITH cleared AS (
+    UPDATE remote_session_clients AS c
+    SET client_secret_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM remote_session_clients AS target
+        WHERE target.organization_id = $1::text
+          AND target.client_secret_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.client_secret_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearRemoteSessionClientSecretPlatformCopiesParams struct {
@@ -105,15 +112,21 @@ type ClearRemoteSessionClientSecretPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearRemoteSessionClientSecretPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the organization's secrets
 // after finalize. The organization-key copy stays, so this is not a new
 // revision.
-func (q *Queries) ClearRemoteSessionClientSecretPlatformCopies(ctx context.Context, arg ClearRemoteSessionClientSecretPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRemoteSessionClientSecretPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy.
+func (q *Queries) ClearRemoteSessionClientSecretPlatformCopies(ctx context.Context, arg ClearRemoteSessionClientSecretPlatformCopiesParams) (ClearRemoteSessionClientSecretPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearRemoteSessionClientSecretPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearRemoteSessionClientSecretPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countRemoteSessionClientSecretCopies = `-- name: CountRemoteSessionClientSecretCopies :one

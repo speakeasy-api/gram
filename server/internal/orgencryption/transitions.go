@@ -541,33 +541,24 @@ func (t *Transitions) ClearPlatformCopies(ctx context.Context, organizationID st
 }
 
 // StragglerCount reports the platform-key copies one column held after its
-// use case's clear had finished.
+// use case's clear had finished, as the sweep's clear destroyed them.
 type StragglerCount struct {
 	// Columns names the column pair.
 	Columns CopyColumns
 
-	// PlatformOnly counts platform-key copies with no organization-key copy
-	// beside them, counted before clearing. Clearing destroys these values:
-	// nothing reads a platform-key copy in org_kms.
-	PlatformOnly int64
-
-	// BesideOrgCopy counts platform-key copies beside an organization-key
-	// copy, counted before clearing. Clearing them loses nothing.
-	BesideOrgCopy int64
-
-	// Cleared is how many platform-key copies the sweep cleared. It can
-	// exceed the counts above when a copy landed between counting and
-	// clearing.
-	Cleared int64
+	// Cleared counts the copies the sweep destroyed, by whether each stood
+	// beside an organization-key copy when it was cleared.
+	Cleared ClearedCopies
 }
 
 // SweepPlatformCopies clears platform-key copies that appeared after a use
 // case's clear finished, and reports one StragglerCount per column that held
-// any. It changes no transition state and records nothing on the transition
-// row. Any copy it finds means a writer bypassed the fence or held a
-// transaction open far longer than the server's timeouts allow, because
-// writers decide org_kms after finalize and write only the organization-key
-// copy. It requires org_kms with the clear finished.
+// any, counted by the statements that cleared them. It changes no transition
+// state and records nothing on the transition row. Any copy it finds means a
+// writer bypassed the fence or held a transaction open far longer than the
+// server's timeouts allow, because writers decide org_kms after finalize and
+// write only the organization-key copy. It requires org_kms with the clear
+// finished.
 func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore) ([]StragglerCount, error) {
 	if err := useCase.validate(); err != nil {
 		return nil, err
@@ -589,24 +580,10 @@ func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID st
 
 	var stragglers []StragglerCount
 	for _, store := range stores {
-		columns := store.Columns()
-
-		counts, err := store.Count(ctx, organizationID)
-		if err != nil {
-			return stragglers, fmt.Errorf("count values in %s: %w", columns.PlatformColumn, err)
-		}
-		if counts.PlatformCopies == 0 {
-			continue
-		}
-
-		platformOnly := counts.Waiting + counts.Unreadable
 		cleared, err := clearStore(ctx, organizationID, current.Generation, store)
-		stragglers = append(stragglers, StragglerCount{
-			Columns:       columns,
-			PlatformOnly:  platformOnly,
-			BesideOrgCopy: max(counts.PlatformCopies-platformOnly, 0),
-			Cleared:       cleared,
-		})
+		if cleared.Total() > 0 {
+			stragglers = append(stragglers, StragglerCount{Columns: store.Columns(), Cleared: cleared})
+		}
 		if err != nil {
 			return stragglers, err
 		}
@@ -619,7 +596,7 @@ func clearStores(ctx context.Context, organizationID string, generation int64, s
 	var cleared int64
 	for _, store := range stores {
 		n, err := clearStore(ctx, organizationID, generation, store)
-		cleared += n
+		cleared += n.Total()
 		if err != nil {
 			return cleared, err
 		}
@@ -630,15 +607,16 @@ func clearStores(ctx context.Context, organizationID string, generation int64, s
 
 // clearStore clears one column's platform-key copies in batches until a
 // batch comes back short.
-func clearStore(ctx context.Context, organizationID string, generation int64, store CopyStore) (int64, error) {
-	var cleared int64
+func clearStore(ctx context.Context, organizationID string, generation int64, store CopyStore) (ClearedCopies, error) {
+	var cleared ClearedCopies
 	for {
 		n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
-		cleared += n
+		cleared.PlatformOnly += n.PlatformOnly
+		cleared.BesideOrgCopy += n.BesideOrgCopy
 		if err != nil {
 			return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
 		}
-		if n < clearBatchSize {
+		if n.Total() < clearBatchSize {
 			return cleared, nil
 		}
 	}
