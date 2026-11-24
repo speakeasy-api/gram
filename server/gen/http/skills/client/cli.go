@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -25,7 +26,17 @@ func BuildCreatePayload(skillsCreateBody string, skillsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(skillsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		for _, e := range body.Files {
+			if e != nil {
+				if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -49,6 +60,16 @@ func BuildCreatePayload(skillsCreateBody string, skillsCreateSessionToken string
 	v := &skills.CreatePayload{
 		Content: body.Content,
 	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = marshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -64,7 +85,7 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 	{
 		err = json.Unmarshal([]byte(skillsAddVersionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.DerivedFromVersionID != nil {
@@ -72,6 +93,13 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 		}
 		if body.ExpectedLatestVersionID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
+		}
+		for _, e := range body.Files {
+			if e != nil {
+				if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -100,6 +128,16 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 		Content:                 body.Content,
 		DerivedFromVersionID:    body.DerivedFromVersionID,
 		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
+	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = marshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -597,11 +635,18 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 	{
 		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		for _, e := range body.ChangeIds {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.change_ids[*]", e, goa.FormatUUID))
+		}
+		for _, e := range body.Files {
+			if e != nil {
+				if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -633,6 +678,16 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 		v.ChangeIds = make([]string, len(body.ChangeIds))
 		for i, val := range body.ChangeIds {
 			v.ChangeIds[i] = val
+		}
+	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = marshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
 		}
 	}
 	v.SessionToken = sessionToken
@@ -945,6 +1000,59 @@ func BuildListVersionsPayload(skillsListVersionsID string, skillsListVersionsCur
 	v.ID = id
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetVersionFilePayload builds the payload for the skills getVersionFile
+// endpoint from CLI flags.
+func BuildGetVersionFilePayload(skillsGetVersionFileSkillID string, skillsGetVersionFileVersionID string, skillsGetVersionFilePath string, skillsGetVersionFileSessionToken string, skillsGetVersionFileApikeyToken string, skillsGetVersionFileProjectSlugInput string) (*skills.GetVersionFilePayload, error) {
+	var err error
+	var skillID string
+	{
+		skillID = skillsGetVersionFileSkillID
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var versionID string
+	{
+		versionID = skillsGetVersionFileVersionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("version_id", versionID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var path string
+	{
+		path = skillsGetVersionFilePath
+	}
+	var sessionToken *string
+	{
+		if skillsGetVersionFileSessionToken != "" {
+			sessionToken = &skillsGetVersionFileSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsGetVersionFileApikeyToken != "" {
+			apikeyToken = &skillsGetVersionFileApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsGetVersionFileProjectSlugInput != "" {
+			projectSlugInput = &skillsGetVersionFileProjectSlugInput
+		}
+	}
+	v := &skills.GetVersionFilePayload{}
+	v.SkillID = skillID
+	v.VersionID = versionID
+	v.Path = path
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -21,6 +21,10 @@ type CreateRequestBody struct {
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Supporting files stored with SKILL.md, such as scripts/, references/ and
+	// assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB
+	// per file and 10 MiB in total.
+	Files []*SkillFileInputRequestBodyRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
 // AddVersionRequestBody is the type of the "skills" service "addVersion"
@@ -36,6 +40,11 @@ type AddVersionRequestBody struct {
 	// The version the caller believes is current. When set, the write is rejected
 	// as a conflict if the skill has moved on.
 	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
+	// Supporting files stored with SKILL.md, such as scripts/, references/ and
+	// assets/ entries. Omit to keep the supporting files of the current version,
+	// send an empty list to remove them all, or send the complete new set. At most
+	// 100 files, 5 MiB per file and 10 MiB in total.
+	Files []*SkillFileInputRequestBodyRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
 // RestoreVersionRequestBody is the type of the "skills" service
@@ -84,6 +93,11 @@ type ApproveSuggestionRequestBody struct {
 	// The suggestion stays open carrying whatever is left. Cannot be combined with
 	// edited content.
 	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
+	// Supporting files stored with the approved SKILL.md. Omit to keep the
+	// supporting files of the suggestion's base version, send an empty list to
+	// remove them all, or send the complete new set. At most 100 files, 5 MiB per
+	// file and 10 MiB in total.
+	Files []*SkillFileInputRequestBodyRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
 // DismissSuggestionRequestBody is the type of the "skills" service
@@ -395,6 +409,21 @@ type ListVersionsResponseBody struct {
 	Versions []*SkillVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetVersionFileResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body.
+type GetVersionFileResponseBody struct {
+	// The slash-separated path relative to the skill root.
+	Path string `form:"path" json:"path" xml:"path"`
+	// The media type of the file.
+	ContentType string `form:"content_type" json:"content_type" xml:"content_type"`
+	// The lowercase hex SHA-256 of the file bytes.
+	Sha256 string `form:"sha256" json:"sha256" xml:"sha256"`
+	// The file size in bytes.
+	SizeBytes int64 `form:"size_bytes" json:"size_bytes" xml:"size_bytes"`
+	// The exact file bytes, base64-encoded in JSON.
+	Content []byte `form:"content" json:"content" xml:"content"`
 }
 
 // DistributeResponseBody is the type of the "skills" service "distribute"
@@ -3429,6 +3458,188 @@ type ListVersionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetVersionFileUnauthorizedResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "unauthorized" error.
+type GetVersionFileUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileForbiddenResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "forbidden" error.
+type GetVersionFileForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileBadRequestResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "bad_request" error.
+type GetVersionFileBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileNotFoundResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "not_found" error.
+type GetVersionFileNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileConflictResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "conflict" error.
+type GetVersionFileConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileUnsupportedMediaResponseBody is the type of the "skills"
+// service "getVersionFile" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetVersionFileUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileInvalidResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "invalid" error.
+type GetVersionFileInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileInvariantViolationResponseBody is the type of the "skills"
+// service "getVersionFile" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetVersionFileInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileUnexpectedResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "unexpected" error.
+type GetVersionFileUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetVersionFileGatewayErrorResponseBody is the type of the "skills" service
+// "getVersionFile" endpoint HTTP response body for the "gateway_error" error.
+type GetVersionFileGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ArchiveUnauthorizedResponseBody is the type of the "skills" service
 // "archive" endpoint HTTP response body for the "unauthorized" error.
 type ArchiveUnauthorizedResponseBody struct {
@@ -5309,6 +5520,9 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+	// The supporting files stored with this version besides SKILL.md, sorted by
+	// path. Fetch a file's bytes with getVersionFile.
+	Files []*SkillFileResponseBody `form:"files" json:"files" xml:"files"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -5320,6 +5534,18 @@ type SkillValidationErrorResponseBody struct {
 	Field string `form:"field" json:"field" xml:"field"`
 	// A human-readable explanation of the problem.
 	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// SkillFileResponseBody is used to define fields on response body types.
+type SkillFileResponseBody struct {
+	// The slash-separated path relative to the skill root.
+	Path string `form:"path" json:"path" xml:"path"`
+	// The lowercase hex SHA-256 of the file bytes.
+	Sha256 string `form:"sha256" json:"sha256" xml:"sha256"`
+	// The file size in bytes.
+	SizeBytes int64 `form:"size_bytes" json:"size_bytes" xml:"size_bytes"`
+	// The media type of the file.
+	ContentType string `form:"content_type" json:"content_type" xml:"content_type"`
 }
 
 // SkillEditSuggestionResponseBody is used to define fields on response body
@@ -5590,6 +5816,20 @@ type SkillLinkResponseBody struct {
 	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
 	// When the link was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// SkillFileInputRequestBodyRequestBody is used to define fields on request
+// body types.
+type SkillFileInputRequestBodyRequestBody struct {
+	// The slash-separated path relative to the skill root, for example
+	// references/REFERENCE.md. Must be a clean relative path of at most 512 bytes
+	// and must not be SKILL.md.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.
+	Content []byte `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// The media type of the file. Inferred from the path extension and content
+	// when omitted.
+	ContentType *string `form:"content_type,omitempty" json:"content_type,omitempty" xml:"content_type,omitempty"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -5943,6 +6183,19 @@ func NewListVersionsResponseBody(res *skills.ListSkillVersionsResult) *ListVersi
 		}
 	} else {
 		body.Versions = []*SkillVersionResponseBody{}
+	}
+	return body
+}
+
+// NewGetVersionFileResponseBody builds the HTTP response body from the result
+// of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileResponseBody(res *types.SkillVersionFileContent) *GetVersionFileResponseBody {
+	body := &GetVersionFileResponseBody{
+		Path:        res.Path,
+		ContentType: res.ContentType,
+		Sha256:      res.Sha256,
+		SizeBytes:   res.SizeBytes,
+		Content:     res.Content,
 	}
 	return body
 }
@@ -8332,6 +8585,147 @@ func NewListVersionsGatewayErrorResponseBody(res *goa.ServiceError) *ListVersion
 	return body
 }
 
+// NewGetVersionFileUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileUnauthorizedResponseBody(res *goa.ServiceError) *GetVersionFileUnauthorizedResponseBody {
+	body := &GetVersionFileUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileForbiddenResponseBody builds the HTTP response body from
+// the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileForbiddenResponseBody(res *goa.ServiceError) *GetVersionFileForbiddenResponseBody {
+	body := &GetVersionFileForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileBadRequestResponseBody builds the HTTP response body from
+// the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileBadRequestResponseBody(res *goa.ServiceError) *GetVersionFileBadRequestResponseBody {
+	body := &GetVersionFileBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileNotFoundResponseBody builds the HTTP response body from the
+// result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileNotFoundResponseBody(res *goa.ServiceError) *GetVersionFileNotFoundResponseBody {
+	body := &GetVersionFileNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileConflictResponseBody builds the HTTP response body from the
+// result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileConflictResponseBody(res *goa.ServiceError) *GetVersionFileConflictResponseBody {
+	body := &GetVersionFileConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileUnsupportedMediaResponseBody(res *goa.ServiceError) *GetVersionFileUnsupportedMediaResponseBody {
+	body := &GetVersionFileUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileInvalidResponseBody builds the HTTP response body from the
+// result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileInvalidResponseBody(res *goa.ServiceError) *GetVersionFileInvalidResponseBody {
+	body := &GetVersionFileInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getVersionFile" endpoint of the "skills"
+// service.
+func NewGetVersionFileInvariantViolationResponseBody(res *goa.ServiceError) *GetVersionFileInvariantViolationResponseBody {
+	body := &GetVersionFileInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileUnexpectedResponseBody(res *goa.ServiceError) *GetVersionFileUnexpectedResponseBody {
+	body := &GetVersionFileUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetVersionFileGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getVersionFile" endpoint of the "skills" service.
+func NewGetVersionFileGatewayErrorResponseBody(res *goa.ServiceError) *GetVersionFileGatewayErrorResponseBody {
+	body := &GetVersionFileGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewArchiveUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "archive" endpoint of the "skills" service.
 func NewArchiveUnauthorizedResponseBody(res *goa.ServiceError) *ArchiveUnauthorizedResponseBody {
@@ -9739,6 +10133,16 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 	v := &skills.CreatePayload{
 		Content: *body.Content,
 	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = unmarshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -9753,6 +10157,16 @@ func NewAddVersionPayload(body *AddVersionRequestBody, sessionToken *string, api
 		Content:                 *body.Content,
 		DerivedFromVersionID:    body.DerivedFromVersionID,
 		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
+	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = unmarshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -9876,6 +10290,16 @@ func NewApproveSuggestionPayload(body *ApproveSuggestionRequestBody, sessionToke
 			v.ChangeIds[i] = val
 		}
 	}
+	if body.Files != nil {
+		v.Files = make([]*types.SkillFileInput, len(body.Files))
+		for i, val := range body.Files {
+			if val == nil {
+				v.Files[i] = nil
+				continue
+			}
+			v.Files[i] = unmarshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -9956,6 +10380,20 @@ func NewListVersionsPayload(id string, cursor *string, limit int, sessionToken *
 	v.ID = id
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetVersionFilePayload builds a skills service getVersionFile endpoint
+// payload.
+func NewGetVersionFilePayload(skillID string, versionID string, path string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.GetVersionFilePayload {
+	v := &skills.GetVersionFilePayload{}
+	v.SkillID = skillID
+	v.VersionID = versionID
+	v.Path = path
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -10100,6 +10538,13 @@ func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.Content == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
 	}
+	for _, e := range body.Files {
+		if e != nil {
+			if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -10120,6 +10565,13 @@ func ValidateAddVersionRequestBody(body *AddVersionRequestBody) (err error) {
 	}
 	if body.ExpectedLatestVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
+	}
+	for _, e := range body.Files {
+		if e != nil {
+			if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -10211,6 +10663,13 @@ func ValidateApproveSuggestionRequestBody(body *ApproveSuggestionRequestBody) (e
 	}
 	for _, e := range body.ChangeIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.change_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.Files {
+		if e != nil {
+			if err2 := ValidateSkillFileInputRequestBodyRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -10343,6 +10802,18 @@ func ValidateUnlinkRequestBody(body *UnlinkRequestBody) (err error) {
 	}
 	if body.LinkID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.link_id", *body.LinkID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSkillFileInputRequestBodyRequestBody runs the validations defined on
+// SkillFileInputRequestBodyRequestBody
+func ValidateSkillFileInputRequestBodyRequestBody(body *SkillFileInputRequestBodyRequestBody) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
 	}
 	return
 }

@@ -1174,6 +1174,16 @@ WHERE project_id = @project_id
   AND skill_version_id = @skill_version_id
 ORDER BY path;
 
+-- name: ListSkillVersionFileMetadataForVersions :many
+-- Lists the supporting files of several versions of one skill without their
+-- content.
+SELECT skill_version_id, path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
+
 -- name: ListSkillVersionFiles :many
 -- Lists a version's supporting files with their content.
 SELECT path, content, sha256, size_bytes, content_type

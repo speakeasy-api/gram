@@ -55,8 +55,31 @@ type parsedSkillManifest struct {
 	SpecValid        bool
 	ValidationErrors []validationError
 	RawSHA256        string
-	CanonicalSHA256  string
+
+	// CanonicalSHA256 is the tree digest of the skill version: the
+	// canonicalized SKILL.md plus files. It starts as the SKILL.md-only
+	// digest; withSupportingFiles recomputes it.
+	CanonicalSHA256 string
+
 	canonicalContent string
+
+	// manifestDigest is the SHA-256 of canonicalContent.
+	manifestDigest [sha256.Size]byte
+
+	// files are the validated supporting files stored with the version.
+	files []skilltree.Entry
+}
+
+// withSupportingFiles returns the manifest with files attached and its
+// canonical digest recomputed over the whole skill tree.
+func (m parsedSkillManifest) withSupportingFiles(files []skilltree.Entry) (parsedSkillManifest, error) {
+	digest, err := skilltree.Digest(m.manifestDigest, files)
+	if err != nil {
+		return parsedSkillManifest{}, fmt.Errorf("digest skill tree: %w", err)
+	}
+	m.CanonicalSHA256 = digest
+	m.files = files
+	return m, nil
 }
 
 // ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
@@ -283,6 +306,8 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 		RawSHA256:        hex.EncodeToString(rawDigest[:]),
 		CanonicalSHA256:  canonicalSHA256,
 		canonicalContent: canonicalContent,
+		manifestDigest:   fileDigest,
+		files:            nil,
 	}, nil
 }
 

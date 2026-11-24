@@ -32,6 +32,7 @@ type Endpoints struct {
 	Get                    goa.Endpoint
 	ListUnknownActivations goa.Endpoint
 	ListVersions           goa.Endpoint
+	GetVersionFile         goa.Endpoint
 	Archive                goa.Endpoint
 	Distribute             goa.Endpoint
 	Undistribute           goa.Endpoint
@@ -65,6 +66,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Get:                    NewGetEndpoint(s, a.APIKeyAuth),
 		ListUnknownActivations: NewListUnknownActivationsEndpoint(s, a.APIKeyAuth),
 		ListVersions:           NewListVersionsEndpoint(s, a.APIKeyAuth),
+		GetVersionFile:         NewGetVersionFileEndpoint(s, a.APIKeyAuth),
 		Archive:                NewArchiveEndpoint(s, a.APIKeyAuth),
 		Distribute:             NewDistributeEndpoint(s, a.APIKeyAuth),
 		Undistribute:           NewUndistributeEndpoint(s, a.APIKeyAuth),
@@ -96,6 +98,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Get = m(e.Get)
 	e.ListUnknownActivations = m(e.ListUnknownActivations)
 	e.ListVersions = m(e.ListVersions)
+	e.GetVersionFile = m(e.GetVersionFile)
 	e.Archive = m(e.Archive)
 	e.Distribute = m(e.Distribute)
 	e.Undistribute = m(e.Undistribute)
@@ -1049,6 +1052,65 @@ func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ListVersions(ctx, p)
+	}
+}
+
+// NewGetVersionFileEndpoint returns an endpoint function that calls the method
+// "getVersionFile" of service "skills".
+func NewGetVersionFileEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetVersionFilePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetVersionFile(ctx, p)
 	}
 }
 

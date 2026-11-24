@@ -32,6 +32,7 @@ type Client struct {
 	GetEndpoint                    goa.Endpoint
 	ListUnknownActivationsEndpoint goa.Endpoint
 	ListVersionsEndpoint           goa.Endpoint
+	GetVersionFileEndpoint         goa.Endpoint
 	ArchiveEndpoint                goa.Endpoint
 	DistributeEndpoint             goa.Endpoint
 	UndistributeEndpoint           goa.Endpoint
@@ -45,7 +46,7 @@ type Client struct {
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions, link, unlink, listLinks goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, getVersionFile, archive, distribute, undistribute, share, unshare, getShared, listDistributions, link, unlink, listLinks goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:                 create,
 		AddVersionEndpoint:             addVersion,
@@ -63,6 +64,7 @@ func NewClient(create, addVersion, restoreVersion, update, list, listTags, listS
 		GetEndpoint:                    get,
 		ListUnknownActivationsEndpoint: listUnknownActivations,
 		ListVersionsEndpoint:           listVersions,
+		GetVersionFileEndpoint:         getVersionFile,
 		ArchiveEndpoint:                archive,
 		DistributeEndpoint:             distribute,
 		UndistributeEndpoint:           undistribute,
@@ -428,6 +430,28 @@ func (c *Client) ListVersions(ctx context.Context, p *ListVersionsPayload) (res 
 		return
 	}
 	return ires.(*ListSkillVersionsResult), nil
+}
+
+// GetVersionFile calls the "getVersionFile" endpoint of the "skills" service.
+// GetVersionFile may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetVersionFile(ctx context.Context, p *GetVersionFilePayload) (res *types.SkillVersionFileContent, err error) {
+	var ires any
+	ires, err = c.GetVersionFileEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillVersionFileContent), nil
 }
 
 // Archive calls the "archive" endpoint of the "skills" service.

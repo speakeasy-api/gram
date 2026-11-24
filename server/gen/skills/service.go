@@ -70,6 +70,9 @@ type Service interface {
 	// List immutable versions of an active skill, newest first. The implementation
 	// requires the skills product feature and skill read scope.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
+	// Get one supporting file of a skill version, including its bytes. The
+	// implementation requires the skills product feature and skill read scope.
+	GetVersionFile(context.Context, *GetVersionFilePayload) (res *types.SkillVersionFileContent, err error)
 	// Idempotently archive a skill. The implementation requires the skills product
 	// feature and skill write scope. Repeated requests for the same skill succeed
 	// without creating another state transition.
@@ -125,7 +128,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [26]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions", "link", "unlink", "listLinks"}
+var MethodNames = [27]string{"create", "addVersion", "restoreVersion", "update", "list", "listTags", "listSuggestions", "listFeedback", "triggerSuggestion", "approveSuggestion", "dismissSuggestion", "listSuggestionFeedback", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "getVersionFile", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions", "link", "unlink", "listLinks"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -140,9 +143,14 @@ type AddVersionPayload struct {
 	// The version the caller believes is current. When set, the write is rejected
 	// as a conflict if the skill has moved on.
 	ExpectedLatestVersionID *string
-	SessionToken            *string
-	ApikeyToken             *string
-	ProjectSlugInput        *string
+	// Supporting files stored with SKILL.md, such as scripts/, references/ and
+	// assets/ entries. Omit to keep the supporting files of the current version,
+	// send an empty list to remove them all, or send the complete new set. At most
+	// 100 files, 5 MiB per file and 10 MiB in total.
+	Files            []*types.SkillFileInput
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ApproveAllSkillSuggestionsResult is the result type of the skills service
@@ -186,7 +194,12 @@ type ApproveSuggestionPayload struct {
 	// Optional IDs of the proposed changes to take together as one new version.
 	// The suggestion stays open carrying whatever is left. Cannot be combined with
 	// edited content.
-	ChangeIds        []string
+	ChangeIds []string
+	// Supporting files stored with the approved SKILL.md. Omit to keep the
+	// supporting files of the suggestion's base version, send an empty list to
+	// remove them all, or send the complete new set. At most 100 files, 5 MiB per
+	// file and 10 MiB in total.
+	Files            []*types.SkillFileInput
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -205,7 +218,11 @@ type ArchivePayload struct {
 type CreatePayload struct {
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
-	Content          string
+	Content string
+	// Supporting files stored with SKILL.md, such as scripts/, references/ and
+	// assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB
+	// per file and 10 MiB in total.
+	Files            []*types.SkillFileInput
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -269,6 +286,20 @@ type GetSkillResult struct {
 	AssistantCount int64
 	// Open prompt-injection findings for the current skill version.
 	PromptInjectionFindings []*SkillPromptInjectionFinding
+}
+
+// GetVersionFilePayload is the payload type of the skills service
+// getVersionFile method.
+type GetVersionFilePayload struct {
+	// The skill ID.
+	SkillID string
+	// The skill version ID.
+	VersionID string
+	// The supporting file path relative to the skill root.
+	Path             string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // LinkPayload is the payload type of the skills service link method.
