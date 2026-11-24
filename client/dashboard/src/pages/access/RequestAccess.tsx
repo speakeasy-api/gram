@@ -107,8 +107,9 @@ export default function RequestAccess(): React.JSX.Element {
           <>
             <p className="text-muted-foreground text-sm">
               You don&apos;t have the required permission to access this
-              resource. Click the button below to send a request to your
-              organization administrators.
+              resource.
+              {!notRequestable &&
+                " Click the button below to send a request to your organization administrators."}
             </p>
 
             {/* Scope info */}
