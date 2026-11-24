@@ -599,6 +599,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 			var openRouter interface {
 				openrouter.Provisioner
 				openrouter.SpendClient
@@ -606,7 +607,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -728,6 +729,7 @@ func newWorkerCommand() *cli.Command {
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
+				orEndpoints,
 				openRouter,
 				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				captureStrategy,
@@ -826,7 +828,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), orEndpoints)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -850,7 +852,7 @@ func newWorkerCommand() *cli.Command {
 			 * END -- Agent client
 			 */
 
-			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
+			piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
 
 			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 			if err != nil {
@@ -873,7 +875,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
 				return err
 			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.

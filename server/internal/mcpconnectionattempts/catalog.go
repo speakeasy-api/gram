@@ -1,5 +1,10 @@
 package mcpconnectionattempts
 
+import (
+	"maps"
+	"slices"
+)
+
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string
 
@@ -139,6 +144,12 @@ type Meaning struct {
 	// WhatToDo says what to do next in one short sentence.
 	WhatToDo string
 
+	// WhatHappenedForAdmin says what happened for an organization administrator, in the third person.
+	WhatHappenedForAdmin string
+
+	// Technical is a precise technical fact for administrators, empty when the code's causes share none.
+	Technical string
+
 	result Result
 }
 
@@ -147,7 +158,16 @@ var catalog = map[string]Meaning{}
 // MeaningOf returns the meaning of a stored reason.
 func MeaningOf(reason string) (Meaning, bool) {
 	meaning, ok := catalog[reason]
+	if ok {
+		admin := adminMeanings[Code{reason}]
+		meaning.WhatHappenedForAdmin, meaning.Technical = admin.whatHappened, admin.technical
+	}
 	return meaning, ok
+}
+
+// Codes returns every stored reason code, sorted.
+func Codes() []string {
+	return slices.Sorted(maps.Keys(catalog))
 }
 
 func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code {
@@ -158,7 +178,7 @@ func defineResult(name string, result Result, outcome Outcome, who WhoFixes, wha
 	if _, duplicate := catalog[name]; duplicate {
 		panic("duplicate connection attempt code: " + name)
 	}
-	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, result: result}
+	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, WhatHappenedForAdmin: "", Technical: "", result: result}
 	return Code{name}
 }
 

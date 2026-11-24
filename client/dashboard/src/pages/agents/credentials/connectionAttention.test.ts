@@ -4,6 +4,7 @@ import {
   assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
+  refreshOutcome,
   serversNeedingConnection,
 } from "./connectionAttention";
 import type { ServerConnection, ServerSignIn } from "./ownerConnections";
@@ -209,5 +210,53 @@ describe("an existing agent with no working connection", () => {
     };
     expect(displayedConnections(creating).get("linear")).toEqual(ready);
     expect(assignableOwnConnection(creating, "linear")).toBe(false);
+  });
+});
+
+describe("refreshOutcome", () => {
+  it("confirms a working connection", () => {
+    expect(refreshOutcome("Linear", { status: "ready", sessions: [] })).toEqual(
+      { tone: "success", message: "The connection to Linear is working." },
+    );
+  });
+
+  it("tells an expired connection to reauthenticate", () => {
+    expect(refreshOutcome("Linear", { status: "ended", sessions: [] })).toEqual(
+      {
+        tone: "warning",
+        message:
+          "The connection to Linear is still expired. Reauthenticate to sign in again.",
+      },
+    );
+  });
+
+  it("says nothing is connected yet", () => {
+    expect(
+      refreshOutcome("Linear", missing(signIn("linear", "Linear"))),
+    ).toEqual({
+      tone: "info",
+      message: "No connection to Linear yet. Connect an account to add one.",
+    });
+  });
+
+  it("names what is left when some sign-ins are connected", () => {
+    expect(
+      refreshOutcome("Linear", {
+        status: "missing",
+        signIns: [signIn("stripe", "Stripe")],
+        connected: 1,
+      }),
+    ).toEqual({
+      tone: "info",
+      message:
+        "Checked Linear. This server has 2 sign-ins; 1 is connected. Still needs a connection to Stripe.",
+    });
+  });
+
+  it("says when the check failed", () => {
+    expect(refreshOutcome("Linear", { status: "error" })).toEqual({
+      tone: "error",
+      message: "Could not check the connection to Linear. Try again.",
+    });
   });
 });

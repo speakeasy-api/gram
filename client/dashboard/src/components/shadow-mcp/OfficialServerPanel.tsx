@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { Spinner } from "@/components/ui/Spinner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -237,6 +238,30 @@ function OpenServerButton({
   );
 }
 
+/**
+ * A button label that keeps its width while the action runs. Swapping the
+ * text for "Making official" widened the button and shoved its neighbour
+ * sideways mid-click; the spinner sits over the hidden label instead.
+ */
+function PendingLabel({
+  pending,
+  children,
+}: {
+  pending: boolean;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <span className="relative inline-flex items-center justify-center">
+      <span className={cn(pending && "invisible")}>{children}</span>
+      {pending ? (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Spinner className="mr-0 size-4 motion-reduce:animate-none" />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
   // Without automatic links, removing the link is the only way out, as it
@@ -276,7 +301,15 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   };
 
   return (
-    <section aria-label="Official server" className={PANEL_CLASS}>
+    // Fades in: linking swaps the options for this panel in place, under
+    // the cursor that just clicked, and an instant swap read as a jump.
+    <section
+      aria-label="Official server"
+      className={cn(
+        PANEL_CLASS,
+        "animate-in fade-in duration-300 motion-reduce:animate-none",
+      )}
+    >
       <PanelHeading
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
@@ -705,11 +738,12 @@ function UnlinkedPanel({
                 size="sm"
                 variant={isRecommended ? "primary" : "secondary"}
                 disabled={linking}
+                aria-busy={linking}
                 onClick={() => void linkSuggested()}
                 aria-label={`Make official: “${suggested.name}”`}
               >
                 <Button.Text>
-                  {linking ? "Making official" : "Make official"}
+                  <PendingLabel pending={linking}>Make official</PendingLabel>
                 </Button.Text>
               </Button>
             </>
@@ -949,6 +983,7 @@ function LinkAnotherServer({
           variant="secondary"
           size="sm"
           disabled={selected === "" || isPending}
+          aria-busy={isPending}
           onClick={() => void onLink()}
           aria-label={
             chosenLabel
@@ -957,7 +992,7 @@ function LinkAnotherServer({
           }
         >
           <Button.Text>
-            {isPending ? "Making official" : "Make official"}
+            <PendingLabel pending={isPending}>Make official</PendingLabel>
           </Button.Text>
         </Button>
       </div>

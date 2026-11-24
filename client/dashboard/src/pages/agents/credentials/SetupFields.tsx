@@ -20,6 +20,7 @@ import type { WorkloadIssuer } from "@gram/client/models/components/workloadissu
 import { Fragment, useState, type JSX, type ReactNode } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { linkMcpServerUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
 import { ChangeIssuerConfirmDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/ChangeIssuerConfirmDialog";
@@ -197,6 +198,7 @@ export function SharedServerChoice({
     (total, group) => total + group.options.length,
     0,
   );
+  const reason = recommendationReason(setupValues, count);
   return (
     <Stack gap={3}>
       <Stack gap={1}>
@@ -204,10 +206,7 @@ export function SharedServerChoice({
         <Text muted small>
           An agent on GKE, Claude Tag or another platform signs in through a
           shared authorization server, and every MCP server it uses must be on
-          the one you choose.{" "}
-          {count === 1
-            ? "This is the only one available."
-            : "The recommended one is the server most of this agent's servers already use."}
+          the one you choose.{reason && ` ${reason}`}
         </Text>
       </Stack>
       {setupValues.checking ? (
@@ -222,10 +221,13 @@ export function SharedServerChoice({
           </div>
         </Alert>
       ) : (
-        <SharedServerSelect
-          setupValues={setupValues}
-          id="agent-shared-server"
-        />
+        <Stack gap={2}>
+          <SharedServerSelect
+            setupValues={setupValues}
+            id="agent-shared-server"
+          />
+          <SharedServerLocation setupValues={setupValues} />
+        </Stack>
       )}
       {setupValues.mismatch !== null && count > 0 && (
         <ProviderMismatchNotice
@@ -234,6 +236,62 @@ export function SharedServerChoice({
         />
       )}
     </Stack>
+  );
+}
+
+/**
+ * Why one shared authorization server is recommended. Only claims that the
+ * servers already use it when at least one does. Empty while the list loads
+ * or when there is none to choose: the notice below the label says why.
+ */
+function recommendationReason(setupValues: SetupValues, count: number): string {
+  if (setupValues.checking || count === 0) return "";
+  if (count === 1) return "This is the only one available.";
+  if (setupValues.recommendedUsedBy > 0) {
+    return "The recommended one is the server most of this agent's servers already use.";
+  }
+  return "None of this agent's servers use one yet, so pick one and move them onto it.";
+}
+
+/**
+ * Where the chosen shared authorization server is managed. The dashboard
+ * lists it on MCP Sessions as an MCP Authentication Provider, and not on the
+ * Authorization Servers page, so the step names the page and links to it.
+ */
+function SharedServerLocation({
+  setupValues,
+}: {
+  setupValues: SetupValues;
+}): JSX.Element | null {
+  const organization = useOrganization();
+  const owner = setupValues.selectedProjectId;
+  // An organization-wide one shows on every project's MCP Sessions page, so
+  // the current project's will do; a project's own shows only on that one.
+  const ownerSlug =
+    owner === ""
+      ? undefined
+      : organization.projects?.find((project) => project.id === owner)?.slug;
+  const routes = useRoutes({ projectSlug: ownerSlug });
+  const selected = setupValues.endpointGroups
+    .flatMap((group) => group.options)
+    .find((option) => option.id === setupValues.selectedEndpointId);
+  if (!selected) return null;
+  if (owner !== "" && !ownerSlug) return null;
+
+  return (
+    <Text muted small>
+      It is listed on the MCP Sessions page as an MCP Authentication Provider,
+      not on the Authorization Servers page.{" "}
+      <Link
+        to={routes.mcpSessions.provider.mcpServers.href(selected.id)}
+        target="_blank"
+        rel="noreferrer"
+        className="text-foreground inline-flex items-center gap-1 underline underline-offset-4 hover:no-underline"
+      >
+        Open {selected.label} in MCP Sessions
+        <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+      </Link>
+    </Text>
   );
 }
 

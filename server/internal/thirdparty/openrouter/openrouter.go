@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -405,20 +406,28 @@ type DBTX = repo.DBTX
 type OpenRouter struct {
 	provisioningKey string
 	env             string
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	repo            *repo.Queries
-	orgRepo         *orgRepo.Queries
-	orClient        *guardian.HTTPClient
-	featureClient   *productfeatures.Client
-	keys            *aiproviderkeys.Keys
+
+	// partition is the partition this process runs in. It selects the
+	// endpoints and is part of upstream key names outside the US.
+	partition partition.Partition
+
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *repo.Queries
+	orgRepo       *orgRepo.Queries
+	orClient      *guardian.HTTPClient
+	featureClient *productfeatures.Client
+	keys          *aiproviderkeys.Keys
 
 	// staffOrg is the deployment's Speakeasy staff organization, whose keys
 	// bypass the tier credit limits.
 	staffOrg staff.Organization
 
-	// baseURL is OpenRouterBaseURL outside of tests.
-	baseURL string
+	// inferenceURL is the partition's Endpoints.Inference outside of tests.
+	inferenceURL string
+
+	// managementURL is the partition's Endpoints.Management outside of tests.
+	managementURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
@@ -436,7 +445,8 @@ func WithAIProviderKeys(keys *aiproviderkeys.Keys) Option {
 	}
 }
 
-// WithTestBaseURL points OpenRouter requests at a loopback HTTP test server.
+// WithTestBaseURL points every OpenRouter request, inference and management
+// alike, at a loopback HTTP test server.
 func WithTestBaseURL(baseURL string) (Option, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
@@ -454,16 +464,22 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 
 	parsed.Path = ""
 	return func(openRouter *OpenRouter) {
-		openRouter.baseURL = parsed.String()
+		openRouter.inferenceURL = parsed.String()
+		openRouter.managementURL = parsed.String()
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, staffOrg staff.Organization, options ...Option) *OpenRouter {
+// New constructs the OpenRouter provisioner for a partition. p selects the
+// partition's Endpoints and is part of the upstream key names, so it must be a
+// value accepted by partition.Parse.
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, p partition.Partition, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, staffOrg staff.Organization, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	endpoints := EndpointsFor(p)
 
 	openRouter := &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
+		partition:       p,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
 		db:              db,
 		repo:            repo.New(db),
@@ -472,7 +488,8 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		featureClient:   featureClient,
 		keys:            nil,
 		staffOrg:        staffOrg,
-		baseURL:         OpenRouterBaseURL,
+		inferenceURL:    endpoints.Inference,
+		managementURL:   endpoints.Management,
 	}
 	for _, option := range options {
 		option(openRouter)
@@ -1220,7 +1237,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 	// OpenRouter rejects a disabled key's own credentials with 401, so its
 	// usage is read through the provisioning key instead.
 	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
-		used, _, err := o.fetchKeyUsage(ctx, "/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
+		used, _, err := o.fetchKeyUsage(ctx, o.managementURL+"/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
 		if err != nil {
 			return 0, limit, fmt.Errorf("read disabled key usage: %w", err)
 		}
@@ -1246,16 +1263,18 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // returned limit is nil when OpenRouter reports an unlimited key. Callers that
 // already have the key (e.g. the credits monitoring activity, which joins
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
-// in GetCreditsUsed.
+// in GetCreditsUsed. The call is authorized by the key itself, so it uses the
+// inference host, which a region-restricted key accepts.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	return o.fetchKeyUsage(ctx, "/v1/key", apiKey)
+	return o.fetchKeyUsage(ctx, o.inferenceURL+"/v1/key", apiKey)
 }
 
-// fetchKeyUsage reads a key's monthly usage and limit from path, which is
-// either `/v1/key` authorized by the key itself or `/v1/keys/:hash`
-// authorized by the provisioning key. Both return the same key object.
-func (o *OpenRouter) fetchKeyUsage(ctx context.Context, path string, bearer string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+path, nil)
+// fetchKeyUsage reads a key's monthly usage and limit from endpoint, which is
+// either `/v1/key` on the inference host authorized by the key itself or
+// `/v1/keys/:hash` on the management host authorized by the provisioning key.
+// Both return the same key object.
+func (o *OpenRouter) fetchKeyUsage(ctx context.Context, endpoint string, bearer string) (float64, *int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
@@ -1377,15 +1396,25 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 	return limit
 }
 
-// upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must
-// stay byte-identical to the historical format — the upstream keys already
-// exist under these names — so only internal keys get a suffix.
-func upstreamKeyIdentity(env, orgID, orgSlug string, keyType KeyType) (name, label string) {
-	name = fmt.Sprintf("gram-%s-%s", env, orgID)
-	label = fmt.Sprintf("%s (%s environment)", orgSlug, env)
+// upstreamKeyIdentity names an org's OpenRouter key. US key naming must stay
+// byte-identical to the historical format — the upstream keys already exist
+// under these names — so only internal keys get a suffix there. Every
+// partition runs with the same environment and an organization ID can exist
+// in more than one partition, so other partitions add the partition to the
+// name and label to keep keys in a shared OpenRouter account distinct.
+func upstreamKeyIdentity(env string, p partition.Partition, orgID, orgSlug string, keyType KeyType) (name, label string) {
+	scope := env
+	labelScope := fmt.Sprintf("%s environment", env)
+	if p != partition.US {
+		scope = fmt.Sprintf("%s-%s", env, p)
+		labelScope = fmt.Sprintf("%s environment, %s partition", env, p)
+	}
+
+	name = fmt.Sprintf("gram-%s-%s", scope, orgID)
+	label = fmt.Sprintf("%s (%s)", orgSlug, labelScope)
 	if keyType == KeyTypeInternal {
 		name += "-internal"
-		label = fmt.Sprintf("%s (%s environment, internal)", orgSlug, env)
+		label = fmt.Sprintf("%s (%s, internal)", orgSlug, labelScope)
 	}
 	return name, label
 }
@@ -1416,7 +1445,7 @@ type keyResponse struct {
 
 func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyType KeyType, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
-	name, label := upstreamKeyIdentity(o.env, orgID, orgSlug, keyType)
+	name, label := upstreamKeyIdentity(o.env, o.partition, orgID, orgSlug, keyType)
 	requestBody := createKeyRequest{
 		Name:       name,
 		Label:      label,
@@ -1430,7 +1459,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/v1/keys", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.managementURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to build create key request: %w", err)
@@ -1474,7 +1503,7 @@ func (o *OpenRouter) patchOpenRouterAPIKey(ctx context.Context, keyHash string, 
 		return nil, fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", o.baseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", o.managementURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create update openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to create update key request: %w", err)
@@ -1547,7 +1576,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, aiproviderkeys.Error(err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.inferenceURL+"/v1/generation", nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create generation request: %w", err)
 	}
