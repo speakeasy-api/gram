@@ -28,6 +28,10 @@ export function AccessRequestDecision({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [choice, setChoice] = useState<string | null>(null);
+  // A window can lapse while the dialog stays open (End of day near midnight,
+  // or a requester's deadline). The windows are worked out again at each
+  // render and click; a click on one that has lapsed says so.
+  const [lapsed, setLapsed] = useState<string | null>(null);
   const decide = useDecideAccessRequestMutation({
     // Refresh on a refusal too: a 409 means the request was decided
     // elsewhere, and the list should show that.
@@ -64,7 +68,11 @@ export function AccessRequestDecision({
           (option) => option.key === key,
         )?.expiresAt
       : undefined;
-    if (approve && !expiresAt) return;
+    if (approve && !expiresAt) {
+      setLapsed(key);
+      return;
+    }
+    setLapsed(null);
     setChoice(key);
     decide.mutate({
       request: {
@@ -115,6 +123,11 @@ export function AccessRequestDecision({
       <Text muted small>
         Access ends on its own. To give it permanently, assign a role below.
       </Text>
+      {lapsed && (
+        <Text variant="body" className="text-destructive text-sm">
+          That window has passed. Pick another one.
+        </Text>
+      )}
       {decide.isError && (
         <Text variant="body" className="text-destructive text-sm">
           {decide.error instanceof GramError && decide.error.statusCode === 409

@@ -8,6 +8,7 @@ import { FullScreenPage } from "@/components/full-screen-page";
 import { RequestDurationSelect } from "@/components/request-duration-select";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import {
   requestedDurationFields,
   type RequestedDurationKey,
@@ -38,6 +39,16 @@ export default function RequestAccess(): React.JSX.Element {
   const accessRequestsOn =
     useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
   const [duration, setDuration] = useState<RequestedDurationKey>("none");
+  // Only scopes that can be given temporarily take a duration. A scope the
+  // catalogue does not describe (it may not load for this member) is offered,
+  // and the server refuses it if it cannot be given temporarily.
+  const { catalogue } = useScopeCatalogue();
+  const temporaryGrantable =
+    catalogue.get(scope ?? "")?.temporaryGrantable !== false;
+  const askDuration = accessRequestsOn && temporaryGrantable;
+  // While requests are stored, a scope that cannot be given temporarily is
+  // refused by the server, so the page says so instead of offering to send.
+  const notRequestable = accessRequestsOn && !temporaryGrantable;
 
   // Validate that scope is a valid requestable scope
   const validScopes = Object.values(RequestAccessFormScope);
@@ -55,7 +66,7 @@ export default function RequestAccess(): React.JSX.Element {
             scope: scope as RequestAccessFormScope,
             resourceId,
             resourceName,
-            ...(accessRequestsOn
+            ...(askDuration
               ? requestedDurationFields(duration, new Date())
               : {}),
           },
@@ -118,12 +129,19 @@ export default function RequestAccess(): React.JSX.Element {
               </Stack>
             </div>
 
-            {requestState === "idle" && accessRequestsOn && (
+            {notRequestable && (
+              <p className="text-muted-foreground text-sm">
+                This access can&apos;t be requested here. Ask an organization
+                administrator to give it to you.
+              </p>
+            )}
+
+            {requestState === "idle" && askDuration && (
               <RequestDurationSelect value={duration} onChange={setDuration} />
             )}
 
             {/* Request button */}
-            {requestState === "idle" && (
+            {requestState === "idle" && !notRequestable && (
               <Button
                 variant="primary"
                 onClick={() => void handleRequestAccess()}

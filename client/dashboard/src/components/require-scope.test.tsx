@@ -80,6 +80,28 @@ const toast = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
 }));
+// The real control is a Radix select, which jsdom cannot drive; a native
+// select with the same label and choices stands in for it.
+vi.mock("./request-duration-select", () => ({
+  RequestDurationSelect: ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+  }) => (
+    <label>
+      How long do you need it?
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {["none", "1h", "2h", "4h", "eod"].map((key) => (
+          <option key={key} value={key}>
+            {key}
+          </option>
+        ))}
+      </select>
+    </label>
+  ),
+}));
 vi.mock("sonner", () => ({ toast }));
 const invalidateQueries = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -193,6 +215,32 @@ describe("RequestScopeAccess", () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       request: {
         requestAccessForm: { scope: "log:read", resourceId: "project-1" },
+      },
+    });
+  });
+
+  it("sends the duration the requester picked", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    fireEvent.change(screen.getByLabelText("How long do you need it?"), {
+      target: { value: "4h" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+    expect(mutateAsync).toHaveBeenCalledWith({
+      request: {
+        requestAccessForm: {
+          scope: "log:read",
+          resourceId: "project-1",
+          duration: "4h",
+        },
       },
     });
   });
