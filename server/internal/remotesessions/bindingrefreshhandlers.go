@@ -40,6 +40,9 @@ func (s *Service) BeginBindingRefresh(ctx context.Context, payload *gen.BeginBin
 	if err != nil {
 		return nil, oops.C(oops.CodeBadRequest)
 	}
+	if err := op.lockAttachmentIssuer(ctx); err != nil {
+		return nil, err
+	}
 	binding, err := op.queries.LockPrincipalBindingForRefresh(ctx, repo.LockPrincipalBindingForRefreshParams{ID: bindingID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String()})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
