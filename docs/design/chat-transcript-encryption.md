@@ -161,6 +161,34 @@ Capture and reads emit `chat.transcript_shadow.capture.*` and
 `chat.transcript_shadow.read.*` (duration and message count, by project and
 outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 
+## Backfill
+
+Capture only seals messages written after a project joins the capture
+allowlist. `gram transcript-shadow-backfill` seals the messages that already
+exist. Run it from a server pod, which has the organization encryption identity
+and settings. The project must be on the capture allowlist
+(`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`), or the command refuses to run:
+sealing a project that does not capture leaves shadows that go stale on its
+next write.
+
+```sh
+gram transcript-shadow-backfill --project-id <PROJECT_ID>
+gram transcript-shadow-backfill --project-id <PROJECT_ID> --apply --confirm-environment "$GRAM_ENVIRONMENT"
+```
+
+Without `--apply` the command only reports coverage (`current`, `waiting`,
+`unattributed`). With `--apply` it seals pages of up to 500 messages (default
+200), one transaction each, retries a page that lost a race with a live write,
+and reports coverage again at the end. When a run stops early (an error or
+`--max-pages`), it prints a `--after` cursor to resume from. A sweep that
+reaches the end of the project prints no cursor: start the next sweep from the
+zero cursor so it covers messages inserted below the prior one.
+
+When `chat.load` reads shadows, a message with no shadow falls back to its
+plaintext body and the read metric counts it under the `plaintext_fallback`
+outcome. The backfill is what drives that count to zero for a project. Confirm
+`waiting=0` before relying on shadow reads for it.
+
 ## Scope that still needs implementation
 
 Encrypting a message body is not equivalent to encrypting every transcript copy:
