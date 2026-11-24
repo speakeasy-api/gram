@@ -107,6 +107,7 @@ function preflight(
     cimdClientCount: 0,
     remoteSessionCount: 0,
     conflictingClientIds: [],
+    mergedClientIds: [],
     principalBindingConflictCount: 0,
     emaBindingConflictCount: 0,
     warnings: [],
@@ -463,6 +464,41 @@ describe("ConsolidateIssuerDialog", () => {
     expect(
       screen.getByText(
         "2 clients, 3 sessions, 4 sign-in approvals, 1 allowed client document and 1 linked account move to the target.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("says when clients registered with both merge", () => {
+    testState.preflight = preflight({
+      clientCount: 2,
+      sessionCount: 3,
+      mergedClientIds: ["client-a", "client-b"],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "2 clients and 3 sessions move to the target, including 2 clients registered with both that merge into the target's copy.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: "Consolidate" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("says when one client registered with both merges", () => {
+    testState.preflight = preflight({
+      clientCount: 1,
+      sessionCount: 3,
+      mergedClientIds: ["client-a"],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "1 client and 3 sessions move to the target, including 1 client registered with both that merges into the target's copy.",
       ),
     ).toBeDefined();
   });

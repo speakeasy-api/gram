@@ -713,13 +713,6 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
--- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
--- Test-only privacy sentinel in the deprecated plaintext provider payload column.
-UPDATE openrouter_api_keys
-SET key = @provider_payload
-WHERE organization_id = @organization_id
-  AND key_type = @key_type;
-
 -- name: GetOpenRouterAPIKeyStateFixture :one
 -- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
@@ -2599,6 +2592,13 @@ SET expires_at = clock_timestamp()
 WHERE id = @id
   AND expires_at IS NOT NULL;
 
+-- name: LapsePrincipalGrantFixture :exec
+-- Test-only fixture: turns a grant into a temporary grant that has already
+-- lapsed.
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = @id;
+
 -- name: GetPrincipalGrantExpiresAtFixture :one
 -- Test-only fixture: reads a grant row's deadline (NULL when permanent).
 SELECT expires_at FROM principal_grants WHERE id = @id;
@@ -2791,3 +2791,11 @@ UPDATE network_ingress_certificate_states
 SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
+
+-- name: SetAPIKeyActivityFixture :exec
+-- Backdates a key's creation and last use so the plugin key reaper sees it as
+-- old or recently used.
+UPDATE api_keys
+SET created_at = @created_at
+  , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;

@@ -260,7 +260,8 @@ func TestReconcileAPIKeyConversionPolicyRetryReadsNewCommittedPolicy(t *testing.
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": "hash-1"}})
 	}))
 	t.Cleanup(upstream.Close)
-	provisioner.baseURL = upstream.URL
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	require.ErrorContains(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat), "reconcile upstream OpenRouter API key disabled state")
 	mu.Lock()
