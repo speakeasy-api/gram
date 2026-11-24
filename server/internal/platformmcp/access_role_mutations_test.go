@@ -273,7 +273,7 @@ func accessAPIDispositions(t *testing.T) []string {
 	require.Len(t, match, 2, err.Error())
 
 	var dispositions []string
-	for _, quoted := range strings.Split(match[1], ", ") {
+	for quoted := range strings.SplitSeq(match[1], ", ") {
 		disposition, unquoteErr := strconv.Unquote(quoted)
 		require.NoError(t, unquoteErr, quoted)
 		dispositions = append(dispositions, disposition)

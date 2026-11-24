@@ -23,6 +23,7 @@ import (
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -202,7 +203,7 @@ func setupProductionPaygChatKeyReconciler(t *testing.T, causes []string) (*activ
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", partition.US, "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 	return activities.NewReconcilePaygOpenRouterChatKey(testenv.NewLogger(t), db, production), db, organizationID, recorder
 }

@@ -30,6 +30,12 @@ const (
 	ToolExecuteTool    = "execute_tool"
 )
 
+// ToolExecuteReadOnlyTool runs only member tools whose effective annotations
+// mark them read-only. It carries readOnlyHint itself, so clients that skip
+// approval for read-only tools run these calls without a prompt while
+// execute_tool keeps prompting.
+const ToolExecuteReadOnlyTool = "execute_read_only_tool"
+
 // ToolCodeExecute is the one tool Code Mode serves: it runs a Python program
 // against the connection's member servers.
 const ToolCodeExecute = "execute"

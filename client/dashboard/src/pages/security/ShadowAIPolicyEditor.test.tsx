@@ -250,6 +250,11 @@ describe("ShadowAIPolicyEditor", () => {
       "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before. Try again in a few minutes.",
     ],
     [
+      "a rate-limited request",
+      httpError(429),
+      "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before. Try again in a few minutes.",
+    ],
+    [
       "a refused request",
       httpError(400),
       "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before.",

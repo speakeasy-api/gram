@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -119,7 +120,12 @@ type WorkerOptions struct {
 	// AIProviderKeys opens AI provider and model keys over the process's
 	// organization encryption. Nil opens them as a process without
 	// organization encryption.
-	AIProviderKeys  *aiproviderkeys.Keys
+	AIProviderKeys *aiproviderkeys.Keys
+
+	// RunnerKeys stores and opens Speakeasy Functions runner keys over the
+	// process's organization encryption. Nil handles them as a process
+	// without organization encryption.
+	RunnerKeys      *runnerkeys.Keys
 	FeatureProvider feature.Provider
 	AssetStorage    assets.BlobStore
 	SlackClient     *slack_client.SlackClient
@@ -259,6 +265,7 @@ func ForDeploymentProcessing(
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
 		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -369,6 +376,7 @@ func NewTemporalWorker(
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
 		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -436,6 +444,7 @@ func NewTemporalWorker(
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
 			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
 			AIProviderKeys:                 conv.Default(o.AIProviderKeys, opts.AIProviderKeys),
+			RunnerKeys:                     conv.Default(o.RunnerKeys, opts.RunnerKeys),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -564,6 +573,7 @@ func NewTemporalWorker(
 		opts.ClientSecrets,
 		opts.UpstreamTokens,
 		aiProviderKeys,
+		opts.RunnerKeys,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -726,6 +736,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.ReapStalePluginAPIKeys)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
@@ -897,6 +908,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(PluginAPIKeyReapWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
@@ -1106,6 +1118,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddPluginAPIKeyReapSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add plugin API key reaper schedule", attr.SlogError(err))
 	}
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {

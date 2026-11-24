@@ -646,3 +646,13 @@ func SetOrganizationHooksRolloutAdminPath() string {
 func ClearOrganizationHooksRolloutAdminPath() string {
 	return "/admin/organization.clearHooksRollout"
 }
+
+// ListTailscaleOAuthMigrationAdminPath returns the URL path to the admin service listTailscaleOAuthMigration HTTP endpoint.
+func ListTailscaleOAuthMigrationAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.organizations"
+}
+
+// RunTailscaleOAuthMigrationStepAdminPath returns the URL path to the admin service runTailscaleOAuthMigrationStep HTTP endpoint.
+func RunTailscaleOAuthMigrationStepAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.run"
+}

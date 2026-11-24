@@ -28,13 +28,16 @@ type ContextWindowResolver struct {
 	baseURL    string
 }
 
-func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *ContextWindowResolver {
+// NewContextWindowResolver reads model endpoint metadata from
+// endpoints.Inference, so the result reflects only the providers that can
+// serve the partition's requests.
+func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache, endpoints Endpoints) *ContextWindowResolver {
 	component := logger.With(attr.SlogComponent("openrouter_context_window"))
 	return &ContextWindowResolver{
 		logger:     component,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		cache:      cache.NewTypedObjectCache[mv.ModelContextWindow](component.With(attr.SlogCacheNamespace("openrouter_context_window")), cacheImpl, cache.SuffixNone),
-		baseURL:    OpenRouterBaseURL,
+		baseURL:    endpoints.Inference,
 	}
 }
 

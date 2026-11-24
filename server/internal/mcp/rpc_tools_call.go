@@ -272,6 +272,20 @@ func handleToolsCall(
 		}
 	}
 
+	// A gateway execute_read_only_tool call runs only tools whose annotations
+	// classify them read-only, the classification per-tool RBAC uses above. It
+	// runs after RBAC so a caller who may not call the tool learns nothing
+	// about its annotations.
+	if metaAttempt != nil && metaAttempt.dispositions == memberToolReadOnly {
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for read-only call").LogError(ctx, logger)
+		}
+		if toolDisposition(ctx, logger, params.Name, baseTool.Annotations) != authz.DispositionReadOnly {
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", readOnlyToolRefusal(params.Name)).LogInfo(ctx, logger)
+		}
+	}
+
 	userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err

@@ -361,6 +361,9 @@ trackedFiles:
   src/funcs/identityResolve.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
+  src/funcs/intentPoliciesAnalyzeSession.ts: {}
+  src/funcs/intentPoliciesGetGuardrail.ts: {}
+  src/funcs/intentPoliciesUploadTranscript.ts: {}
   src/funcs/internalSessionIssuersGet.ts: {}
   src/funcs/internalSessionIssuersRotate.ts: {}
   src/funcs/internalSessionIssuersSetEnabled.ts: {}
@@ -1029,6 +1032,7 @@ trackedFiles:
   src/models/components/analyticssignalscope.ts: {}
   src/models/components/analyticssignalselection.ts: {}
   src/models/components/analyticssignalsensor.ts: {}
+  src/models/components/analyzesessionrequestbody.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/apikeypolicygrant.ts: {}
   src/models/components/apikeypolicyselector.ts: {}
@@ -1463,6 +1467,18 @@ trackedFiles:
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
+  src/models/components/intentanalysistotals.ts: {}
+  src/models/components/intentcallassessment.ts: {}
+  src/models/components/intentcallusage.ts: {}
+  src/models/components/intentcondition.ts: {}
+  src/models/components/intentcontract.ts: {}
+  src/models/components/intentcontractoutcome.ts: {}
+  src/models/components/intentevaluatordescriptor.ts: {}
+  src/models/components/intentguardrail.ts: {}
+  src/models/components/intentlabeloption.ts: {}
+  src/models/components/intentlabelquestion.ts: {}
+  src/models/components/intentlabelvalue.ts: {}
+  src/models/components/intentsessionanalysis.ts: {}
   src/models/components/internalsessionissuer.ts: {}
   src/models/components/internalsessionissuerkey.ts: {}
   src/models/components/interruptturnrequestbody.ts: {}
@@ -2284,6 +2300,8 @@ trackedFiles:
   src/models/components/uploadimageresult.ts: {}
   src/models/components/uploadopenapiv3result.ts: {}
   src/models/components/uploadskillcontentpayload.ts: {}
+  src/models/components/uploadtranscriptrequestbody.ts: {}
+  src/models/components/uploadtranscriptresult.ts: {}
   src/models/components/upsertaiscantargetrequestbody.ts: {}
   src/models/components/upsertallowedoriginform.ts: {}
   src/models/components/upsertallowedoriginresult.ts: {}
@@ -2377,6 +2395,7 @@ trackedFiles:
   src/models/operations/analyticsquery.ts: {}
   src/models/operations/analyticssignaldefinition.ts: {}
   src/models/operations/analyticssignalfindings.ts: {}
+  src/models/operations/analyzeintentsession.ts: {}
   src/models/operations/applydirectoryrolesetup.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -2633,6 +2652,7 @@ trackedFiles:
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getidentityproviderconnection.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
+  src/models/operations/getintentguardrail.ts: {}
   src/models/operations/getinternalsessionissuer.ts: {}
   src/models/operations/getjsonwebkeyset.ts: {}
   src/models/operations/getjsonwebkeysetdeletepreflight.ts: {}
@@ -3217,6 +3237,7 @@ trackedFiles:
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
+  src/models/operations/uploadintenttranscript.ts: {}
   src/models/operations/uploadlogs.ts: {}
   src/models/operations/uploadmetrics.ts: {}
   src/models/operations/uploadopenapiv3asset.ts: {}
@@ -3310,6 +3331,7 @@ trackedFiles:
   src/react-query/analyticsSignalDefinition.core.ts: {}
   src/react-query/analyticsSignalDefinition.ts: {}
   src/react-query/analyticsSignalFindings.ts: {}
+  src/react-query/analyzeIntentSession.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/applyDirectoryRoleSetup.ts: {}
@@ -3757,6 +3779,8 @@ trackedFiles:
   src/react-query/ingestHookEvent.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
+  src/react-query/intentGuardrail.core.ts: {}
+  src/react-query/intentGuardrail.ts: {}
   src/react-query/internalSessionIssuer.core.ts: {}
   src/react-query/internalSessionIssuer.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
@@ -4452,6 +4476,7 @@ trackedFiles:
   src/react-query/uploadChatAttachment.ts: {}
   src/react-query/uploadFunctions.ts: {}
   src/react-query/uploadImage.ts: {}
+  src/react-query/uploadIntentTranscript.ts: {}
   src/react-query/uploadOpenAPIv3.ts: {}
   src/react-query/uploadOpenTelemetryLogs.ts: {}
   src/react-query/uploadOpenTelemetryMetrics.ts: {}
@@ -4564,6 +4589,7 @@ trackedFiles:
   src/sdk/identity.ts: {}
   src/sdk/identityproviderconnections.ts: {}
   src/sdk/integrations.ts: {}
+  src/sdk/intentpolicies.ts: {}
   src/sdk/internalsessionissuers.ts: {}
   src/sdk/jsonwebkeysets.ts: {}
   src/sdk/keys.ts: {}
@@ -4837,6 +4863,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyzeIntentSession:
+    speakeasy-default-analyze-intent-session:
+      requestBody:
+        application/json: {"chat_id": "208b33c0-724b-4fb5-800e-e38b3695868a", "evaluator": "jev", "offset": 0}
+      responses:
+        "200":
+          application/json: {"assessments": [{"arguments": "<value>", "decided_by": ["<value 1>", "<value 2>"], "decision": "block", "labels": [{"key": "<key>", "probability": 4833.22, "rank": 846408, "value": "<value>"}], "message_id": "d2974872-d50d-480e-9bd3-08a192e33d7a", "occurred_at": "2024-10-04T16:15:04.249Z", "outcomes": [], "seq": 321837, "tool_call_id": "<id>", "tool_name": "<value>", "usage": {"cost_usd": 5214.59, "input_tokens": 668768, "latency_ms": 946735, "output_tokens": 827352}}], "chat_id": "75c5a946-41d6-4a7d-8f1d-d07296b92a9b", "evaluator": {"evaluator": "<value>", "model": "Land Cruiser", "prompt_version": "<value>", "provider": "<value>"}, "generation": 823630, "guardrail_version": "<value>", "limit_hit": true, "totals": {"blocked": 606157, "calls": 716446, "clarified": 67128, "cost_usd": 3166.06, "judged": 59781, "latency_ms": 573921, "permitted": 583589}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   applyDirectoryRoleSetup:
     speakeasy-default-apply-directory-role-setup:
       requestBody:
@@ -8052,6 +8089,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getIntentGuardrail:
+    speakeasy-default-get-intent-guardrail:
+      responses:
+        "200":
+          application/json: {"contracts": [{"conditions": [{"join": "and", "label": "<value>", "op": "includes", "pattern": "<value>", "values": ["<value 1>"]}], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "block", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getInternalSessionIssuer:
     speakeasy-default-get-internal-session-issuer:
       responses:
@@ -12456,7 +12502,7 @@ examples:
         application/json: {"id": "debf903f-956d-4b64-ad70-c9f849ad2ba7"}
       responses:
         "200":
-          application/json: {"access_expires_at": "2025-12-11T10:46:03.238Z", "created_at": "2025-11-15T04:52:56.504Z", "has_refresh_token": true, "id": "ac6b175f-ad75-41ec-b49b-11c32d865266", "remote_session_client_id": "2b7b676f-a00b-4112-82a1-3f0cfbcc4eb7", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "subject_urn": "<value>", "updated_at": "2026-10-03T10:11:55.708Z", "user_session_issuer_id": "93adcc88-0a63-48b1-8efa-a6adadecc722"}
+          application/json: {"created_at": "2025-11-15T04:52:56.504Z", "has_refresh_token": true, "id": "ac6b175f-ad75-41ec-b49b-11c32d865266", "remote_session_client_id": "2b7b676f-a00b-4112-82a1-3f0cfbcc4eb7", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "subject_urn": "<value>", "updated_at": "2026-10-03T10:11:55.708Z", "user_session_issuer_id": "93adcc88-0a63-48b1-8efa-a6adadecc722"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -15069,6 +15115,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  uploadIntentTranscript:
+    speakeasy-default-upload-intent-transcript:
+      requestBody:
+        application/json: {"content": "<value>", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"chat_id": "d60de10d-ca38-462a-8dec-1f65cf0399bc", "format": "<value>", "message_count": 328476}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   uploadLogs:
     speakeasy-default-upload-logs:
       responses:

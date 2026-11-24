@@ -10,11 +10,17 @@ import (
 	"math/big"
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -30,13 +36,24 @@ var (
 type Store struct {
 	db      *pgxpool.Pool
 	service *orgencryption.Service
+	tracer  trace.Tracer
+	metrics *captureMetrics
 }
 
-func New(db *pgxpool.Pool, service *orgencryption.Service) (*Store, error) {
-	if db == nil || service == nil {
+func New(db *pgxpool.Pool, service *orgencryption.Service, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*Store, error) {
+	if db == nil || service == nil || tracerProvider == nil || meterProvider == nil {
 		return nil, ErrInvalid
 	}
-	return &Store{db: db, service: service}, nil
+	metrics, err := newCaptureMetrics(meterProvider)
+	if err != nil {
+		return nil, err
+	}
+	return &Store{
+		db:      db,
+		service: service,
+		tracer:  tracerProvider.Tracer(instrumentationName),
+		metrics: metrics,
+	}, nil
 }
 
 // operationError deliberately hides database/provider details while preserving errors.Is.
@@ -68,9 +85,33 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 	if len(messageIDs) == 0 {
 		return nil
 	}
+	// Reject bad arguments before telemetry so a misused store fails closed
+	// with ErrInvalid instead of touching uninitialized tracer or metrics.
 	if db == nil || organizationID == "" || projectID == uuid.Nil {
 		return ErrInvalid
 	}
+
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.Capture", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.OrganizationID(organizationID),
+		attr.TranscriptShadowMessageCount(len(messageIDs)),
+	))
+	defer span.End()
+
+	start := time.Now()
+	err := s.capture(ctx, db, organizationID, projectID, messageIDs)
+	outcome := classifyCapture(err)
+	s.metrics.record(ctx, projectID, len(messageIDs), time.Since(start), outcome)
+
+	span.SetAttributes(attr.Outcome(outcome))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(outcome))
+	}
+	return err
+}
+
+func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
 	if err != nil {
 		return safe(err)
