@@ -253,7 +253,10 @@ func TestGatewayConnectionSettingsReportsReadableProxiedMemberSignIn(t *testing.
 		result, handled := mcpConnectionSettingsToolResult(err)
 		require.True(t, handled, query)
 		require.True(t, result.IsError, query)
-		require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "temporarily unavailable", query)
+		require.Len(t, result.Content, 1, query)
+		message, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok, query)
+		require.Contains(t, message.Text, "temporarily unavailable", query)
 	}
 
 	other := input
@@ -276,5 +279,5 @@ func (f gatewaySettingsQueryFailure) Query(ctx context.Context, sql string, args
 	if strings.HasPrefix(sql, "-- name: "+f.query+" ") {
 		return nil, f.cause
 	}
-	return f.DBTX.Query(ctx, sql, args...)
+	return f.DBTX.Query(ctx, sql, args...) //nolint:glint // Passes through existing SQLc queries; the test does not construct statements.
 }

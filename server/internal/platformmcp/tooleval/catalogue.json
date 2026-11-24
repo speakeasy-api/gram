@@ -1402,7 +1402,7 @@
     },
     {
       "name": "set_mcp_network_access",
-      "description": "Change network access for one exact MCP server (hosted, remote, or tunneled) or gateway in an explicit project to public_only, dual, or private_only. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access is refused unless the organization may use it and a live network ingress covers every endpoint.",
+      "description": "Set whether one MCP server or gateway accepts public or private network connections. To lock down access to the private network only, select private_only; public_only and dual are also supported. Name the exact hosted, remote, or tunneled server or gateway in an explicit project. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access is refused unless the organization may use it and a live network ingress covers every endpoint.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4294,7 +4294,7 @@
     },
     {
       "name": "get_mcp_network_traffic",
-      "description": "Summarize observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. Use before changing its network access mode; a quiet route is not proof all clients migrated.",
+      "description": "Read observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use set_mcp_network_access to change the mode. Review traffic when asked to assess migration impact; a quiet route is not proof all clients migrated.",
       "input_schema": {
         "type": "object",
         "properties": {
