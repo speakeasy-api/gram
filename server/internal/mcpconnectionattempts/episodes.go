@@ -40,7 +40,7 @@ type Episode struct {
 	// ClientFamily is the client of the latest failure.
 	ClientFamily string
 
-	// ClientVersion is the client version of the latest failure, empty when not recorded.
+	// ClientVersion is the version on the row that named ClientFamily, empty when not recorded.
 	ClientVersion string
 
 	// ProviderHost is the provider of the latest failure.
@@ -72,6 +72,31 @@ type Episode struct {
 	LastWorkedAt time.Time
 }
 
+// BackingServerID is the mcp_servers id reached (server or gateway member), else empty.
+func (e Episode) BackingServerID() string {
+	var raw string
+	switch e.ServerKind {
+	case serverKindMCP:
+		raw = e.ServerID
+	case serverKindMeta:
+		raw = e.MemberID
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
+
+// OnMCPServer reports whether the episode's server is an MCP server, gateway or toolset, by its kind and id only.
+func (e Episode) OnMCPServer() bool {
+	switch e.ServerKind {
+	case serverKindMCP, serverKindMeta, serverKindToolset:
+		return e.ServerID != ""
+	}
+	return false
+}
+
 // attemptFacts is one attempt reduced for episodes.
 type attemptFacts struct {
 	AttemptSummary
@@ -81,7 +106,7 @@ type attemptFacts struct {
 	MemberID       string `ch:"member"`
 	EndingClientID string `ch:"ending_client"`
 
-	// ClientVersion is the latest client version named.
+	// ClientVersion is the version on the row that named the client, empty when it had none.
 	ClientVersion string `ch:"version"`
 
 	// SignInMembers, SignInClients and SignInTimes are the member, service connection
@@ -106,7 +131,9 @@ var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
 		argMinIf(remote_session_client_id, (event_time, step, outcome, reason, remote_session_client_id), is_final),
 		argMax(remote_session_client_id, (event_time, step, reason, remote_session_client_id))) AS ending_client,
-	argMaxIf(client_version, (event_time, client_version), client_version != '') AS version,
+	if(countIf(client_family NOT IN ('', 'browser')) > 0,
+		argMinIf(client_version, (event_time, client_family, client_version), client_family NOT IN ('', 'browser')),
+		argMinIf(client_version, (event_time, client_version), client_family = 'browser')) AS version,
 	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignInRows + `) AS sign_ins,
 	arrayMap(x -> toString(x.1), sign_ins) AS sign_in_members,
 	arrayMap(x -> toString(x.2), sign_ins) AS sign_in_clients,
@@ -193,7 +220,7 @@ func (f failure) connectionKey() string {
 	a := f.a
 	key := string(f.part) + "|" + a.SubjectURN + "|" + a.ServerKind + "|" + a.ServerID + "|" + a.MemberID + "|" + a.AppKey
 	switch {
-	case f.part == PartAppSignIn && namedClient(a.ClientFamily):
+	case f.part == PartAppSignIn && NamedClient(a.ClientFamily):
 		key += "|" + a.ClientFamily
 	case f.part == PartServiceSignIn:
 		key += "|" + a.RemoteSessionClientID
@@ -357,7 +384,7 @@ func (f failure) sameApp(app, clientFamily string) bool {
 	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
 		return false
 	}
-	return !namedClient(f.a.ClientFamily) || !namedClient(clientFamily) || f.a.ClientFamily == clientFamily
+	return !NamedClient(f.a.ClientFamily) || !NamedClient(clientFamily) || f.a.ClientFamily == clientFamily
 }
 
 // servedBySameService reports whether the person's served connection s, on f's server,

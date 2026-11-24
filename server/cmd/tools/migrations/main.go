@@ -18,6 +18,8 @@
 //     REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
 //   - marketplace-tokens: PostgreSQL application-data backfill; see
 //     MARKETPLACE_TOKENS_BACKFILL.md. It defaults to a dry run.
+//   - functions-access-organization: PostgreSQL application-data backfill; see
+//     FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -113,9 +115,11 @@ func run() int {
 		return runRemoteSessionsOrganization(args, os.Stdout, os.Getenv)
 	case marketplaceTokensName:
 		return runMarketplaceTokens(args, os.Stdout, os.Getenv)
+	case functionsAccessOrganizationName:
+		return runFunctionsAccessOrganization(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, marketplace-tokens)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, remote-sessions-organization, marketplace-tokens, functions-access-organization)")
 		return 2
 	}
 }

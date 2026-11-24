@@ -37,7 +37,7 @@ func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcrip
 	if provision {
 		require.NoError(t, ti.fixture.Provisioner.EnsureUseCase(t.Context(), ti.orgID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
 	}
-	store, err := transcriptstore.New(ti.conn, ti.fixture.Service)
+	store, err := transcriptstore.New(ti.conn, ti.fixture.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })

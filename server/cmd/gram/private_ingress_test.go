@@ -67,9 +67,9 @@ func TestPrivateIngressRuntimeClosesInReverseOrderAfterCancellation(t *testing.T
 	require.Equal(t, []int{2, 1, 0}, closed)
 }
 
-func TestPrivateGatewayPrincipalMustBeConfiguredTogether(t *testing.T) {
+func TestPrivateGatewayPrincipalIsRequired(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, validatePrivateGatewayPrincipal("", ""))
+	require.Error(t, validatePrivateGatewayPrincipal("", ""), "only the gateway can attest, so it must be configured")
 	require.NoError(t, validatePrivateGatewayPrincipal("gram-gateway", "gram-tailnet-gateway"))
 	require.Error(t, validatePrivateGatewayPrincipal("gram-gateway", ""))
 	require.Error(t, validatePrivateGatewayPrincipal("", "gram-tailnet-gateway"))

@@ -18,7 +18,8 @@ type ApiKey struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	CreatedByUserID string
-	// @access: confidential
+	// Label the customer chose for the key.
+	// @access: opaque-confidential
 	Name string
 	// @access: secret-restricted
 	KeyPrefix string

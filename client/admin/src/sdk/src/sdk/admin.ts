@@ -85,6 +85,7 @@ import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
 import { adminListRegistryPromotionCandidates } from "../funcs/adminListRegistryPromotionCandidates.js";
 import { adminListSignupOffers } from "../funcs/adminListSignupOffers.js";
+import { adminListTailscaleOAuthMigration } from "../funcs/adminListTailscaleOAuthMigration.js";
 import { adminListUpstreamOAuthMigrationOrganizations } from "../funcs/adminListUpstreamOAuthMigrationOrganizations.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
@@ -101,6 +102,7 @@ import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
+import { adminRunTailscaleOAuthMigrationStep } from "../funcs/adminRunTailscaleOAuthMigrationStep.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
@@ -185,6 +187,8 @@ import { AdminSpendBreakdownResponse } from "../models/components/adminspendbrea
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminTailscaleOAuthMigrationOrganization } from "../models/components/admintailscaleoauthmigrationorganization.js";
+import { AdminTailscaleOAuthMigrationOrganizations } from "../models/components/admintailscaleoauthmigrationorganizations.js";
 import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
@@ -238,6 +242,7 @@ import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/comp
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
+import { RunTailscaleOAuthMigrationStepRequestBody } from "../models/components/runtailscaleoauthmigrationsteprequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
@@ -2216,6 +2221,38 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SupportMatrix> {
     return unwrapAsync(adminUpdateSupportMatrix(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listTailscaleOAuthMigration admin
+   *
+   * @remarks
+   * Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.
+   */
+  async listTailscaleOAuthMigration(
+    options?: RequestOptions,
+  ): Promise<AdminTailscaleOAuthMigrationOrganizations> {
+    return unwrapAsync(adminListTailscaleOAuthMigration(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * runTailscaleOAuthMigrationStep admin
+   *
+   * @remarks
+   * Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.
+   */
+  async runTailscaleOAuthMigrationStep(
+    request: RunTailscaleOAuthMigrationStepRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminTailscaleOAuthMigrationOrganization> {
+    return unwrapAsync(adminRunTailscaleOAuthMigrationStep(
       this,
       request,
       options,
