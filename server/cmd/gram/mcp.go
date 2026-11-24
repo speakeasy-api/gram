@@ -258,11 +258,12 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 
 	// No key refresher: refreshing a provisioned key is a Temporal workflow,
 	// and provisioning tolerates its absence.
+	orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 	var openRouter openrouter.Provisioner
 	if serviceEnv == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 	}
 
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
@@ -342,14 +343,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// the Temporal-backed observers `gram start` attaches.
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	shutdown.funcs = append(shutdown.funcs, stop)
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter),
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, orEndpoints, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, orEndpoints, publishers, shadowMCPClient, toolIOLogsEnabled,
 		approvalService,
 	)
 	if err != nil {

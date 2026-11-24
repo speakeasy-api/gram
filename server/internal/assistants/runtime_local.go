@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"net/url"
 	"slices"
 	"strconv"
@@ -134,6 +135,52 @@ type LocalRuntimeConfig struct {
 	// mkcert root CA) mounted into containers so the runner trusts the local
 	// server's TLS certificate.
 	ExtraCACertFile string
+	// OTelEnv is extra container env that turns on the runner's OTLP span
+	// export; see LocalRuntimeOTelEnv. Empty leaves export off.
+	OTelEnv map[string]string
+}
+
+// localRuntimeOTLPProtocols are the OTEL_EXPORTER_OTLP_PROTOCOL values the
+// runner accepts. Any other value would fail its flag parsing at boot.
+var localRuntimeOTLPProtocols = []string{"grpc", "http/protobuf", "http/json"}
+
+// LocalRuntimeOTelEnv derives the env that makes a local runner container
+// export spans to the same OTLP collector as this process. It returns nil
+// unless tracing is enabled and OTEL_EXPORTER_OTLP_ENDPOINT is set. A
+// loopback endpoint host is rewritten to the host gateway alias, because a
+// container cannot reach the host's loopback. OTEL_RESOURCE_ATTRIBUTES passes
+// through so runner spans carry the same resource tags (such as the local
+// worktree) as this process. The runner stamps assistant and project ids on
+// every span itself.
+func LocalRuntimeOTelEnv(tracingEnabled bool, getenv func(string) string) map[string]string {
+	endpoint := getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if !tracingEnabled || endpoint == "" {
+		return nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Hostname() == "" {
+		return nil
+	}
+	switch parsed.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+		port := parsed.Port()
+		parsed.Host = LocalRuntimeHostGatewayAlias
+		if port != "" {
+			parsed.Host = net.JoinHostPort(LocalRuntimeHostGatewayAlias, port)
+		}
+	}
+	env := map[string]string{
+		// The runner's clap flag accepts only "true" or "false".
+		"GRAM_ENABLE_OTEL_TRACES":     "true",
+		"OTEL_EXPORTER_OTLP_ENDPOINT": parsed.String(),
+	}
+	if protocol := getenv("OTEL_EXPORTER_OTLP_PROTOCOL"); slices.Contains(localRuntimeOTLPProtocols, protocol) {
+		env["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocol
+	}
+	if attrs := getenv("OTEL_RESOURCE_ATTRIBUTES"); attrs != "" {
+		env["OTEL_RESOURCE_ATTRIBUTES"] = attrs
+	}
+	return env
 }
 
 func (c LocalRuntimeConfig) Validate() error {
@@ -396,6 +443,8 @@ func (l *LocalRuntimeBackend) containerSpec(runtime assistantRuntimeRecord, name
 		VolumeName:      localVolumeName(runtime),
 		ExtraCACertFile: l.config.ExtraCACertFile,
 	}
+	// Part of the spec hash: toggling tracing replaces idle containers.
+	maps.Copy(spec.Env, l.config.OTelEnv)
 	spec.Labels[runtimeLabelSpecHash] = localContainerSpecHash(spec)
 	return spec
 }
