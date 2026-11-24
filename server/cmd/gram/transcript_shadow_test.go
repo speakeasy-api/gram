@@ -115,9 +115,11 @@ func TestTranscriptShadowFlags(t *testing.T) {
 	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand()} {
 		requireFlag(t, command.Flags, chatTranscriptShadowProjectIDsFlag)
 	}
-	// Only the server serves chat reads.
-	requireFlag(t, newStartCommand().Flags, chatTranscriptShadowReadProjectsFlag)
-	for _, command := range []*cli.Command{newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand(), newAdminCommand()} {
+	// The server serves chat reads and the worker reads chats to title them.
+	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand()} {
+		requireFlag(t, command.Flags, chatTranscriptShadowReadProjectsFlag)
+	}
+	for _, command := range []*cli.Command{newMCPCommand(), newNetworkIngressServerCommand(), newAdminCommand()} {
 		for _, item := range command.Flags {
 			require.NotContains(t, item.Names(), chatTranscriptShadowReadProjectsFlag, command.Name)
 		}

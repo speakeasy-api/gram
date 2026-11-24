@@ -2361,6 +2361,8 @@ func newStartCommand() *cli.Command {
 						SlackClient:                    slackClient,
 						SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
 						ChatMessageWriter:              chatWriter,
+						TranscriptShadow:               shadow.Store,
+						TranscriptShadowReadProjectIDs: shadow.ReadProjectIDs,
 						ChatClient:                     chatClient,
 						OpenRouter:                     openRouter,
 						OpenRouterSpend:                openRouter,

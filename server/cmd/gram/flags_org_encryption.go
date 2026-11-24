@@ -73,8 +73,9 @@ func transcriptShadowFlag() cli.Flag {
 	}
 }
 
-// transcriptShadowReadFlag routes chat reads through encrypted shadows. Only the
-// server command serves chat reads, so only it registers this flag.
+// transcriptShadowReadFlag routes chat reads through encrypted shadows. The
+// server serves chat reads and the worker reads chats to title them, so only
+// they register this flag.
 func transcriptShadowReadFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowReadProjectsFlag,

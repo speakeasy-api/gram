@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -134,6 +136,13 @@ type WorkerOptions struct {
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
+
+	// TranscriptShadow opens encrypted chat transcript shadows. Nil reads
+	// plaintext for every project.
+	TranscriptShadow *transcriptstore.Store
+	// TranscriptShadowReadProjectIDs are the projects whose background chat
+	// reads open encrypted shadows instead of plaintext.
+	TranscriptShadowReadProjectIDs []uuid.UUID
 
 	// CustomDomainTargetSuffix is the normalized parent DNS name of per-domain
 	// CNAME targets (<token>.<suffix>); empty disables per-domain targets.
@@ -273,6 +282,8 @@ func ForDeploymentProcessing(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
+		TranscriptShadow:               nil,
+		TranscriptShadowReadProjectIDs: nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		OpenRouterSpend:                nil,
@@ -374,6 +385,8 @@ func NewTemporalWorker(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
+		TranscriptShadow:               nil,
+		TranscriptShadowReadProjectIDs: nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		OpenRouterSpend:                nil,
@@ -441,6 +454,8 @@ func NewTemporalWorker(
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
 			SlackDirectoryTokenRefresher:   conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
 			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			TranscriptShadow:               conv.Default(o.TranscriptShadow, opts.TranscriptShadow),
+			TranscriptShadowReadProjectIDs: conv.DefaultSlice(o.TranscriptShadowReadProjectIDs, opts.TranscriptShadowReadProjectIDs),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:                conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
 			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
@@ -619,6 +634,7 @@ func NewTemporalWorker(
 		opts.StaffOrganization,
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
+	activities.generateChatTitle.WithTranscriptShadowReads(opts.TranscriptShadow, opts.TranscriptShadowReadProjectIDs...)
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
