@@ -132,7 +132,13 @@ func TestResolveClientFollowsTypedOffers(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, RemoteUrl: pgtype.Text{String: "https://mcp.example", Valid: true}, UsesTypedOffers: tc.usesTypedOffers, OfferedClientIds: tc.offered}
+			server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project, UserSessionIssuerID: uuid.NullUUID{UUID: login, Valid: true}, UsesTypedOffers: tc.usesTypedOffers, OfferedClientIds: tc.offered}
+			upstream := pgtype.Text{String: "https://mcp.example", Valid: true}
+			if tc.usesTypedOffers {
+				server.RemoteUrl = upstream
+			} else {
+				server.UnproxiedUrl = upstream
+			}
 			id, _, state := resolveClient(server, "https://mcp.example", "", clients, nil, allClients(remotesessions.ResourceScopes{}))
 			require.Equal(t, tc.clientID, id)
 			require.Equal(t, tc.state, state)
