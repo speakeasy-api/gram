@@ -134,8 +134,9 @@ type Outcome struct {
 	// call or a final answer. It is a miss even on a negative case.
 	Unfinished bool
 	// Refused is a turn the provider's safety filter stopped before the
-	// model answered: no content, no tool call, a content_filter finish or a
-	// refusal message. Answer holds the refusal text. Like any answer
+	// model answered: a completion with no content and no tool call that
+	// has a content_filter finish or a refusal message, or an HTTP content
+	// policy rejection. Answer holds the refusal text. Like any answer
 	// without a Platform tool, it is right on a negative case and a miss on
 	// one that expects a tool.
 	Refused bool
@@ -302,6 +303,13 @@ turns:
 				outcome.Err = fmt.Errorf("case %s turn %d: %w", c.ID, turn, err)
 				break
 			}
+			// A provider can also refuse with an HTTP moderation rejection
+			// instead of a filtered completion. It is the same refusal.
+			if openrouter.IsContentPolicy(err) {
+				outcome.Refused = true
+				outcome.Answer = contentPolicyAnswer
+				break
+			}
 			// An agent that runs out of time has not reached a tool, like one
 			// that runs out of turns: a miss, not an error that drops out of
 			// the rates. A cancelled run is still an error.
@@ -357,6 +365,10 @@ turns:
 	score(&outcome, tools, validators)
 	return outcome
 }
+
+// contentPolicyAnswer stands in for the refusal message of an HTTP
+// moderation rejection, whose body the client does not pass on.
+const contentPolicyAnswer = "(the provider rejected the request on content policy grounds)"
 
 // contentFilterFinish is the finish reason OpenRouter reports when a
 // provider's safety filter stops a completion. The provider's own reason,

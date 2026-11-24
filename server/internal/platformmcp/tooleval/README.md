@@ -37,12 +37,13 @@ request. Every tool the external endpoint serves has at least one case.
   A misses table lists each case an agent got wrong and what it chose
   instead. Read it to find unclear or overlapping tool descriptions.
 
-  A provider's safety filter can stop a turn before the model answers:
-  OpenRouter returns no content, no usage and a `content_filter` finish,
-  often with a refusal message. The eval scores that as a refusal, an answer
-  with no Platform tool: right on a negative case, a miss (`(refused)`) on one
-  that expects a tool. The report lists every refusal in its own section,
-  because a refused prompt never reached the model and spent no tokens.
+  A provider's safety filter can stop a turn before the model answers.
+  OpenRouter then returns either a completion with no content and a
+  `content_filter` finish or a refusal message, or an HTTP content policy
+  rejection. The eval scores that as a refusal, an answer with no Platform
+  tool: right on a negative case, a miss (`(refused)`) on one that expects a
+  tool. The report lists every refusal in its own section, apart from the
+  answers the model wrote.
 
 ## Running
 
