@@ -7,6 +7,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { isForbiddenError } from "@/lib/errors";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -27,18 +28,35 @@ export function GatewayAuthorizationServersField({
     row.classification === "proxied" && row.server ? [row.server] : [],
   );
   const legacy = useLegacyProviderVisibility(servers);
+  const hiddenLegacyCount = field.associatedIssuers.filter((issuer) =>
+    legacy.issuerIds.has(issuer.id),
+  ).length;
   return (
     <RemoteIdentityProvidersField
       {...field}
       isLoading={field.isLoading || isLoading || legacy.isLoading}
       hiddenIssuerIds={legacy.issuerIds}
       members={
-        <GatewayMemberSignInField
-          servers={servers}
-          isLoading={isLoading}
-          isError={isError}
-          refetch={refetch}
-        />
+        <div className="space-y-3">
+          <GatewayMemberSignInField
+            servers={servers}
+            isLoading={isLoading}
+            isError={isError}
+            refetch={refetch}
+          />
+          {!field.isLoading &&
+            !isLoading &&
+            !legacy.isLoading &&
+            hiddenLegacyCount > 0 && (
+              <Text muted small>
+                {hiddenLegacyCount === 1
+                  ? "1 legacy authorization server link is hidden."
+                  : `${hiddenLegacyCount} legacy authorization server links are hidden.`}{" "}
+                These links are read-only here. Proxied members use their own
+                upstream settings.
+              </Text>
+            )}
+        </div>
       }
     />
   );
@@ -116,16 +134,19 @@ function MemberSignInRow({ server }: { server: McpServer }): JSX.Element {
     { throwOnError: false },
   );
   const href = `${routes.mcp.details.settings.href(mcpServerRouteParam(server))}#upstream-credentials`;
+  const forbidden = isForbiddenError(query.error);
   const status = query.isError ? undefined : query.data?.status;
-  const description = query.isLoading
-    ? "Checking upstream sign-in…"
-    : status === "configured"
-      ? "Upstream credentials configured"
-      : status === "no_auth_required"
-        ? "No upstream credentials required"
-        : status === "setup_incomplete"
-          ? "Upstream credential setup incomplete"
-          : "Upstream sign-in status unavailable";
+  const description = forbidden
+    ? "Organization read access is required to view upstream sign-in status."
+    : query.isLoading
+      ? "Checking upstream sign-in…"
+      : status === "configured"
+        ? "Upstream credentials configured"
+        : status === "no_auth_required"
+          ? "No upstream credentials required"
+          : status === "setup_incomplete"
+            ? "Upstream credential setup incomplete"
+            : "Upstream sign-in status unavailable";
 
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 p-3">
@@ -136,7 +157,7 @@ function MemberSignInRow({ server }: { server: McpServer }): JSX.Element {
         </Text>
       </div>
       <div className="flex items-center gap-2">
-        {query.isError && (
+        {query.isError && !forbidden && (
           <Button
             variant="secondary"
             size="sm"
