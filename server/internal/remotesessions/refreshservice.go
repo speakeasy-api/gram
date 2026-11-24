@@ -336,6 +336,9 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 // persisted resource. organizationID is the client's organization; it selects
 // where the attachments come from and, for associations, scopes them.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
+	if organizationID == "" {
+		return "", nil
+	}
 	attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
 	if err != nil {
 		return "", err
@@ -344,27 +347,24 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organiza
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
-// Where the organization it was consented in enforces typed auth clients, the
-// servers that offer its client decide; a client with no offer, and any client
-// elsewhere, falls back to its attached servers.
+// The grant's sign-in tenant fences both typed offers and direct placements.
+// Only a global sign-in may fall back to the registration's own tenant.
 func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
 	q := remotesessions_repo.New(s.db)
 	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
 	if err != nil {
 		return "", fmt.Errorf("get grant organization: %w", err)
 	}
-	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
-	if err != nil {
-		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
+	if organizationID == "" {
+		organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+		if err != nil {
+			return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+		}
 	}
-	if offered[sess.RemoteSessionClientID] {
-		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
-	}
-	// A global sign-in has no organization, but its client still has a tenant.
-	// Use that tenant when resolving direct associations.
-	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
-	if err != nil {
-		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+	if organizationID == "" {
+		// Neither side establishes a tenant. Do not infer a resource from
+		// some other tenant's placement of a platform-global registration.
+		return "", nil
 	}
 	return s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 }

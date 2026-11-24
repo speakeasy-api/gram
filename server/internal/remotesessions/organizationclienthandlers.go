@@ -1162,6 +1162,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return err.LogWarn(ctx, logger)
 	}
 
+	if err := s.detachDerivedServerOffers(ctx, dbtx, authCtx, server.ProjectID, server.ID, clientID); err != nil {
+		return err.LogError(ctx, logger)
+	}
+
 	affected, err := upstreamclientsrepo.New(dbtx).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 		McpServerID: server.ID, ProjectID: server.ProjectID, RemoteSessionClientID: clientID,
 	})
@@ -1171,6 +1175,14 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
+		if err := upstreamclientsrepo.New(dbtx).RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "preserve hosted upstream authentication requirement").LogError(ctx, logger)
+		}
+	}
+	// The FK parent survives, but this operation revokes the typed offer that
+	// an attached agent may need to use its grant on the target server. Keep
+	// the explicit agent-detach requirement rather than silently stranding it.
 	attached, err := txRepo.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
 		OrganizationID: authCtx.ActiveOrganizationID, RemoteSessionClientID: clientID, UserSessionIssuerID: server.UserSessionIssuerID.UUID,
 	})

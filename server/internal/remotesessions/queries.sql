@@ -1191,8 +1191,8 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: ListVisibleRemoteSessionClientPlacementIssuers :many
--- The caller must first select the registration through an exact server offer.
--- Return only live placements in the requested project or its organization.
+-- The caller must first authorize access to the registration.
+-- An empty project is only used for organization-scoped rotation auditing.
 SELECT DISTINCT usi.id
 FROM mcp_server_remote_session_clients AS link
 JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
@@ -1203,7 +1203,7 @@ JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id A
 WHERE link.remote_session_client_id = @remote_session_client_id::uuid AND NOT link.deleted
   AND link.organization_id = @organization_id::text
   AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
-  AND (usi.project_id IS NULL OR usi.project_id = @project_id::uuid)
+  AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR usi.project_id IS NULL OR usi.project_id = @project_id::uuid)
 ORDER BY usi.id;
 
 -- name: GetRemoteSessionClientByID :one
@@ -1284,7 +1284,8 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
--- Filters registrations by a live server association on the given sign-in.
+-- Filters registrations by live direct, gateway-member or organization gateway
+-- placements on the given sign-in.
 -- Includes both the project's own clients and organization-level clients
 -- (project_id NULL) belonging to the project's org.
 SELECT
@@ -1303,16 +1304,43 @@ SELECT
           AND (usi.project_id IS NULL OR usi.project_id = @project_id::uuid)
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS upstream ON upstream.id = c.remote_session_issuer_id AND NOT upstream.deleted
+  AND (upstream.project_id = @project_id::uuid OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = @organization_id::text)))
 WHERE (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND EXISTS (
-    SELECT 1 FROM mcp_server_remote_session_clients AS link
-    JOIN mcp_servers AS server ON server.id = link.mcp_server_id AND server.project_id = link.project_id AND NOT server.deleted
-    JOIN projects AS project ON project.id = server.project_id AND project.organization_id = link.organization_id AND NOT project.deleted
-    JOIN user_session_issuers AS usi ON usi.id = server.user_session_issuer_id AND NOT usi.deleted
-    WHERE link.remote_session_client_id = c.id AND NOT link.deleted
-      AND link.organization_id = @organization_id::text AND link.project_id = @project_id::uuid
-      AND usi.id = @user_session_issuer_id
-      AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
+    SELECT 1
+    FROM user_session_issuers AS usi
+    JOIN mcp_server_remote_session_clients AS association ON association.remote_session_client_id = c.id
+    JOIN mcp_servers AS placement ON placement.id = association.mcp_server_id
+      AND placement.project_id = association.project_id AND NOT placement.deleted
+    JOIN projects AS placement_project ON placement_project.id = placement.project_id
+      AND placement_project.organization_id = association.organization_id AND NOT placement_project.deleted
+    WHERE usi.id = @user_session_issuer_id::uuid AND NOT usi.deleted
+      AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+      AND NOT association.deleted
+      AND association.organization_id = @organization_id::text
+      AND (placement.project_id = @project_id::uuid)
+      AND (
+        placement.user_session_issuer_id = usi.id
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND gateway.organization_id = association.organization_id
+            AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = placement.id AND membership.project_id = placement.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = usi.id
+        )
+        OR (usi.project_id IS NULL AND usi.organization_id = association.organization_id
+          AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = association.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> usi.id
+          ) AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS flag
+            WHERE flag.organization_id = association.organization_id AND NOT flag.deleted
+              AND flag.feature_name = 'organization_gateway_disabled'
+          ))
+      )
   )
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)

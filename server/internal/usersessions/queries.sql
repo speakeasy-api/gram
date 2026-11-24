@@ -2919,9 +2919,8 @@ ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FAL
 -- auth, upstream OAuth client associations decide nothing. A server's clients
 -- are the registrations of the live, enabled remote_session and service_account
 -- auth clients it offers, and no-auth is chosen when it offers no enabled
--- OAuth-backed auth client. The credential's issuer must still bind a
--- registration for it to be chosen without a person picking it, which only
--- ever withholds a choice: a pick on the consent page does not need the binding.
+-- OAuth-backed auth client. The exact server offer supplies the registration
+-- for automatic selection; no issuer-registration junction is consulted.
 -- A registration counts only while it and its issuer are live and exactly one
 -- offered client uses it, since a choice of a registration two clients share
 -- names neither and the resolver serves it as ambiguous; that choice is left to

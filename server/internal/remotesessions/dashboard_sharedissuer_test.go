@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // Several MCP servers usually share one user session issuer, and a client's
@@ -208,6 +209,12 @@ func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.
 	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target))
+	compatibility := testrepo.New(ti.conn)
+	require.NoError(t, compatibility.DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
+		RemoteSessionClientID: clientID, ProjectID: conv.ToNullUUID(projectID),
+	}))
+	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target), "compatibility parent removal does not revoke an explicit server offer")
 }
 
 // A server an administrator configured apart from its issuer during
