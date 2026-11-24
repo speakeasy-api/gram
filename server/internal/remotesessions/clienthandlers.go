@@ -1016,6 +1016,13 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, lifecycleLockError(err)
 	}
 	existing.RemoteSessionClient = locked
+	attached, err := lockAttachmentParentForUnlink(ctx, txRepo, authCtx.ActiveOrganizationID, clientID, userIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+	}
+	if attached {
+		return nil, oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
 	removed, err := txRepo.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
 		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
