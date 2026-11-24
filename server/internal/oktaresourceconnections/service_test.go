@@ -630,19 +630,21 @@ func TestEligibleServersFollowTypedOffers(t *testing.T) {
 	issuerOf := func(serverID uuid.UUID) (uuid.UUID, bool) {
 		rows, err := si.q.ListEligibleServers(ctx, si.orgID)
 		require.NoError(t, err)
-		listed := uuid.Nil
+		var listed *repo.ListEligibleServersRow
 		for _, row := range rows {
 			if row.ID == serverID {
-				listed = row.IssuerID
+				listed = &row
 			}
 		}
 		one, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			require.Equal(t, uuid.Nil, listed, "the list and the single read agree")
+			require.Nil(t, listed, "the list and the single read agree")
 			return uuid.Nil, false
 		}
 		require.NoError(t, err)
-		require.Equal(t, one.IssuerID, listed, "the list and the single read agree")
+		require.NotNil(t, listed, "the list includes the same eligible server")
+		require.Equal(t, one.IssuerID, listed.IssuerID, "the list and the single read agree")
+		require.Equal(t, one.UsesTypedOffers, listed.UsesTypedOffers, "the list and transaction-time read agree on the offer path")
 		return one.IssuerID, true
 	}
 
