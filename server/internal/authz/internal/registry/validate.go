@@ -340,7 +340,7 @@ func validateOpenKeys(fail func(string, ...any), owner string, p Permission, dec
 	seen := make(map[OpenOn]bool, len(p.Open))
 	for _, open := range p.Open {
 		switch open.On {
-		case OpenOnProbe, OpenOnPolicyAudience:
+		case OpenOnProbe:
 		case OpenOnConnection:
 			if len(p.DimensionSets) == 0 {
 				fail("%s: only a permission with dimension sets has a connection to open keys on", owner)

@@ -49,10 +49,6 @@ const (
 	// called. It names no tool, so a grant limited to some tools still lets
 	// the caller connect.
 	operationConnection
-	// operationPolicyAudience asks whether a risk policy's audience includes
-	// the caller. It names no server, so an audience grant limited to some
-	// servers still places the caller under the policy.
-	operationPolicyAudience
 )
 
 // asToolCall marks c as a tool call. Only the tool-call constructors use it.
@@ -178,8 +174,6 @@ func (c Check) mayOmit(key string) bool {
 	switch c.operation {
 	case operationConnection:
 		return slices.Contains(open.Connection, key)
-	case operationPolicyAudience:
-		return slices.Contains(open.PolicyAudience, key)
 	case operationDefault, operationToolCall:
 		return false
 	}
