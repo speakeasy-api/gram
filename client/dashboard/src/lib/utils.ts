@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
+import { getRuntimeConfig, type RuntimeConfig } from "./runtime-config";
 
 // The design system ships semantic font-size utilities (`text-body-md`,
 // `text-heading-lg`, …) that tailwind-merge does not know about, so without
@@ -50,24 +51,17 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// Hosts serving the production dashboard. Compared exactly: a substring check
-// would also match dev.ai.speakeasy.com and preview hosts.
-const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
-
-export function isProdHost(serverURL: string): boolean {
-  return PROD_HOSTS.has(new URL(serverURL).hostname);
-}
-
-// Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
-const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
-
 // Every first-party host that serves the same product as serverURL's host:
-// all of that environment's hosts on a prod or dev host, otherwise just it.
-export function firstPartyHosts(serverURL = getServerURL()): string[] {
+// the deployment's configured hosts when serverURL's host is one of them,
+// otherwise just that host. A deployment can route extra hosts to the
+// dashboard (old API hosts, previews) that are not first-party.
+export function firstPartyHosts(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string[] {
   const host = new URL(serverURL, window.location.origin).hostname;
-  if (PROD_HOSTS.has(host)) return [...PROD_HOSTS];
-  if (DEV_HOSTS.has(host)) return [...DEV_HOSTS];
-  return [host];
+  const configured = config.firstPartyHosts ?? [];
+  return configured.includes(host) ? [...configured] : [host];
 }
 
 // Hosts an agent sandbox must allow to reach Speakeasy: the current host first,
@@ -75,23 +69,25 @@ export function firstPartyHosts(serverURL = getServerURL()): string[] {
 // daemon send to the server URL at publish time, which moves between these
 // hosts when the server URL changes, so an allowlist needs all of them to keep
 // working across a republish.
-export function agentEgressHosts(serverURL = getServerURL()): string[] {
+export function agentEgressHosts(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string[] {
   const host = new URL(serverURL, window.location.origin).hostname;
-  return [host, ...firstPartyHosts(serverURL).filter((h) => h !== host)];
+  return [
+    host,
+    ...firstPartyHosts(serverURL, config).filter((h) => h !== host),
+  ];
 }
 
-// tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
-// host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
-// valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(serverURL = getServerURL()): string {
+// The deployment's tunnel gateway host when configured, otherwise
+// tunnel.<host> (local development).
+export function tunnelGatewayURL(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string {
   const server = new URL(serverURL);
-  const host = PROD_HOSTS.has(server.hostname)
-    ? "tunnel.speakeasy.com"
-    : DEV_HOSTS.has(server.hostname)
-      ? "tunnel.dev.getgram.ai"
-      : /^pr-\d+\./.test(server.host)
-        ? `tunnel-${server.host}`
-        : `tunnel.${server.host}`;
+  const host = config.tunnelHost ?? `tunnel.${server.host}`;
   return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
 }
 
@@ -286,18 +282,22 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(serverURL = getServerURL()): string {
+// Fallback for the custom domain DNS target: the server's dnsConfig.cnameTarget
+// takes precedence wherever it is available. The deployment's configured target
+// when set, otherwise one derived from the server host (local development).
+export function getCustomDomainCNAME(
+  serverURL = getServerURL(),
+  config: RuntimeConfig = getRuntimeConfig(),
+): string {
+  if (config.customDomainCname) return config.customDomainCname;
   try {
-    if (isProdHost(serverURL)) return "cname.getgram.ai.";
-    const url = new URL(serverURL);
-    if (DEV_HOSTS.has(url.hostname)) return "cname.dev.getgram.ai.";
-    const parts = url.hostname.split(".");
+    const parts = new URL(serverURL).hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;
     }
     return `${parts.join(".")}.`;
   } catch {
-    return "cname.getgram.ai.";
+    return "";
   }
 }
 

@@ -341,6 +341,54 @@ describe("useObserveFilters", () => {
     ]);
   });
 
+  it("runs a calendar range through the whole of its final day", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 23, 11, 52));
+    try {
+      const { result } = renderHook(() => useObserveFilters(), {
+        wrapper: makeWrapper("/"),
+      });
+      act(() =>
+        result.current.setCalendarRangeParam(
+          new Date(2026, 10, 16),
+          new Date(2026, 10, 17),
+        ),
+      );
+      expect(result.current.customRange).toEqual({
+        from: new Date(2026, 10, 16),
+        to: new Date(2026, 10, 17, 23, 59, 59, 999),
+      });
+      expect(result.current.to).toEqual(
+        new Date(2026, 10, 17, 23, 59, 59, 999),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends a calendar range that includes today at now", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = new Date(2026, 10, 23, 11, 52);
+    vi.setSystemTime(now);
+    try {
+      const { result } = renderHook(() => useObserveFilters(), {
+        wrapper: makeWrapper("/"),
+      });
+      act(() =>
+        result.current.setCalendarRangeParam(
+          new Date(2026, 10, 22),
+          new Date(2026, 10, 23),
+        ),
+      );
+      expect(result.current.customRange).toEqual({
+        from: new Date(2026, 10, 22),
+        to: now,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("handleHookSourceSelectionChange sets and clears the source URL param", () => {
     const { result } = renderHook(() => useObserveFiltersWithNavigation(), {
       wrapper: makeWrapper("/"),

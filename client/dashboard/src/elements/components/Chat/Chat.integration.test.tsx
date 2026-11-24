@@ -31,11 +31,6 @@ import {
 // this covers what those tests skip: the provider's transport wiring,
 // @assistant-ui/react-ai-sdk, and rendering the result.
 
-vi.mock("@/elements/lib/errorTracking", () => ({
-  initErrorTracking: vi.fn(),
-  trackError: vi.fn(),
-}));
-
 const SESSION = "test-session";
 
 let server: ChatTestServerProcess;

@@ -2900,9 +2900,9 @@ const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = $1
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = $1
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
@@ -5411,7 +5411,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE
@@ -8677,7 +8677,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE

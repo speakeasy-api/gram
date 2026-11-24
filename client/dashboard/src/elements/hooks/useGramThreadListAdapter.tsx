@@ -16,7 +16,6 @@ import {
   convertGramMessagesToUIMessages,
 } from "@/elements/lib/messageConverter";
 import { sleep } from "@/lib/utils";
-import { trackError } from "@/elements/lib/errorTracking";
 import {
   ThreadMetaContext,
   type ThreadMeta,
@@ -543,10 +542,7 @@ export function useGramThreadListAdapter(
             throw new Error(`Failed to rename chat: ${response.status}`);
           }
         } catch (error) {
-          trackError(error, {
-            source: "custom",
-            context: "useGramThreadListAdapter.rename",
-          });
+          console.error("Failed to rename chat:", error);
           throw error;
         }
       },

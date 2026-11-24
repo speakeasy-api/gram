@@ -6,6 +6,11 @@ import { enumPresentation } from "@/lib/enum";
 
 import type { Disposition } from "@gram/client/models/components/selector.js";
 
+import {
+  TOOL_ANNOTATIONS,
+  type ToolAnnotation,
+} from "@/components/tool-selection/annotations";
+
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
 /** The four tool annotations the backend checks, in the order shown. */
@@ -59,6 +64,13 @@ export type ToolLimit =
 
 export type ToolLimitKind = ToolLimit["kind"];
 
+interface ToolHints {
+  readOnlyHint?: boolean | null;
+  destructiveHint?: boolean | null;
+  idempotentHint?: boolean | null;
+  openWorldHint?: boolean | null;
+}
+
 /**
  * The order the backend picks a tool's one disposition in when it carries
  * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
@@ -78,7 +90,9 @@ export const DISPOSITION_PRECEDENCE = [
  * is unannotated. disposition-cases.gen.json holds the server's answers, and
  * the tests check this function against them.
  */
-export function toolDisposition(tool: ServerTool): Disposition {
+export function toolDisposition(tool: {
+  annotations?: ToolHints | null;
+}): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
   if (hints?.readOnlyHint) return "read_only";
@@ -130,6 +144,17 @@ export function limitAfterToggle(
     return { ...limit, tools: named.filter((other) => other !== name) };
   }
   return { kind: "tools", tools: next };
+}
+
+/**
+ * The server matches a tool by one disposition only, so a tool with several
+ * hints must not count under the others.
+ */
+export function toolDispositionAnnotations(tool: {
+  annotations?: ToolHints | null;
+}): ToolAnnotation[] {
+  const disposition = toolDisposition(tool);
+  return TOOL_ANNOTATIONS.filter((annotation) => annotation === disposition);
 }
 
 /**

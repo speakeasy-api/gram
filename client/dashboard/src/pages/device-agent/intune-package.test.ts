@@ -63,13 +63,38 @@ describe("psQuote", () => {
 });
 
 describe("configScript", () => {
-  it("embeds the org settings as quoted literals", () => {
-    const script = configScript({ ...config, orgName: "O'Brien & Co" });
-    expect(script).toContain("$orgToken = 'spk_org_test'");
-    expect(script).toContain("$orgSlug = 'example-corp'");
-    expect(script).toContain("$orgName = 'O''Brien & Co'");
-    expect(script).toContain("$autoUpdate = 'notify'");
-    expect(script).toContain("$configRevision = '20261119184500'");
+  it.each(["notify", "automatic"] as const)(
+    "fills the manual JSON template in %s mode",
+    (autoUpdate) => {
+      const orgName = `O'Brien “HQ” "West" \\ $(whoami) {{mail}}\n'@`;
+      const script = configScript({ ...config, orgName, autoUpdate });
+      const template = /\$template = @'\n([\s\S]*?)\n'@/.exec(script)?.[1];
+      expect(JSON.parse(template ?? "")).toEqual({
+        v: 1,
+        email: "{{mail}}",
+        org_token: config.orgToken,
+        org_slug: config.orgSlug,
+        org_name: orgName,
+        auto_update: autoUpdate,
+      });
+      expect(script).toContain("$configRevision = '20261119184500'");
+      expect(script).toContain("$config.email = Get-EnrolledUserEmail");
+      expect(script).toContain("managed-$configRevision.installed");
+    },
+  );
+
+  it("prefers the enrollment UPN before trying the interactive identity sources", () => {
+    const script = configScript(config);
+    const lookup = script.split("function Get-EnrolledUserEmail {")[1];
+    expect(lookup).toMatch(
+      /HKLM:\\SOFTWARE\\Microsoft\\Enrollments[\s\S]*?\.UPN[\s\S]*?return \(Get-ActiveEntraUserEmail\)/,
+    );
+    const fallback = script.split("function Get-ActiveEntraUserEmail {")[1];
+    expect(fallback).toMatch(
+      /AzureAD[\s\S]*?Get-AadNgcUserId -Sid \$user.Sid[\s\S]*?Get-DomainUserPrincipalName -Sid \$user.Sid/,
+    );
+    expect(script).toContain("WorkplaceJoin\\AADNGC");
+    expect(script).toContain("UserPrincipal]::FindByIdentity");
   });
 });
 
@@ -109,9 +134,9 @@ describe("buildIntuneBundle", () => {
       entry(files, "1-config/Deploy-SpeakeasyManagedJson.intunewin"),
     );
     expect(configPkg.setupFile).toBe("Deploy-SpeakeasyManagedJson.ps1");
-    expect(
-      strFromU8(entry(configPkg.files, "Deploy-SpeakeasyManagedJson.ps1")),
-    ).toContain("$orgToken = 'spk_org_test'");
+    expect(entry(configPkg.files, "Deploy-SpeakeasyManagedJson.ps1")).toEqual(
+      new TextEncoder().encode(`\uFEFF${configScript(config)}`),
+    );
 
     const startupPkg = await openPackage(
       entry(files, "2-startup/Deploy-SpeakeasyStartup.intunewin"),

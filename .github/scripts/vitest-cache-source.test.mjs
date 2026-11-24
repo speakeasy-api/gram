@@ -26,12 +26,24 @@ function fixture({ runId = 101, jobId = 201, artifactId = 301 } = {}) {
     run_id: runId,
     run_attempt: 2,
     head_sha: sha,
-    name: "client-test",
+    name: "client-test (dashboard)",
     status: "completed",
     conclusion: "success",
-    steps: ["Test", "Test admin", "Test registry editor in Chrome"].map(
-      (name) => ({ name, status: "completed", conclusion: "success" }),
-    ),
+    steps: ["Test"].map((name) => ({
+      name,
+      status: "completed",
+      conclusion: "success",
+    })),
+  };
+  const adminJob = {
+    ...job,
+    id: jobId + 1000,
+    name: "client-test (admin)",
+    steps: ["Test admin", "Test registry editor in Chrome"].map((name) => ({
+      name,
+      status: "completed",
+      conclusion: "success",
+    })),
   };
   const artifact = {
     id: artifactId,
@@ -53,15 +65,16 @@ function fixture({ runId = 101, jobId = 201, artifactId = 301 } = {}) {
     if (url.pathname.endsWith("/actions/workflows/pr.yaml/runs"))
       return { workflow_runs: [run] };
     if (url.pathname.endsWith(`/runs/${runId}/attempts/2/jobs`))
-      return { jobs: [job] };
+      return { jobs: [job, adminJob] };
     if (url.pathname.endsWith(`/runs/${runId}/artifacts`))
       return { artifacts: [artifact] };
     throw new Error(`Unexpected API request: ${path}`);
   };
-  return { run, job, artifact, api };
+  return { run, job, adminJob, artifact, api };
 }
 
-const select = (api) => selectCacheSource({ api, repository, sha, prefix });
+const select = (api, suite = "dashboard") =>
+  selectCacheSource({ api, repository, sha, prefix, suite });
 
 for (const [reason, change] of [
   [
@@ -273,7 +286,9 @@ for (const [name, conclusion] of [
 ]) {
   test(`rejects ${conclusion} step: ${name}`, async () => {
     const f = fixture();
-    f.job.steps.find((step) => step.name === name).conclusion = conclusion;
+    (name === "Test" ? f.job : f.adminJob).steps.find(
+      (step) => step.name === name,
+    ).conclusion = conclusion;
     assert.equal(await select(f.api), null);
   });
 }
@@ -349,7 +364,11 @@ test("selects a later eligible run when the first has no artifact", async () => 
     if (pathname.endsWith("/runs/101/artifacts")) return { artifacts: [] };
     if (pathname.endsWith("/runs/102/attempts/2/jobs"))
       return {
-        jobs: [{ ...later.job, id: 999, name: "other-job" }, later.job],
+        jobs: [
+          { ...later.job, id: 999, name: "other-job" },
+          later.job,
+          later.adminJob,
+        ],
       };
     if (pathname.endsWith("/runs/102/artifacts"))
       return {
@@ -367,3 +386,60 @@ test("selects a later eligible run when the first has no artifact", async () => 
     sha,
   });
 });
+
+test("selects the admin artifact producer after both jobs pass", async () => {
+  const f = fixture();
+  assert.deepEqual(await select(f.api, "admin"), {
+    runId: 101,
+    jobId: 1201,
+    artifactId: 301,
+    sha,
+  });
+});
+
+for (const suite of ["dashboard", "admin"]) {
+  test(`rejects a missing companion job when selecting ${suite}`, async () => {
+    const f = fixture();
+    assert.equal(
+      await select(async (path) => {
+        const response = await f.api(path);
+        return response.jobs
+          ? { jobs: [suite === "dashboard" ? f.job : f.adminJob] }
+          : response;
+      }, suite),
+      null,
+    );
+  });
+}
+
+test("rejects an unknown suite", async () => {
+  const f = fixture();
+  assert.equal(await select(f.api, "other"), null);
+});
+
+for (const [reason, change] of [
+  [
+    "failed",
+    (job) => {
+      job.conclusion = "failure";
+    },
+  ],
+  [
+    "wrong attempt",
+    (job) => {
+      job.run_attempt = 1;
+    },
+  ],
+  [
+    "wrong SHA",
+    (job) => {
+      job.head_sha = "b".repeat(40);
+    },
+  ],
+]) {
+  test(`rejects an admin job with ${reason} even when selecting dashboard`, async () => {
+    const f = fixture();
+    change(f.adminJob);
+    assert.equal(await select(f.api), null);
+  });
+}

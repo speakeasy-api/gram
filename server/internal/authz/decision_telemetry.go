@@ -63,7 +63,7 @@ func boundedReason(value repo.Reason) string {
 	switch value {
 	case repo.ReasonGrantMatched, repo.ReasonNoGrants, repo.ReasonScopeUnsatisfied,
 		repo.ReasonDenyGrant, repo.ReasonInvalidCheck, repo.ReasonRBACSkippedAPIKey,
-		repo.ReasonDevOverride:
+		repo.ReasonDevOverride, repo.ReasonConnectionOwnerMismatch:
 		return string(value)
 	default:
 		return boundedUnknownValue
