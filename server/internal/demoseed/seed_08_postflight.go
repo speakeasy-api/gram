@@ -134,7 +134,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "mcp server feedback settings",
 			count: byProject(s.q.ServerFeedbackCountConfigs),
-			fail:  postflightMustEqual(2, "expected 2 servers with feedback settings, found %d"),
+			fail:  postflightMustEqual(1, "expected 1 server with feedback settings, found %d"),
 		},
 		{
 			what:  "mcp server feedback reports",
