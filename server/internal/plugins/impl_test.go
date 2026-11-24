@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -1181,12 +1182,12 @@ func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testi
 		InstallationID:           12345,
 		RepoOwner:                "test-owner",
 		RepoName:                 "test-marketplace",
-		MarketplaceToken:         conv.ToPGText("marketplace-token"),
 		PublishedMcpFingerprints: []byte(`{}`),
 		PublishedHooksVersion:    pgtype.Text{},
 		PublishedHooksConfig:     nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *authCtx.ProjectID, "marketplace-token")
 
 	result, body, err := ti.service.DownloadCodexInstallScript(ctx, &gen.DownloadCodexInstallScriptPayload{})
 	require.NoError(t, err)
@@ -1978,8 +1979,8 @@ func TestPluginsService_PublishPlugins_GrantsMCPKeyItsPluginServers(t *testing.T
 		return slices.ContainsFunc(policies["mcp"], func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 	}
 
-	require.True(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, distributed.ID.String(), project)), "the key connects to the server its plugin distributes")
-	require.False(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, other.ID.String(), project)), "the key reaches nothing its plugins do not distribute")
+	require.True(t, allows(authz.MCPServer(authz.MCPServerIDOf(distributed.ID), authz.ProjectIDFrom(project)).Connect()), "the key connects to the server its plugin distributes")
+	require.False(t, allows(authz.MCPServer(authz.MCPServerIDOf(other.ID), authz.ProjectIDFrom(project)).Connect()), "the key reaches nothing its plugins do not distribute")
 
 	clientID := uuid.NewString()
 	for _, clientType := range []string{authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough} {
@@ -2045,7 +2046,7 @@ func TestPluginsService_PublishProject_MCPKeyFollowsServerSignIn(t *testing.T) {
 		require.Len(t, minted, 1, "the republish mints one MCP key")
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(minted[0].ID)})
 		require.NoError(t, err)
-		check := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project)
+		check := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDFrom(project)).Connect()
 		connects = slices.ContainsFunc(grants, func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 		return connects, strings.Contains(string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), minted[0].KeyPrefix)
 	}

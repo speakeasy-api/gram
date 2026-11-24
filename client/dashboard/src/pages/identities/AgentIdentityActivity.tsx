@@ -15,6 +15,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { ResourceLink } from "@/pages/access/ResourceLink";
+import { reasonLabel } from "@/pages/access/challengeHelpers";
 import {
   useResourceLinkMaps,
   type ResourceLinkMaps,
@@ -212,8 +213,21 @@ function CheckGroupRow({
         ) : (
           <span className="inline-flex min-w-0 items-center gap-2">
             <code className="text-xs">{group.scope}</code>
-            {/* Named and linked as the Roles & Permissions page does. */}
-            <ResourceLink challenge={group} orgSlug={orgSlug ?? ""} {...maps} />
+            {/* Named and linked as the Roles & Permissions page does. An
+                auth client check names the server it was used on. */}
+            <ResourceLink
+              challenge={
+                group.serverId
+                  ? {
+                      ...group,
+                      resourceKind: "mcp",
+                      resourceId: group.serverId,
+                    }
+                  : group
+              }
+              orgSlug={orgSlug ?? ""}
+              {...maps}
+            />
           </span>
         )
       }
@@ -221,6 +235,10 @@ function CheckGroupRow({
         <>
           {checkCountLabel(outcome, group.count, atLeast)} · last{" "}
           <HumanizeDateTime date={group.latest} />
+          {outcome === "deny" &&
+            group.reason === "connection_owner_mismatch" && (
+              <> · {reasonLabel(group.reason)}</>
+            )}
         </>
       }
       trailing={outcome === "deny" ? "Denied" : "Allowed"}

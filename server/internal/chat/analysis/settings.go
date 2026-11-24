@@ -19,11 +19,15 @@ const DefaultJudgeDailyCap int32 = 100
 // projectOnlyOrgs confines an organization's chat analysis to a single
 // project: every other project resolves with no judges enabled, so nothing is
 // enqueued and no budget is reserved for it. Hardcoded rather than configured
-// — this is a one-off carve-out for Speakeasy's own organization, whose
+// — this is a one-off carve-out for Speakeasy's own US organization, whose
 // hundreds of internal projects would otherwise spend judge budget on noise.
+// Both IDs exist only in the US production database, so the entry matches
+// nothing elsewhere. It deliberately does not use the configured staff
+// organization: another partition's staff organization would then have every
+// project resolve with no judges enabled.
 var projectOnlyOrgs = map[string]uuid.UUID{
-	// speakeasy-team → its "default" project.
-	constants.SpeakeasyTeamOrganizationID: uuid.MustParse("0196cbd1-9328-74e7-b7bb-6e5357565573"),
+	// US speakeasy-team → its "default" project.
+	constants.USSpeakeasyTeamOrganizationID: uuid.MustParse("0196cbd1-9328-74e7-b7bb-6e5357565573"),
 }
 
 // Settings are the effective per-organization budgets: the daily cap for each
