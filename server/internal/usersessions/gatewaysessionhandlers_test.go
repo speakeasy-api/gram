@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func seedSessionGateway(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) uuid.UUID {
@@ -206,6 +207,23 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	require.Equal(t, session.ID.String(), result.Items[0].ID)
 	require.Len(t, result.Items[0].Upstreams, 1)
+
+	// A selected gateway wins even if the caller omits the inventory mode.
+	// Another gateway ID must not inherit this member's typed offer.
+	q := usersessionsrepo.New(ti.conn)
+	params := usersessionsrepo.ListRemoteSessionUpstreamsForSubjectsParams{
+		SubjectUrns: []string{subject.String()}, IssuerIds: []uuid.UUID{issuer},
+		OrganizationID: auth.ActiveOrganizationID, ProjectIds: []uuid.UUID{*auth.ProjectID},
+		GatewayID: conv.ToNullUUID(gateway), GatewayInventory: false,
+	}
+	upstreams, err := q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, upstreams, 1)
+	params.GatewayID = conv.ToNullUUID(uuid.New())
+	upstreams, err = q.ListRemoteSessionUpstreamsForSubjects(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, upstreams)
+
 	empty, err := ti.service.ListGatewaySessions(ctx, &gen.ListGatewaySessionsPayload{GatewayID: new(gateway.String()), ServerID: new(uuid.NewString())})
 	require.NoError(t, err)
 	require.Empty(t, empty.Items)
