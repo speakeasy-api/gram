@@ -2799,3 +2799,11 @@ UPDATE functions_access SET deleted_at = clock_timestamp() WHERE id = @id;
 -- Test-only fixture: reads a function runner key's organization, soft-deleted
 -- or not.
 SELECT organization_id, updated_at FROM functions_access WHERE id = @id;
+
+-- name: SetAPIKeyActivityFixture :exec
+-- Backdates a key's creation and last use so the plugin key reaper sees it as
+-- old or recently used.
+UPDATE api_keys
+SET created_at = @created_at
+  , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;
