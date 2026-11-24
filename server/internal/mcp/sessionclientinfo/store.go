@@ -146,7 +146,8 @@ return 1
 //
 // The ZADD on a hit is unconditional: if the live set expired or was evicted
 // while the record survived, the hit admits the record again, so it counts
-// against the cap and the next admit evicts any excess. Only a present record
+// against the cap. That can leave the live set above the cap, but only until
+// the next admit evicts the excess. Only a present record
 // reaches it, so an evicted session is never brought back.
 var loadScript = redis.NewScript(`
 local value = redis.call('GET', KEYS[1])

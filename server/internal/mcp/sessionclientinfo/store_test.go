@@ -333,9 +333,9 @@ func TestLoadReadmitsRecordAfterLiveSetLoss(t *testing.T) {
 	requireFreshIdleExpiry(t, client, liveKey)
 }
 
-// TestCapEvictsRecordsReadmittedByLoad checks that re-admission on a hit
-// cannot grow a server past its budget: a load may push the live set over the
-// cap, and the next admit evicts the excess least recently used first.
+// TestCapEvictsRecordsReadmittedByLoad checks how re-admission on a hit meets
+// the budget: a load may push the live set over the cap, and the overflow lasts
+// only until the next admit evicts the excess, least recently used first.
 func TestCapEvictsRecordsReadmittedByLoad(t *testing.T) {
 	t.Parallel()
 
