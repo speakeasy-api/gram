@@ -464,8 +464,8 @@ var ProblemRule = Type("SuspectedProblemRule", String, func() {
 })
 
 var ProblemWhoFixes = Type("SuspectedProblemWhoFixes", String, func() {
-	Description("Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.")
-	Enum("person", "admin", "provider", "app", "speakeasy", "nobody")
+	Description("Who has to fix it, unknown when that is not known.")
+	Enum("person", "admin", "provider", "app", "speakeasy", "unknown")
 	Meta("openapi:extension:x-speakeasy-name-override", "SuspectedProblemWhoFixes")
 })
 
@@ -556,7 +556,7 @@ var ProblemDetail = Type("SuspectedProblemDetail", func() {
 
 var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
 	loggingEnabled()
-	Attribute("problems", ArrayOf(Problem), "At most 100. Problems someone other than each person fixes come first, then those each person fixes; most people first within each.")
+	Attribute("problems", ArrayOf(Problem), "At most 100. Problems each person fixes themselves come last; most people first within each group.")
 	Attribute("problems_total", Int64, "Problems before the cap.")
 	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })

@@ -12,27 +12,27 @@ import {
 } from "./format";
 
 describe("sourceSentence", () => {
-  it("says who returned the failures in a plain sentence", () => {
+  it("says where the failures came from in a plain sentence", () => {
     expect(sourceSentence("speakeasy_setting")).toBe(
       "A setting in Speakeasy caused these failures.",
     );
     expect(sourceSentence("service", "mcp.linear.app")).toBe(
-      "The service (mcp.linear.app) returned these failures.",
+      "These failures came from the service (mcp.linear.app).",
     );
     expect(sourceSentence("service")).toBe(
-      "The service returned these failures.",
+      "These failures came from the service.",
     );
     expect(sourceSentence("app", "Cursor 2.0.1")).toBe(
-      "The app (Cursor 2.0.1) caused these failures.",
+      "These failures came from the app (Cursor 2.0.1).",
     );
     expect(sourceSentence("server")).toBe(
-      "The MCP server returned these failures.",
+      "These failures came from the MCP server.",
     );
     expect(sourceSentence("identity_provider")).toBe(
-      "The identity provider returned these failures.",
+      "These failures came from the identity provider.",
     );
     expect(sourceSentence("speakeasy")).toBe(
-      "These failures came from Speakeasy itself.",
+      "These failures came from Speakeasy.",
     );
   });
 });

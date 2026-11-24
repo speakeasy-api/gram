@@ -128,20 +128,28 @@ func TestListSuspectedProblems_ListsWhatEachPersonFixesLast(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
-	for range 3 {
+	for range 7 {
 		person := urn.NewUserSubject("user-" + uuid.NewString())
 		ti.attemptAs(t, mcpconnectionattempts.GatewayScope(ti.org, ti.project, ti.server, mcpconnectionattempts.AppDCR), person, time.Hour, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession)
 	}
-	ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	me := urn.NewUserSubject(ti.userID)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
 
 	res := ti.listProblems(t, ctx, nil, nil)
 	require.Len(t, res.Problems, 2)
-	require.Equal(t, int64(2), res.Problems[0].PeopleCount, "an admin's problem comes before one with more people that each person fixes")
-	require.Equal(t, gen.SuspectedProblemWhoFixes("admin"), res.Problems[0].WhoFixes)
+	admin := res.Problems[0]
+	require.Equal(t, int64(1), admin.PeopleCount, "one person's problem an admin fixes comes before seven people's that each fixes")
+	require.Equal(t, gen.SuspectedProblemWhoFixes("admin"), admin.WhoFixes)
 	connect := res.Problems[1]
+	require.Equal(t, int64(7), connect.PeopleCount)
 	require.Equal(t, gen.SuspectedProblemWhoFixes("person"), connect.WhoFixes)
-	require.Equal(t, "3 people need to connect their account for Linear", connect.Headline)
-	require.Equal(t, "Their apps asked for Linear, but each person has to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page.", connect.Fact)
+	require.Equal(t, "7 people need to connect their account for Linear", connect.Headline)
+	require.Equal(t, "Their apps asked for Linear. Each person has to connect their own account for it, or reconnect it if it expired. They can do that from the link their app shows.", connect.Fact)
+
+	got := ti.getProblem(t, ctx, connect.ID)
+	require.True(t, got.Found)
+	require.Equal(t, gen.SuspectedProblemWhoFixes("person"), got.Problem.WhoFixes)
 }
 
 func TestListSuspectedProblems_FiltersByPart(t *testing.T) {

@@ -189,8 +189,8 @@ type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool   `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
 	ViewerScope    string `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
-	// At most 100. Problems someone other than each person fixes come first, then
-	// those each person fixes; most people first within each.
+	// At most 100. Problems each person fixes themselves come last; most people
+	// first within each group.
 	Problems []*SuspectedProblemResponseBody `form:"problems" json:"problems" xml:"problems"`
 	// Problems before the cap.
 	ProblemsTotal int64 `form:"problems_total" json:"problems_total" xml:"problems_total"`

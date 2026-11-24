@@ -49,7 +49,7 @@ export type SuspectedProblemSuspectedProblemRule = OpenEnum<
 >;
 
 /**
- * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ * Who has to fix it, unknown when that is not known.
  */
 export const SuspectedProblemSuspectedProblemWhoFixes = {
   Person: "person",
@@ -57,10 +57,10 @@ export const SuspectedProblemSuspectedProblemWhoFixes = {
   Provider: "provider",
   App: "app",
   Speakeasy: "speakeasy",
-  Nobody: "nobody",
+  Unknown: "unknown",
 } as const;
 /**
- * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ * Who has to fix it, unknown when that is not known.
  */
 export type SuspectedProblemSuspectedProblemWhoFixes = OpenEnum<
   typeof SuspectedProblemSuspectedProblemWhoFixes
@@ -103,7 +103,7 @@ export type SuspectedProblem = {
    */
   since: Date;
   /**
-   * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+   * Who has to fix it, unknown when that is not known.
    */
   suspectedProblemWhoFixes: SuspectedProblemSuspectedProblemWhoFixes;
 };

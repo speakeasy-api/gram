@@ -109082,7 +109082,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SuspectedProblem'
-          description: At most 100. Problems someone other than each person fixes come first, then those each person fixes; most people first within each.
+          description: At most 100. Problems each person fixes themselves come last; most people first within each group.
         problems_total:
           type: integer
           description: Problems before the cap.
@@ -123845,14 +123845,14 @@ components:
           description: When its earliest failure ended.
           format: date-time
         who_fixes:
-          description: 'Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.'
+          description: Who has to fix it, unknown when that is not known.
           enum:
             - person
             - admin
             - provider
             - app
             - speakeasy
-            - nobody
+            - unknown
           type: string
           x-speakeasy-name-override: SuspectedProblemWhoFixes
       required:
@@ -123979,14 +123979,14 @@ components:
           type: string
           x-speakeasy-name-override: ConnectionFailureSource
         who_fixes:
-          description: 'Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.'
+          description: Who has to fix it, unknown when that is not known.
           enum:
             - person
             - admin
             - provider
             - app
             - speakeasy
-            - nobody
+            - unknown
           type: string
           x-speakeasy-name-override: SuspectedProblemWhoFixes
       required:

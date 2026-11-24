@@ -79,7 +79,7 @@ export type SuspectedProblemDetailConnectionFailureSource = OpenEnum<
 >;
 
 /**
- * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ * Who has to fix it, unknown when that is not known.
  */
 export const SuspectedProblemWhoFixes = {
   Person: "person",
@@ -87,10 +87,10 @@ export const SuspectedProblemWhoFixes = {
   Provider: "provider",
   App: "app",
   Speakeasy: "speakeasy",
-  Nobody: "nobody",
+  Unknown: "unknown",
 } as const;
 /**
- * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ * Who has to fix it, unknown when that is not known.
  */
 export type SuspectedProblemWhoFixes = OpenEnum<
   typeof SuspectedProblemWhoFixes
@@ -176,7 +176,7 @@ export type SuspectedProblemDetail = {
     | SuspectedProblemDetailConnectionFailureSource
     | undefined;
   /**
-   * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+   * Who has to fix it, unknown when that is not known.
    */
   suspectedProblemWhoFixes: SuspectedProblemWhoFixes;
 };

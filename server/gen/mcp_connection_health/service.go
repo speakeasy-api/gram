@@ -470,8 +470,8 @@ type ListSuspectedProblemsResult struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool
 	ViewerScope    ConnectionViewerScope
-	// At most 100. Problems someone other than each person fixes come first, then
-	// those each person fixes; most people first within each.
+	// At most 100. Problems each person fixes themselves come last; most people
+	// first within each group.
 	Problems []*SuspectedProblem
 	// Problems before the cap.
 	ProblemsTotal int64
@@ -623,9 +623,7 @@ type SuspectedProblemServer struct {
 	Attempts int64
 }
 
-// Who has to act: person when each person fixes it themselves; admin,
-// provider, app or speakeasy when someone else must; nobody when it is not
-// known.
+// Who has to fix it, unknown when that is not known.
 type SuspectedProblemWhoFixes string
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

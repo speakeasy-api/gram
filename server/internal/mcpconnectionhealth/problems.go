@@ -269,8 +269,7 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	return result, nil
 }
 
-// capProblems puts the problems each person fixes themselves after the rest, keeping the
-// grouping's order inside each, then keeps the first maxProblems and counts them all.
+// capProblems lists what each person fixes last, keeps the first maxProblems and counts them all.
 func capProblems(ps []problems.Problem) ([]problems.Problem, int64) {
 	slices.SortStableFunc(ps, func(a, b problems.Problem) int {
 		return cmp.Compare(personFixes(a), personFixes(b))
@@ -288,7 +287,7 @@ func personFixes(p problems.Problem) int {
 // whoFixesOf is the API's name for who fixes a problem.
 func whoFixesOf(w mcpconnectionattempts.WhoFixes) gen.SuspectedProblemWhoFixes {
 	if w == mcpconnectionattempts.WhoNobody {
-		return "nobody"
+		return "unknown"
 	}
 	return gen.SuspectedProblemWhoFixes(w)
 }

@@ -36,14 +36,14 @@ export const SIGN_IN_STEPS: readonly StepGroup[] = [
 /** Signing in to Speakeasy, or connecting to the service behind a server. */
 export type ProblemPart = "speakeasy" | "service";
 
-/** Who has to fix a suspected problem; person when each person fixes it themselves. */
+/** Who has to fix a suspected problem, unknown when that is not known. */
 export type WhoFixes =
   | "person"
   | "admin"
   | "provider"
   | "app"
   | "speakeasy"
-  | "nobody";
+  | "unknown";
 
 /** The party that returned a failure. */
 export type Source =

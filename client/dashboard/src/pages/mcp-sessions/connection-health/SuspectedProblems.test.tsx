@@ -133,13 +133,13 @@ const DETAIL: SuspectedProblemDetail = {
   ],
 };
 
-function renderSheet() {
+function renderSheet(now: Date = NOW) {
   render(
     <MemoryRouter>
       <ProblemDetailSheet
         id="abc"
         providerId="prov_1"
-        now={NOW}
+        now={now}
         onClose={noop}
       />
     </MemoryRouter>,
@@ -414,13 +414,19 @@ describe("ProblemDetailSheet", () => {
         problem: {
           ...DETAIL,
           people: [
-            { ...person("old"), firstFailedAt: "2026-11-18T10:00:00Z" },
-            person("new"),
+            {
+              ...person("old"),
+              firstFailedAt: new Date(2026, 10, 18, 10, 0).toISOString(),
+            },
+            {
+              ...person("new"),
+              firstFailedAt: new Date(2026, 10, 20, 10, 0).toISOString(),
+            },
           ],
         },
       },
     };
-    renderSheet();
+    renderSheet(new Date(2026, 10, 20, 12, 0));
     const started = screen
       .getAllByText(/^started /)
       .map((el) => el.textContent);

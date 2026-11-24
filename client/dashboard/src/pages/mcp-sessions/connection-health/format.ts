@@ -74,25 +74,22 @@ export const SOURCE_LABELS: Record<Source, string> = {
   speakeasy: "Speakeasy",
 };
 
-/** Who returned a problem's failures, in one sentence; name is the service or app when known. */
+/** Where a problem's failures came from, in one sentence; name is the service or app when known. */
 export function sourceSentence(source: Source, name?: string): string {
+  const named = (what: string) => (name ? `${what} (${name})` : what);
   switch (source) {
     case "service":
-      return name
-        ? `The service (${name}) returned these failures.`
-        : "The service returned these failures.";
+      return `These failures came from ${named("the service")}.`;
     case "server":
-      return "The MCP server returned these failures.";
+      return "These failures came from the MCP server.";
     case "app":
-      return name
-        ? `The app (${name}) caused these failures.`
-        : "The app caused these failures.";
+      return `These failures came from ${named("the app")}.`;
     case "identity_provider":
-      return "The identity provider returned these failures.";
+      return "These failures came from the identity provider.";
     case "speakeasy_setting":
       return "A setting in Speakeasy caused these failures.";
     case "speakeasy":
-      return "These failures came from Speakeasy itself.";
+      return "These failures came from Speakeasy.";
   }
 }
 
@@ -226,9 +223,8 @@ function sameDay(a: Date, b: Date): boolean {
 
 /** "09:48 today", or "16 Nov, 16:05" on another day. */
 export function formatSince(iso: string, now: Date): string {
-  const date = new Date(iso);
-  if (sameDay(date, now)) return `${TIME_MINUTES.format(date)} today`;
-  return `${DAY_MONTH.format(date)}, ${TIME_MINUTES.format(date)}`;
+  const at = formatAt(iso, now);
+  return sameDay(new Date(iso), now) ? `${at} today` : at;
 }
 
 /** "09:48" today, or "16 Nov, 16:05" on another day. */

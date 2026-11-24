@@ -189,8 +189,8 @@ type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled *bool   `form:"logging_enabled,omitempty" json:"logging_enabled,omitempty" xml:"logging_enabled,omitempty"`
 	ViewerScope    *string `form:"viewer_scope,omitempty" json:"viewer_scope,omitempty" xml:"viewer_scope,omitempty"`
-	// At most 100. Problems someone other than each person fixes come first, then
-	// those each person fixes; most people first within each.
+	// At most 100. Problems each person fixes themselves come last; most people
+	// first within each group.
 	Problems []*SuspectedProblemResponseBody `form:"problems,omitempty" json:"problems,omitempty" xml:"problems,omitempty"`
 	// Problems before the cap.
 	ProblemsTotal *int64 `form:"problems_total,omitempty" json:"problems_total,omitempty" xml:"problems_total,omitempty"`
@@ -6244,8 +6244,8 @@ func ValidateSuspectedProblemResponseBody(body *SuspectedProblemResponseBody) (e
 		}
 	}
 	if body.WhoFixes != nil {
-		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "nobody") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "nobody"}))
+		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "unknown"}))
 		}
 	}
 	if body.Scope != nil {
@@ -6452,8 +6452,8 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 		}
 	}
 	if body.WhoFixes != nil {
-		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "nobody") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "nobody"}))
+		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "unknown"}))
 		}
 	}
 	if body.Scope != nil {
