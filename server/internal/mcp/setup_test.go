@@ -644,6 +644,7 @@ func buildTestMCPService(
 	})
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	features := &feature.InMemory{}
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -656,7 +657,7 @@ func buildTestMCPService(
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
-		&feature.InMemory{},
+		features,
 	)
 
 	var temporalEnv *temporal.Environment
@@ -674,7 +675,6 @@ func buildTestMCPService(
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	require.NoError(t, err)
-	features := &feature.InMemory{}
 	// One prober shared by login and proxy, as in production.
 	protectedResources := protectedresource.NewProber(conn, guardianPolicy)
 	clientCredentials := &testClientCredentials{}
