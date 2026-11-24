@@ -1,5 +1,18 @@
 # dashboard
 
+## 0.155.0
+
+### Minor Changes
+
+- 715566e: Adds MCP connection health to MCP Sessions behind the `mcp-connection-health` flag: an Overview tab with the sign-in summary, denied clients and recent sign-in activity, Connection Logs beside Active Sessions with filters, reference search and an attempt's details, the same view locked to one server on its Clients and Sessions tab, and an "Ask AI to investigate" button. Suspected problems show sample data until their API ships.
+
+### Patch Changes
+
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+- 1d69491: MCP Sessions is no longer listed under In Beta.
+- bb368b3: The time range picker now shows the times of a custom range that doesn't start and end at midnight, so a range dragged across the Tool Logs timeline reads "Nov 16, 11:34 AM – Nov 17, 11:34 PM" instead of "Nov 16 – Nov 17", matching the rows below it. Picking days in the Tool Logs calendar now includes the last selected day; before, "Nov 16 – Nov 17" listed only Nov 16.
+
 ## 0.154.2
 
 ### Patch Changes

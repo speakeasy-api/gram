@@ -234,6 +234,10 @@ describe("AppSidebar", () => {
             label: "Upstream OAuth migration",
             href: "/upstream-oauth-migration",
           },
+          {
+            label: "Tailscale OAuth migration",
+            href: "/tailscale-oauth-migration",
+          },
           { label: "Platform credentials", href: "/platform-credentials" },
           { label: "Custom domains", href: "/custom-domains" },
           { label: "Organizational Memory evals", href: "/memory-evals" },

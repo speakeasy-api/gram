@@ -82,20 +82,24 @@ type metaToolCallAttempt struct {
 
 	// succeeded is set when the member's result is not an error.
 	succeeded bool
+
+	// dispositions is which member tools the call may run.
+	dispositions memberToolDispositions
 }
 
 // newMetaToolCallAttempt starts an attempt for a call received at start.
 func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 	return &metaToolCallAttempt{
-		start:       start,
-		member:      nil,
-		toolsetSlug: "",
-		descriptor:  nil,
-		logged:      false,
-		proxied:     false,
-		status:      0,
-		message:     "",
-		succeeded:   false,
+		start:        start,
+		member:       nil,
+		toolsetSlug:  "",
+		descriptor:   nil,
+		logged:       false,
+		proxied:      false,
+		status:       0,
+		message:      "",
+		succeeded:    false,
+		dispositions: memberToolAnyDisposition,
 	}
 }
 

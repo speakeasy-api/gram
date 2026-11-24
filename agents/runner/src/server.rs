@@ -130,6 +130,9 @@ async fn thread_turn(
     Json(request): Json<ThreadTurnRequest>,
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     let span = tracing::info_span!("thread_turn", thread_id = %thread_id);
+    // The backend's runner client sends W3C trace context; adopting it ties
+    // this turn's runner spans to the dispatching backend trace.
+    crate::telemetry::set_parent_from_headers(&span, &headers);
     thread_turn_inner(host, thread_id, headers, request)
         .instrument(span)
         .await
@@ -157,6 +160,7 @@ async fn thread_turn_inner(
     let bootstrap = host
         .gram_client
         .fetch_bootstrap(&thread_id, &TokenRegistry::new(token.clone()))
+        .instrument(tracing::info_span!("runner.fetch_bootstrap"))
         .await
         .map_err(|error| {
             let status = match error {

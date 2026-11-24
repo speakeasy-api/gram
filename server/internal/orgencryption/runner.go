@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
@@ -27,6 +29,32 @@ const (
 	// unknownErrorCode is recorded when a platform-key decryption failure
 	// carries no ENC-* code.
 	unknownErrorCode = "unknown"
+
+	// MaxRunDuration bounds one Run, verification included. The largest
+	// organization's values take seconds to seal and verify; the bound stops
+	// a hung KMS or database call from holding the run's claim. Callers size
+	// activity timeouts and heartbeats from it.
+	MaxRunDuration = 5 * time.Minute
+
+	// recordTimeout bounds the bookkeeping write that ends a run. It runs
+	// after the run's own deadline may have passed, so a run cut short still
+	// records that it ended.
+	recordTimeout = 30 * time.Second
+
+	// ClaimTimeout bounds the work in Run up to and including its claim on
+	// the transition row, so a run claims within ClaimTimeout of starting or
+	// does not claim at all. Callers that retry a run whose process died
+	// size the retry delay from ClaimTimeout and RunLease.
+	ClaimTimeout = 30 * time.Second
+
+	// RunLease is how long a run's claim on the transition row holds. A live
+	// run never holds it longer than MaxRunDuration plus recordTimeout, and
+	// its end is recorded only on its own claim, so the lease only has to
+	// outlast that. It is kept short so that a retry of a run whose process
+	// died finds the claim expired: callers start retries at least RunLease
+	// after the claim was made, which is at most ClaimTimeout after the run
+	// started.
+	RunLease = MaxRunDuration + time.Minute
 )
 
 // RunResult reports one run for an organization and use case.
@@ -82,31 +110,40 @@ func NewRunner(logger *slog.Logger, db *pgxpool.Pool, cipher *Cipher, meterProvi
 
 // Run backfills and then verifies every column of an organization's use case,
 // which must be in dual_write. A transient key problem stops the run and is
-// recorded on the transition row; the next run resumes.
+// recorded on the transition row; the next run resumes. Only one run per
+// organization and use case holds the claim at a time, from before the
+// backfill until verification ends: Run returns ErrBackfillRunning, and
+// changes nothing, while another run holds it, and ErrFenced if the transition
+// moved since it decided. A run stops after MaxRunDuration.
 func (r *Runner) Run(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore) (result RunResult, err error) {
 	result = RunResult{Converted: 0, Counted: false, Remaining: 0, Unreadable: 0, Unattributed: 0, Verified: 0, Mismatched: 0, Unopenable: 0, VerificationPassed: false}
-	defer func() { r.metrics.record(ctx, organizationID, useCase, result, err) }()
+	refused := false
+	defer func() {
+		if !refused {
+			r.metrics.record(ctx, organizationID, useCase, result, err)
+		}
+	}()
 
 	if err := requireStores(useCase, stores); err != nil {
 		return result, err
 	}
 
-	d, err := r.cipher.Redecide(ctx, Decision{OrganizationID: organizationID, UseCase: useCase, State: "", Generation: 0, decidedAt: r.cipher.now()})
-	if err != nil {
-		return result, err
-	}
-	if d.State != TransitionStateDualWrite {
-		return result, fmt.Errorf("%w: run in %s", ErrTransitionNotAllowed, d.State)
-	}
+	ctx, cancel := context.WithTimeout(ctx, MaxRunDuration)
+	defer cancel()
 
 	q := repo.New(r.db)
 	logger := r.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogOrgEncryptionUseCase(useCase))
 
-	if err := q.RecordEncryptionTransitionBackfillStarted(ctx, repo.RecordEncryptionTransitionBackfillStartedParams{OrganizationID: organizationID, UseCase: string(useCase)}); err != nil {
-		return result, fmt.Errorf("record backfill start: %w", err)
+	d, claimedAt, err := r.claim(ctx, q, organizationID, useCase)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		refused = true
+		return result, r.refusedClaim(ctx, d)
+	case err != nil:
+		return result, err
 	}
 
-	backfillErr := r.backfill(ctx, logger, q, &d, stores, &result)
+	runErr := r.backfill(ctx, logger, q, &d, stores, &result)
 
 	counts, countErr := countStores(ctx, organizationID, stores)
 	if countErr == nil {
@@ -115,27 +152,88 @@ func (r *Runner) Run(ctx context.Context, organizationID string, useCase UseCase
 		result.Unreadable = counts.Unreadable
 		result.Unattributed = counts.Unattributed
 	}
+	runErr = errors.Join(runErr, countErr)
 
-	runErr := errors.Join(backfillErr, countErr)
-	if err := q.RecordEncryptionTransitionBackfillCompleted(ctx, repo.RecordEncryptionTransitionBackfillCompletedParams{
+	// Verification runs inside the claim, so no other run backfills while it
+	// reads, and its outcome, including the run's deadline passing, is part of
+	// the run recorded below.
+	if runErr == nil {
+		runErr = r.verify(ctx, logger, q, d, stores, &result)
+	}
+
+	recordCtx, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), recordTimeout)
+	defer cancelRecord()
+
+	recorded, err := q.RecordEncryptionTransitionBackfillCompleted(recordCtx, repo.RecordEncryptionTransitionBackfillCompletedParams{
 		ConvertedCount:  result.Converted,
 		RemainingCount:  result.Remaining,
 		UnreadableCount: result.Unreadable,
-		Error:           errorSummary(runErr),
+		Error:           errorSummary(recordedError(runErr, result)),
 		OrganizationID:  organizationID,
 		UseCase:         string(useCase),
-	}); err != nil {
+		StartedAt:       claimedAt,
+	})
+	switch {
+	case err != nil:
 		return result, errors.Join(runErr, fmt.Errorf("record backfill completion: %w", err))
-	}
-	if runErr != nil {
-		return result, runErr
-	}
-
-	if err := r.verify(ctx, logger, q, d, stores, &result); err != nil {
-		return result, err
+	case recorded == 0:
+		return result, errors.Join(runErr, errors.New("orgencryption: another backfill run took over the claim before this run ended"))
 	}
 
-	return result, nil
+	return result, runErr
+}
+
+// recordedError is the error recorded on the transition row for a run: the
+// run's error, or a verification that found copies that differ or do not
+// open, which is not an error of the run but blocks finalize and needs a
+// person to look.
+func recordedError(runErr error, result RunResult) error {
+	if runErr != nil || result.Mismatched+result.Unopenable == 0 {
+		return runErr
+	}
+
+	return fmt.Errorf("orgencryption: verification failed: %d values mismatched, %d organization-key copies did not open", result.Mismatched, result.Unopenable)
+}
+
+// claim decides the use case's state and claims the run within ClaimTimeout.
+// Its error wraps pgx.ErrNoRows when the claim did not land.
+func (r *Runner) claim(ctx context.Context, q *repo.Queries, organizationID string, useCase UseCase) (Decision, pgtype.Timestamptz, error) {
+	ctx, cancel := context.WithTimeout(ctx, ClaimTimeout)
+	defer cancel()
+
+	d, err := r.cipher.Redecide(ctx, Decision{OrganizationID: organizationID, UseCase: useCase, State: "", Generation: 0, decidedAt: r.cipher.now()})
+	if err != nil {
+		return d, pgtype.Timestamptz{}, err
+	}
+	if d.State != TransitionStateDualWrite {
+		return d, pgtype.Timestamptz{}, fmt.Errorf("%w: run in %s", ErrTransitionNotAllowed, d.State)
+	}
+
+	claimedAt, err := q.RecordEncryptionTransitionBackfillStarted(ctx, repo.RecordEncryptionTransitionBackfillStartedParams{
+		OrganizationID: organizationID,
+		UseCase:        string(useCase),
+		Generation:     d.Generation,
+		Lease:          conv.PtrToPGInterval(new(RunLease)),
+	})
+	if err != nil {
+		return d, claimedAt, fmt.Errorf("record backfill start: %w", err)
+	}
+
+	return d, claimedAt, nil
+}
+
+// refusedClaim explains a claim that did not land: the transition moved on
+// since the run decided, or another run holds the claim.
+func (r *Runner) refusedClaim(ctx context.Context, d Decision) error {
+	fresh, err := r.cipher.Redecide(ctx, d)
+	if err != nil {
+		return err
+	}
+	if fresh.State != TransitionStateDualWrite || fresh.Generation != d.Generation {
+		return ErrFenced
+	}
+
+	return ErrBackfillRunning
 }
 
 // backfill seals every waiting value. It refreshes the decision when it gets

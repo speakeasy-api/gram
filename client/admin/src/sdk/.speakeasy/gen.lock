@@ -115,6 +115,7 @@ trackedFiles:
   src/funcs/adminListRegistryOktaUnmapped.ts: {}
   src/funcs/adminListRegistryPromotionCandidates.ts: {}
   src/funcs/adminListSignupOffers.ts: {}
+  src/funcs/adminListTailscaleOAuthMigration.ts: {}
   src/funcs/adminListUpstreamOAuthMigrationOrganizations.ts: {}
   src/funcs/adminListUserOrganizations.ts: {}
   src/funcs/adminListUsers.ts: {}
@@ -131,6 +132,7 @@ trackedFiles:
   src/funcs/adminRepairOrganizationAssistantAgentNames.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
   src/funcs/adminRetryRegistryPromotionDocs.ts: {}
+  src/funcs/adminRunTailscaleOAuthMigrationStep.ts: {}
   src/funcs/adminRunUpstreamOAuthMigration.ts: {}
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
@@ -290,6 +292,8 @@ trackedFiles:
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
   src/models/components/adminstripesubscriptioncandidate.ts: {}
+  src/models/components/admintailscaleoauthmigrationorganization.ts: {}
+  src/models/components/admintailscaleoauthmigrationorganizations.ts: {}
   src/models/components/adminuploadimageresult.ts: {}
   src/models/components/adminupstreamauthenforcement.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
@@ -366,6 +370,7 @@ trackedFiles:
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
+  src/models/components/runtailscaleoauthmigrationsteprequestbody.ts: {}
   src/models/components/runupstreamoauthmigrationrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
   src/models/components/setadoptiondashboardurlrequestbody.ts: {}
@@ -578,6 +583,8 @@ trackedFiles:
   src/react-query/adminListRegistryPromotionCandidates.ts: {}
   src/react-query/adminListSignupOffers.core.ts: {}
   src/react-query/adminListSignupOffers.ts: {}
+  src/react-query/adminListTailscaleOAuthMigration.core.ts: {}
+  src/react-query/adminListTailscaleOAuthMigration.ts: {}
   src/react-query/adminListUpstreamOAuthMigrationOrganizations.core.ts: {}
   src/react-query/adminListUpstreamOAuthMigrationOrganizations.ts: {}
   src/react-query/adminListUserOrganizations.core.ts: {}
@@ -611,6 +618,7 @@ trackedFiles:
   src/react-query/adminRepairOrganizationAssistantAgentNames.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminRetryRegistryPromotionDocs.ts: {}
+  src/react-query/adminRunTailscaleOAuthMigrationStep.ts: {}
   src/react-query/adminRunUpstreamOAuthMigration.ts: {}
   src/react-query/adminSaveRegistryEntry.ts: {}
   src/react-query/adminServeImage.core.ts: {}
@@ -1711,6 +1719,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListTailscaleOAuthMigration:
+    speakeasy-default-admin-list-tailscale-O-auth-migration:
+      responses:
+        "200":
+          application/json: {"minimum_dual_write_seconds": 392784, "organizations": [{"generation": 790904, "name": "<value>", "organization_id": "<id>", "platform_copies": 403494, "slug": "<value>", "state": "dual_write", "unreadable": 792041, "waiting": 919754}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminListUpstreamOAuthMigrationOrganizations:
     speakeasy-default-admin-list-upstream-O-auth-migration-organizations:
       responses:
@@ -1924,6 +1941,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminRunTailscaleOAuthMigrationStep:
+    speakeasy-default-admin-run-tailscale-O-auth-migration-step:
+      requestBody:
+        application/json: {"organization_id": "<id>", "step": "clear_platform_copies"}
+      responses:
+        "200":
+          application/json: {"generation": 24710, "name": "<value>", "organization_id": "<id>", "platform_copies": 940618, "slug": "<value>", "state": "dual_write", "unreadable": 65865, "waiting": 591008}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminRunUpstreamOAuthMigration:
     speakeasy-default-admin-run-upstream-O-auth-migration:
       requestBody:
