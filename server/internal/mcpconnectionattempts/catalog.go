@@ -284,7 +284,7 @@ var (
 	CodeToolNotApproved            = define("tool_not_approved", OutcomeBlocked, WhoPerson, "This tool was not picked when you connected.", "Connect again and pick this tool.")
 	CodeInvalidBearerToken         = define("invalid_bearer_token", OutcomeFailed, WhoPerson, "Your sign-in for this server is no longer valid.", "Connect to the server again.")
 	CodeAuthCheckUnavailable       = define("auth_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check your sign-in right now.", "Try again in a few minutes. You do not need to sign in again.")
-	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "Your connection to this service is missing or has expired.", "Reconnect to the service.")
+	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "Your connection to this service is missing or has expired.", "Connect to the service, or reconnect if the connection expired.")
 	CodeCredentialMisconfigured    = define("credential_misconfigured", OutcomeFailed, WhoAdmin, "The connection to this service is not set up correctly.", "Check the connection settings for this server.")
 	CodeRemoteSessionUnavailable   = define("remote_session_unavailable", OutcomeFailed, WhoProvider, "The service's sign-in system is temporarily unavailable.", "Wait a few minutes and try again.")
 	CodeProviderRejected           = define("provider_rejected", OutcomeFailed, WhoPerson, "The service rejected your access.", "Reconnect. If it keeps happening, ask your admin.")

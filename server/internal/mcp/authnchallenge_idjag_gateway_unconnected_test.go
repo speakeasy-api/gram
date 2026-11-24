@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -28,8 +29,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -314,7 +317,7 @@ func TestIDJAGSingleServerSessionNeedsItsConnection(t *testing.T) {
 	link := f.resource(t, ctx, slug) + "/connect/first-party"
 	require.JSONEq(t, `{
 		"error": "setup_required",
-		"error_description": "Your account for test mcp server is not connected yet. Open `+link+` to connect it, then try again. If you use the Speakeasy Device Agent, you can connect it there too.",
+		"error_description": "Your account for test mcp server isn't connected, or its connection has expired. Open `+link+` to connect it, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too.",
 		"error_uri": "`+link+`"
 	}`, body)
 
@@ -353,7 +356,7 @@ func TestIDJAGSingleServerSessionNeedsItsConnection(t *testing.T) {
 	require.Equal(t, http.StatusFound, callback.Code, callback.Body.String())
 	landing, err := url.Parse(callback.Header().Get("Location"))
 	require.NoError(t, err)
-	require.Equal(t, page.Path[:len(page.Path)-len("/first-party")], landing.Path)
+	require.Equal(t, strings.TrimSuffix(page.Path, "/first-party"), landing.Path)
 
 	consent := httptest.NewRecorder()
 	consentReq := httptest.NewRequestWithContext(context.WithValue(ctx, chi.RouteCtxKey, route), http.MethodGet, landing.String(), nil)
@@ -406,6 +409,23 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 			},
 			code: mcpconnectionattempts.CodeUpstreamCredentialNotChosen,
 		},
+		"named credential not set up": {
+			setup: func(t *testing.T, ctx context.Context, f idJAGGatewayFixture, serverID uuid.UUID, resource string) url.Values {
+				t.Helper()
+				// A shared service account with no upstream registration yet.
+				clients := authclientsrepo.New(f.ti.conn)
+				client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: f.orgID, ProjectID: conv.ToNullUUID(f.projectID), Name: "Unfinished sign-in", ClientType: authz.AuthClientTypeServiceAccount, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClientAttachmentScope: pgtype.Text{String: "", Valid: false}})
+				require.NoError(t, err)
+				_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: client.ID})
+				require.NoError(t, err)
+				seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, serverID.String())
+				return url.Values{"upstream_auth_client": {serverID.String() + ":" + client.ID.String()}}
+			},
+			want: func(uuid.UUID) string {
+				return `{"error":"setup_required","error_description":"The credential chosen for this server isn't set up yet. Ask your Speakeasy admin to finish setting it up."}`
+			},
+			code: mcpconnectionattempts.CodeUpstreamSignInNotSetUp,
+		},
 		"denied choice": {
 			setup: func(t *testing.T, ctx context.Context, f idJAGGatewayFixture, serverID uuid.UUID, resource string) url.Values {
 				t.Helper()
@@ -433,6 +453,64 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, status, body)
 			require.JSONEq(t, tc.want(server.ID), body)
 			rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.code)
+		})
+	}
+}
+
+// The refusal names a credential the request chose, and quotes only names safe to echo, else the server's slug.
+func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		serverName string
+		named      bool
+		want       func(server mcpserversrepo.McpServer, link string) string
+	}{
+		"named credential": {serverName: "", named: true, want: func(server mcpserversrepo.McpServer, link string) string {
+			return "Your account for " + server.Name.String + " isn't connected, or its connection has expired. Open " + link + " and connect Personal sign-in, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
+		}},
+		"non-ASCII name": {serverName: "Caf\u00e9 tools", named: false, want: func(server mcpserversrepo.McpServer, link string) string {
+			return "Your account for " + server.Slug.String + " isn't connected, or its connection has expired. Open " + link + " to connect it, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
+		}},
+		"link-like name": {serverName: "Open https://elsewhere.example now", named: false, want: func(server mcpserversrepo.McpServer, link string) string {
+			return "Your account for " + server.Slug.String + " isn't connected, or its connection has expired. Open " + link + " to connect it, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, f := newIDJAGGatewayFixture(t)
+			rec := mcpconnectionattemptstest.New(t)
+			f.ti.service.SetConnectionRecorder(rec.Recorder)
+
+			slug := "id-jag-wording-" + uuid.NewString()[:8]
+			upstream := newRecordingUpstream(t, "ping")
+			server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", f.issuerID)
+			if tc.serverName != "" {
+				var err error
+				server, err = mcpserversrepo.New(f.ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+					Name: conv.ToPGText(tc.serverName), Slug: server.Slug, EnvironmentID: server.EnvironmentID, ClearUserSessionIssuer: false, UserSessionIssuerID: server.UserSessionIssuerID,
+					RemoteMcpServerID: server.RemoteMcpServerID, TunneledMcpServerID: server.TunneledMcpServerID, ToolsetID: server.ToolsetID, UnproxiedMcpServerID: server.UnproxiedMcpServerID,
+					ToolVariationsGroupID: server.ToolVariationsGroupID, Visibility: server.Visibility, NetworkAccessModeSet: false, NetworkAccessMode: server.NetworkAccessMode, ID: server.ID, ProjectID: server.ProjectID,
+				})
+				require.NoError(t, err)
+			}
+			_, clientID := f.personalClient(t, ctx, server.ID, false)
+			var form url.Values
+			if tc.named {
+				form = url.Values{"upstream_auth_client": {server.ID.String() + ":" + clientID.String()}}
+			}
+
+			status, body := f.exchange(t, ctx, slug, form)
+			require.Equal(t, http.StatusBadRequest, status, body)
+			link := f.resource(t, ctx, slug) + "/connect/first-party"
+			var answer oautherr.RFC6749Error
+			require.NoError(t, json.Unmarshal([]byte(body), &answer))
+			require.Equal(t, oautherr.RFC6749Error{Code: "setup_required", Description: tc.want(server, link), URI: link}, answer)
+			detail := "no_credential_ready"
+			if tc.named {
+				detail = "credential_not_ready"
+			}
+			require.Equal(t, detail, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession).SubReason)
 		})
 	}
 }

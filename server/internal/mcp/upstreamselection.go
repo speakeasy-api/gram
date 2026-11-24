@@ -1409,6 +1409,8 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				sharedAuthorizationServer: nil,
 				sharedResource:            nil,
 				RouteBase:                 "",
+				serverDisplayName:         "",
+				serverSlug:                "",
 				Slug:                      "",
 				ToolsetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				useAuthenticationHost:     false,

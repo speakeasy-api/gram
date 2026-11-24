@@ -562,7 +562,6 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogWarn("
         - "(*github.com/speakeasy-api/gram/server/internal/oops.ShareableError).LogInfo("
         - "github.com/speakeasy-api/gram/server/internal/oops.NewOAuthError("
-        - "(*github.com/speakeasy-api/gram/server/internal/oops.OAuthError).WithURI("
         - "github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers.NewAuthError("
         - "github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting.GatewayFailureRejection("
         - "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy.NewKillswitchInfrastructureRejection("

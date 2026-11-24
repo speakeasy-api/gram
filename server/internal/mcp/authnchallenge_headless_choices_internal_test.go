@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,10 +12,13 @@ import (
 
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -187,6 +192,8 @@ func TestDecideHeadlessChoiceNamesWhoClearsAnUnreadyServer(t *testing.T) {
 
 	connect := consentAuthClientOption{ID: uuid.New(), Name: "Personal", Type: authz.AuthClientTypeRemoteSession, State: consentClientConnect, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	setup := consentAuthClientOption{ID: uuid.New(), Name: "Shared", Type: authz.AuthClientTypeServiceAccount, State: consentClientSetup, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	reconnect := connect
+	reconnect.ID, reconnect.State = uuid.New(), consentClientReconnect
 	none := headlessChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
 	for name, tc := range map[string]struct {
 		options []consentAuthClientOption
@@ -194,9 +201,10 @@ func TestDecideHeadlessChoiceNamesWhoClearsAnUnreadyServer(t *testing.T) {
 		named   bool
 		want    headlessChoiceError
 	}{
-		"one to connect":           {options: []consentAuthClientOption{setup, connect}, choice: none, named: false, want: errChoiceNoneReady},
+		"one to connect":           {options: []consentAuthClientOption{setup, connect}, choice: none, named: false, want: errChoiceNoneConnected},
+		"one to reconnect":         {options: []consentAuthClientOption{setup, reconnect}, choice: none, named: false, want: errChoiceNoneConnected},
 		"none to connect":          {options: []consentAuthClientOption{setup}, choice: none, named: false, want: errChoiceNotSetUp},
-		"named one to connect":     {options: []consentAuthClientOption{setup, connect}, choice: headlessChoice{clientID: uuid.NullUUID{UUID: connect.ID, Valid: true}}, named: true, want: errChoiceNotReady},
+		"named one to connect":     {options: []consentAuthClientOption{setup, connect}, choice: headlessChoice{clientID: uuid.NullUUID{UUID: connect.ID, Valid: true}}, named: true, want: errChoiceNotConnected},
 		"named one not set up yet": {options: []consentAuthClientOption{setup, connect}, choice: headlessChoice{clientID: uuid.NullUUID{UUID: setup.ID, Valid: true}}, named: true, want: errChoiceChosenNotSetUp},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -207,4 +215,22 @@ func TestDecideHeadlessChoiceNamesWhoClearsAnUnreadyServer(t *testing.T) {
 			require.True(t, awaitsConnection(err, tc.named), "a gateway still defers the server")
 		})
 	}
+}
+
+// A workload grant shares the decision but answers without a connect link, and records the person's missing connection.
+func TestWorkloadGrantNotConnectedRefusalHasNoLink(t *testing.T) {
+	t.Parallel()
+
+	connect := consentAuthClientOption{ID: uuid.New(), Name: "Personal", Type: authz.AuthClientTypeRemoteSession, State: consentClientConnect, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	auth := &consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: []consentAuthClientOption{connect}}
+	_, refusal := decideHeadlessChoice(consentAuthServer{id: auth.ServerID, projectID: uuid.New()}, auth, headlessChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, false)
+	require.Error(t, refusal)
+
+	rec := mcpconnectionattemptstest.New(t)
+	refuseWorkloadGrantRow(t.Context(), rec.Recorder.Track(directScope(), mcpconnectionattempts.StepInboundToken), refusal)
+	require.Equal(t, "no_credential_ready", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession).SubReason)
+
+	w := httptest.NewRecorder()
+	oops.OAuthErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return refusal }).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/token", nil))
+	require.JSONEq(t, `{"error":"setup_required","error_description":"Your account for this server isn't connected, or its connection has expired. Connect it, then try again."}`, w.Body.String())
 }

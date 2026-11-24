@@ -34,21 +34,16 @@ func NewOAuthError(status int, code, description string, cause error) *OAuthErro
 	}
 }
 
-// WithURI sets "error_uri" (RFC 6749 §5.2); Error then keeps the person-facing description and URI out of logs.
-func (e *OAuthError) WithURI(uri string) *OAuthError {
-	e.Response.URI = uri
-	return e
-}
-
+// Error is "code: description: cause", or "code: cause" when the error has both a cause and a URI, keeping a person-facing link out of logs.
 func (e *OAuthError) Error() string {
-	logged := e.Response.Error()
-	if e.Response.URI != "" {
-		logged = e.Response.Code
+	switch {
+	case e.Cause != nil && e.Response.URI != "":
+		return fmt.Sprintf("%s: %v", e.Response.Code, e.Cause)
+	case e.Cause != nil:
+		return fmt.Sprintf("%s: %v", e.Response.Error(), e.Cause)
+	default:
+		return e.Response.Error()
 	}
-	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", logged, e.Cause)
-	}
-	return logged
 }
 
 func (e *OAuthError) Unwrap() error { return e.Cause }

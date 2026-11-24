@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -28,10 +27,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -216,7 +213,7 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 // own server, or the gateway members the subject reaches.
 func (s *Service) headlessTargetServers(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) ([]consentAuthServer, error) {
 	switch {
-	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
+	case endpoint.IsSingleServer():
 		return []consentAuthServer{{id: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID}}, nil
 	case endpoint.MetaMcpServerID.Valid:
 		members, err := s.consentSubjectMembers(ctx, endpoint, AuthnChallengeState{Subject: &subject, ID: "headless:" + uuid.NewString()}) //nolint:exhaustruct_v5 // only the subject and a session-like id are read
@@ -295,10 +292,10 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 				continue
 			}
 			if option.State == consentClientSetup {
-				return nil, setupRequired("the credential chosen for a server is not set up yet", errChoiceChosenNotSetUp)
+				return nil, setupRequired("The credential chosen for this server isn't set up yet. Ask your Speakeasy admin to finish setting it up.", errChoiceChosenNotSetUp)
 			}
 			if !option.Usable() {
-				return nil, setupRequired("the credential chosen for a server is not ready: set it up or connect it first", errChoiceNotReady)
+				return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSetupRequired, "The credential chosen for this server isn't connected, or its connection has expired. Connect it, then try again.", namedCredentialError{cause: errChoiceNotConnected, name: option.Name})
 			}
 			return option, nil
 		}
@@ -314,10 +311,12 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 	}
 	switch len(ready) {
 	case 0:
-		if !slices.ContainsFunc(auth.Options, func(o consentAuthClientOption) bool { return o.State == consentClientConnect }) {
-			return nil, setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
+		if !slices.ContainsFunc(auth.Options, func(o consentAuthClientOption) bool {
+			return o.State == consentClientConnect || o.State == consentClientReconnect
+		}) {
+			return nil, setupRequired("Sign-in to the service for this server isn't set up yet. Ask your Speakeasy admin to set it up.", errChoiceNotSetUp)
 		}
-		return nil, setupRequired("no upstream credential for a server is ready: set one up or connect it first", errChoiceNoneReady)
+		return nil, setupRequired("Your account for this server isn't connected, or its connection has expired. Connect it, then try again.", errChoiceNoneConnected)
 	case 1:
 		return ready[0], nil
 	}
@@ -370,7 +369,7 @@ func awaitsConnection(err error, named bool) bool {
 		return false
 	}
 	switch cause {
-	case errChoiceNotReady, errChoiceNoneReady, errChoiceChosenNotSetUp:
+	case errChoiceNotConnected, errChoiceNoneConnected, errChoiceChosenNotSetUp:
 		return true
 	case errChoiceNotSetUp:
 		return !named
@@ -379,29 +378,47 @@ func awaitsConnection(err error, named bool) bool {
 	return false
 }
 
+// maxDescribedNameLength bounds a server or credential name quoted in a refusal; longer names read as a generic phrase.
+const maxDescribedNameLength = 80
+
 // withConnectPage links a single server's connect page (RFC 6749 §5.2 error_uri) on a refusal the person fixes by connecting.
-func (s *Service) withConnectPage(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, resource string, err error) error {
+func withConnectPage(endpoint *ResolvedMcpEndpoint, resource string, err error) error {
 	refusal, ok := errors.AsType[*oops.OAuthError](err)
 	cause, _ := errors.AsType[headlessChoiceError](err)
-	connects := cause == errChoiceNotReady || cause == errChoiceNoneReady
-	if !ok || !connects || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid {
+	if !ok || !cause.personConnects() || !endpoint.IsSingleServer() {
 		return err
 	}
 	page, perr := url.JoinPath(resource, "connect", "first-party")
 	if perr != nil {
-		logger.WarnContext(ctx, "build connect page link", attr.SlogError(perr))
 		return err
 	}
-	name := "this server"
-	server, serr := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID})
-	switch {
-	case serr != nil:
-		logger.WarnContext(ctx, "load server name for connect page link", attr.SlogError(serr))
-	case server.Name.String != "" && oautherr.IsDescriptionText(server.Name.String):
-		name = server.Name.String
+	named, isNamed := errors.AsType[namedCredentialError](err)
+	for _, server := range []string{endpoint.serverDisplayName, endpoint.serverSlug, "this server"} {
+		if !describable(server) {
+			continue
+		}
+		action := "Open " + page + " to connect it, then try again."
+		if isNamed {
+			action = "Open " + page + " and connect the credential chosen for this server, then try again."
+			if describable(named.name) {
+				action = "Open " + page + " and connect " + named.name + ", then try again."
+			}
+		}
+		description := "Your account for " + server + " isn't connected, or its connection has expired. " + action + " If this server is in your Speakeasy Device Agent, you can connect it there too."
+		if !oautherr.IsDescriptionText(description) {
+			continue
+		}
+		refusal.Response.Description = description
+		refusal.Response.URI = page
+		return err
 	}
-	description := fmt.Sprintf("Your account for %s is not connected yet. Open %s to connect it, then try again. If you use the Speakeasy Device Agent, you can connect it there too.", name, page)
-	return oops.NewOAuthError(refusal.Status, refusal.Response.Code, description, refusal.Cause).WithURI(page)
+	return err
+}
+
+// describable reports a name a refusal can quote as is: within the RFC 6749 §5.2 character set, short, and not link-like.
+func describable(name string) bool {
+	return name != "" && len(name) <= maxDescribedNameLength && oautherr.IsDescriptionText(name) &&
+		!strings.Contains(name, "://") && !strings.ContainsAny(name, "[]()")
 }
 
 func setupRequired(description string, cause headlessChoiceError) error {
@@ -417,6 +434,29 @@ func accessDenied(description string, cause headlessChoiceError) error {
 type headlessChoiceError string
 
 func (p headlessChoiceError) Error() string { return string(p) }
+
+// personConnects reports a refusal the person fixes by connecting their own account.
+func (p headlessChoiceError) personConnects() bool {
+	switch p {
+	case errChoiceNotConnected, errChoiceNoneConnected:
+		return true
+	case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceNotSetUp, errChoiceChosenNotSetUp, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
+	}
+	return false
+}
+
+// namedCredentialError is a refusal of the credential a request named, carrying its display name.
+type namedCredentialError struct {
+	// cause is why the credential was refused.
+	cause headlessChoiceError
+
+	// name is the credential's display name.
+	name string
+}
+
+func (e namedCredentialError) Error() string { return string(e.cause) }
+
+func (e namedCredentialError) Unwrap() error { return e.cause }
 
 const (
 	// errChoiceNotAccepted names a choice in an organization that does not take them yet.
@@ -434,15 +474,14 @@ const (
 	// errChoiceNotSetUp is a server whose upstream sign-in is not set up.
 	errChoiceNotSetUp headlessChoiceError = "sign_in_not_set_up"
 
-	// errChoiceNotReady names a credential the person has not connected yet.
-	errChoiceNotReady headlessChoiceError = "credential_not_ready"
+	// errChoiceNotConnected names a credential the person has not connected, or whose connection expired.
+	errChoiceNotConnected headlessChoiceError = "credential_not_ready"
 
 	// errChoiceChosenNotSetUp names a credential an administrator has not finished setting up.
 	errChoiceChosenNotSetUp headlessChoiceError = "credential_not_set_up"
 
-	// errChoiceNoneReady is a server with no ready credential and none named,
-	// at least one of which the person can connect.
-	errChoiceNoneReady headlessChoiceError = "no_credential_ready"
+	// errChoiceNoneConnected is a server with no ready credential and none named, one of which the person can connect.
+	errChoiceNoneConnected headlessChoiceError = "no_credential_ready"
 
 	// errChoiceDenied names a credential the subject may not use.
 	errChoiceDenied headlessChoiceError = "credential_denied"

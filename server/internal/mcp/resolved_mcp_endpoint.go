@@ -116,6 +116,11 @@ type ResolvedMcpEndpoint struct {
 	// serving it, and on every MCP request.
 	sharedResource *sharedResource
 
+	// serverDisplayName and serverSlug name the MCP server an endpoint resolved
+	// through an mcp_server serves; empty for every other resolution.
+	serverDisplayName string
+	serverSlug        string
+
 	// RouteBase is the route surface — drives URL construction in
 	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
 	// consent form action, and the redirect from idp_callback.
@@ -481,6 +486,11 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	return nil
 }
 
+// IsSingleServer reports an endpoint for one MCP server rather than a toolset or gateway.
+func (e *ResolvedMcpEndpoint) IsSingleServer() bool {
+	return e.McpServerID.Valid && !e.ToolsetID.Valid
+}
+
 // NewResolvedMcpEndpointFromMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
@@ -512,6 +522,8 @@ func NewResolvedMcpEndpointFromMcpServer(
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
 		RouteBase:                 routeBase,
+		serverDisplayName:         mcpservers.ServerDisplayName(*mcpServer),
+		serverSlug:                mcpServer.Slug.String,
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
 		Slug:                      mcpEndpoint.Slug,
@@ -573,6 +585,8 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
 		RouteBase:                 routeBase,
+		serverDisplayName:         "",
+		serverSlug:                "",
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
 		Slug:                      mcpEndpoint.Slug,
