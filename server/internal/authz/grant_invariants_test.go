@@ -357,7 +357,9 @@ func TestGrantInvariants_PersonalConnectionsBindToRepresentedUser(t *testing.T) 
 	}
 }
 
-func TestGrantInvariants_AnyOf(t *testing.T) {
+// Either is allowed only when one alternative passes on its own, whatever the
+// order, and Can gives the same answer as Require.
+func TestGrantInvariants_Either(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
 	failures := &failureReport{t: t}
@@ -373,23 +375,19 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 				if i == j {
 					continue
 				}
-				anyAllowed := engineAllows(t, engine.RequireAny(ctx, a.check, b.check))
-				if anyAllowed != (alone[i] || alone[j]) {
-					failures.add("[%s] RequireAny(%s on %s, %s on %s) = %v, alone %v and %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, anyAllowed, alone[i], alone[j])
+				allowed := engineAllows(t, engine.Require(ctx, Either(a.check, b.check)))
+				if allowed && !alone[i] && !alone[j] {
+					failures.add("[%s] Either(%s on %s, %s on %s) is allowed, but neither alternative is on its own", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				unblocked := engineAllows(t, engine.RequireAnyUnblocked(ctx, a.check, b.check))
-				if unblocked != engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-					failures.add("[%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+				if allowed != engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
+					failures.add("[%s] Either(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				if engineAllows(t, engine.Require(ctx, AnyUnblocked(a.check, b.check))) != unblocked {
-					failures.add("[%s] Require(AnyUnblocked(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
-				}
-				can, err := engine.Can(ctx, AnyUnblocked(a.check, b.check))
+				can, err := engine.Can(ctx, Either(a.check, b.check))
 				if err != nil {
-					t.Fatalf("Can(AnyUnblocked) errored: %v", err)
+					t.Fatalf("Can(Either) errored: %v", err)
 				}
-				if can != unblocked {
-					failures.add("[%s] Can(AnyUnblocked(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
+				if can != allowed {
+					failures.add("[%s] Can(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, allowed)
 				}
 			}
 		}
@@ -397,7 +395,7 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 	failures.done()
 }
 
-func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
+func TestGrantInvariants_EitherRefusesEveryBlock(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
 	failures := &failureReport{t: t}
@@ -419,8 +417,8 @@ func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 					if i == j {
 						continue
 					}
-					if engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-						failures.add("[%s] plus %s still allows RequireAnyUnblocked(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
+					if engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
+						failures.add("[%s] plus %s still allows Either(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
 					}
 				}
 			}

@@ -1145,7 +1145,7 @@ func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedPr
 	if skillID != "" {
 		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
 	}
-	return s.grants.Require(ctx, authz.AnyUnblocked(checks...))
+	return s.grants.Require(ctx, authz.Either(checks...))
 }
 
 // UndistributeSkillInput names exactly one target on the same terms as

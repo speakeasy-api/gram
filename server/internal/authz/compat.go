@@ -5,17 +5,6 @@ import (
 	"slices"
 )
 
-// RequireAny refuses the request unless one of the checks is allowed. A block
-// on one alternative only rules that alternative out.
-//
-// Deprecated: Use Require(ctx, Either(...)), which behaves the same.
-func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
-	if len(checks) == 0 {
-		return e.Require(ctx)
-	}
-	return e.Require(ctx, Either(checks...))
-}
-
 // Evaluate reports whether every check is allowed, without a challenge row.
 //
 // Deprecated: Use Decide and read AllAllowed.
@@ -30,7 +19,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	return d.AllAllowed, err
 }
 
-// Can is Evaluate that also accepts a single AnyUnblocked or Either.
+// Can is Evaluate that also accepts a single Either.
 //
 // Deprecated: Use Decide and read AllAllowed.
 func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
@@ -113,21 +102,4 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, e
 		}
 	}
 	return reasons, nil
-}
-
-// RequireAnyUnblocked accepts any allow alternative, but rejects explicit
-// exclusions matching ANY supplied check first. Use it when project-wide and
-// resource-specific grants authorize the same operation: a broad allow must
-// not bypass an exclusion on the actual resource (or vice versa).
-//
-// Checks carry base scopes, not blocked scopes, and must include the concrete
-// resource dimensions. Exclusions match exactly, open no key, and never expand
-// to root. Every admitted policy can exclude; one allow alternative must still
-// be satisfied by all policies, just as with RequireAny. An exclusion inherited
-// from a role or user:all does not reject a check that a direct grant naming
-// the concrete resource satisfies.
-//
-// Deprecated: Use Require(ctx, AnyUnblocked(...)), which behaves the same.
-func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error {
-	return e.Require(ctx, AnyUnblocked(checks...))
 }

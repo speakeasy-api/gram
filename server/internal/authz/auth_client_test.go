@@ -314,9 +314,9 @@ func TestUnenforcedPathsDenyAuthClientChecks(t *testing.T) {
 	requireForbidden(t, engine.Require(ctx, own))
 	requireForbidden(t, engine.Require(ctx, other, shared))
 	require.NoError(t, engine.Require(ctx, other), "unrelated scopes keep today's behavior")
-	requireForbidden(t, engine.RequireAny(ctx, own, shared))
-	require.NoError(t, engine.RequireAny(ctx, own, other))
-	requireForbidden(t, engine.RequireAnyUnblocked(ctx, shared))
+	requireForbidden(t, engine.Require(ctx, Either(own, shared)))
+	require.NoError(t, engine.Require(ctx, Either(own, other)))
+	requireForbidden(t, engine.Require(ctx, Either(shared)))
 
 	allowed, err := engine.Evaluate(ctx, shared)
 	require.NoError(t, err)

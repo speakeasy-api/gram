@@ -51,15 +51,14 @@ func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db ac
 	}
 
 	return e.EvaluateLoadedGrants(ctx, grants, Check{
-		Scope:             scope,
-		ResourceKind:      "",
-		ResourceID:        organizationID,
-		Dimensions:        nil,
-		exact:             false,
-		representedUser:   "",
-		probe:             false,
-		group:             nil,
-		blockRefusesGroup: false,
-		operation:         operationDefault,
+		Scope:           scope,
+		ResourceKind:    "",
+		ResourceID:      organizationID,
+		Dimensions:      nil,
+		exact:           false,
+		representedUser: "",
+		probe:           false,
+		group:           nil,
+		operation:       operationDefault,
 	})
 }

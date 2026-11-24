@@ -27,8 +27,7 @@ type verdict struct {
 	match       *grantMatch
 	alternative int
 	blocked     []bool
-	// blockedBy is set when a block refused an AnyUnblocked group before any
-	// alternative
+	// blockedBy is set when a block refused a group before any alternative
 	// was matched.
 	blockedBy *Check
 }
@@ -82,8 +81,8 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 }
 
 // Require refuses the request unless the caller satisfies every check. A
-// single group check is enough when one of its alternatives is allowed and,
-// for AnyUnblocked, no block refuses any of them. A probe is refused: gating
+// single group check is enough when one of its alternatives is allowed and no
+// block refuses any of them. A probe is refused: gating
 // an action needs the concrete resource.
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if len(checks) == 0 {
@@ -440,10 +439,9 @@ func (q question) verdict(check Check, allowed bool) verdict {
 	}
 }
 
-// decideGroup: in an AnyUnblocked group a block on any alternative refuses
-// the whole group unless a direct grant on the concrete resource outranks it.
-// Example: a project-wide skill read and a read of skill S, with S blocked, is
-// refused. In an Either group the same checks are allowed.
+// decideGroup: a block on any alternative refuses the whole group unless a
+// direct grant on the concrete resource outranks it. Example: a project-wide
+// skill read and a read of skill S, with S blocked, is refused.
 func (q question) decideGroup(check Check) (verdict, error) {
 	refused := q.verdict(check, false)
 	alternatives := slices.DeleteFunc(slices.Clone(check.group), q.aboutOtherOrganization)
@@ -465,16 +463,14 @@ func (q question) decideGroup(check Check) (verdict, error) {
 			return refused, err
 		}
 	}
-	if check.blockRefusesGroup {
-		blocked, err := firstUnoverriddenExclusion(q.grants, alternatives)
-		if err != nil {
-			return refused, err
-		}
-		if blocked != nil {
-			refused.Reason = ReasonBlocked
-			refused.blockedBy = blocked
-			return refused, nil
-		}
+	blocked, err := firstUnoverriddenExclusion(q.grants, alternatives)
+	if err != nil {
+		return refused, err
+	}
+	if blocked != nil {
+		refused.Reason = ReasonBlocked
+		refused.blockedBy = blocked
+		return refused, nil
 	}
 	result, err := q.grants.decideAnyOf(alternatives)
 	if err != nil {

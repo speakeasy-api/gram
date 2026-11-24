@@ -301,7 +301,7 @@ func TestGrantsAuthorizeRejectsWildcardResourceID(t *testing.T) {
 func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	group := AnyUnblocked(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
+	group := Either(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
 
 	// A misuse is refused whether or not RBAC is enforced for the caller.
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeRoot, WildcardResource)}) {
@@ -312,7 +312,7 @@ func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused group is a bad check, not a denial", name)
 		}
 		requireInvalid(engine.Require(ctx, group, Project(ProjectIDFrom("project-one")).Read()))
-		requireInvalid(engine.Require(ctx, AnyUnblocked(group)))
+		requireInvalid(engine.Require(ctx, Either(group)))
 		_, err := engine.Evaluate(ctx, group)
 		requireInvalid(err)
 		_, err = engine.Filter(ctx, []Check{group})
@@ -321,16 +321,16 @@ func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 		requireInvalid(err)
 		_, err = engine.Can(ctx, group, Project(ProjectIDFrom("project-one")).Read())
 		requireInvalid(err)
-		_, err = engine.Can(ctx, AnyUnblocked(group))
+		_, err = engine.Can(ctx, Either(group))
 		requireInvalid(err)
-		requireInvalid(engine.Require(ctx, AnyUnblocked()))
-		_, err = engine.Can(ctx, AnyUnblocked())
+		requireInvalid(engine.Require(ctx, Either()))
+		_, err = engine.Can(ctx, Either())
 		requireInvalid(err)
 	}
 }
 
 // A probe is a discovery question: Can and Filter answer it, Require refuses
-// it, alone or inside AnyUnblocked, whether or not RBAC is enforced.
+// it, alone or inside Either, whether or not RBAC is enforced.
 func TestProbe_RefusedByRequire(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -346,10 +346,10 @@ func TestProbe_RefusedByRequire(t *testing.T) {
 
 		for call, err := range map[string]error{
 			"require":               engine.Require(ctx, probe),
-			"require any":           engine.RequireAny(ctx, probe),
-			"require any unblocked": engine.RequireAnyUnblocked(ctx, probe),
-			"anyof alternative":     engine.Require(ctx, AnyUnblocked(probe)),
-			"probed anyof":          engine.Require(ctx, AnyUnblocked(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
+			"require any":           engine.Require(ctx, Either(probe)),
+			"require any unblocked": engine.Require(ctx, Either(probe)),
+			"anyof alternative":     engine.Require(ctx, Either(probe)),
+			"probed anyof":          engine.Require(ctx, Either(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
 		} {
 			require.ErrorIs(t, err, ErrInvalidCheck, "%s: %s", name, call)
 		}

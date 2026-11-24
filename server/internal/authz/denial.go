@@ -102,7 +102,7 @@ const (
 // check the evaluator would refuse today, such as a view check that names a
 // tool, stays invalid.
 func RecordedCheck(scope Scope, resourceKind, resourceID string, dimensions map[string]string) Check {
-	check := Check{Scope: scope, ResourceKind: resourceKind, ResourceID: resourceID, Dimensions: dimensions, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault, exact: false}
+	check := Check{Scope: scope, ResourceKind: resourceKind, ResourceID: resourceID, Dimensions: dimensions, representedUser: "", probe: false, group: nil, operation: operationDefault, exact: false}
 	_, hasTool := dimensions[SelectorKeyTool]
 	_, hasDisposition := dimensions[SelectorKeyDisposition]
 	if (hasTool || hasDisposition) && isConnectScope(scope) {

@@ -95,7 +95,7 @@ func TestEngineEvaluateLoadedGrants_DoesNotRecord(t *testing.T) {
 	require.Equal(t, Denial{Scope: ScopeLogRead, ResourceKind: "project"}, denial)
 }
 
-func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
+func TestEngineEither_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
@@ -124,7 +124,7 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 			none:   false,
 		},
 		{
-			name: "not an alternative a block refused",
+			name: "nothing when a block refuses the group",
 			grants: []Grant{
 				NewGrant(ScopeProjectRead, WildcardResource),
 				NewGrantWithSelector(ScopeProjectBlockedRead, Selector{
@@ -133,8 +133,8 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 				}),
 			},
 			checks: []Check{orgCheck, projectCheck},
-			want:   Denial{Scope: ScopeOrgRead, ResourceKind: "org"},
-			none:   false,
+			want:   Denial{Scope: "", ResourceKind: ""},
+			none:   true,
 		},
 		{
 			name: "nothing when every alternative is blocked",
@@ -156,7 +156,7 @@ func TestEngineRequireAny_RecordsTheLeastPrivilegedAlternative(t *testing.T) {
 			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 			ctx := WithDenialRecorder(GrantsToContext(enterpriseSessionCtx(t), tt.grants))
 
-			require.Error(t, engine.RequireAny(ctx, tt.checks...))
+			require.Error(t, engine.Require(ctx, Either(tt.checks...)))
 
 			denial, ok := RecordedDenial(ctx)
 			require.Equal(t, !tt.none, ok)

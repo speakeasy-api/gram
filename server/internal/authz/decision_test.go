@@ -73,9 +73,9 @@ func TestDecide_unenforcedCallerIsAllowedAndSaysSo(t *testing.T) {
 	}
 }
 
-// For a caller RBAC skips, a valid AnyUnblocked check is not reported as invalid:
+// For a caller RBAC skips, a valid Either check is not reported as invalid:
 // its alternatives are what gets validated.
-func TestDecide_unenforcedAnyOfIsNotReportedInvalid(t *testing.T) {
+func TestDecide_unenforcedEitherIsNotReportedInvalid(t *testing.T) {
 	t.Parallel()
 
 	var logs bytes.Buffer
@@ -86,21 +86,21 @@ func TestDecide_unenforcedAnyOfIsNotReportedInvalid(t *testing.T) {
 		SessionID:            nil,
 	})
 
-	d, err := engine.Decide(ctx, AnyUnblocked(projectRead("proj_a"), projectRead("proj_b")))
+	d, err := engine.Decide(ctx, Either(projectRead("proj_a"), projectRead("proj_b")))
 	require.NoError(t, err)
 	require.True(t, d.AllAllowed)
 	require.NotContains(t, logs.String(), "invalid authz check")
 }
 
-// A refusal from Decide is a branch, not an error, and an AnyUnblocked check can sit
+// A refusal from Decide is a branch, not an error, and an Either check can sit
 // next to other checks.
-func TestDecide_acceptsAnyOfNextToOtherChecks(t *testing.T) {
+func TestDecide_acceptsEitherNextToOtherChecks(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_a")})
 
-	d, err := engine.Decide(ctx, AnyUnblocked(projectRead("proj_b"), projectRead("proj_a")), projectRead("proj_b"))
+	d, err := engine.Decide(ctx, Either(projectRead("proj_b"), projectRead("proj_a")), projectRead("proj_b"))
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false}, allowedOf(d))
 }

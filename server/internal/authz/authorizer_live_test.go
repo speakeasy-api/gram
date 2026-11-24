@@ -38,8 +38,8 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	for name, ctx := range map[string]context.Context{"authorizer may do the same": same, "workload acts for nobody": workload} {
 		logs.Reset()
 		require.NoError(t, engine.Require(ctx, one, two), name)
-		require.NoError(t, engine.RequireAny(ctx, one, two), name)
-		allowed, err := engine.Can(ctx, AnyUnblocked(one, two))
+		require.NoError(t, engine.Require(ctx, Either(one, two)), name)
+		allowed, err := engine.Can(ctx, Either(one, two))
 		require.NoError(t, err, name)
 		require.True(t, allowed, name)
 		ids, err := engine.Filter(ctx, []Check{one, two})
@@ -67,15 +67,15 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	require.Equal(t, 1, count())
 
 	logs.Reset()
-	require.NoError(t, engine.RequireAny(narrowed, two, one))
+	require.NoError(t, engine.Require(narrowed, Either(two, one)))
 	require.Zero(t, count(), "one alternative survives the authorizer's policy")
 
 	logs.Reset()
-	require.NoError(t, engine.RequireAny(narrowed, two))
+	require.NoError(t, engine.Require(narrowed, Either(two)))
 	require.Equal(t, 1, count())
 
 	logs.Reset()
-	allowed, err = engine.Can(narrowed, AnyUnblocked(two, one))
+	allowed, err = engine.Can(narrowed, Either(two, one))
 	require.NoError(t, err)
 	require.True(t, allowed)
 	require.Zero(t, count())

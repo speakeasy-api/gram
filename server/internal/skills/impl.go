@@ -196,7 +196,7 @@ func (s *Service) requireSkillReadGrant(ctx context.Context, projectID uuid.UUID
 	if skillID != "" {
 		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
 	}
-	return s.authz.Require(ctx, authz.AnyUnblocked(checks...))
+	return s.authz.Require(ctx, authz.Either(checks...))
 }
 
 func manifestErrorMessage(err error) string {

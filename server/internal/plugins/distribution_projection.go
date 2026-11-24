@@ -25,7 +25,7 @@ func (s *Service) distributionAuthContext(ctx context.Context, id string) (*cont
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
 	}
-	if err := s.authz.Require(ctx, authz.AnyUnblocked(
+	if err := s.authz.Require(ctx, authz.Either(
 		authz.Skills(authz.ProjectIDOf(*ac.ProjectID)).Read(),
 		authz.Skill(authz.SkillIDOf(skillID)).Read(),
 	)); err != nil {
