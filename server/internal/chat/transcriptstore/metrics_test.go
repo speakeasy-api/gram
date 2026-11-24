@@ -1,6 +1,8 @@
 package transcriptstore
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,4 +63,28 @@ func TestCaptureRecordsOutcomeMetrics(t *testing.T) {
 
 	require.Equal(t, map[string]int64{"success": 1, "not_found": 2}, messages)
 	require.Equal(t, map[string]uint64{"success": 1, "not_found": 1}, durations)
+}
+
+func TestClassifyCaptureCoversRollbackOutcomes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err  error
+		want captureOutcome
+	}{
+		{nil, captureOutcomeSuccess},
+		{ErrNotFound, captureOutcomeNotFound},
+		{fmt.Errorf("capture: %w", ErrChanged), captureOutcomeChanged},
+		{safe(context.DeadlineExceeded), captureOutcomeError},
+	} {
+		require.Equal(t, tc.want, classifyCapture(tc.err))
+	}
+}
+
+func TestCaptureRejectsInvalidArgumentsBeforeTelemetry(t *testing.T) {
+	t.Parallel()
+	// A zero-value store has no tracer or metrics; invalid input must not reach them.
+	ids := []uuid.UUID{uuid.New()}
+	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.Nil, ids), ErrInvalid)
 }

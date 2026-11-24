@@ -78,14 +78,15 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 			seen[org] = struct{}{}
 		}
 	}
+	// Build the store first: it can fail, and provisioning mints keys.
+	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
+	if err != nil {
+		return fmt.Errorf("create chat transcript shadow store: %w", err)
+	}
 	for _, org := range organizations {
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
-	}
-	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
-	if err != nil {
-		return fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
 	writer.WithTranscriptShadow(store, projectIDs...)
 	return nil

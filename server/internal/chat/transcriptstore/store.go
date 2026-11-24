@@ -85,6 +85,11 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 	if len(messageIDs) == 0 {
 		return nil
 	}
+	// Reject bad arguments before telemetry so a misused store fails closed
+	// with ErrInvalid instead of touching uninitialized tracer or metrics.
+	if db == nil || organizationID == "" || projectID == uuid.Nil {
+		return ErrInvalid
+	}
 
 	ctx, span := s.tracer.Start(ctx, "transcriptstore.Capture", trace.WithAttributes(
 		attr.ProjectID(projectID.String()),
@@ -107,9 +112,6 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 }
 
 func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	if db == nil || organizationID == "" || projectID == uuid.Nil {
-		return ErrInvalid
-	}
 	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
 	if err != nil {
 		return safe(err)

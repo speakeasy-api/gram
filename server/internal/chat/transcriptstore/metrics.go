@@ -26,19 +26,19 @@ const (
 )
 
 // captureDurationBuckets are in seconds. A KMS unwrap takes about 150 to 250
-// ms in prod, so the buckets resolve that range and stretch to the slow tail
-// that would hold a message transaction open.
-var captureDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
+// ms in prod, so the buckets split that range into 50 ms steps and stretch to
+// the slow tail that would hold a message transaction open.
+var captureDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1, 2.5, 5}
 
 // captureOutcome classifies a Capture call for metrics and spans. Any outcome
-// other than success rolls back the caller's message write.
+// other than success rolls back the caller's message write. Invalid arguments
+// return ErrInvalid before telemetry starts, so they have no outcome.
 type captureOutcome string
 
 const (
 	captureOutcomeSuccess  captureOutcome = "success"
 	captureOutcomeNotFound captureOutcome = "not_found"
 	captureOutcomeChanged  captureOutcome = "changed"
-	captureOutcomeInvalid  captureOutcome = "invalid"
 	captureOutcomeError    captureOutcome = "error"
 )
 
@@ -50,8 +50,6 @@ func classifyCapture(err error) captureOutcome {
 		return captureOutcomeNotFound
 	case errors.Is(err, ErrChanged):
 		return captureOutcomeChanged
-	case errors.Is(err, ErrInvalid):
-		return captureOutcomeInvalid
 	default:
 		return captureOutcomeError
 	}
