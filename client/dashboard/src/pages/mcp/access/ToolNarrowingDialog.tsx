@@ -11,8 +11,7 @@ import {
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
 import { Check } from "lucide-react";
-import { useMemo, useState, type JSX } from "react";
-import { toolDisposition } from "./serverAudience";
+import { useState, type JSX } from "react";
 
 /**
  * Narrows one rule to particular tools, or to tools carrying an annotation.
@@ -56,22 +55,6 @@ export function ToolNarrowingDialog({
   const [selectedAnnotations, setSelectedAnnotations] = useState<
     ToolAnnotation[]
   >(() => dispositions as ToolAnnotation[]);
-
-  // A tool is checked under one disposition, so each counts once: counting
-  // every annotation it carries would list an OpenAPI GET under read-only,
-  // idempotent and open-world alike, while a rule naming open-world never
-  // reaches it.
-  const countByDisposition = useMemo(() => {
-    if (!catalog) return undefined;
-    const counts = new Map<ToolAnnotation, number>();
-    for (const tool of catalog) {
-      const disposition = toolDisposition(tool);
-      if (disposition) {
-        counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
-      }
-    }
-    return counts;
-  }, [catalog]);
 
   const servers: ToolSelectionServer[] = [
     {
@@ -138,7 +121,6 @@ export function ToolNarrowingDialog({
             mode={selectedTools.length > 0 ? "tools" : "annotations"}
             selectedAnnotations={selectedAnnotations}
             selectedTools={selectedTools}
-            toolCountByAnnotation={countByDisposition}
             onSelectionChange={(change) => {
               setSelectedAnnotations([...change.annotations]);
               setSelectedTools([...change.tools]);

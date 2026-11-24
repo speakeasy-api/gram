@@ -102,6 +102,7 @@ export function AppSidebar({
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isIntentPoliciesEnabled = navAccess.has(routes.intentPolicies.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.identities.agents.url);
   const isSignalsIntelligenceEnabled = navAccess.has(
@@ -202,6 +203,14 @@ export function AppSidebar({
           item: { ...routes.shadowMCP, active: shadowMCPActive },
           ...accessFor(routes.shadowMCP),
         },
+        ...(isIntentPoliciesEnabled
+          ? [
+              {
+                item: routes.intentPolicies,
+                ...accessFor(routes.intentPolicies),
+              },
+            ]
+          : []),
       ],
     },
     {

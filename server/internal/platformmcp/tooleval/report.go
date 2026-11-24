@@ -139,7 +139,8 @@ type Miss struct {
 	Model, Surface, CaseID string
 	Expected               []string
 	// Chosen counts what the agent reached for instead; "(none)" is no
-	// Platform tool and "(error)" a failed attempt.
+	// Platform tool, "(refused)" a provider refusal and "(error)" a failed
+	// attempt.
 	Chosen map[string]int
 	Wrong  int
 	Total  int
@@ -168,6 +169,8 @@ func (r *Report) Misses() []Miss {
 			m.Chosen["(error)"]++
 		case o.Unfinished:
 			m.Chosen["(unfinished)"]++
+		case o.Refused:
+			m.Chosen["(refused)"]++
 		case o.Selected == nil:
 			m.Chosen["(none)"]++
 		case o.Hit && !o.SchemaValid:
@@ -207,6 +210,7 @@ func (r *Report) Markdown() string {
 	}
 	r.writeErrors(&b)
 	r.writeUnexpectedAnswers(&b)
+	r.writeRefusals(&b)
 	misses := r.Misses()
 	if len(misses) == 0 {
 		b.WriteString("\nNo misses.\n")
@@ -273,7 +277,7 @@ const maxAnswerBytes = 240
 func (r *Report) writeUnexpectedAnswers(b *strings.Builder) {
 	var lines []string
 	for _, o := range r.Outcomes {
-		if o.Err != nil || o.Selected != nil || (o.Case.Negative() && !o.Unfinished) {
+		if o.Err != nil || o.Selected != nil || o.Refused || (o.Case.Negative() && !o.Unfinished) {
 			continue
 		}
 		answer := strings.Join(strings.Fields(o.Answer), " ")
@@ -287,6 +291,33 @@ func (r *Report) writeUnexpectedAnswers(b *strings.Builder) {
 		return
 	}
 	b.WriteString("\n### Answered without a tool\n\n")
+	b.WriteString(strings.Join(lines, "\n") + "\n")
+}
+
+// writeRefusals lists every attempt the provider's safety filter refused, on
+// any case, and whether it counted. A refusal on a negative case is right, but
+// it shows the model never read the prompt, so it is reported apart from the
+// answers the model wrote.
+func (r *Report) writeRefusals(b *strings.Builder) {
+	var lines []string
+	for _, o := range r.Outcomes {
+		if o.Err != nil || !o.Refused {
+			continue
+		}
+		verdict := "miss"
+		if o.Pass() {
+			verdict = "right"
+		}
+		answer := strings.Join(strings.Fields(o.Answer), " ")
+		if answer == "" {
+			answer = "(no refusal message)"
+		}
+		lines = append(lines, fmt.Sprintf("- %s / %s / %s (%s): %s", o.Model, o.Surface, o.Case.ID, verdict, truncate(answer, maxAnswerBytes)))
+	}
+	if len(lines) == 0 {
+		return
+	}
+	b.WriteString("\n### Refused by the provider\n\n")
 	b.WriteString(strings.Join(lines, "\n") + "\n")
 }
 

@@ -7,6 +7,7 @@ package testrepo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -150,6 +151,35 @@ type FunctionToolDefinition struct {
 	IdempotentHint pgtype.Bool
 	// @access: confidential
 	OpenWorldHint pgtype.Bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type FunctionsAccess struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	FunctionID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	EncryptionKey conv.Secret
+	// @access: secret-restricted
+	EncryptionKeyOrgEncrypted pgtype.Text
+	// @access: confidential
+	BearerFormat pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

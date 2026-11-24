@@ -76,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -585,8 +586,6 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// The dashboard shows every flag on in local dev, so the server lets local
 	// orgs create tool approval policies too. A CSV row can still turn it off.
 	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
-	// Local development runs the tailnet gateway, not the operator.
-	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -981,6 +980,7 @@ func newAdminOpenRouter(
 		guardianPolicy,
 		db,
 		env,
+		PullPartition(ctx),
 		provisioningKey,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
@@ -1105,7 +1105,7 @@ func newFunctionOrchestrator(
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
-	enc *encryption.Client,
+	runnerKeys *runnerkeys.Keys,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := noopShutdown
 
@@ -1168,7 +1168,7 @@ func newFunctionOrchestrator(
 			assetStore,
 			tigrisStore,
 			imgSelector,
-			enc,
+			runnerKeys,
 			functions.FlyRunnerOptions{
 				ServiceName:        "gram",
 				ServiceVersion:     GitSHA,
@@ -2062,6 +2062,12 @@ func (d orgEncryptionDeps) AIProviderKeys(logger *slog.Logger, platform *encrypt
 // process's organization encryption and transition state.
 func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
 	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// RunnerKeys builds the Speakeasy Functions runner key seam over the process's
+// organization encryption and transition state.
+func (d orgEncryptionDeps) RunnerKeys(logger *slog.Logger, platform *encryption.Client) *runnerkeys.Keys {
+	return runnerkeys.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.
