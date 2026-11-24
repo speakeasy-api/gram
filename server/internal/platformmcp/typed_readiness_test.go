@@ -117,6 +117,16 @@ func TestSetupConnectionFollowsTypedOffers(t *testing.T) {
 
 	_, err = prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, uuid.New())
 	require.ErrorIs(t, err, ErrReadinessInvalid, "stale sign-in target must not use an offered credential")
+
+	clients, _, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	_, err = remotesessionsrepo.New(conn).MarkRemoteSessionClientUpstreamRejected(ctx, remotesessionsrepo.MarkRemoteSessionClientUpstreamRejectedParams{ID: clients[0].ID, ClientID: clients[0].ExternalClientID})
+	require.NoError(t, err)
+	result, err = prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, f.userSessionIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_required", result.Status)
+	require.Equal(t, "user_identity_client_required", result.Code)
 }
 
 // A missing grant on the first offer must not hide a usable second offer or
