@@ -36,6 +36,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -512,6 +513,12 @@ type ServiceCore struct {
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
+	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
+	// reads plaintext for every project. Set by SetTranscriptShadowReads.
+	transcriptShadow *transcriptstore.Store
+	// shadowReadProjects are the projects whose assistant history
+	// reads open shadows instead of plaintext.
+	shadowReadProjects map[uuid.UUID]struct{}
 	// outboundOrigin is the pinned origin of the MCP auth CIMD client_id and
 	// redirect_uri. Authorization servers store both, so it stays fixed when
 	// the server URL moves. Set by SetOutboundCallbackOrigin.
@@ -580,6 +587,8 @@ func NewServiceCore(
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
+		transcriptShadow:            nil,
+		shadowReadProjects:          nil,
 		outboundOrigin:              nil,
 		managedCeilingsRepaired:     sync.Map{},
 	}
@@ -4434,6 +4443,11 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	if err != nil {
 		return fmt.Errorf("self-heal: list chat messages: %w", err)
 	}
+	// A shadow that cannot be opened fails self-heal rather than rewriting
+	// history from plaintext that the shadow contradicts.
+	if err := s.openTranscriptShadows(ctx, chatRow.OrganizationID, projectID, messages); err != nil {
+		return fmt.Errorf("self-heal: %w", err)
+	}
 
 	var currentGen int32
 	userMessages := make([]chatrepo.ChatMessage, 0, len(messages))
@@ -4534,6 +4548,9 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list assistant chat messages: %w", err)
+	}
+	if err := s.openHistoryTranscriptShadows(ctx, projectID, messages); err != nil {
+		return nil, err
 	}
 
 	spilled := s.prefetchHistoryContentAssets(ctx, messages)

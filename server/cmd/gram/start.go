@@ -1331,6 +1331,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsCore.SetTurnStream(turnStream)
+			assistantsCore.SetTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...)
 			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 				return err
 			}
