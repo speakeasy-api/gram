@@ -51,6 +51,12 @@ const (
 	// the feedback tool away from agents already using it.
 	settingsUsableFor = 5 * time.Minute
 
+	// settingsReadTimeout bounds one read of a server's settings. Every
+	// request that finds them stale waits on that read, so a database that
+	// stopped answering must not hold them for longer than a request would
+	// reasonably wait.
+	settingsReadTimeout = 5 * time.Second
+
 	// maxCachedSettings bounds how many servers' settings one replica holds.
 	// An entry is a few hundred bytes, so this is about a megabyte.
 	maxCachedSettings = 5_000
@@ -272,12 +278,26 @@ func (r *Recorder) serverSettings(ctx context.Context, key cachedSettingsKey) (S
 
 	// Requests that find the same server's settings stale together share one
 	// read, so a busy server reads them once per refresh. The read outlives
-	// the request that started it, which the others are waiting on too.
-	read, err, _ := r.settingsReads.Do(key.mcpServerID.String()+"/"+key.projectID.String(), func() (any, error) {
-		return r.readSettings(context.WithoutCancel(ctx), key)
+	// the request that started it, which the others are waiting on too, but
+	// is bounded so a stalled database cannot hold them all; a request that
+	// ends stops waiting.
+	reads := r.settingsReads.DoChan(key.mcpServerID.String()+"/"+key.projectID.String(), func() (any, error) {
+		readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), settingsReadTimeout)
+		defer cancel()
+		return r.readSettings(readCtx, key)
 	})
+	var read any
+	var err error
+	select {
+	case done := <-reads:
+		read, err = done.Val, done.Err
+	case <-ctx.Done():
+		err = fmt.Errorf("wait for feedback config: %w", ctx.Err())
+	}
 	if err != nil {
-		if found && now.Sub(cached.readAt) < settingsUsableFor {
+		// Measured now, after the wait, so settings past their usable age
+		// are never served.
+		if found && r.now().Sub(cached.readAt) < settingsUsableFor {
 			r.logger.WarnContext(ctx, "load feedback config; serving the settings read earlier", attr.SlogError(err), attr.SlogMcpServerID(key.mcpServerID.String()))
 			return cached.settings, nil
 		}
