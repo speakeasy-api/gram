@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -323,6 +325,231 @@ func TestCopyStoreCountsUnreadableTokens(t *testing.T) {
 	counts, err := stores[0].Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
+}
+
+func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	unattributed := ti.createUnattributedSession(t)
+	sealed := ti.createSession(t)
+
+	// Rows written before access_token_encrypted became nullable store ''
+	// for a session without an access token. The sealed session also holds
+	// an organization-key copy, so only the '' filter keeps verification
+	// from comparing the two: the copy is not a ciphertext and would count
+	// as unopenable if it were listed.
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: session, orgCopy: nullText()},
+		{session: unattributed, orgCopy: nullText()},
+		{session: sealed, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(""),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	stores := upstreamtokens.CopyStores(ti.conn)
+	access := stores[0]
+	require.Equal(t, upstreamtokens.RemoteSessionAccessToken, access.Columns())
+
+	counts, err := access.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0}, counts, "'' is neither waiting, unreadable, unattributed nor a platform-key copy")
+
+	waiting, err := access.ListWaiting(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, waiting)
+
+	listed, err := access.ListSealed(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, listed, "'' beside an organization-key copy is not a pair to verify")
+
+	ti.enroll(t)
+	result, err := ti.runner(t).Run(t.Context(), ti.orgID, orgencryption.UseCaseOAuthSessionTokens, stores)
+	require.NoError(t, err)
+	require.Zero(t, result.Converted)
+	require.Zero(t, result.Unreadable)
+	require.Zero(t, result.Mismatched)
+	require.Zero(t, result.Unopenable)
+	require.True(t, result.VerificationPassed)
+
+	ti.finalize(t)
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "clearing still removes ''")
+	require.False(t, ti.stored(t, sealed.ID).AccessTokenEncrypted.Valid, "clearing still removes '' beside an organization-key copy")
+}
+
+func TestCopyStoreClearReportsWhatItDestroyedByKind(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	alone := ti.createSession(t)
+	beside := ti.createSession(t)
+
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: alone, orgCopy: nullText()},
+		{session: beside, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	access := upstreamtokens.CopyStores(ti.conn)[0]
+	cleared, err := access.ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}, cleared)
+	require.False(t, ti.stored(t, alone.ID).AccessTokenEncrypted.Valid)
+	require.True(t, ti.stored(t, beside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy stays")
+}
+
+func TestCopyStoreClearDoesNotCountACopyAConcurrentClearDestroyed(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+		AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+		AccessOrgCopy:       nullText(),
+		ReplaceRefreshToken: false,
+		RefreshPlatformCopy: nullText(),
+		RefreshOrgCopy:      nullText(),
+		ID:                  session.ID,
+		OrganizationID:      session.OrganizationID,
+		DecidedGeneration:   0,
+	})
+	require.NoError(t, err)
+
+	// The first clear runs in a transaction that holds the row's lock.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	first, err := repo.New(tx).ClearRemoteSessionAccessTokenPlatformCopies(t.Context(), repo.ClearRemoteSessionAccessTokenPlatformCopiesParams{OrganizationID: ti.orgID, LimitValue: 10, DecidedGeneration: 0})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), first.PlatformOnly)
+
+	// The second clear picked the same row before the first committed, and
+	// waits for its lock.
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	second := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		second <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-second
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 0, BesideOrgCopy: 0}, result.cleared, "the copy the first clear destroyed is not counted again")
+}
+
+func TestCopyStoreClearCountsAnEmptyPlatformCopyApart(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	emptyAlone := ti.createSession(t)
+	emptyBeside := ti.createSession(t)
+	valueAlone := ti.createSession(t)
+
+	for _, row := range []struct {
+		session  repo.RemoteSession
+		platform string
+		orgCopy  pgtype.Text
+	}{
+		{session: emptyAlone, platform: "", orgCopy: nullText()},
+		{session: emptyBeside, platform: "", orgCopy: conv.ToPGText("organization-key copy")},
+		{session: valueAlone, platform: "platform-key copy", orgCopy: nullText()},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(row.platform),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 2}, cleared, "'' is cleared but never reported as a platform-only straggler")
+	for _, session := range []repo.RemoteSession{emptyAlone, emptyBeside, valueAlone} {
+		require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "every platform-key copy is cleared")
+	}
+	require.True(t, ti.stored(t, emptyBeside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy beside an empty one stays")
+}
+
+func TestCopyStoreClearClassifiesTheVersionItClears(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	setAccess := func(db repo.DBTX, platform string) {
+		t.Helper()
+
+		_, err := repo.New(db).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(platform),
+			AccessOrgCopy:       nullText(),
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  session.ID,
+			OrganizationID:      session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+	setAccess(ti.conn, "")
+
+	// A writer replaces the empty copy with a value in a transaction that
+	// holds the row's lock while the clear runs.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	setAccess(tx, "platform-key copy")
+
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	done := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		done <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-done
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 0}, result.cleared, "the value the clear destroyed is reported, not taken for the empty copy it replaced")
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid)
 }
 
 // remoteSessionStores are the CopyStores of the remote session columns.

@@ -47,7 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -343,6 +345,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, customDomainTargetSuffixFlag())
 	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, staffFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -355,6 +358,10 @@ func newAdminCommand() *cli.Command {
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
 			}
 
 			serviceName := "gram-admin"
@@ -375,6 +382,7 @@ func newAdminCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -414,6 +422,9 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			err = o11y.StartObservers(meterProvider, db)
 			if err != nil {
@@ -495,7 +506,7 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c, staffOrg)
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
@@ -520,7 +531,7 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB)
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB, staffOrg)
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
@@ -535,7 +546,7 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService)
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {
@@ -570,20 +581,42 @@ func newAdminCommand() *cli.Command {
 				return err
 			}
 			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Built whether or not the application key is set: the remote
+			// session service and the Tailscale OAuth client migration need
+			// both, but the organization encryption transition methods need
+			// only organization encryption. Building
+			// it here stops admin at startup when it is misconfigured.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
+			if err != nil {
+				return err
+			}
 			if applicationEncryption != nil {
-				// Admin reads OAuth credentials only through the remote session
-				// service, so organization encryption is built, and required,
-				// alongside it. Building it here stops admin at startup when it
-				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for organization
-				// encryption counts, backfills and finalization.
-				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
-				if err != nil {
-					return err
-				}
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			// Transitions change only where keys can be provisioned.
+			// Without Temporal, runs are unavailable and the hourly
+			// background run finishes the clear after finalize.
+			if orgEncryption.Service != nil && orgEncryption.Provisioner != nil {
+				var runs admin.OrganizationEncryptionRunStarter
+				if temporalEnv != nil {
+					runs = &background.TemporalOrganizationEncryptionRunStarter{TemporalEnv: temporalEnv}
+				}
+				adminService.SetOrganizationEncryption(admin.OrganizationEncryption{
+					Transitions: orgEncryption.Transitions,
+					UseCases:    orgEncryptionUseCaseStores(db),
+					Runs:        runs,
+				})
+			} else {
+				logger.WarnContext(ctx, "Admin organization encryption transitions unavailable; organization encryption is not configured")
 			}
 			var platformAssets *assets.Service
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))

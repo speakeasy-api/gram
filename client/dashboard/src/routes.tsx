@@ -392,6 +392,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
           },
+          feedback: {
+            title: "MCP Server Agent Feedback",
+            url: "feedback",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -466,7 +470,13 @@ const ROUTE_STRUCTURE = {
         title: "MCP Authentication Provider",
         url: ":issuerId",
         subPages: {
+          // Overview and Connection Logs: mcp-connection-health flag only.
+          overview: { title: "Overview", url: "overview" },
           connections: { title: "Connections", url: "connections" },
+          connectionLogs: {
+            title: "Connection Logs",
+            url: "connection-logs",
+          },
           mcpServers: { title: "MCP servers", url: "mcp-servers" },
           settings: { title: "Settings", url: "settings" },
         },
@@ -756,6 +766,13 @@ const ROUTE_STRUCTURE = {
     title: "Risk Events",
     url: "risk-events",
     icon: "flag",
+  },
+  // Staff-only replay tool; the server requires a platform admin.
+  intentPolicies: {
+    title: "Intent-based policies",
+    url: "security/intent-policies",
+    icon: "scan-eye",
+    stage: "preview",
   },
   // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
   // and is not in the nav. Its section URLs stay because tickets, bookmarks

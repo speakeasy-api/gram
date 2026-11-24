@@ -516,6 +516,12 @@ type ServiceCore struct {
 	// redirect_uri. Authorization servers store both, so it stays fixed when
 	// the server URL moves. Set by SetOutboundCallbackOrigin.
 	outboundOrigin *url.URL
+
+	// managedCeilingsRepaired holds the IDs of assistants whose managed
+	// ceilings this process has repaired, or found not to need them, so a turn
+	// reaches the database for the repair at most once per assistant per
+	// process.
+	managedCeilingsRepaired sync.Map
 }
 
 func NewServiceCore(
@@ -575,6 +581,7 @@ func NewServiceCore(
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
+		managedCeilingsRepaired:     sync.Map{},
 	}
 }
 
@@ -1442,12 +1449,12 @@ func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.U
 	}
 	checks := make([]authz.Check, 0, len(rows)+1)
 	for _, row := range rows {
-		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, row.ID.String(), projectID.String()))
+		checks = append(checks, authz.Environment(authz.EnvironmentIDOf(row.ID), authz.ProjectIDOf(projectID)).Read())
 	}
 	// An unknown slug reports not-found only to callers who can read the project's environments.
 	unresolved := len(rows) < len(slugs)
 	if unresolved {
-		checks = append(checks, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, projectID.String(), projectID.String()))
+		checks = append(checks, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	}
 	readable, err := s.authz.Filter(ctx, checks)
 	if err != nil {

@@ -94,3 +94,18 @@ func TestParseTokenError_RFCMembersSurviveMalformedSiblings(t *testing.T) {
 	require.Equal(t, "Token has been revoked.", got.Description)
 	require.Empty(t, got.URI)
 }
+
+func TestIsDescriptionText(t *testing.T) {
+	t.Parallel()
+
+	for text, want := range map[string]bool{
+		"Notion (work) #1": true,
+		"":                 false,
+		`say "hi"`:         false,
+		`back\slash`:       false,
+		"Café":             false,
+		"line\nbreak":      false,
+	} {
+		require.Equal(t, want, IsDescriptionText(text), text)
+	}
+}

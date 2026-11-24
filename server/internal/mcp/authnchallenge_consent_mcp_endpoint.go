@@ -160,7 +160,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if challengeState.FirstParty {
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no tool picker").LogWarn(ctx, logger)
 	}
-	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly); err != nil {
+	if _, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.SnapshotFor(ctx), challengeState.ClientID, lookupClientOnly); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 		}
@@ -318,7 +318,7 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 		}
 	}
 	connectResourceID := endpoint.connectResourceID()
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 	if s.authz != nil && !private {
 		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).recordServer(authzCtx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
 	}
@@ -397,7 +397,7 @@ func (s *Service) serveConsentProxiedMCP(
 	switch {
 	case auth == nil:
 		var resolved remotesessions.ServerAccessTokens
-		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
+		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
 		tokens = resolved.Tokens
 		association = &resolved.Association
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
@@ -406,7 +406,7 @@ func (s *Service) serveConsentProxiedMCP(
 		backendIssuerID = auth.choice.remoteSessionIssuerID
 		chosenClient = auth.choice.clientID.UUID
 		tokens, err = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
-			Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+			Attribution: consentRefreshAttribution(s.aiCatalog.SnapshotFor(ctx), r, endpoint, challengeState),
 			ProjectID:   endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject,
 			RegistrationID: auth.choice.clientID.UUID, SkipUnusable: false,
@@ -604,7 +604,7 @@ func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Log
 		logger.WarnContext(ctx, "build consent cards for inventory deferral", attr.SlogError(err))
 		return false
 	}
-	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, s.aiCatalog.SnapshotFor(ctx), challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		return false
 	}

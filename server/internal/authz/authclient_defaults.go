@@ -62,7 +62,6 @@ func AuthClientTypeSelector(clientType, projectID string) Selector {
 	return selector
 }
 
-// ProjectServersSelector covers every server in one project.
 func ProjectServersSelector(projectID string) Selector {
 	return Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource, SelectorKeyProjectID: projectID}
 }

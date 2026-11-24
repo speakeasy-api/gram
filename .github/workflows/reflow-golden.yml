@@ -21,7 +21,7 @@ concurrency:
 
 env:
   # Exact Reflow CLI release; bump deliberately.
-  REFLOW_VERSION: 0.1.0-47d62bd1d591383aa9c2
+  REFLOW_VERSION: 0.1.0-9a6228c334e188c19c72
   REFLOW_API: https://app.reflow.io
 
 jobs:
@@ -68,11 +68,19 @@ jobs:
           path: agents/code-runner/target/monty
           key: monty-blacksmith-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise-tasks/build/monty.sh', 'agents/code-runner/rust-toolchain.toml') }}
 
+      # Keep Project Assistant runtimes from starting. On a Linux runner each
+      # runtime container start or stop changes the host's network interfaces,
+      # and Chromium then closes its HTTP/2 sessions with ERR_NETWORK_CHANGED,
+      # failing whichever golden flow has a request in flight. No golden flow
+      # needs a running runtime (CI has no model key), so the tag names an
+      # image that is never built: assistants stay on in the dashboard and the
+      # runtime reports that its image is missing instead of starting.
       - name: Answer zero's questions before it asks them
         run: |
           cat > mise.local.toml <<'TOML'
           [env]
           CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          GRAM_ASSISTANT_RUNTIME_IMAGE_TAG = "ci-not-built"
           TOML
 
       - name: Give the seed someone to be

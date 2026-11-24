@@ -56,15 +56,22 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+
+	// inferenceURL is the partition's Endpoints.Inference, used for
+	// completions, embeddings and model discovery.
+	inferenceURL string
+
 	// providerRouting, when set, limits which OpenRouter providers serve
 	// every chat completion this client sends.
 	providerRouting *ProviderRouting
 }
 
-// NewUnifiedClient creates a new UnifiedClient with the given strategies.
+// NewUnifiedClient creates a new UnifiedClient with the given strategies. It
+// sends every request to endpoints.Inference.
 func NewUnifiedClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
+	endpoints Endpoints,
 	provisioner Provisioner,
 	keyResolver KeyResolver,
 	captureStrategy MessageCaptureStrategy,
@@ -81,6 +88,7 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
+		inferenceURL:           endpoints.Inference,
 		providerRouting:        nil,
 	}
 }
@@ -263,7 +271,7 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 	httpReq, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
-		fmt.Sprintf("%s/v1/chat/completions", OpenRouterBaseURL),
+		fmt.Sprintf("%s/v1/chat/completions", c.inferenceURL),
 		bytes.NewReader(data),
 	)
 	if err != nil {
@@ -1111,7 +1119,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		)
 	}
 
-	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
+	orClient := or_base.New(or_base.WithSecurity(openrouterKey), or_base.WithServerURL(c.inferenceURL+"/v1"))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
 		SessionID:      nil,
 		Trace:          nil,

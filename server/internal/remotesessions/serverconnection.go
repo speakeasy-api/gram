@@ -33,7 +33,10 @@ func (s *Service) TestServerConnection(ctx context.Context, payload *gen.TestSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "Invalid MCP server ID.")
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), authCtx.ProjectID.String())); err != nil {
+	if id == uuid.Nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "Invalid MCP server ID.")
+	}
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(*authCtx.ProjectID)).Connect()); err != nil {
 		return nil, err
 	}
 	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: *authCtx.ProjectID})

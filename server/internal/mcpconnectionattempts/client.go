@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // The client families client_family can hold. New ones can be appended.
@@ -80,16 +78,10 @@ func genericFamily(family string) bool {
 	return family == "" || family == FamilyOther || family == FamilyScript
 }
 
-// documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
-var documentFamilies = func() map[string]string {
-	families := make(map[string]string)
-	for _, entry := range aivendors.CIMDDocuments() {
-		if family, ok := productFamilies[entry.Product.ID]; ok {
-			families[entry.Document.URL] = family
-		}
-	}
-	return families
-}()
+// NamedClient reports whether a family names one AI app, not a script, a browser or nothing.
+func NamedClient(family string) bool {
+	return !genericFamily(family) && family != FamilyBrowser
+}
 
 // clientVersionShape is what a version may look like, so caller text never reaches the column.
 var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.]{1,16})?$`)
@@ -229,7 +221,7 @@ func (r *Recorder) stampClient(row *Row) {
 	if genericFamily(row.ClientFamily) && client.present {
 		// A browser User-Agent is generic too, so it can't replace a name the session reported.
 		family, version := classifyUserAgent(client.userAgent)
-		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
+		if row.ClientFamily == "" || NamedClient(family) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}

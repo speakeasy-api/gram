@@ -2,7 +2,10 @@ import { appendFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const workflowPath = ".github/workflows/pr.yaml";
-const requiredSteps = ["Test", "Test admin", "Test registry editor in Chrome"];
+const suites = {
+  dashboard: ["Test"],
+  admin: ["Test admin", "Test registry editor in Chrome"],
+};
 const successful = (value) =>
   value.status === "completed" && value.conclusion === "success";
 const numericId = (value) => Number.isSafeInteger(value) && value > 0;
@@ -25,8 +28,10 @@ export async function selectCacheSource({
   repository,
   sha,
   prefix,
+  suite,
   now = Date.now(),
 }) {
+  if (!Object.hasOwn(suites, suite)) return null;
   const base = `/repos/${repository}`;
   const repo = await api(base);
   const workflow = await api(`${base}/actions/workflows/pr.yaml`);
@@ -63,21 +68,31 @@ export async function selectCacheSource({
       `${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,
       "jobs",
     );
-    const matchingJobs = jobs.filter((job) => job.name === "client-test");
-    if (matchingJobs.length !== 1) continue;
-    const job = matchingJobs[0];
-    if (
-      !numericId(job.id) ||
-      job.run_id !== run.id ||
-      job.run_attempt !== run.run_attempt ||
-      job.head_sha !== sha ||
-      !successful(job) ||
-      !requiredSteps.every((name) => {
-        const steps = job.steps?.filter((step) => step.name === name) ?? [];
-        return steps.length === 1 && successful(steps[0]);
-      })
-    )
+    const verifiedJobs = {};
+    for (const [name, requiredSteps] of Object.entries(suites)) {
+      const matches = jobs.filter(
+        (job) => job.name === `client-test (${name})`,
+      );
+      if (matches.length !== 1) continue;
+      const job = matches[0];
+      if (
+        !numericId(job.id) ||
+        job.run_id !== run.id ||
+        job.run_attempt !== run.run_attempt ||
+        job.head_sha !== sha ||
+        !successful(job) ||
+        !requiredSteps.every((name) => {
+          const steps = job.steps?.filter((step) => step.name === name) ?? [];
+          return steps.length === 1 && successful(steps[0]);
+        })
+      )
+        continue;
+      verifiedJobs[name] = job;
+    }
+    // Promote only after both complete suites passed in this exact attempt.
+    if (Object.keys(verifiedJobs).length !== Object.keys(suites).length)
       continue;
+    const job = verifiedJobs[suite];
     const artifacts = await list(
       api,
       `${base}/actions/runs/${run.id}/artifacts`,
@@ -112,6 +127,7 @@ async function main() {
     GITHUB_API_URL: apiUrl,
     GH_TOKEN: token,
     CACHE_PREFIX: prefix,
+    CACHE_SUITE: suite,
     GITHUB_OUTPUT: output,
   } = process.env;
   if (
@@ -121,6 +137,7 @@ async function main() {
     !apiUrl ||
     !token ||
     !prefix ||
+    !Object.hasOwn(suites, suite) ||
     !output
   )
     throw new Error("Missing or invalid cache selector configuration");
@@ -138,7 +155,13 @@ async function main() {
       throw new Error(`GitHub API request failed (${response.status})`);
     return response.json();
   };
-  const selected = await selectCacheSource({ api, repository, sha, prefix });
+  const selected = await selectCacheSource({
+    api,
+    repository,
+    sha,
+    prefix,
+    suite,
+  });
   if (!selected) {
     console.log(`No trusted cache source for ${sha}`);
     return;

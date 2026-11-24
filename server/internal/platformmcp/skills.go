@@ -1065,7 +1065,7 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 	}
 	skillID := strings.TrimSpace(input.SkillID)
 	if skillID != "" {
-		if _, err := uuid.Parse(skillID); err != nil {
+		if parsed, err := uuid.Parse(skillID); err != nil || parsed == uuid.Nil {
 			return ListSkillDistributionsOutput{}, ErrRegistrationInvalid
 		}
 	}
@@ -1141,9 +1141,9 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 // requireSkillRead is the skills service's own read policy: a skill grant
 // selects either the whole project or the one skill named.
 func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedProject, skillID string) error {
-	checks := []authz.Check{{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}}
+	checks := []authz.Check{authz.Skills(authz.ProjectIDOf(project.ID)).Read()}
 	if skillID != "" {
-		checks = append(checks, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: authz.ResourceKindSkill, ResourceID: skillID, Dimensions: nil})
+		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
 	}
 	return s.grants.RequireAnyUnblocked(ctx, checks...)
 }

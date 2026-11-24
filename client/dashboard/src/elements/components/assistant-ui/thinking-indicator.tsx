@@ -3,7 +3,7 @@
 import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
-import { isToolCallAnnotation } from "@/elements/lib/toolCallAnnotation";
+import { isThinkingIndicatorActive } from "@/elements/lib/thinkingIndicator";
 import { RainbowSpinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 
@@ -175,38 +175,14 @@ function useThinkingVerb(
 
 /**
  * Shows a rainbow spinner alongside a cycling "thinking" verb whenever the
- * assistant is running but has not yet produced visible answer text. Once text
- * starts streaming, this hides and the inline trailing dot (see the
- * `aui-md[data-status="running"]` rules in global.css) takes over.
+ * assistant is running and no other working signal is on screen — see
+ * {@link isThinkingIndicatorActive} for how it hands off to the streaming-text
+ * dot and the tool and reasoning shimmers.
  */
 export const ThinkingIndicator: FC = () => {
-  const active = useAuiState(({ message }) => {
-    if (message.status?.type !== "running") return false;
-    const parts = message.parts;
-    // Skip trailing empty text and lone annotations (the next batch's
-    // heading, mid-flight) — they don't end the current tool run.
-    let i = parts.length - 1;
-    while (i >= 0) {
-      const part = parts[i];
-      if (
-        part?.type === "text" &&
-        (part.text.trim().length === 0 || isToolCallAnnotation(part.text))
-      ) {
-        i--;
-        continue;
-      }
-      break;
-    }
-    if (i < 0) return true;
-    const last = parts[i];
-    if (!last) return true;
-    // A trailing tool group is still "open" (shimmering heading) for the
-    // whole streaming run — a second global loader would be noise.
-    if (last.type === "tool-call") return false;
-    if (last.type === "reasoning") return true;
-    if (last.type === "text") return last.text.trim().length === 0;
-    return false;
-  });
+  const active = useAuiState(({ message }) =>
+    isThinkingIndicatorActive(message),
+  );
 
   const reducedMotion = usePrefersReducedMotion();
   const { verb, visible } = useThinkingVerb(active, reducedMotion);

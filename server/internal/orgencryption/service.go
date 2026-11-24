@@ -98,6 +98,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 
 // Encryptor seals and opens values for one organization and use case.
 type Encryptor struct {
+	transaction    *transactionScope
 	service        *Service
 	organizationID string
 	useCase        UseCase
@@ -112,13 +113,13 @@ func (s *Service) For(organizationID string, useCase UseCase) (*Encryptor, error
 		return nil, errors.New("orgencryption: organization id is required")
 	}
 
-	return &Encryptor{service: s, organizationID: organizationID, useCase: useCase}, nil
+	return &Encryptor{service: s, organizationID: organizationID, useCase: useCase, transaction: nil}, nil
 }
 
 // Encrypt seals plaintext for storage in column, a "table.column" name. The
 // result only decrypts for the same organization, use case and column.
 func (e *Encryptor) Encrypt(ctx context.Context, column string, plaintext []byte) (string, error) {
-	cfg, err := e.service.config(ctx, e.organizationID, e.useCase)
+	cfg, err := e.config(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +127,7 @@ func (e *Encryptor) Encrypt(ctx context.Context, column string, plaintext []byte
 		return "", ErrNotProvisioned
 	}
 
-	dataKey, err := e.service.dataKey(ctx, e.organizationID, cfg.activeDataKeyID)
+	dataKey, err := e.dataKey(ctx, cfg.activeDataKeyID)
 	if err != nil {
 		return "", err
 	}
@@ -147,11 +148,11 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 		return nil, fmt.Errorf("%w: %w", ErrInvalidCiphertext, err)
 	}
 
-	if _, err := e.service.config(ctx, e.organizationID, e.useCase); err != nil {
+	if _, err := e.config(ctx); err != nil {
 		return nil, err
 	}
 
-	dataKey, err := e.service.dataKey(ctx, e.organizationID, envelope.DataKeyID)
+	dataKey, err := e.dataKey(ctx, envelope.DataKeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +175,7 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 // reads the same caches as Encrypt, so a suspension can take up to
 // configCacheTTL to show and a revoked KEK up to DataKeyCacheTTL.
 func (e *Encryptor) RequireUsable(ctx context.Context) error {
-	cfg, err := e.service.config(ctx, e.organizationID, e.useCase)
+	cfg, err := e.config(ctx)
 	if err != nil {
 		return err
 	}
@@ -182,7 +183,7 @@ func (e *Encryptor) RequireUsable(ctx context.Context) error {
 		return ErrNotProvisioned
 	}
 
-	if _, err := e.service.dataKey(ctx, e.organizationID, cfg.activeDataKeyID); err != nil {
+	if _, err := e.dataKey(ctx, cfg.activeDataKeyID); err != nil {
 		return err
 	}
 
@@ -215,7 +216,11 @@ func (s *Service) config(ctx context.Context, organizationID string, useCase Use
 }
 
 func (s *Service) loadConfig(ctx context.Context, organizationID string, useCase UseCase) (cachedConfig, error) {
-	q := repo.New(s.db)
+	return s.loadConfigIn(ctx, s.db, organizationID, useCase)
+}
+
+func (s *Service) loadConfigIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (cachedConfig, error) {
+	q := repo.New(db)
 
 	config, err := q.GetOrganizationEncryptionConfig(ctx, organizationID)
 	switch {
@@ -279,11 +284,15 @@ func (s *Service) dataKey(ctx context.Context, organizationID string, dataKeyID 
 // unwrapDataKey unwraps a readable DEK with the configuration's current KEK,
 // falling back to the previous KEK while a switch is in flight.
 func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, dataKeyID uuid.UUID) (cachedDataKey, error) {
+	return s.unwrapDataKeyIn(ctx, s.db, organizationID, dataKeyID, true)
+}
+
+func (s *Service) unwrapDataKeyIn(ctx context.Context, db repo.DBTX, organizationID string, dataKeyID uuid.UUID, recordUnwrap bool) (cachedDataKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, kmsCallTimeout)
 	defer cancel()
 
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	q := repo.New(s.db)
+	q := repo.New(db)
 
 	dek, err := q.GetReadableDataEncryptionKey(ctx, repo.GetReadableDataEncryptionKeyParams{ID: dataKeyID, OrganizationID: organizationID})
 	switch {
@@ -311,7 +320,7 @@ func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, data
 
 	var errs []error
 	for _, keyID := range candidates {
-		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID)
+		dataKey, err := s.unwrapWith(ctx, logger, q, dek, keyID, recordUnwrap)
 		if err == nil {
 			return cachedDataKey{key: dataKey, organizationID: dek.OrganizationID, useCase: dek.UseCase}, nil
 		}
@@ -321,7 +330,7 @@ func (s *Service) unwrapDataKey(ctx context.Context, organizationID string, data
 	return cachedDataKey{}, errors.Join(errs...)
 }
 
-func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID) ([]byte, error) {
+func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Queries, dek repo.DataEncryptionKey, keyID uuid.UUID, recordUnwrap bool) ([]byte, error) {
 	wrap, err := q.GetDataEncryptionKeyWrap(ctx, repo.GetDataEncryptionKeyWrapParams{
 		OrganizationID:      dek.OrganizationID,
 		DataEncryptionKeyID: dek.ID,
@@ -349,8 +358,13 @@ func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Q
 		return nil, fmt.Errorf("%w: unwrapped data encryption key is %d bytes", ErrKeyUnavailable, len(dataKey))
 	}
 
-	if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
-		logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
+	// Operational bookkeeping must not lock a shared wrap row for the
+	// lifetime of a caller-owned message transaction: compaction takes a chat
+	// lock first, which would invert the lock order against a normal capture.
+	if recordUnwrap {
+		if err := q.TouchDataEncryptionKeyWrapUnwrapped(ctx, repo.TouchDataEncryptionKeyWrapUnwrappedParams{ID: wrap.ID, OrganizationID: dek.OrganizationID}); err != nil {
+			logger.WarnContext(ctx, "record data encryption key unwrap", attr.SlogError(err))
+		}
 	}
 
 	return dataKey, nil

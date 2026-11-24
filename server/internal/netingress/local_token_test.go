@@ -153,7 +153,7 @@ func TestLocalTokenAttestsTheGatewayThroughTheVerifier(t *testing.T) {
 	reviewer, err := NewLocalTokenReviewer(localTestKey)
 	require.NoError(t, err)
 	reviewer.now = func() time.Time { return now }
-	ingress := Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "speakeasy.example.ts.net", AttestorNamespace: "", AttestorServiceAccount: ""}
+	ingress := Ingress{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale, DNSName: "speakeasy.example.ts.net"}
 	lookup := &fakeAttestorLookup{ingress: ingress}
 	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, 30*time.Second)
 	verifier.now = func() time.Time { return now }
@@ -166,7 +166,6 @@ func TestLocalTokenAttestsTheGatewayThroughTheVerifier(t *testing.T) {
 
 	other, err := MintLocalToken(localTestKey, LocalTokenClaims{Namespace: "gram-local", ServiceAccount: "someone-else", Audience: DefaultTokenAudience, TTL: time.Hour}, now)
 	require.NoError(t, err)
-	lookup.byAttestorErr = ErrAttestationRejected
 	_, err = verifier.Verify(t.Context(), other, "127.0.0.1:1234", "speakeasy.example.ts.net")
 	require.ErrorIs(t, err, ErrAttestationRejected, "another service account is not the gateway")
 }

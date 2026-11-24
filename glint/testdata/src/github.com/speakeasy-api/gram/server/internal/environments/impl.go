@@ -1,9 +1,9 @@
-// Package environments carries the production import path of a migrated
-// package, so the rule's default package list is exercised.
+// Package environments carries a production import path outside authz,
+// package, so the rule's default reach is exercised.
 package environments
 
 import "github.com/speakeasy-api/gram/server/internal/authz"
 
 func raw(env, project string) authz.Check {
-	return authz.EnvironmentCheck("environment:read", env, project) // want `replace authz.EnvironmentCheck: build authorization checks`
+	return authz.Check{Scope: "environment:read", ResourceID: env, Dimensions: map[string]string{"project_id": project}} // want `replace the authz.Check literal: build authorization checks`
 }

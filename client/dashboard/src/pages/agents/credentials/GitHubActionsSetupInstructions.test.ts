@@ -108,8 +108,8 @@ describe("GitHub Actions setup", () => {
     expect(hasPlatformSetup(github)).toBe(true);
   });
 
-  // The server decides per organization, from its catalog file and feature
-  // flag, and the dashboard follows `enabled` alone.
+  // The server decides from its catalog file, and the dashboard follows
+  // `enabled` alone.
   it("is not offered while the catalog lists it as not enabled", () => {
     expect(hasPlatformSetup({ ...github, enabled: false })).toBe(false);
   });

@@ -22,7 +22,7 @@ func (s *Service) GetGateway(ctx context.Context, _ *gen.GetGatewayPayload) (*ge
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) GetProjectGateway(ctx context.Context, _ *gen.GetProjectGatewa
 	if ac.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: ac.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 

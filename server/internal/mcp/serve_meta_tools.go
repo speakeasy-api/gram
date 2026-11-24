@@ -245,37 +245,60 @@ func describeToolsMemberArguments(slug string, toolNames []string) []byte {
 	return arguments
 }
 
+// memberToolDispositions is which member tools one gateway call may run.
+type memberToolDispositions string
+
+const (
+	// memberToolAnyDisposition runs any member tool the caller may call.
+	memberToolAnyDisposition memberToolDispositions = "any"
+
+	// memberToolReadOnly runs only member tools whose effective annotations
+	// classify them read-only, the classification per-tool RBAC uses.
+	memberToolReadOnly memberToolDispositions = "read_only"
+)
+
+// readOnlyToolRefusal is the isError message for a tool that
+// execute_read_only_tool may not run.
+func readOnlyToolRefusal(toolName string) string {
+	return fmt.Sprintf("tool %q is not annotated read-only, so %s cannot run it; call it with %s instead", toolName, metamcp.ToolExecuteReadOnlyTool, metamcp.ToolExecuteTool)
+}
+
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The
 // synthetic tools/call carries the outer request ID, so the dispatch envelope
-// answers directly; the result's _meta identity stays the member's.
+// answers directly; the result's _meta identity stays the member's. toolName
+// is the gateway tool called, execute_tool or execute_read_only_tool.
 func (s *Service) handleMetaExecuteToolCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	gate *metaGateContext,
 	members []metaMember,
 	req *rawRequest,
+	toolName string,
 	argsRaw json.RawMessage,
 	meta *mcprequests.WireMeta,
+	dispositions memberToolDispositions,
 ) (json.RawMessage, error) {
 	start := time.Now()
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
-		s.logMetaToolCallFailure(ctx, gate, metamcp.ToolExecuteTool, argsRaw, newMetaToolCallAttempt(start), err)
+		s.logMetaToolCallFailure(ctx, gate, toolName, argsRaw, newMetaToolCallAttempt(start), err)
 		return nil, err
 	}
 
-	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
+	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta, dispositions)
 }
 
-// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
-// and Code Mode. A call that fails before its member dispatch writes the
-// member's tool_call row is logged here, so every failed call leaves one row
-// stamped with this gateway.
-func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool
+// and execute_read_only_tool, and Code Mode. A call that fails before its
+// member dispatch writes the member's tool_call row is logged here, so every
+// failed call leaves one row stamped with this gateway.
+func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta, dispositions memberToolDispositions) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
+	attempt.dispositions = dispositions
 	// A row from earlier in the request is about something else, not this call.
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
+	noteGatewayMemberCall(ctx, err == nil && attempt.succeeded)
 	if err != nil {
 		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
 	}
@@ -296,6 +319,13 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// Resolved before the cached-view check so the named server's check is
 	// recorded on both paths; an unknown server is still refused after it.
 	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
+	namesLocalTool := false
+	if ok {
+		_, namesLocalTool = localToolNamed(s.memberLocalTools(ctx, logger, gate.organizationID, member), toolName)
+	}
+	// A local tool's calls are not the member's tool calls, so a failed one
+	// is not written to the tool logs either.
+	attempt.localTool = namesLocalTool
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
@@ -303,6 +333,14 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 				found = true
 				break
 			}
+		}
+		// A member's local tools are not part of what was approved at connect
+		// time: access to them follows access to the member, not to any one of
+		// its tools.
+		if !found && namesLocalTool {
+			found = true
+			// The member must answer it with that local tool or refuse it.
+			ctx = withLocalToolsOnly(ctx)
 		}
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
@@ -327,13 +365,26 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
+		// A hosted member's tool is checked once handleToolsCall resolves it.
+		if attempt.dispositions == memberToolReadOnly {
+			dispositions, err := s.remoteProxyManager.Dispositions(ctx, member.serverID.String(), member.projectID.String())
+			if err != nil {
+				return nil, oops.E(oops.CodeUnavailable, err, "could not read the tool's annotations; retry shortly").LogError(ctx, logger)
+			}
+			// A tool the catalog has not recorded has no disposition and is refused.
+			if dispositions[toolName] != authz.DispositionReadOnly {
+				message := readOnlyToolRefusal(toolName)
+				attempt.fail(http.StatusForbidden, message)
+				return marshalMetaToolError(ctx, logger, req.ID, message)
+			}
+		}
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			s.recordMemberFailure(ctx, gate, member, uuid.Nil, failure.code)
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
@@ -348,7 +399,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// toolset's hosting publicness.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil || !satisfied {
-		s.recordMemberFailure(ctx, gate, member, failureCode)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, failureCode)
 	}
 	if err != nil {
 		return nil, err
@@ -384,7 +435,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
-		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		// The member's local tools are answered here, after the checks this
+		// dispatch makes, exactly where its own tools would be dispatched.
+		s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.hostedLocalTools)
 	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
 	code, refused := toolsCallRefusal(err)
 	if !refused {
@@ -395,7 +448,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 	}
 	if code != (mcpconnectionattempts.Code{}) {
-		s.recordMemberFailure(ctx, gate, member, code)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, code)
 	}
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
@@ -416,13 +469,23 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 		return nil, err
 	}
+	if inputs.backendAnswered {
+		s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	}
+	if inputs.resultSucceeded {
+		attempt.succeeded = true
+	}
 	return body, nil
 }
 
 // memberCatalog is one member's permission-filtered tool inventory.
 type memberCatalog struct {
-	entries    []*toolListEntry
-	byName     map[string]*toolListEntry
+	entries []*toolListEntry
+	byName  map[string]*toolListEntry
+	// local names the entries that are the member's local tools. Consent
+	// and the catalogs it freezes leave them out: access to them follows
+	// access to the member, not approval of any one of its tools.
+	local      map[string]struct{}
 	incomplete bool
 	// From a live upstream handshake. Cached catalogs do not probe upstream.
 	instructions string
@@ -456,7 +519,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)
@@ -503,7 +566,7 @@ func (s *Service) describeMemberToolset(
 			catalog.entries = append(catalog.entries, kept)
 		}
 	}
-	return catalog, nil
+	return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 }
 
 // withMemberProjectAuthContext scopes the caller's auth context to a hosted
@@ -623,6 +686,8 @@ func (s *Service) buildMemberDispatch(
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 	return toolset, hosting, inputs, nil
 }
@@ -702,7 +767,7 @@ func (s *Service) loadMemberToolset(
 // and a call that named a private member already recorded the same check, so
 // the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 	visibility := mcpservers.VisibilityPrivate
 	if public {
 		visibility = mcpservers.VisibilityPublic

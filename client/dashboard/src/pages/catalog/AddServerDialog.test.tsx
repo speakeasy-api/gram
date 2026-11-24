@@ -249,7 +249,7 @@ describe("guided setup identity defaults", () => {
     "defaults %s guided setup to User Identity",
     async (specifier, url) => {
       show(specifier, url);
-      await screen.findByRole("radio", { name: /User Identity/ });
+      await screen.findByRole("radio", { name: /User identity/ });
       expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual(
         { identityMode: "user" },
       );
@@ -260,14 +260,14 @@ describe("guided setup identity defaults", () => {
       openProviderSetup: false,
       attachToGatewayId: "gateway-id",
     });
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual({
       identityMode: "user",
     });
   });
   it("keeps ordinary manual-auth catalog entries on their existing default", async () => {
     show("test/server", "https://mcp.example.test/mcp");
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     expect(
       mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
     ).toBeUndefined();
@@ -297,7 +297,7 @@ describe("Salesforce catalog Add entry", () => {
   }
   it("enters the existing Identity configuration with one source instead of the endpoint picker", async () => {
     openSalesforce();
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     const options = mocks.workflow.mock.calls.at(-1)![0];
     expect(options.initialConfiguration).toEqual({ identityMode: "user" });
     expect(options.servers[0].remotes).toEqual([salesforceServer.remotes[0]]);
@@ -307,12 +307,12 @@ describe("Salesforce catalog Add entry", () => {
   it("returns to guided entry when Manual changes back to User Identity", async () => {
     mocks.hasScope.mockReturnValue(true);
     const view = openSalesforce();
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
     const configure = mocks.workflow.mock.results.at(-1)!.value;
     configure.serverConfigs[0].identityMode = "none";
     view.refresh();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     const options = mocks.workflow.mock.calls.at(-1)![0];
     expect(options.servers[0].remotes).toEqual([salesforceServer.remotes[0]]);
     expect(options.initialConfiguration).toEqual({
@@ -335,7 +335,7 @@ describe("Salesforce catalog Add entry", () => {
       ],
     };
     openSalesforce({ servers: [hosted] });
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     expect(
       mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes[0].headers,
     ).toEqual(hosted.remotes[0]!.headers);
@@ -349,7 +349,7 @@ describe("Salesforce catalog Add entry", () => {
   });
   it("updates Manual to Shared credential in place without rebuilding the Salesforce selection", async () => {
     const view = openSalesforce();
-    await screen.findByRole("radio", { name: /User Identity/ });
+    await screen.findByRole("radio", { name: /User identity/ });
     fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
     const configure = mocks.workflow.mock.results.at(-1)!.value;
     configure.serverConfigs[0].identityMode = "none";
@@ -369,7 +369,7 @@ describe("Salesforce catalog Add entry", () => {
     "retains the original endpoint flow when Identity changes to %s",
     async (identityMode) => {
       openSalesforce();
-      await screen.findByRole("radio", { name: /User Identity/ });
+      await screen.findByRole("radio", { name: /User identity/ });
       fireEvent.click(
         screen.getByRole("radio", {
           name: identityMode === "none" ? /Manual/ : /Shared credential/,
@@ -408,7 +408,7 @@ describe("AddServerDialog identity permissions", () => {
     mockConfigureWorkflow(cimdServer);
     renderDialog(cimdServer);
     expect(
-      await screen.findByRole("radio", { name: /User Identity Default/ }),
+      await screen.findByRole("radio", { name: /User identity Default/ }),
     ).toBeDefined();
   });
 
@@ -417,18 +417,18 @@ describe("AddServerDialog identity permissions", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("radio", { name: /User Identity/ }),
+        screen.getByRole("radio", { name: /User identity/ }),
       ).toBeDefined(),
     );
     expect(
       (
         screen.getByRole("radio", {
-          name: /User Identity/,
+          name: /User identity/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/User Identity creates an authorization server/i),
+      screen.getByText(/User identity creates an authorization server/i),
     ).toBeDefined();
     expect(
       (
@@ -446,18 +446,18 @@ describe("AddServerDialog identity permissions", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("radio", { name: /User Identity/ }),
+        screen.getByRole("radio", { name: /User identity/ }),
       ).toBeDefined(),
     );
     expect(
       (
         screen.getByRole("radio", {
-          name: /User Identity/,
+          name: /User identity/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
     expect(
-      screen.queryByText(/User Identity creates a provider or OAuth client/i),
+      screen.queryByText(/User identity creates a provider or OAuth client/i),
     ).toBeNull();
     expect(
       (
@@ -861,7 +861,7 @@ describe.each(["snowflake", "okta"] as const)(
       async (props) => {
         mockConfigureWorkflow(snowflake);
         show(props);
-        await screen.findByRole("radio", { name: /User Identity/ });
+        await screen.findByRole("radio", { name: /User identity/ });
         expect(mocks.workflow.mock.calls.at(-1)![0]).toMatchObject({
           initialConfiguration: { identityMode: "user" },
           accountSetupEnabled: true,

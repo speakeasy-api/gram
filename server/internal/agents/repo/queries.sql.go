@@ -320,6 +320,51 @@ func (q *Queries) DeleteConnectionBlockGrant(ctx context.Context, arg DeleteConn
 	return err
 }
 
+const ensurePermanentAgentPolicyGrant = `-- name: EnsurePermanentAgentPolicyGrant :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, concat('agent:', $2::uuid), $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = NULL,
+  updated_at = clock_timestamp()
+RETURNING id, scope, selectors, created_at, updated_at
+`
+
+type EnsurePermanentAgentPolicyGrantParams struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Scope          string
+	Selectors      []byte
+}
+
+type EnsurePermanentAgentPolicyGrantRow struct {
+	ID        uuid.UUID
+	Scope     string
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+// Creates a permanent grant, or takes over a temporary grant for the same
+// target by clearing its expiry.
+func (q *Queries) EnsurePermanentAgentPolicyGrant(ctx context.Context, arg EnsurePermanentAgentPolicyGrantParams) (EnsurePermanentAgentPolicyGrantRow, error) {
+	row := q.db.QueryRow(ctx, ensurePermanentAgentPolicyGrant,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i EnsurePermanentAgentPolicyGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.Scope,
+		&i.Selectors,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentByID = `-- name: GetAgentByID :one
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
@@ -879,7 +924,7 @@ func (q *Queries) ListAgentOwnerProfiles(ctx context.Context, arg ListAgentOwner
 
 const listAgentPolicyGrants = `-- name: ListAgentPolicyGrants :many
 
-SELECT id, scope, selectors, created_at, updated_at
+SELECT id, scope, selectors, created_at, updated_at, expires_at
 FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = concat('agent:', $2::uuid)
@@ -897,6 +942,7 @@ type ListAgentPolicyGrantsRow struct {
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
 }
 
 // Agent direct-policy queries construct the canonical principal from the typed
@@ -916,6 +962,7 @@ func (q *Queries) ListAgentPolicyGrants(ctx context.Context, arg ListAgentPolicy
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -946,7 +993,6 @@ WHERE a.organization_id = $1
       JOIN remote_session_issuers issuer ON issuer.id = c.remote_session_issuer_id AND NOT issuer.deleted
       JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id AND NOT usi.deleted
       JOIN user_session_issuers provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
-      JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
       WHERE c.id = b.remote_session_client_id AND c.id = s.remote_session_client_id AND NOT c.deleted
         AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
         AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))

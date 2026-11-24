@@ -72,14 +72,14 @@ func (s *Service) requireDeviceEnrollmentGrant(ctx context.Context, db accessrep
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
-	if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
+	if !authz.GrantsSatisfy(grants, authz.Org(authz.OrgIDFrom(organizationID)).DeviceAgentSync()) {
 		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", authz.ScopeOrgDeviceAgentSync)
 	}
 	return nil
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -109,12 +109,7 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 	// An enrolled device acts under the agent's whole policy, which is what
 	// authorizing the agent means. Owning it is the other way to hold that.
 	if agent.OwnerUserID != authCtx.UserID {
-		if err := s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeAgentAuthorize,
-			ResourceKind: authz.ResourceKindAgent,
-			ResourceID:   agent.ID.String(),
-			Dimensions:   nil,
-		}); err != nil {
+		if err := s.authz.Require(ctx, authz.Agent(authz.AgentIDOf(agent.ID)).Authorize()); err != nil {
 			return nil, err
 		}
 	}

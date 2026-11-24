@@ -1,0 +1,374 @@
+{
+  "library_version": 752276068,
+  "targets": [
+    {
+      "target_id": "aider",
+      "display_name": "Aider",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "amp",
+      "display_name": "Amp",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "antigravity",
+      "display_name": "Google Antigravity",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "anythingllm",
+      "display_name": "AnythingLLM",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "augment",
+      "display_name": "Augment Code",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "chatgpt",
+      "display_name": "ChatGPT",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "chatgpt-classic",
+      "display_name": "ChatGPT Classic",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "cherry-studio",
+      "display_name": "Cherry Studio",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "claude-code",
+      "display_name": "Claude Code",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "cline",
+      "display_name": "Cline",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "codex",
+      "display_name": "Codex",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "conductor",
+      "display_name": "Conductor",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "continue",
+      "display_name": "Continue",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "crush",
+      "display_name": "Crush",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "cursor",
+      "display_name": "Cursor",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "devin",
+      "display_name": "Devin",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "gemini-cli",
+      "display_name": "Gemini CLI",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "goose",
+      "display_name": "Goose",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "gpt4all",
+      "display_name": "GPT4All",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "hermes-agent",
+      "display_name": "Hermes Agent",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "jan",
+      "display_name": "Jan",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "kilo-code",
+      "display_name": "Kilo Code",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "koboldcpp",
+      "display_name": "KoboldCpp",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "llamacpp",
+      "display_name": "llama.cpp",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "lmstudio",
+      "display_name": "LM Studio",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "localai",
+      "display_name": "LocalAI",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "msty",
+      "display_name": "Msty",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "ollama",
+      "display_name": "Ollama",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "open-webui",
+      "display_name": "Open WebUI",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "openclaw",
+      "display_name": "OpenClaw",
+      "category": "assistant",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "opencode",
+      "display_name": "opencode",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "openhands",
+      "display_name": "OpenHands",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "pi",
+      "display_name": "Pi",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "qwen-code",
+      "display_name": "Qwen Code",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "roo-code",
+      "display_name": "Roo Code",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "trae",
+      "display_name": "Trae",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "vibe",
+      "display_name": "Mistral Vibe",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "vllm",
+      "display_name": "vLLM",
+      "category": "local_model",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "warp",
+      "display_name": "Warp",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "windsurf",
+      "display_name": "Windsurf",
+      "category": "harness",
+      "origin": "default",
+      "blockable": false,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    },
+    {
+      "target_id": "zed",
+      "display_name": "Zed",
+      "category": "harness",
+      "origin": "default",
+      "blockable": true,
+      "state": "unreviewed",
+      "decision": "unreviewed"
+    }
+  ]
+}
