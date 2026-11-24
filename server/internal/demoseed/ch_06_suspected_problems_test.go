@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
@@ -51,7 +52,7 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 	spec := DefaultSpec()
 	spec.OrgID = "org-problems-" + uuid.NewString()
 	spec.UUIDPrefix = strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
-	s := &seeder{spec: spec, now: seeded}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot(), now: seeded}
 
 	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)

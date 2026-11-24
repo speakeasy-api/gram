@@ -1,4 +1,4 @@
-package admission
+package aivendors
 
 import (
 	"errors"
@@ -13,10 +13,10 @@ import (
 // connector gets its own https://chatgpt.com/oauth/{id}/client.json, where
 // {id} is server-generated.
 //
-// It is deliberately available ONLY to the compile-time catalog, never to
+// It is available only to the staff-managed catalog, never to
 // operator-supplied custom URLs. A pattern is a security-relevant grant of
-// trust to a whole namespace, and confining it to code keeps every one of
-// them behind review and deploy. Customers who need a specific URL add that
+// trust to a whole namespace, and confining it to the catalog keeps every one of
+// them behind staff review. Customers who need a specific URL add that
 // URL exactly, which is what they want anyway.
 //
 // The syntax is one metacharacter, `*`, with two hard structural limits:
@@ -39,25 +39,18 @@ import (
 // expressed in the catalog. No known vendor publishes such a URL, and an
 // escape syntax would cost more than it buys.
 
-// errPatternHostWildcard and friends explain why a catalog pattern is
-// malformed. They surface only through the catalog's own validation test —
-// patterns are compile-time constants, so a bad one is a build-time bug,
-// never a runtime condition.
+// Pattern validation errors identify malformed staff-managed catalog rows.
+// The loader logs and skips these rows before publishing a snapshot.
 var (
 	errPatternHostWildcard    = errors.New("wildcard is not permitted in the scheme or host")
 	errPatternPartialSegment  = errors.New("wildcard must be a complete path segment")
 	errPatternUnparseable     = errors.New("pattern is not a parseable https URL")
 	errPatternEmptySegment    = errors.New("pattern has an empty path segment")
 	errPatternNoPathComponent = errors.New("pattern has no path component")
+	errPatternNoWildcard      = errors.New("pattern has no wildcard segment")
+	errPatternUserinfo        = errors.New("pattern carries userinfo")
+	errPatternDotSegment      = errors.New("pattern has a dot path segment")
 )
-
-// isPattern reports whether a catalog URL carries a wildcard. Exact entries
-// take a map lookup; only patterns pay for matching. Callers outside the
-// package ask [Preset.IsPattern] instead, since a bare URL string is never
-// the thing they hold.
-func isPattern(url string) bool {
-	return strings.Contains(url, "*")
-}
 
 // validatePattern enforces the structural rules above. Returns nil for a
 // pattern that is safe to match against.
@@ -81,8 +74,13 @@ func validatePattern(pattern string) error {
 	}
 	// url.Parse still earns its keep as a structural sanity check on the
 	// whole pattern, with wildcards stubbed out so it sees a normal URL.
-	if _, err := url.Parse(strings.ReplaceAll(pattern, "*", "x")); err != nil {
+	parsed, err := url.Parse(strings.ReplaceAll(pattern, "*", "x"))
+	if err != nil || parsed.Hostname() == "" {
 		return errPatternUnparseable
+	}
+	// The client_id rules refuse userinfo and dot segments, so such a pattern could never match.
+	if parsed.User != nil {
+		return errPatternUserinfo
 	}
 	if rest == "" {
 		return errPatternNoPathComponent
@@ -101,9 +99,15 @@ func validatePattern(pattern string) error {
 		if segment == "" {
 			return errPatternEmptySegment
 		}
+		if segment == "." || segment == ".." {
+			return errPatternDotSegment
+		}
 		if strings.Contains(segment, "*") && segment != "*" {
 			return errPatternPartialSegment
 		}
+	}
+	if !strings.Contains(path, "*") {
+		return errPatternNoWildcard
 	}
 	return nil
 }
@@ -167,6 +171,36 @@ func matchesPattern(pattern, clientID string) bool {
 	return true
 }
 
+// PatternsOverlap reports whether one client ID can match both valid patterns:
+// same scheme and authority, same suffix, same segment count, and no position
+// where both segments are literal and differ.
+func PatternsOverlap(a, b string) bool {
+	aPrefix, aRest, ok := splitAuthorityAndPath(a)
+	if !ok {
+		return false
+	}
+	bPrefix, bRest, ok := splitAuthorityAndPath(b)
+	if !ok || aPrefix != bPrefix {
+		return false
+	}
+	aPath, aSuffix := splitPathAndSuffix(aRest)
+	bPath, bSuffix := splitPathAndSuffix(bRest)
+	if aSuffix != bSuffix {
+		return false
+	}
+	aSegments := strings.Split(aPath, "/")
+	bSegments := strings.Split(bPath, "/")
+	if len(aSegments) != len(bSegments) {
+		return false
+	}
+	for i, segment := range aSegments {
+		if segment != "*" && bSegments[i] != "*" && segment != bSegments[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // splitPathAndSuffix cuts the remainder returned by splitAuthorityAndPath
 // into its path and its query/fragment suffix (the suffix keeps its leading
 // "?" or "#", so an absent one is distinguishable from an empty one).
@@ -194,6 +228,10 @@ func splitAuthorityAndPath(raw string) (string, string, bool) {
 	slash := strings.Index(rest, "/")
 	if slash <= 0 {
 		// No path, or an empty authority ("https:///x").
+		return "", "", false
+	}
+	if strings.ContainsAny(rest[:slash], "?#") {
+		// A slash in a query or fragment cannot begin the URL's path.
 		return "", "", false
 	}
 	return raw[:len(scheme)+slash], rest[slash+1:], true

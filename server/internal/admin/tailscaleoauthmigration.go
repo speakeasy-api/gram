@@ -109,7 +109,7 @@ func (s *Service) RunTailscaleOAuthMigrationStep(ctx context.Context, payload *g
 		// not an error, so report what it found.
 		verificationFailures = new(run.Mismatched + run.Unopenable)
 	case "finalize":
-		_, err = migration.Transitions.Finalize(stepCtx, organization.ID, ingresscredentials.UseCase, orgencryption.FinalizeRequest{MinimumDualWrite: tailscaleOAuthMinimumDualWrite, Stores: stores}, actor)
+		_, err = migration.Transitions.Finalize(stepCtx, organization.ID, ingresscredentials.UseCase, orgencryption.FinalizeRequest{MinimumDualWrite: tailscaleOAuthMinimumDualWrite, Stores: stores, ExpectedUnreadable: nil}, actor)
 	case "clear_platform_copies":
 		_, err = migration.Transitions.ClearPlatformCopies(stepCtx, organization.ID, ingresscredentials.UseCase, stores, actor)
 	case "rollback":
@@ -119,7 +119,7 @@ func (s *Service) RunTailscaleOAuthMigrationStep(ctx context.Context, payload *g
 	}
 	switch {
 	case errors.Is(err, orgencryption.ErrTransitionNotAllowed), errors.Is(err, orgencryption.ErrFinalizeBlocked),
-		errors.Is(err, orgencryption.ErrFenced), errors.Is(err, orgencryption.ErrConcurrentChange):
+		errors.Is(err, orgencryption.ErrFenced), errors.Is(err, orgencryption.ErrConcurrentChange), errors.Is(err, orgencryption.ErrClearRunning):
 		return nil, oops.E(oops.CodeConflict, err, "%s", err.Error()).LogInfo(ctx, logger)
 	case err != nil && orgencryption.IsKeyProblem(err):
 		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable: %s", err.Error()).LogWarn(ctx, logger)

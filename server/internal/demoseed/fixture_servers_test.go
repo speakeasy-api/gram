@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
@@ -49,7 +50,7 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 	require.Equal(t, testServerURL+"/rpc/demoseed", base)
 
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
-	s := &seeder{spec: spec}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	q := testrepo.New(db)
 	for range 2 {
 		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec)

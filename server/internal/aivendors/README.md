@@ -1,0 +1,43 @@
+# AI client catalog snapshots
+
+`Load` reads one database snapshot of the AI client catalog. Nothing in
+production loads one yet. `CompiledSnapshot` wraps the compiled registry in the
+same `Snapshot` type. The API, MCP gateway and Platform MCP services read an
+injected `Store` built from it, so every reader sees the registry's catalog
+content (snapshots carry no families or aliases) until the database becomes the
+source.
+
+`Store.Run` can refresh a store on a minute timer, but nothing in production
+runs it yet. Each refresh reads live products and
+documents in a read-only, repeatable-read transaction. A full content
+fingerprint detects changes, including edits that do not update timestamps. The
+catalog is small, so the reader fetches its contents instead of relying on a
+timestamp watermark. Refresh errors retain the previous snapshot. The loader
+requires a validator, so a consumer can reject a catalog before it is
+published; a rejected first load returns an error. Cancelling the context stops
+the refresh loop.
+
+Snapshots own their data and return copies. A compound operation should capture
+one snapshot and use it throughout. Snapshots keep input order for products
+and listings. Exact URLs win over patterns; among matching patterns the one with
+the most literal path segments wins, then the lower URL, then the lower product
+id, so input order never decides attribution. A disabled document still wins
+its match, so its client is unknown rather than a broader pattern's product; an
+enabled document with the same URL or specificity wins over it. Listing order is content, so it is
+part of the fingerprint. Database reads sort by id, then URL, in byte order.
+`CompiledSnapshot` has no families or aliases, like a database snapshot. The database's
+`is_pattern` discriminator is authoritative. Invalid patterns are logged and
+omitted from all projections; that is a successful partial load, distinct from
+a database failure. A valid empty catalog is published, including when staff
+soft-delete every product. Retaining a last good snapshot is reserved for read
+or validation failures, not valid staff deletions.
+
+Full fingerprints drive refresh detection. The device scan list version is
+derived from the served targets in `agent/aitargets`, not from the snapshot.
+
+Product families and reported-name aliases stay in the compiled registry by
+design: they change with plugin and telemetry code, so the database does not
+store them and snapshots leave them empty.
+
+Platform MCP parity: this package adds no reader, permission, or tool contract,
+so no Platform MCP tool changes.

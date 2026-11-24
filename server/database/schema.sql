@@ -244,7 +244,8 @@ COMMENT ON COLUMN billing_metadata.organization_id IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_customer_id IS '@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_subscription_id IS '@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_billing_cycle_anchor IS '@access: confidential';
-COMMENT ON COLUMN billing_metadata.stripe_checkout_idempotency_key IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_idempotency_key IS 'Stripe checkout idempotency key. Encodes the organization, billing anchor, trial fingerprint and possibly a base64 return URL.
+@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_billing_cycle_anchor IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_trial_end IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_expires_at IS '@access: confidential';
@@ -1535,7 +1536,8 @@ COMMENT ON COLUMN api_keys.id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.organization_id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.created_by_user_id IS '@access: confidential';
-COMMENT ON COLUMN api_keys.name IS '@access: confidential';
+COMMENT ON COLUMN api_keys.name IS 'Label the customer chose for the key.
+@access: opaque-confidential';
 COMMENT ON COLUMN api_keys.key_prefix IS '@access: secret-restricted';
 COMMENT ON COLUMN api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN api_keys.scopes IS '@access: confidential';
@@ -1875,8 +1877,8 @@ COMMENT ON COLUMN device_agent_state_reports.remote_config_etag IS '@access: con
 COMMENT ON COLUMN device_agent_state_reports.remote_config_failed IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.withheld_plugins IS 'Marketplace and plugin slugs chosen by the organization.
 @access: opaque-confidential';
-COMMENT ON COLUMN device_agent_state_reports.tools IS 'Speakeasy-defined tool ids and enforcement enums.
-@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.tools IS 'Per-tool enforcement state. Tool ids are reported by the device agent and stored as sent; layer and outcome fields are normalized enums.
+@access: opaque-confidential';
 COMMENT ON COLUMN device_agent_state_reports.degraded_tool_count IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.drift_counting_since IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.speakeasyd_version IS '@access: confidential';
@@ -4001,8 +4003,8 @@ COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP s
 @access: confidential';
 COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 @access: confidential';
-COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.
-@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source, chosen by the customer.
+@access: opaque-confidential';
 COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 @access: secret-restricted';
 COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
@@ -6767,9 +6769,6 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Excluded chats are skipped by the summary, memo and digest readers.
   memory_excluded_at timestamptz,
 
-  -- Versioned hashes of the last successfully evaluated inference frame.
-  -- Archival alone must never advance this checkpoint.
-  inference_accepted_checkpoint bytea,
   -- Hash of (tenant, actor type, actor id) for Anthropic inference conversations.
   -- Lets a transcript delivered without a session id be adopted by the chat
   -- that already holds its prefix, scoped to the same actor.
@@ -6836,7 +6835,6 @@ COMMENT ON COLUMN chats.summary IS '@access: opaque-restricted';
 COMMENT ON COLUMN chats.summary_generated_at IS '@access: confidential';
 COMMENT ON COLUMN chats.summary_redacted IS '@access: confidential';
 COMMENT ON COLUMN chats.memory_excluded_at IS '@access: confidential';
-COMMENT ON COLUMN chats.inference_accepted_checkpoint IS '@access: confidential';
 COMMENT ON COLUMN chats.inference_actor_key IS '@access: confidential-pii';
 COMMENT ON COLUMN chats.user_account_id IS '@access: confidential';
 COMMENT ON COLUMN chats.litellm_proxied IS '@access: confidential';
@@ -7235,7 +7233,8 @@ COMMENT ON COLUMN chat_messages.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.role IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.content IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_raw IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.content_asset_url IS 'Asset path of the stored message content; its file name is a digest of that content.
+@access: restricted';
 COMMENT ON COLUMN chat_messages.model IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.finish_reason IS '@access: confidential';
@@ -7256,7 +7255,8 @@ COMMENT ON COLUMN chat_messages.tool_urn IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_outcome IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.content_hash IS 'SHA-256 digest of the message content. Reveals when two messages have equal content.
+@access: restricted';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.capture_kind IS 'Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
 @access: confidential';
@@ -12441,14 +12441,20 @@ COMMENT ON COLUMN risk_results.chat_message_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.chat_content_part_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.skill_version_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.source IS '@access: confidential';
-COMMENT ON COLUMN risk_results.found IS '@access: confidential';
-COMMENT ON COLUMN risk_results.rule_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.found IS 'Whether the scan found a risk in the anchored content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.rule_id IS 'Detection rule that matched. Security finding.
+@access: restricted';
 COMMENT ON COLUMN risk_results.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_results.match IS '@access: secret-restricted';
-COMMENT ON COLUMN risk_results.start_pos IS '@access: confidential';
-COMMENT ON COLUMN risk_results.end_pos IS '@access: confidential';
-COMMENT ON COLUMN risk_results.confidence IS '@access: confidential';
-COMMENT ON COLUMN risk_results.tags IS '@access: confidential';
+COMMENT ON COLUMN risk_results.start_pos IS 'Start offset of the primary match in the scanned content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.end_pos IS 'End offset of the primary match in the scanned content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.confidence IS 'Detector confidence for the finding. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.tags IS 'Detector tags for the finding. Security finding.
+@access: restricted';
 COMMENT ON COLUMN risk_results.spans IS '@access: secret-restricted';
 COMMENT ON COLUMN risk_results.dead_letter_reason IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_results.excluded_at IS '@access: confidential';
@@ -18294,3 +18300,110 @@ COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
 ON memory_eval_runs (created_at DESC, id DESC)
 WHERE deleted IS FALSE;
+
+-- Whether an MCP server offers the built-in feedback tool, and what an admin
+-- changed about it. One row per server; a server without a row does not offer
+-- the tool. A NULL tool_name or tool_description uses the default kept in
+-- application code, so a server that only switched the tool on follows the
+-- defaults as they change.
+CREATE TABLE IF NOT EXISTS mcp_server_feedback_configs (
+  mcp_server_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  enabled boolean NOT NULL,
+  tool_name TEXT,
+  tool_description TEXT,
+  updated_by_user_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_server_feedback_configs_pkey PRIMARY KEY (mcp_server_id),
+  CONSTRAINT mcp_server_feedback_configs_tool_name_check CHECK (tool_name <> '' AND CHAR_LENGTH(tool_name) <= 64),
+  CONSTRAINT mcp_server_feedback_configs_tool_description_check CHECK (tool_description <> '' AND CHAR_LENGTH(tool_description) <= 2000),
+  CONSTRAINT mcp_server_feedback_configs_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_feedback_configs_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_server_feedback_configs.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.enabled IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.tool_name IS 'Name the feedback tool is listed under, when an admin replaced the default.
+@access: opaque-confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.tool_description IS 'Description agents read for the feedback tool, when an admin replaced the default.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_server_feedback_configs.updated_by_user_id IS 'Speakeasy users.id of the person who last changed these settings; NULL when an API key did.
+@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback_configs.updated_at IS '@access: confidential';
+
+-- Serves the cascades from projects and mcp_servers.
+CREATE INDEX IF NOT EXISTS mcp_server_feedback_configs_project_id_mcp_server_id_idx
+ON mcp_server_feedback_configs (project_id, mcp_server_id);
+
+-- One report an agent sent through an MCP server's built-in feedback tool.
+-- The gateway writes a row per accepted call and nothing updates it. Free
+-- text is stored after secrets and personal data are masked.
+CREATE TABLE IF NOT EXISTS mcp_server_feedback (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
+
+  content TEXT NOT NULL,
+  severity TEXT,
+  workaround TEXT,
+  intention TEXT,
+  tool_name TEXT,
+  model TEXT,
+
+  user_id TEXT,
+  external_user_id TEXT,
+  client_name TEXT,
+  client_version TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_server_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_server_feedback_content_check CHECK (content <> '' AND CHAR_LENGTH(content) <= 2000),
+  CONSTRAINT mcp_server_feedback_severity_check CHECK (severity <> ''),
+  CONSTRAINT mcp_server_feedback_workaround_check CHECK (workaround <> '' AND CHAR_LENGTH(workaround) <= 1000),
+  CONSTRAINT mcp_server_feedback_intention_check CHECK (intention <> '' AND CHAR_LENGTH(intention) <= 1000),
+  CONSTRAINT mcp_server_feedback_tool_name_check CHECK (tool_name <> '' AND CHAR_LENGTH(tool_name) <= 100),
+  CONSTRAINT mcp_server_feedback_model_check CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
+  CONSTRAINT mcp_server_feedback_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT mcp_server_feedback_mcp_server_fkey FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_server_feedback.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.mcp_server_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.content IS 'The report itself, written by the agent.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_server_feedback.severity IS 'blocked, degraded or cosmetic; NULL when the agent gave none.
+@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.workaround IS 'What the agent did instead, in its own words.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_server_feedback.intention IS 'What the agent was trying to do, in its own words.
+@access: opaque-restricted';
+COMMENT ON COLUMN mcp_server_feedback.tool_name IS 'The tool the agent says the report is about. Not checked against the server''s tools.
+@access: opaque-confidential';
+COMMENT ON COLUMN mcp_server_feedback.model IS 'Model and host product as the agent reported them.
+@access: opaque-confidential';
+COMMENT ON COLUMN mcp_server_feedback.user_id IS 'Speakeasy users.id of the caller, when the caller is a member of the server''s organization.
+@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.external_user_id IS 'The caller''s subject in the identity provider the server signs people in with.
+@access: confidential-pii';
+COMMENT ON COLUMN mcp_server_feedback.client_name IS 'MCP client name reported at the handshake.
+@access: opaque-confidential';
+COMMENT ON COLUMN mcp_server_feedback.client_version IS 'MCP client version reported at the handshake.
+@access: opaque-confidential';
+COMMENT ON COLUMN mcp_server_feedback.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_server_feedback.updated_at IS '@access: confidential';
+
+-- Lists a server's feedback newest first and serves the cascades from projects
+-- and mcp_servers.
+CREATE INDEX IF NOT EXISTS mcp_server_feedback_project_id_mcp_server_id_created_at_id_idx
+ON mcp_server_feedback (project_id, mcp_server_id, created_at DESC, id DESC);

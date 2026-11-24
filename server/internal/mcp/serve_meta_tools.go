@@ -420,7 +420,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
-		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		// A gateway does not list its members' feedback tools, so it does not
+		// answer calls to them either.
+		s.platformExtras, s.sessionClientInfo, s.scanEvaluator, nil)
 	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
 	code, refused := toolsCallRefusal(err)
 	if !refused {

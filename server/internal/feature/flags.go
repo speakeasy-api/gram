@@ -3,6 +3,14 @@ package feature
 type Flag string
 
 const (
+	// FlagMCPFeedbackExport gates queueing MCP server feedback for the OTLP
+	// data export. Every report is stored either way. Evaluated server-side
+	// with local evaluation when a report is stored, keyed by organization ID
+	// with no groups, so it is targeted by a release condition with no
+	// properties. Fails closed. It holds the export back until every log relay
+	// routes feedback records to the feedback export rather than to telemetry,
+	// and is removed once that is deployed and the flag is at 100%.
+	FlagMCPFeedbackExport Flag = "mcp-feedback-export"
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
 	// FlagToolApprovals gates creating require_approval risk policies (tool

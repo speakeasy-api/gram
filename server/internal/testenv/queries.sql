@@ -1078,7 +1078,7 @@ WHERE id = @id;
 -- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position;
 
 -- name: CreateProjectFixture :one
@@ -2838,4 +2838,15 @@ SELECT organization_id, updated_at FROM functions_access WHERE id = @id;
 UPDATE api_keys
 SET created_at = @created_at
   , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;
+
+-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = @url, display_name = @display_name, enabled = @enabled,
+    deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
