@@ -100,6 +100,18 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
+	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
+	// Logs, sign-in summary, session activity, denied clients). Evaluated
+	// server-side, where every mcpConnectionHealth method answers not found
+	// without it, and by the dashboard under the same key. Target by
+	// organization group (org slug) or by person "email" (lowercase); API keys
+	// never match a person, and on the server nobody does without local
+	// evaluation (PostHog personal API key). Switch to people only after this server is fully
+	// deployed, and back before rolling it back; servers follow within about a
+	// minute, so check a listed person and an unlisted member of a previously
+	// enabled organization. Fails closed. A rollout gate, not authorization.
+	// Removed once the pages are GA.
+	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
@@ -194,16 +206,6 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
-
-	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
-	// platform to an organization before its catalog entry is enabled, so it
-	// can be tried in production. Evaluated server-side when the platform
-	// catalog is listed (workloadpolicy), so the catalog reports the entry as
-	// enabled and the picker, Command K and preselected setup links offer it.
-	// Targeted by PostHog organization group (org slug). Fails closed: off,
-	// missing or failing, the entry stays "Coming soon". Removed once the entry
-	// is enabled.
-	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
 
 	// FlagAuthClientResolver makes the typed auth client resolver
 	// authoritative for an organization's direct proxied servers. Off, the

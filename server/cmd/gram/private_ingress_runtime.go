@@ -14,6 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -66,6 +69,9 @@ type privateIngressRuntime struct {
 	Runtime  *mcpServerRuntime
 	cleanup  []func(context.Context) error
 
+	// MeterReadings publishes metering readings, including MCP bandwidth.
+	MeterReadings gcp.Publisher[*meteringv1.MeterReading]
+
 	// TokenReviewer verifies attestation tokens: Kubernetes TokenReview in a
 	// cluster, or the HMAC-signed local tokens in local development.
 	TokenReviewer netingress.TokenReviewer
@@ -90,7 +96,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err := validatePrivateIngressTemporalConfig(c); err != nil {
 		return nil, err
 	}
-	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, TokenReviewer: nil}
+	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, MeterReadings: nil, TokenReviewer: nil}
 	defer func() {
 		if err != nil {
 			r.Close(ctx)
@@ -175,11 +181,18 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		r.cleanup = append(r.cleanup, stop)
 	}
 	auditLogger := newAuditLogger()
+
+	gcpIdentity := newGCPIdentity(ctx, logger, c)
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return nil, err
+	}
+	aiProviderKeys := orgEncryption.AIProviderKeys(logger, enc)
 	var openRouter openrouter.Provisioner
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {
@@ -212,6 +225,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
+	r.MeterReadings = publishers.MeterReadings
 	enforcementDispatcher, enforcementShutdown := newRiskEnforcementDispatcher(
 		ctx,
 		logger,
@@ -239,7 +253,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
@@ -298,17 +312,12 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
-	gcpIdentity := newGCPIdentity(ctx, logger, c)
 	kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 	if err != nil {
 		return nil, fmt.Errorf("build kms signing client factory: %w", err)
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
-	if err != nil {
-		return nil, err
-	}
 	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 		return nil, err
 	}

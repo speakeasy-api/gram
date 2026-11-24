@@ -56,10 +56,10 @@ export type ToolLimit =
 export type ToolLimitKind = ToolLimit["kind"];
 
 interface ToolHints {
-  readOnlyHint?: boolean | undefined;
-  destructiveHint?: boolean | undefined;
-  idempotentHint?: boolean | undefined;
-  openWorldHint?: boolean | undefined;
+  readOnlyHint?: boolean | null | undefined;
+  destructiveHint?: boolean | null | undefined;
+  idempotentHint?: boolean | null | undefined;
+  openWorldHint?: boolean | null | undefined;
 }
 
 /**
@@ -70,7 +70,7 @@ interface ToolHints {
  * the tests check this function against them.
  */
 export function toolDisposition(tool: {
-  annotations?: ToolHints | undefined;
+  annotations?: ToolHints | null | undefined;
 }): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";

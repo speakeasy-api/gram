@@ -1,5 +1,30 @@
 # dashboard
 
+## 0.155.0
+
+### Minor Changes
+
+- 715566e: Adds MCP connection health to MCP Sessions behind the `mcp-connection-health` flag: an Overview tab with the sign-in summary, denied clients and recent sign-in activity, Connection Logs beside Active Sessions with filters, reference search and an attempt's details, the same view locked to one server on its Clients and Sessions tab, and an "Ask AI to investigate" button. Suspected problems show sample data until their API ships.
+
+### Patch Changes
+
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+- 1d69491: MCP Sessions is no longer listed under In Beta.
+- bb368b3: The time range picker now shows the times of a custom range that doesn't start and end at midnight, so a range dragged across the Tool Logs timeline reads "Nov 16, 11:34 AM – Nov 17, 11:34 PM" instead of "Nov 16 – Nov 17", matching the rows below it. Picking days in the Tool Logs calendar now includes the last selected day; before, "Nov 16 – Nov 17" listed only Nov 16.
+
+## 0.154.2
+
+### Patch Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- bed51b1: Full-page Project Assistant conversations now fill the window, with the composer pinned to the bottom instead of scrolling with the transcript.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 05c5f3f: The tool narrowing dialog on an MCP server's Team Access tab now counts each tool once, under the one annotation access is checked against, so an OpenAPI GET that is also idempotent and open-world counts only as read-only. A selected annotation stays visible even when no tool carries it, so it can still be cleared.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- bed51b1: Keep the assistant's working indicator on screen for the whole turn. The chat no longer looks idle after the assistant finishes a paragraph and before its next step starts, or while it writes the heading for its first batch of tool calls.
+
 ## 0.154.1
 
 ### Patch Changes

@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-The MCP access pages now count and match each tool under the one annotation the server checks it by. A tool marked both read-only and idempotent is counted under Read-only only, and a rule for unannotated tools now covers tools that declare no annotation.
+The MCP access pages count each tool under the one disposition the server matches it by. A read-only tool that is also idempotent no longer shows as covered by an idempotent rule, and role suggestions now leave out a role whose broader block takes the requested access away.

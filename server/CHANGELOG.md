@@ -1,5 +1,36 @@
 # server
 
+## 2.42.0
+
+### Minor Changes
+
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+
+### Patch Changes
+
+- fca62b7: Daily connection outcomes now credit the owner's next connection with fixing a refused, already used sign-in. Days older than about 11 days at deploy keep the old count; newer days change on the next daily rebuild. Adds a read, not used yet, of who cannot connect to an MCP server right now.
+- 5914d94: The MCP connection health flag can now be targeted at individual people.
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 421f9c6: Add a table that holds when each MCP connection last had a request served, for failing connection detection. Nothing writes to it yet.
+- ea1fd98: Served MCP requests are now recorded per connection, at most every five minutes and never more than five minutes behind the latest one, so failing connections can be told apart from working ones. A tool call or resource read that returned an error does not count as served. Nothing reads these records yet. When a tool call needs a server's tool list and the server never answers, this is now recorded as the server being unreachable. Request failure rows now name the person's own connection to the service when their sign-in was used.
+
+## 2.41.0
+
+### Minor Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- ea4a946: Under upstream auth enforcement, a personal connection its owner attached to an agent now serves that agent whoever issued its API key. Attaching is the owner's consent. The owner's live policy, the key issuer's and the agent's must all still allow the connection, and detaching, owner blocks, the owner leaving and agent suspension still stop use at once. An agent key with no attachment still uses only its issuer's own connection.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+
+### Patch Changes
+
+- 93408f7: AI integration API keys, Anthropic inference signing secrets, customer model provider keys and provisioned OpenRouter keys can now be encrypted with the organization's own key. They follow the organization's ai-provider-keys transition: organizations stay on the platform key until enrolled, then write both copies, then read only the organization copy. Generated code no longer names the retired plaintext `openrouter_api_keys.key` column.
+- bdee7d1: GitHub Actions is now offered as a workload platform to every organization. The agent wizard, Command K and preselected setup links offer its guided setup, where before it stayed under Coming soon unless the `workload-platform-github-actions` feature flag was on for the organization. The flag is removed. The setup's workflow installs the latest stable speakeasyd, and every release from v0.1.54 supports GitHub Actions.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- 6ad6dc8: The tailnet gateway can give each tsnet node a fixed UDP port from a range (`GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE`), so a deployment can publish the range and clients behind strict NATs reach the gateway directly instead of through a DERP relay. tsnet's own log now goes to a child logger tagged `gram.component=tsnet`, with endpoint and path changes at info.
+- 3f3ab7c: A rule that blocks MCP tools by name or by kind (read-only, destructive, unannotated and so on) now also blocks a call whose tool name or kind cannot be determined. Before, such a call was outside the rule. Rules that allow tools by name or kind already refused it.
+
 ## 2.40.0
 
 ### Minor Changes

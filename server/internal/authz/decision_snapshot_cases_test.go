@@ -3,7 +3,6 @@ package authz
 import (
 	"maps"
 	"slices"
-	"sort"
 )
 
 // This file uses only long-standing API, so an older evaluator can answer the
@@ -176,7 +175,7 @@ func buildDecisionSnapshot() snapshotFile {
 
 func (b *snapshotBuilder) everyPermission() {
 	scopes := slices.Collect(maps.Keys(scopeExpansions))
-	sort.Slice(scopes, func(i, j int) bool { return scopes[i] < scopes[j] })
+	slices.Sort(scopes)
 	for _, scope := range scopes {
 		// authClients covers mcp:auth, which needs client dimensions.
 		if scope == ScopeRoot || scope == ScopeMCPAuth || IsBlocklistScope(scope) {
