@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,8 +103,16 @@ func (e Endpoint) Validate() error {
 	if e.Addr == "" {
 		return errors.New("redis endpoint has no address")
 	}
-	if _, _, err := net.SplitHostPort(e.Addr); err != nil {
+	host, port, err := net.SplitHostPort(e.Addr)
+	if err != nil {
 		return fmt.Errorf("redis endpoint address: %w", err)
+	}
+	// An empty host would also leave TLS with no name to verify.
+	if host == "" {
+		return errors.New("redis endpoint address has no host")
+	}
+	if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
+		return fmt.Errorf("redis endpoint address has an invalid port %q", port)
 	}
 
 	switch e.Auth {

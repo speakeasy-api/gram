@@ -10,6 +10,7 @@ import threading
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import anyio
 import google.auth.transport.requests
@@ -268,6 +269,27 @@ def _provider(credentials: _FakeCredentials) -> GoogleIAMCredentialProvider:
 def test_validate_rejects(endpoint: Endpoint, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         endpoint.validate()
+
+
+@pytest.mark.parametrize("addr", [":6379", "[]:6379", "10.0.0.1:0", "10.0.0.1:65536"])
+def test_host_port_rejects(addr: str) -> None:
+    with pytest.raises(ValueError, match="host:port"):
+        Endpoint(addr=addr, auth=AuthMode.NONE).host_port()
+
+
+def test_auth_mode_from_a_string() -> None:
+    endpoint = Endpoint(addr="10.0.0.1:6379", auth=cast("AuthMode", "iam"))
+    assert endpoint.auth is AuthMode.IAM
+    with pytest.raises(ValueError, match="not a valid AuthMode"):
+        Endpoint(addr="10.0.0.1:6379", auth=cast("AuthMode", "token"))
+    with pytest.raises(ValueError, match="not a valid AuthMode"):
+        Endpoint(addr="10.0.0.1:6379", auth=cast("AuthMode", ""))
+
+
+def test_client_refuses_settings_the_endpoint_owns() -> None:
+    endpoint = Endpoint(addr="10.0.0.1:6379", auth=AuthMode.NONE)
+    with pytest.raises(ValueError, match="password"):
+        client(endpoint, password="other")
 
 
 def test_iam_requires_tls() -> None:

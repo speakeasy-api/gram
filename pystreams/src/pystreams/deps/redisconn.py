@@ -72,6 +72,11 @@ class Endpoint:
     # alternative names. Defaults to the host in addr.
     server_name: str = ""
 
+    def __post_init__(self) -> None:
+        # Endpoints built from configuration may carry the mode as a plain
+        # string; an unknown one is refused here rather than read as "none".
+        object.__setattr__(self, "auth", AuthMode(self.auth))
+
     @classmethod
     def with_password(cls, addr: str, password: str | None) -> Endpoint:
         """A plaintext instance that takes password, or nothing when empty."""
@@ -96,6 +101,8 @@ class Endpoint:
             raise ValueError(
                 f"redis endpoint address {self.addr!r} needs brackets around IPv6"
             )
+        if not host or not 0 < int(port) < 1 << 16:
+            raise ValueError(f"redis endpoint address {self.addr!r} is not host:port")
         return host, int(port)
 
     def validate(self) -> None:
@@ -244,6 +251,21 @@ class VerifiedTLSConnection(Connection):
         }
 
 
+# Connection settings the endpoint owns; a caller may not pass them to client().
+_ENDPOINT_KWARGS: Final = frozenset(
+    {
+        "host",
+        "port",
+        "username",
+        "password",
+        "credential_provider",
+        "connection_class",
+        "ssl_context",
+        "server_hostname",
+    }
+)
+
+
 def client(
     endpoint: Endpoint,
     *,
@@ -254,8 +276,15 @@ def client(
 
     ``credential_provider`` supplies IAM tokens and is required for an IAM
     endpoint; it is ignored otherwise. ``connection_kwargs`` (timeouts, retry,
-    and so on) go to each connection. Closing the client closes its pool.
+    and so on) go to each connection; the endpoint alone decides the address,
+    TLS and credentials. Closing the client closes its pool.
     """
+    overridden = _ENDPOINT_KWARGS.intersection(connection_kwargs)
+    if overridden:
+        raise ValueError(
+            "redis endpoint decides these connection settings: "
+            + ", ".join(sorted(overridden))
+        )
     endpoint.validate()
     if endpoint.auth is AuthMode.IAM and credential_provider is None:
         raise ValueError(
