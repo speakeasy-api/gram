@@ -30,6 +30,7 @@ use agentkit_tools_core::{
 };
 use async_trait::async_trait;
 use serde_json::Value;
+use tracing::Instrument;
 
 /// 150 KB. Leaves ~50 KB headroom under OpenRouter's 204800-byte per-message
 /// cap to absorb provider-side JSON envelope overhead (call id, metadata,
@@ -61,6 +62,16 @@ impl<S> ClippedToolSource<S> {
     }
 }
 
+impl<S: ToolSource> ClippedToolSource<S> {
+    fn kind_of(&self, name: &ToolName, tool: &dyn Tool) -> &'static str {
+        if tool.spec().description == crate::catalog::UNRESOLVED_TOOL_DESCRIPTION {
+            return "unknown";
+        }
+        let advertised = self.inner.specs().iter().any(|spec| spec.name == *name);
+        tool_kind(name, advertised)
+    }
+}
+
 impl<S> ToolSource for ClippedToolSource<S>
 where
     S: ToolSource,
@@ -71,9 +82,11 @@ where
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         self.inner.get(name).map(|inner| {
+            let kind = self.kind_of(name, inner.as_ref());
             Arc::new(ClippedTool {
                 inner,
                 spill_root: self.spill_root.clone(),
+                kind,
             }) as Arc<dyn Tool>
         })
     }
@@ -86,6 +99,33 @@ where
 struct ClippedTool {
     inner: Arc<dyn Tool>,
     spill_root: PathBuf,
+    kind: &'static str,
+}
+
+/// Low-cardinality tool class for the `assistant.tool` span. MCP tools are
+/// never advertised (see `catalog`), so any name the wrapped source resolves
+/// without advertising it is MCP-backed. Unresolved names (the unknown-tool
+/// fallback) are classed `unknown` before this runs.
+fn tool_kind(name: &ToolName, advertised: bool) -> &'static str {
+    match name.0.as_str() {
+        agentkit_tool_compose::COMPOSE_TOOL_NAME => "compose",
+        crate::tools::tool_search::TOOL_NAME => "tool_search",
+        _ if advertised => "builtin",
+        _ => "mcp",
+    }
+}
+
+/// Stable label for a failed invocation's `error.type`.
+fn tool_error_class(error: &ToolError) -> &'static str {
+    match error {
+        ToolError::NotFound(_) => "not_found",
+        ToolError::InvalidInput(_) => "invalid_input",
+        ToolError::PermissionDenied(_) => "permission_denied",
+        ToolError::ExecutionFailed(_) => "execution_failed",
+        ToolError::Unavailable(_) => "unavailable",
+        ToolError::Cancelled => "cancelled",
+        ToolError::Internal(_) => "internal",
+    }
 }
 
 #[async_trait]
@@ -112,16 +152,46 @@ impl Tool for ClippedTool {
     ) -> Result<ToolResult, ToolError> {
         let tool_name = request.tool_name.clone();
         let call_id = request.call_id.clone();
-        let mut result = self.inner.invoke(request, ctx).await?;
-        result.result.output = cap_output(
-            result.result.output,
-            MAX_TOOL_BYTES,
-            &self.spill_root,
-            &tool_name,
-            &call_id,
-        )
-        .await;
-        Ok(result)
+        // One span per invocation, top-level or nested in a compose script
+        // (compose dispatches its inner calls back through this wrapper). It
+        // carries sizes and outcome only, never tool input or output.
+        let span = tracing::info_span!(
+            "assistant.tool",
+            "otel.name" = %format!("tool {tool_name}"),
+            "gen_ai.tool.name" = %tool_name,
+            "gram.tool.kind" = self.kind,
+            "gram.tool.result_bytes" = tracing::field::Empty,
+            "gram.tool.clipped" = tracing::field::Empty,
+            "gram.tool.is_error" = tracing::field::Empty,
+            "error.type" = tracing::field::Empty,
+        );
+        async {
+            let mut result = match self.inner.invoke(request, ctx).await {
+                Ok(result) => result,
+                Err(error) => {
+                    let span = tracing::Span::current();
+                    span.record("gram.tool.is_error", true);
+                    span.record("error.type", tool_error_class(&error));
+                    return Err(error);
+                }
+            };
+            let span = tracing::Span::current();
+            span.record("gram.tool.is_error", result.result.is_error);
+            if result.result.is_error {
+                span.record("error.type", "tool_error");
+            }
+            result.result.output = cap_output(
+                result.result.output,
+                MAX_TOOL_BYTES,
+                &self.spill_root,
+                &tool_name,
+                &call_id,
+            )
+            .await;
+            Ok(result)
+        }
+        .instrument(span)
+        .await
     }
 }
 
@@ -135,6 +205,9 @@ async fn cap_output(
     let Some(model_bytes) = model_bytes(&output) else {
         return output;
     };
+    let span = tracing::Span::current();
+    span.record("gram.tool.result_bytes", model_bytes);
+    span.record("gram.tool.clipped", model_bytes > max_bytes);
     if model_bytes <= max_bytes {
         return output;
     }
@@ -290,6 +363,26 @@ fn compose_envelope(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+
+    #[test]
+    fn tool_kind_separates_native_tools_from_hidden_mcp_tools() {
+        assert_eq!(tool_kind(&ToolName::new("compose"), true), "compose");
+        assert_eq!(
+            tool_kind(&ToolName::new("tool_search"), true),
+            "tool_search"
+        );
+        assert_eq!(tool_kind(&ToolName::new("bun_run"), true), "builtin");
+        assert_eq!(tool_kind(&ToolName::new("platform_overview"), false), "mcp");
+    }
+
+    #[test]
+    fn unresolved_tool_names_are_classed_unknown() {
+        let source = ClippedToolSource::new(crate::catalog::UnknownToolSource, "/tmp/unused");
+        let name = ToolName::new("hallucinated_tool");
+        let tool = source.inner.get(&name).unwrap();
+        assert_eq!(source.kind_of(&name, tool.as_ref()), "unknown");
+    }
+
     use super::*;
     use agentkit_core::{Part, TextPart};
     use serde_json::json;

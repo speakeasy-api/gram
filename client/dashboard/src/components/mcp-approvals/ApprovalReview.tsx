@@ -150,7 +150,9 @@ export function ApprovalReview({
     // evidence, so they sit side by side rather than pushing the evidence a
     // screen further down.
     reviewBody = (
-      <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
+      // Stretched, and each list fills its column, so the two boxes end on
+      // the same line however long either list runs.
+      <div className="grid items-stretch gap-x-6 gap-y-4 md:grid-cols-2">
         <Requesters
           requesters={detail.requesters}
           decided={detail.decisions.length > 0}
@@ -398,21 +400,21 @@ function Requesters({
   decided: boolean;
 }): JSX.Element {
   return (
-    <section className="space-y-2">
+    <section className="flex flex-col gap-2">
       <h3 className="text-eyebrow">Who asked, and why</h3>
       {requesters.length === 0 ? (
         // Every ask records who made it, so no requesters means no ask: the
         // review was opened from the server page, not raised by anyone.
-        <p className="text-muted-foreground text-sm">
+        <EmptyListNote>
           {decided
             ? "No one has asked for it. An admin decided without a request."
             : "No one has asked for it."}
-        </p>
+        </EmptyListNote>
       ) : (
         // One framed list with hairline rules, not a stack of cards: three
         // requesters cost three rows here instead of three bordered blocks
         // with gaps between them.
-        <ul className="divide-border border-border divide-y border">
+        <ul className="divide-border border-border flex-1 divide-y border">
           {requesters.map((requester) => (
             <li key={requester.userId} className="px-3 py-1.5 text-xs">
               <div className="flex items-baseline justify-between gap-2">
@@ -442,20 +444,37 @@ function Requesters({
   );
 }
 
+/**
+ * An empty list, framed like a full one. The two lists share a row, so an
+ * empty one drawn as bare text sat beside a bordered box of a different
+ * height; framed, both read as the same kind of block and stretch together.
+ */
+function EmptyListNote({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <p className="border-border text-muted-foreground flex-1 border px-3 py-1.5 text-xs">
+      {children}
+    </p>
+  );
+}
+
 function PriorDecisions({
   decisions,
 }: {
   decisions: ApprovalDecision[];
 }): JSX.Element {
   return (
-    <section className="space-y-2">
+    <section className="flex flex-col gap-2">
       <h3 className="text-eyebrow">Have we decided on this before?</h3>
       {decisions.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <EmptyListNote>
           No prior decisions. This is the first review of this server here.
-        </p>
+        </EmptyListNote>
       ) : (
-        <ul className="divide-border border-border divide-y border">
+        <ul className="divide-border border-border flex-1 divide-y border">
           {decisions.map((decision) => (
             <li key={decision.id} className="px-3 py-1.5 text-xs">
               <div className="flex items-center justify-between gap-2">

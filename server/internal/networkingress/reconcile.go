@@ -26,19 +26,6 @@ type ExecutorOptions struct {
 	// Queue is the authoritative reconciliation task queue.
 	Queue string
 
-	// Image is the attestor image used by Apply.
-	Image string
-
-	// BackendService is the private backend Service name.
-	BackendService string
-
-	// BackendPort is the private backend Service port.
-	BackendPort int32
-
-	// AttestorRequired means the registered provider deploys an attestor and
-	// therefore needs Image, BackendService and BackendPort before applying.
-	AttestorRequired bool
-
 	// CanApply is checked on every attempt before credential decryption.
 	CanApply func(context.Context) error
 
@@ -142,9 +129,14 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 		return e.cleanup(ctx, conn, row)
 	}
 	resources, err := k8s.ParseNetworkIngressResourceNames(row.ProviderResources)
-	resources.Runtime = row.Runtime.String
-	if err != nil || resources.OwnerID != row.ID || resources.Namespace != row.AttestorNamespace || resources.AttestorServiceAccount != row.AttestorServiceAccount {
+	if err != nil || resources.OwnerID != row.ID {
 		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("invalid_desired_state"), "")
+	}
+	// Only the tailnet gateway hosts ingresses. A row created for the retired
+	// Kubernetes operator is never applied, since gateway pods only host
+	// gateway rows; deleting it still cleans up below.
+	if row.Runtime.String != RuntimeGateway {
+		return e.record(ctx, conn, row, k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, reconcileFailure("unsupported_provider"), "")
 	}
 	provider, err := e.registry.Provisioner(row.Provider)
 	if err != nil {
@@ -182,8 +174,6 @@ func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid
 			callCtx, callCancel := context.WithTimeout(ctx, 2*time.Minute)
 			observation, operationErr = provider.Apply(callCtx, k8s.NetworkIngressDesired{
 				ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider, Hostname: row.Hostname, Credentials: []byte(credentials), Resources: resources,
-				AttestorImage: e.options.Image, BackendService: e.options.BackendService, BackendPort: e.options.BackendPort,
-				Runtime: row.Runtime.String,
 			})
 			callCancel()
 		}
@@ -223,9 +213,6 @@ func (e *Executor) applyGate(ctx context.Context) string {
 	if e.enc == nil || e.options.Queue == "" {
 		return "provider_configuration_unavailable"
 	}
-	if e.options.AttestorRequired && (e.options.Image == "" || e.options.BackendService == "" || e.options.BackendPort <= 0 || e.options.BackendPort > 65535) {
-		return "provider_configuration_unavailable"
-	}
 	if e.options.CanApply == nil || e.options.CanApply(ctx) != nil {
 		return "provider_mutations_disabled"
 	}
@@ -240,7 +227,6 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	if err != nil || resources.OwnerID != row.ID {
 		return ReconcileResult{Requeue: false}, reconcileFailure("invalid_desired_state")
 	}
-	resources.Runtime = row.Runtime.String
 	provider, err := e.registry.Provisioner(row.Provider)
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("provider_configuration_unavailable")
@@ -339,7 +325,7 @@ func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.Netw
 	status := observation.Status
 	code := observation.ErrorCode
 	switch code {
-	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+	case "", "invalid_desired_state", "unsupported_provider", "invalid_credentials",
 		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
 		k8s.NetworkIngressErrorProviderServiceNotApproved, k8s.NetworkIngressErrorProviderCertificateUnavailable,
 		k8s.NetworkIngressErrorEncryptionKeyUnavailable:
@@ -425,7 +411,7 @@ func sameIngressDesired(a, b repo.NetworkIngress) bool {
 	return a.UpdatedAt == b.UpdatedAt && a.Deleted == b.Deleted && a.Enabled == b.Enabled && a.IdentityRequired == b.IdentityRequired &&
 		a.Hostname == b.Hostname && a.Provider == b.Provider && a.CredentialsEncrypted == b.CredentialsEncrypted &&
 		a.OrganizationID == b.OrganizationID && a.EndpointNamespaceKind == b.EndpointNamespaceKind && a.CustomDomainID == b.CustomDomainID &&
-		a.AttestorNamespace == b.AttestorNamespace && a.AttestorServiceAccount == b.AttestorServiceAccount && bytes.Equal(a.ProviderResources, b.ProviderResources)
+		a.Runtime == b.Runtime && bytes.Equal(a.ProviderResources, b.ProviderResources)
 }
 
 func providerFailure(err error, code string) *ReconcileError {
@@ -440,17 +426,13 @@ func providerFailure(err error, code string) *ReconcileError {
 		return reconcileFailure(k8s.NetworkIngressErrorProviderAPIUnavailable)
 	case errors.Is(err, k8s.ErrNetworkIngressDeletionPending):
 		return reconcileFailure(ReconcileCodeDeletionPending)
-	case errors.Is(err, k8s.ErrNetworkIngressReplacementPending):
-		return reconcileFailure("replacement_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressInvalidDesiredState):
 		return reconcileFailure("invalid_desired_state")
-	case errors.Is(err, k8s.ErrNetworkIngressProviderUnavailable):
-		return reconcileFailure("provider_configuration_unavailable")
 	case errors.Is(err, k8s.ErrNetworkIngressUnsupportedProvider):
 		return reconcileFailure("unsupported_provider")
 	}
 	switch code {
-	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
+	case "invalid_desired_state", "unsupported_provider", "invalid_credentials",
 		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
 		k8s.NetworkIngressErrorEncryptionKeyUnavailable:
 		return reconcileFailure(code)

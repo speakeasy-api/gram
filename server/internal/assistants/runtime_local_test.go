@@ -184,6 +184,7 @@ func newTestLocalBackend(t *testing.T, engine containerEngine, doer runtimeHTTPD
 		GuestPort:       defaultRuntimeGuestPort,
 		ServerURL:       &url.URL{Scheme: "https", Host: "host.docker.internal:8080"},
 		ExtraCACertFile: "",
+		OTelEnv:         nil,
 	})
 }
 
@@ -334,6 +335,7 @@ func TestLocalEnsureReplacesConfigDriftedIdleContainer(t *testing.T) {
 		GuestPort:       defaultRuntimeGuestPort,
 		ServerURL:       &url.URL{Scheme: "https", Host: "host.docker.internal:9443"},
 		ExtraCACertFile: "",
+		OTelEnv:         nil,
 	})
 
 	result, err := drifted.Ensure(t.Context(), record)
@@ -369,6 +371,7 @@ func TestLocalRecycleImageReplacesConfigDriftedIdleContainer(t *testing.T) {
 		GuestPort:       defaultRuntimeGuestPort,
 		ServerURL:       &url.URL{Scheme: "https", Host: "host.docker.internal:9443"},
 		ExtraCACertFile: "",
+		OTelEnv:         nil,
 	})
 
 	result, err := drifted.RecycleImage(t.Context(), record)
@@ -633,4 +636,84 @@ func TestLocalConcurrentEnsureCreatesOneContainer(t *testing.T) {
 	engine.mu.Lock()
 	defer engine.mu.Unlock()
 	require.Len(t, engine.containers, 1)
+}
+
+func TestLocalRuntimeOTelEnv(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		enabled bool
+		env     map[string]string
+		want    map[string]string
+	}{
+		{
+			name:    "tracing disabled",
+			enabled: false,
+			env:     map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
+			want:    nil,
+		},
+		{
+			name:    "no endpoint",
+			enabled: true,
+			env:     map[string]string{},
+			want:    nil,
+		},
+		{
+			name:    "loopback endpoint is rewritten to the host gateway",
+			enabled: true,
+			env: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+				"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
+			},
+			want: map[string]string{
+				"GRAM_ENABLE_OTEL_TRACES":     "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4317",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+				"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
+			},
+		},
+		{
+			// The runner cannot parse "http", so it is dropped and the runner
+			// falls back to its default protocol.
+			name:    "remote endpoint kept and unknown protocol dropped",
+			enabled: true,
+			env: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "http",
+			},
+			want: map[string]string{
+				"GRAM_ENABLE_OTEL_TRACES":     "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := LocalRuntimeOTelEnv(tt.enabled, func(key string) string { return tt.env[key] })
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLocalContainerSpecCarriesOTelEnv(t *testing.T) {
+	t.Parallel()
+
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, 0)
+	plain := newTestLocalBackend(t, engine, nil)
+	traced := newTestLocalBackend(t, engine, nil)
+	traced.config.OTelEnv = map[string]string{"GRAM_ENABLE_OTEL_TRACES": "1"}
+
+	record := localRecord(uuid.New(), nil)
+	name := localContainerName(record)
+	plainSpec := plain.containerSpec(record, name)
+	tracedSpec := traced.containerSpec(record, name)
+
+	require.NotContains(t, plainSpec.Env, "GRAM_ENABLE_OTEL_TRACES")
+	require.Equal(t, "1", tracedSpec.Env["GRAM_ENABLE_OTEL_TRACES"])
+	require.Equal(t, plainSpec.Env["GRAM_SERVER_URL"], tracedSpec.Env["GRAM_SERVER_URL"])
+	// Turning tracing on changes the spec hash, so idle containers are replaced.
+	require.NotEqual(t, plainSpec.Labels[runtimeLabelSpecHash], tracedSpec.Labels[runtimeLabelSpecHash])
 }

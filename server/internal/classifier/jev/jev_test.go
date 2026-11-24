@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func testClient(t *testing.T, handler http.HandlerFunc) *Classifier {
+func testClient(t *testing.T, handler http.HandlerFunc, options ...Option) *Classifier {
 	t.Helper()
 	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
@@ -31,7 +31,7 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Classifier {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	c, err := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
+	c, err := New(policy, conv.NewSecret([]byte("test-key")), append([]Option{WithEndpoint(server.URL)}, options...)...)
 	require.NoError(t, err)
 	return c
 }
@@ -142,7 +142,7 @@ func TestClassifyAllVariants(t *testing.T) {
 	require.InDelta(t, 0.75, result.Outcomes[2].Answer.Score.ExpectedIndex, 1e-9)
 	require.True(t, result.Usage.Complete)
 	require.Equal(t, int64(100), result.Usage.InputTokens)
-	require.Equal(t, model, captured.Model)
+	require.Equal(t, defaultModel, captured.Model)
 
 	encoded, err := json.Marshal(captured)
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestClassifyBoundsConcurrentCalls(t *testing.T) {
 		for key := range req.Questions {
 			answers[key] = map[string]any{"type": "noul", "noul": 0.5}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"model": model, "answers": answers, "usage": map[string]int{"input_tokens": 10, "output_tokens": 1}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"model": defaultModel, "answers": answers, "usage": map[string]int{"input_tokens": 10, "output_tokens": 1}})
 	})
 	req := classifier.NewRequest(classifier.Text("state"))
 	for i := range 8 {
@@ -489,4 +489,22 @@ func TestNoulCriteriaMatchOpenRouterSchema(t *testing.T) {
 	encoded, err = json.Marshal(positiveOnly)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"noul","instructions":"Evaluate","criteria":{"true":"Positive","false":""}}`, string(encoded))
+}
+
+func TestClassifyWithModelPinsVersion(t *testing.T) {
+	t.Parallel()
+	var captured wireRequest
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if json.NewDecoder(r.Body).Decode(&captured) != nil {
+			w.WriteHeader(400)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"model":"jev-1.13.0","answers":{"0":{"type":"noul","noul":0.8}},"usage":{"input_tokens":1,"output_tokens":1}}`)
+	}, WithModel("jev-1.13"))
+
+	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("q", classifier.Text("question?")))
+	result := c.Classify(t.Context(), req)
+	require.NoError(t, result.Err())
+	require.Equal(t, "jev-1.13", captured.Model)
+	require.Equal(t, "jev-1.13", result.Metadata.Model)
 }

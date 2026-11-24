@@ -524,10 +524,7 @@ export function narrowingSeed(
   const grantedTools =
     reachableTools(
       cell,
-      namedTools.map((name) => ({
-        name,
-        annotations: [],
-      })),
+      namedTools.map((name) => ({ name, disposition: undefined })),
     ) ?? [];
   if (grantedTools.length > 0) return { tools: grantedTools, dispositions: [] };
 
@@ -545,7 +542,9 @@ export function narrowingSeed(
         reachableTools(cell, [
           {
             name: "",
-            annotations: DISPOSITIONS.filter((known) => known === disposition),
+            disposition: [...DISPOSITIONS, "unannotated" as const].find(
+              (known) => known === disposition,
+            ),
           },
         ]) ?? []
       ).length > 0,
