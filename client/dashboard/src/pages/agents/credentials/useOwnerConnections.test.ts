@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => {
     required: undefined as string[] | undefined,
     // The agent's attachments, read when editing.
     bindings: [] as unknown[],
+    // Set when reading the agent's attachments fails.
+    bindingsError: undefined as Error | undefined,
+    // Set when reading the viewer's own sessions fails.
+    sessionsError: false,
   };
 });
 vi.mock("@/contexts/Auth", () => ({
@@ -59,7 +63,15 @@ vi.mock("@tanstack/react-query", () => ({
           refetch: mocks.refetch,
         };
       if (queryKey[1] === "bindings")
-        return { data: { items: mocks.bindings }, refetch: mocks.refetch };
+        return mocks.bindingsError
+          ? {
+              isError: true,
+              error: mocks.bindingsError,
+              refetch: mocks.refetch,
+            }
+          : { data: { items: mocks.bindings }, refetch: mocks.refetch };
+      if (queryKey[1] === "sessions" && mocks.sessionsError)
+        return { isError: true, refetch: mocks.refetch };
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -74,6 +86,8 @@ afterEach(() => {
   mocks.sessions = [];
   mocks.required = undefined;
   mocks.bindings = [];
+  mocks.bindingsError = undefined;
+  mocks.sessionsError = false;
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -363,5 +377,54 @@ it("keeps focus refreshes in flight until all owner reads finish", async () => {
   expect(mocks.refetch).toHaveBeenCalledTimes(4);
   await act(async () => {
     await Promise.resolve();
+  });
+});
+
+describe("an agent whose attachments the viewer may not read", () => {
+  const ownSignIn = { id: "client_own", credentialOwner: "subject" };
+  const httpError = (statusCode: number) =>
+    Object.assign(new Error("request failed"), { statusCode });
+
+  it("marks the agent's connection as not visible, and still reads the viewer's own", () => {
+    mocks.clients = [ownSignIn];
+    mocks.bindingsError = httpError(403);
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({
+      status: "missing",
+      signIns: [ownSignIn],
+      connected: 0,
+    });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "forbidden",
+    });
+  });
+
+  it("keeps a failed read of the viewer's own connection an error", () => {
+    mocks.bindingsError = httpError(403);
+    mocks.auth.set(server.id, {
+      data: { status: "configured", clients: [mocks.personalClient] },
+    });
+    mocks.sessionsError = true;
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "error",
+    });
+  });
+
+  it("still reports a failed read that is not a refusal as an error", () => {
+    mocks.clients = [ownSignIn];
+    mocks.bindingsError = httpError(500);
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
+      status: "error",
+    });
   });
 });

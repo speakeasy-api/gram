@@ -146,7 +146,7 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 			t.Parallel()
 			f := newDelegableFixture(t)
 			for _, principal := range []string{"agent", "owner", "caller"} {
-				selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+				selector := authz.NewSelector(authz.ScopeMCPConnect, "server-one")
 				if principal == "caller" {
 					selector[authz.SelectorKeyTool] = "tool-one"
 					selector[authz.SelectorKeyProjectID] = "project-one"
@@ -154,7 +154,7 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				if incompatible && principal == "owner" {
 					selector[authz.SelectorKeyTool] = "tool-two"
 				}
-				f.grant(t, principal, authz.ScopeMCPRead, selector)
+				f.grant(t, principal, authz.ScopeMCPConnect, selector)
 			}
 			result := f.list(t, "caller")
 			if incompatible {
@@ -162,10 +162,8 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				return
 			}
 			require.NotEmpty(t, result)
-			foundRead := false
 			for _, grant := range result {
-				require.Contains(t, []string{string(authz.ScopeMCPRead), string(authz.ScopeMCPConnect)}, grant.Scope)
-				foundRead = foundRead || grant.Scope == string(authz.ScopeMCPRead)
+				require.Equal(t, string(authz.ScopeMCPConnect), grant.Scope)
 				require.Equal(t, authz.ResourceKindMCP, grant.Selector.ResourceKind)
 				require.Equal(t, "server-one", grant.Selector.ResourceID)
 				require.NotNil(t, grant.Selector.Tool)
@@ -173,7 +171,6 @@ func TestListDelegableGrantsPreservesCallerConstraints(t *testing.T) {
 				require.NotNil(t, grant.Selector.ProjectID)
 				require.Equal(t, "project-one", *grant.Selector.ProjectID)
 			}
-			require.True(t, foundRead)
 		})
 	}
 }

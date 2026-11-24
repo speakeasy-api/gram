@@ -310,6 +310,8 @@ func handleResourcesRead(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
 		}
 
+		payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+		payload.resultSucceeded = payload.backendAnswered
 		return bs, nil
 	}
 
@@ -360,6 +362,8 @@ func handleResourcesRead(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)
 	}
 
+	payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+	payload.resultSucceeded = payload.backendAnswered
 	return bs, nil
 }
 

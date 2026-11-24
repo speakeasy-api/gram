@@ -36,9 +36,10 @@ _MOVED_PREFIX: Final = b"moved:"
 
 # How long a blocked write waits between attempts.
 RETRY_INTERVAL_SECONDS: Final = 0.25
-# Longest a write waits for a hold to end before failing. Holds are bounded by
-# the operator's copy job, well under this.
-HOLD_TIMEOUT_SECONDS: Final = 60.0
+# Longest a write waits for a hold to end before failing. Longer than the
+# longest hold the operator's copy job sets (120 s in prod), so a held write
+# waits for the hold to end rather than failing.
+HOLD_TIMEOUT_SECONDS: Final = 150.0
 
 Write = Callable[[redis_asyncio.client.Pipeline], None]
 

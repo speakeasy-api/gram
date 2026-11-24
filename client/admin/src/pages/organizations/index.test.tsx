@@ -269,10 +269,16 @@ async function openFilters(group: string): Promise<HTMLElement> {
   return trigger;
 }
 
+function filterQueries(): ReturnType<typeof within> {
+  return within(screen.getByRole("dialog", { name: "Filters" }));
+}
+
 // A picker inside the sheet. Its accessible name is the group's heading
 // followed by its own text, which is what the group is filtering on.
 function picker(group: string): HTMLElement {
-  return screen.getByRole("combobox", { name: new RegExp(`^${group}`) });
+  return filterQueries().getByRole("combobox", {
+    name: new RegExp(`^${group}`),
+  });
 }
 
 // Radix opens a popover on click, unlike the menu and the select below. A
@@ -292,7 +298,7 @@ async function chooseFilter(group: string, option: string): Promise<void> {
 }
 
 function applyFilters(): void {
-  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  fireEvent.click(filterQueries().getByRole("button", { name: "Apply" }));
 }
 
 // A Radix menu and a Radix select both open on pointerdown, not on click.
@@ -3364,7 +3370,11 @@ describe("organizations list bulk account type", () => {
 
   async function confirm(type: string): Promise<void> {
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: `Set to ${type}` }));
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: `Set to ${type}`,
+        }),
+      );
     });
   }
 
@@ -4560,8 +4570,8 @@ describe("member range filters", () => {
       initialPath: "/organizations",
     });
     const trigger = await openFilters("Members");
-    const min = screen.getByRole("textbox", { name: "Min" });
-    const max = screen.getByRole("textbox", { name: "Max" });
+    const min = filterQueries().getByRole("textbox", { name: "Min" });
+    const max = filterQueries().getByRole("textbox", { name: "Max" });
     await waitFor(() => expect(document.activeElement).toBe(picker("Type")));
     for (const value of ["-1", "1.2", "1e3", "9223372036854775808", "bad"]) {
       fireEvent.change(min, { target: { value } });
@@ -4571,7 +4581,7 @@ describe("member range filters", () => {
           .getElementById(min.getAttribute("aria-describedby") ?? "")
           ?.getAttribute("role"),
       ).toBe("alert");
-      const apply = screen.getByRole("button", { name: "Apply" });
+      const apply = filterQueries().getByRole("button", { name: "Apply" });
       expect(apply.hasAttribute("disabled")).toBe(true);
       fireEvent.click(apply);
       expect(currentSearch(router)).toBe("");
@@ -4587,7 +4597,9 @@ describe("member range filters", () => {
       expect(document.getElementById(errorId ?? "")).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+        filterQueries()
+          .getByRole("button", { name: "Apply" })
+          .hasAttribute("disabled"),
       ).toBe(false);
       expect(currentSearch(router)).toBe("");
     }
@@ -4599,12 +4611,16 @@ describe("member range filters", () => {
     expect(currentSearch(router)).toBe("");
     await openFilters("Members");
     expect(
-      (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement).value,
+      (
+        filterQueries().getByRole("textbox", {
+          name: "Min",
+        }) as HTMLInputElement
+      ).value,
     ).toBe("");
-    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+    fireEvent.change(filterQueries().getByRole("textbox", { name: "Min" }), {
       target: { value: " 0009007199254740993 " },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+    fireEvent.change(filterQueries().getByRole("textbox", { name: "Max" }), {
       target: { value: "9223372036854775807" },
     });
     applyFilters();
@@ -4626,26 +4642,33 @@ describe("member range filters", () => {
           "/organizations?q=fixture&type=pro&trial=running&disabledStatus=disabled&dir=asc",
       });
       await openFilters("Members");
-      fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+      fireEvent.change(filterQueries().getByRole("textbox", { name: "Min" }), {
         target: { value: "10" },
       });
-      const max = screen.getByRole("textbox", { name: "Max" });
+      const max = filterQueries().getByRole("textbox", { name: "Max" });
       fireEvent.change(max, { target: { value: "5" } });
       const errorId = max.getAttribute("aria-describedby");
       expect(errorId).toBeTruthy();
       expect(screen.getByRole("alert").textContent).toContain("Max must");
       expect(
-        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+        filterQueries()
+          .getByRole("button", { name: "Apply" })
+          .hasAttribute("disabled"),
       ).toBe(true);
-      fireEvent.change(screen.getByRole("textbox", { name: cleared }), {
-        target: { value: "" },
-      });
+      fireEvent.change(
+        filterQueries().getByRole("textbox", { name: cleared }),
+        {
+          target: { value: "" },
+        },
+      );
       expect(max.getAttribute("aria-invalid")).toBe("false");
       expect(max.hasAttribute("aria-describedby")).toBe(false);
       expect(document.getElementById(errorId ?? "")).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Apply" }).hasAttribute("disabled"),
+        filterQueries()
+          .getByRole("button", { name: "Apply" })
+          .hasAttribute("disabled"),
       ).toBe(false);
       applyFilters();
       await waitFor(() =>
@@ -4706,10 +4729,10 @@ describe("member range filters", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(lastListParams().page).toBe(2));
     await openFilters("Members");
-    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+    fireEvent.change(filterQueries().getByRole("textbox", { name: "Min" }), {
       target: { value: "0" },
     });
-    fireEvent.change(screen.getByRole("textbox", { name: "Max" }), {
+    fireEvent.change(filterQueries().getByRole("textbox", { name: "Max" }), {
       target: { value: "0" },
     });
     applyFilters();
@@ -4742,7 +4765,7 @@ describe("member range filters", () => {
       });
     });
     await openFilters("Members");
-    fireEvent.change(screen.getByRole("textbox", { name: "Min" }), {
+    fireEvent.change(filterQueries().getByRole("textbox", { name: "Min" }), {
       target: { value: "99" },
     });
     await act(async () => {
@@ -4750,8 +4773,11 @@ describe("member range filters", () => {
     });
     await waitFor(() =>
       expect(
-        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
-          .value,
+        (
+          filterQueries().getByRole("textbox", {
+            name: "Min",
+          }) as HTMLInputElement
+        ).value,
       ).toBe("5"),
     );
     await act(async () => {
@@ -4759,8 +4785,11 @@ describe("member range filters", () => {
     });
     await waitFor(() =>
       expect(
-        (screen.getByRole("textbox", { name: "Min" }) as HTMLInputElement)
-          .value,
+        (
+          filterQueries().getByRole("textbox", {
+            name: "Min",
+          }) as HTMLInputElement
+        ).value,
       ).toBe("10"),
     );
   });
@@ -4847,7 +4876,7 @@ describe("created date filters", () => {
     fireEvent.click(await screen.findByRole("option", { name: option }));
   }
   function dateInput(name: "From" | "To"): HTMLInputElement {
-    return screen.getByRole("textbox", { name: `${name} (UTC)` });
+    return filterQueries().getByRole("textbox", { name: `${name} (UTC)` });
   }
   function changeDate(name: "From" | "To", value: string): void {
     fireEvent.change(dateInput(name), { target: { value } });
@@ -4926,7 +4955,7 @@ describe("created date filters", () => {
       const calls = mocks.listOrganizations.mock.calls.length;
       await openFilters("Created date");
       await chooseCreated("Custom");
-      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      fireEvent.click(filterQueries().getByRole("button", { name: "Apply" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(screen.queryByText("Created: Today")).toBeNull();
       expect(screen.getByText("Created: From ≥ 2025-01-02 UTC")).toBeTruthy();
@@ -4980,8 +5009,11 @@ describe("created date filters", () => {
       expect(dateInput("From").getAttribute("aria-describedby")).toBeTruthy();
       expect(screen.getByRole("alert").textContent).toContain("YYYY-MM-DD");
       expect(
-        (screen.getByRole("button", { name: "Apply" }) as HTMLButtonElement)
-          .disabled,
+        (
+          filterQueries().getByRole("button", {
+            name: "Apply",
+          }) as HTMLButtonElement
+        ).disabled,
       ).toBe(true);
       expect(currentSearch(router)).not.toContain("created");
     }

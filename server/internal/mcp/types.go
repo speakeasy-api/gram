@@ -119,5 +119,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 }

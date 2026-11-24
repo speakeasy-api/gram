@@ -25,7 +25,8 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 		authz.SelectorKeyResourceID:   "server-a", authz.SelectorKeyTool: "hidden-tool",
 	})
-	toolRead := authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{
+	// Limits belong to connect: a tool is named only when one is called.
+	toolConnect := authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 		authz.SelectorKeyResourceID:   "server-a", authz.SelectorKeyTool: "allowed-tool",
 	})
@@ -46,8 +47,8 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 		{name: "caller connect exclusion", caller: []authz.Grant{write, connect, toolBlock}, owner: []authz.Grant{write, connect}, requested: connect, denial: "your permissions"},
 		{name: "owner connect exclusion", caller: []authz.Grant{write, connect}, owner: []authz.Grant{write, connect, toolBlock}, requested: connect, denial: "owner's permissions"},
 		{name: "connect exclusion leaves read", caller: []authz.Grant{write, toolBlock}, owner: []authz.Grant{write, toolBlock}, requested: read},
-		{name: "nonoverlapping tool", caller: []authz.Grant{write, toolBlock}, owner: []authz.Grant{write, toolBlock}, requested: toolRead},
-		{name: "tool narrowing cannot be omitted", caller: []authz.Grant{toolRead}, owner: []authz.Grant{write}, requested: read, denial: "your permissions"},
+		{name: "nonoverlapping tool", caller: []authz.Grant{connect, toolBlock}, owner: []authz.Grant{connect, toolBlock}, requested: toolConnect},
+		{name: "tool narrowing cannot be omitted", caller: []authz.Grant{toolConnect}, owner: []authz.Grant{connect}, requested: connect, denial: "your permissions"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

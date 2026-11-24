@@ -3,30 +3,40 @@ import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 /**
- * The connection each server shows on the MCP sign-in tab: the agent's
- * assigned one, unless it no longer works and the editor has a usable one,
- * which a save assigns in its place. Until the editor's own connection is
- * known, its checking or error state stands rather than a premature verdict.
+ * The connection each server shows. For an agent that exists, only the one
+ * assigned to it: the editor's own connection reaches the agent only when
+ * they assign it (`assignableOwnConnection`), so showing it as the agent's
+ * would claim a grant nobody made. While an agent is being created there is
+ * nothing assigned yet, and the creator's connections are what creation
+ * assigns.
  */
 export function displayedConnections(
   connections: OwnerConnections,
 ): Map<string, ServerConnection> {
   const displayed = new Map(connections.byServer);
-  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    const own = connections.byServer.get(serverId)?.status;
-    const keepOwn =
-      assigned.status !== "ready" &&
-      assigned.status !== "not-required" &&
-      (own === "ready" || own === "checking" || own === "error");
-    if (!keepOwn) displayed.set(serverId, assigned);
-  }
+  for (const [serverId, assigned] of connections.assignedByServer ?? [])
+    displayed.set(serverId, assigned);
   return displayed;
+}
+
+/**
+ * Whether the editor could give an existing agent their own working
+ * connection to a server, because the agent has none that works there.
+ */
+export function assignableOwnConnection(
+  connections: OwnerConnections,
+  serverId: string,
+): boolean {
+  const assigned = connections.assignedByServer?.get(serverId)?.status;
+  if (assigned !== "missing" && assigned !== "ended") return false;
+  return connections.byServer.get(serverId)?.status === "ready";
 }
 
 /**
  * The servers someone has to sign in to before the agent can call them: one
  * that signs each caller in, with no connection, an expired one, or one that
- * could not be checked.
+ * could not be checked. One whose connection the viewer may not see is not
+ * counted: nothing on it is theirs to fix.
  */
 export function serversNeedingConnection(
   servers: InventoryServer[],
@@ -107,4 +117,49 @@ export function missingSignInsSentence(
           unnamed === 1 ? "1 other sign-in" : `${unnamed} other sign-ins`,
         ];
   return `${progress}Still needs a connection to ${andList.format(parts)}.`;
+}
+
+/**
+ * What a re-read of a server's connection found, told once it lands. An
+ * expired connection reads the same before and after, so without this the
+ * refresh looks like it did nothing.
+ */
+export function refreshOutcome(
+  serverName: string,
+  connection: ServerConnection,
+): { tone: "success" | "warning" | "info" | "error"; message: string } {
+  if (connection.status === "ready")
+    return {
+      tone: "success",
+      message: `The connection to ${serverName} is working.`,
+    };
+  if (connection.status === "ended")
+    return {
+      tone: "warning",
+      message: `The connection to ${serverName} is still expired. Reauthenticate to sign in again.`,
+    };
+  // Some of its sign-ins may already be connected: say what is left, not
+  // that nothing is there.
+  if (connection.status === "missing" && (connection.connected ?? 0) > 0)
+    return {
+      tone: "info",
+      message: `Checked ${serverName}. ${
+        missingSignInsSentence({ name: serverName }, connection) ??
+        "It still needs another sign-in."
+      }`,
+    };
+  if (connection.status === "missing")
+    return {
+      tone: "info",
+      message: `No connection to ${serverName} yet. Connect an account to add one.`,
+    };
+  if (connection.status === "error")
+    return {
+      tone: "error",
+      message: `Could not check the connection to ${serverName}. Try again.`,
+    };
+  return {
+    tone: "info",
+    message: `Checked the connection to ${serverName}.`,
+  };
 }

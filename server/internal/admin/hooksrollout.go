@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
@@ -41,7 +42,7 @@ func (s *Service) GetOrganizationHooksRollout(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, err
 	}
-	return s.organizationHooksRolloutResult(ctx, organization.ID, organization.Slug)
+	return s.organizationHooksRolloutResult(ctx, organization.ID)
 }
 
 func (s *Service) SetOrganizationHooksRollout(ctx context.Context, payload *gen.SetOrganizationHooksRolloutPayload) (*gen.AdminOrganizationHooksRollout, error) {
@@ -61,7 +62,7 @@ func (s *Service) SetOrganizationHooksRollout(ctx context.Context, payload *gen.
 	}
 	s.logger.InfoContext(ctx, "set organization hooks rollout pin",
 		attr.SlogOrganizationID(organization.ID), attr.SlogHooksRolloutVersion(payload.Version), attr.SlogAuthUserEmail(setBy))
-	return s.organizationHooksRolloutResult(ctx, organization.ID, organization.Slug)
+	return s.organizationHooksRolloutResult(ctx, organization.ID)
 }
 
 func (s *Service) ClearOrganizationHooksRollout(ctx context.Context, payload *gen.ClearOrganizationHooksRolloutPayload) (*gen.AdminOrganizationHooksRollout, error) {
@@ -78,7 +79,7 @@ func (s *Service) ClearOrganizationHooksRollout(ctx context.Context, payload *ge
 	}
 	s.logger.InfoContext(ctx, "cleared organization hooks rollout pin",
 		attr.SlogOrganizationID(organization.ID), attr.SlogAuthUserEmail(setBy))
-	return s.organizationHooksRolloutResult(ctx, organization.ID, organization.Slug)
+	return s.organizationHooksRolloutResult(ctx, organization.ID)
 }
 
 // hooksRolloutOperator names the staff operator recorded against a pin change.
@@ -150,16 +151,37 @@ func (s *Service) hooksRolloutResult(ctx context.Context) (*gen.AdminHooksRollou
 		})
 	}
 
+	canarySlugs, err := s.canaryOrganizationSlugs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &gen.AdminHooksRollout{
 		CurrentVersion:          current,
 		DefaultPin:              hooksRolloutPinView(defaultPin),
-		CanaryOrganizationSlugs: hooksrollout.CanaryOrganizationSlugs(),
+		CanaryOrganizationSlugs: canarySlugs,
 		Overrides:               overrideViews,
 		RecentChanges:           changeViews,
 	}, nil
 }
 
-func (s *Service) organizationHooksRolloutResult(ctx context.Context, organizationID, organizationSlug string) (*gen.AdminOrganizationHooksRollout, error) {
+// canaryOrganizationSlugs lists the organizations that always receive the
+// current hooks version: the deployment's staff organization, or none when it
+// has no staff organization.
+func (s *Service) canaryOrganizationSlugs(ctx context.Context) ([]string, error) {
+	if !s.staffOrg.Configured() {
+		return []string{}, nil
+	}
+
+	organization, err := orgRepo.New(s.db).GetOrganizationMetadata(ctx, s.staffOrg.ID())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read staff organization").LogError(ctx, s.logger)
+	}
+
+	return []string{organization.Slug}, nil
+}
+
+func (s *Service) organizationHooksRolloutResult(ctx context.Context, organizationID string) (*gen.AdminOrganizationHooksRollout, error) {
 	current, err := plugins.CurrentHooksGeneratorVersion()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read hooks generator version").LogError(ctx, s.logger)
@@ -178,7 +200,7 @@ func (s *Service) organizationHooksRolloutResult(ctx context.Context, organizati
 		EffectiveVersion: nil,
 		Eligible:         nil,
 	}
-	if hooksrollout.IsCanary(organizationSlug) {
+	if s.staffOrg.Is(organizationID) {
 		result.Source = gen.AdminHooksRolloutSource(hooksrollout.SourceCanary)
 		result.Eligible = new(true)
 		return result, nil

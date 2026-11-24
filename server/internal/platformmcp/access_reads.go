@@ -707,16 +707,14 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	}
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(role)
-		serverCheck := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())
+		serverCheck := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).Connect()
 		canEnter, err := authz.GrantsAuthorize(grants, serverCheck)
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate server access for role %q: %w", role.Name, err)
 		}
 		allowedTools := make([]string, 0, len(tools))
 		for _, tool := range tools {
-			allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(row.McpServerID.String(), authz.MCPToolCallDimensions{
-				Tool: tool.Name, Disposition: tool.Disposition, ProjectID: projectID.String(),
-			}))
+			allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).ToolCall(tool.Name, tool.Disposition))
 			if err != nil {
 				return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool access for role %q: %w", role.Name, err)
 			}
@@ -724,7 +722,10 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 				allowedTools = append(allowedTools, tool.Name)
 			}
 		}
-		dispositions, blockedDispositions := matchingDispositionRules(role.Grants, row.McpServerID.String(), projectID.String())
+		dispositions, blockedDispositions, err := dispositionRulesOnServer(grants, authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)))
+		if err != nil {
+			return GetMCPAccessOutput{}, fmt.Errorf("evaluate disposition rules for role %q: %w", role.Name, err)
+		}
 		if !canEnter && len(allowedTools) == 0 && len(dispositions) == 0 && len(blockedDispositions) == 0 && !unevaluated {
 			continue
 		}
@@ -775,7 +776,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 				if tool == nil || tool.Name == "" {
 					continue
 				}
-				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: conv.DispositionFromAnnotations(tool.Annotations)})
+				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: annotationDisposition(tool.Annotations)})
 			}
 		}
 	case row.RemoteMcpServerID.Valid || row.TunneledMcpServerID.Valid:
@@ -791,7 +792,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 		for _, tool := range rows {
 			tools = append(tools, MCPAccessTool{
 				Name: tool.ToolName,
-				Disposition: conv.DispositionFromAnnotations(conv.AnnotationsFromColumns(
+				Disposition: annotationDisposition(conv.AnnotationsFromColumns(
 					tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint,
 				)),
 			})
@@ -940,41 +941,57 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 	return grants, unevaluated
 }
 
-func matchingDispositionRules(grants []*accessgen.RoleGrant, mcpID, projectID string) ([]string, []string) {
-	found := map[string]struct{}{}
-	blocked := map[string]struct{}{}
+// dispositionProbeTool is never a real tool, so a rule limited to named tools
+// does not reach the probe calls.
+const dispositionProbeTool = "platform-mcp-disposition-probe"
+
+// dispositionRulesOnServer asks the evaluator rather than matching selectors
+// itself, so the report cannot drift from enforcement.
+func dispositionRulesOnServer(grants []authz.Grant, server authz.MCPServerRef) (allowed []string, blocked []string, err error) {
+	allowedSet := map[string]struct{}{}
+	blockedSet := map[string]struct{}{}
 	for _, grant := range grants {
-		if grant == nil || (!scopeMayAllowConnect(grant.Scope) && !scopeMayBlockConnect(grant.Scope)) {
+		disposition := grant.Selector[authz.SelectorKeyDisposition]
+		if disposition == "" || disposition == authz.WildcardResource {
 			continue
 		}
-		for _, selector := range grant.Selectors {
-			if selector == nil || selector.Disposition == nil || *selector.Disposition == "" {
+		tool := grant.Selector[authz.SelectorKeyTool]
+		if tool == "" || tool == authz.WildcardResource {
+			tool = dispositionProbeTool
+		}
+		call := server.ToolCall(tool, disposition)
+		switch grant.Scope {
+		case authz.ScopeMCPBlockedConnect:
+			everything := authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+			everything.PrincipalUrn = grant.PrincipalUrn
+			stillAllowed, err := authz.GrantsAuthorize([]authz.Grant{everything, grant}, call)
+			if err != nil {
+				return nil, nil, fmt.Errorf("evaluate block on %s: %w", disposition, err)
+			}
+			if !stillAllowed {
+				blockedSet[disposition] = struct{}{}
+			}
+		default:
+			reaches, err := authz.GrantsAuthorize([]authz.Grant{grant}, call)
+			if err != nil {
+				return nil, nil, fmt.Errorf("evaluate rule on %s: %w", disposition, err)
+			}
+			if !reaches {
 				continue
 			}
-			if selector.ResourceID != authz.WildcardResource && selector.ResourceID != mcpID {
-				continue
+			effective, err := authz.GrantsAuthorize(grants, call)
+			if err != nil {
+				return nil, nil, fmt.Errorf("evaluate role on %s: %w", disposition, err)
 			}
-			if selector.ProjectID != nil && *selector.ProjectID != authz.WildcardResource && *selector.ProjectID != projectID {
-				continue
-			}
-			if scopeMayBlockConnect(grant.Scope) {
-				blocked[*selector.Disposition] = struct{}{}
-			} else {
-				found[*selector.Disposition] = struct{}{}
+			if effective {
+				allowedSet[disposition] = struct{}{}
 			}
 		}
 	}
-	out := make([]string, 0, len(found))
-	for value := range found {
-		out = append(out, value)
-	}
-	blockedOut := make([]string, 0, len(blocked))
-	for value := range blocked {
-		blockedOut = append(blockedOut, value)
-	}
-	slices.Sort(out)
-	slices.Sort(blockedOut)
-	return out, blockedOut
+	// Empty, not nil, so the output reads [] rather than null.
+	allowed = append([]string{}, slices.Sorted(maps.Keys(allowedSet))...)
+	blocked = append([]string{}, slices.Sorted(maps.Keys(blockedSet))...)
+	return allowed, blocked, nil
 }
 
 func scopeMayAllowConnect(scope string) bool {
@@ -1116,4 +1133,15 @@ func authClientRole(role *accessgen.Role) *accessgen.Role {
 
 func anyAuthClientRule(access []MCPRoleAuthClientAccess) bool {
 	return slices.ContainsFunc(access, func(a MCPRoleAuthClientAccess) bool { return a.Access != "not_granted" })
+}
+
+// annotationDisposition is the disposition a call to a tool with these
+// annotations carries.
+func annotationDisposition(a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
+	}
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
 }

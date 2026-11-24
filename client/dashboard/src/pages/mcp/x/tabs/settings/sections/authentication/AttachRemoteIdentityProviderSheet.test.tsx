@@ -151,7 +151,6 @@ vi.mock("./useIssuerDiscovery", () => ({
 
 function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
   return {
-    kind: "standard",
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",
@@ -194,7 +193,7 @@ async function submitManualClient(): Promise<void> {
     target: { value: "client-1" },
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Attach Authorization Server" }),
+    screen.getByRole("button", { name: "Attach authorization server" }),
   );
 }
 
@@ -303,7 +302,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     });
 
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Authorization Server",
+      name: "Attach authorization server",
     });
     fireEvent.click(confirm[confirm.length - 1] as HTMLElement);
     await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
@@ -347,7 +346,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       ),
     ).toBeTruthy();
     const confirm = screen.getAllByRole("button", {
-      name: "Attach Authorization Server",
+      name: "Attach authorization server",
     });
     expect((confirm[confirm.length - 1] as HTMLButtonElement).disabled).toBe(
       true,
@@ -438,7 +437,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     };
     const attach = () =>
       fireEvent.click(
-        screen.getByRole("button", { name: "Attach Authorization Server" }),
+        screen.getByRole("button", { name: "Attach authorization server" }),
       );
 
     it("creates a separate client on the stored registration and never binds the stored one", async () => {
@@ -553,7 +552,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       );
       expect(
         screen
-          .getByRole("button", { name: "Attach Authorization Server" })
+          .getByRole("button", { name: "Attach authorization server" })
           .hasAttribute("disabled"),
       ).toBe(true);
     });

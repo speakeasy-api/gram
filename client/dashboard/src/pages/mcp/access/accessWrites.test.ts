@@ -35,9 +35,9 @@ function state(entries: ResourceAudienceEntry[]) {
 }
 
 const catalog: ToolSelectionTool[] = [
-  { name: "search", annotations: ["read_only"] },
-  { name: "fetch", annotations: ["read_only"] },
-  { name: "delete", annotations: ["destructive"] },
+  { name: "search", disposition: "read_only" },
+  { name: "fetch", disposition: "read_only" },
+  { name: "delete", disposition: "destructive" },
 ];
 
 const role = (overrides: Partial<ResourceAudienceEntry> = {}) =>
@@ -1163,7 +1163,7 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
   expect(
     reachableTools(updated.cells.use, [
       ...catalog,
-      { name: "unannotated", annotations: [] },
+      { name: "unannotated", disposition: "unannotated" },
     ]),
   ).toEqual(["search", "fetch", "unannotated"]);
 });
@@ -1185,4 +1185,72 @@ it("refuses narrowing that would discard an unknown stored block", () => {
       catalog,
     ),
   ).toThrow("not supported");
+});
+
+describe("narrowing to read-only tools on an OpenAPI server", () => {
+  // An OpenAPI GET is annotated read-only, idempotent and open-world at once,
+  // and a POST open-world. The runtime checks a call under one disposition,
+  // the first in priority order, so a block on open-world and idempotent
+  // leaves the GETs reachable — and the page has to read it the same way, or
+  // a saved "read-only tools" reads back as no access at all.
+  const openapi: ToolSelectionTool[] = [
+    { name: "list_pets", disposition: "read_only" },
+    { name: "get_pet", disposition: "read_only" },
+    { name: "create_pet", disposition: "open_world" },
+    { name: "update_pet", disposition: "idempotent" },
+    { name: "delete_pet", disposition: "destructive" },
+  ];
+
+  it("reads the saved choice back as the read-only tools", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      openapi,
+    ).entries;
+    expect(written).toContainEqual({
+      principalUrn: "user:1",
+      level: "blocked",
+      tools: [],
+      dispositions: ["destructive", "idempotent", "open_world"],
+    });
+
+    // What the list holds once the save lands.
+    const saved = buildAccessRows(written.map((rule) => entry({ ...rule })));
+    expect(reachableTools(saved[0]!.cells.use, openapi)).toEqual([
+      "list_pets",
+      "get_pet",
+    ]);
+    expect(narrowingSeed(saved[0]!, openapi)).toEqual({
+      tools: ["list_pets", "get_pet"],
+      dispositions: [],
+    });
+  });
+
+  it("keeps an annotation block a name choice matches exactly", () => {
+    // Saving the dialog untouched sends back the names the block leaves. The
+    // block they amount to is the annotation block already standing, so it
+    // stays written as annotations.
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive", "idempotent", "open_world"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(
+        direct,
+        person,
+        { tools: ["list_pets", "get_pet"], dispositions: [] },
+        openapi,
+      ).message,
+    ).toBe("Access to this server is unchanged.");
+  });
 });

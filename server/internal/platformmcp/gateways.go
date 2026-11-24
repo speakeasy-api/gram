@@ -388,7 +388,7 @@ func (s *GatewayService) resolveProject(ctx context.Context, principal Principal
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return ResolvedProject{}, toolExposureAdminAuthorizationError(err)
 	}
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, resourceID.String(), projectID.String())); err != nil {
+	if err := s.engine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ResolvedProject{}, gatewayUnavailable(err)

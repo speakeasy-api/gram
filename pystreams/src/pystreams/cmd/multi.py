@@ -87,6 +87,7 @@ async def multi(
     # Service options
     service_version: str | None,
     environment: str | None,
+    partition: str,
     git_sha: str | None,
     log_level: str,
     pretty_log: bool,
@@ -121,15 +122,15 @@ async def multi(
             attr.SERVICE_NAME: "gram-pystreams",
             attr.SERVICE_VERSION: service_version,
             attr.SERVICE_ENVIRONMENT: environment,
+            attr.PARTITION: partition,
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+    # A next instance equal to the current one means the move is over: the
+    # client is an ordinary one.
     if redis_next_addr and redis_next_addr == redis_addr:
-        raise click.UsageError(
-            "--redis-next-addr is the same instance as --redis-addr: replies "
-            "would be written to the instance being left"
-        )
+        redis_next_addr = None
 
     if role == "enforcement" and (
         not redis_addr or not risk_fingerprint_pepper_keyring
@@ -144,6 +145,7 @@ async def multi(
         service_version=service_version,
         git_sha=git_sha,
         environment=environment,
+        partition=partition,
         enable_tracing=enable_tracing,
         enable_metrics=enable_metrics,
     )

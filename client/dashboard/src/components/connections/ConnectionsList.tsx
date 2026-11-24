@@ -813,6 +813,7 @@ export function ConnectionsList({
   project,
   bordered = true,
   killswitchContext,
+  splitNeedsReauth = false,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -845,6 +846,8 @@ export function ConnectionsList({
   bordered?: boolean;
   /** Enables user-only Killswitch status/actions on this sessions surface. */
   killswitchContext?: ConnectionKillswitchContext;
+  /** Lists groups waiting for re-auth on their own, apart from unused ones. */
+  splitNeedsReauth?: boolean;
 }): JSX.Element {
   const sessions = useSessionAgents(unresolvedSessions);
   const now = useNow();
@@ -957,7 +960,14 @@ export function ConnectionsList({
           revoking, and burying them behind a toggle is how a dead grant sits
           unnoticed for a year. Dimmed so they read as a footnote to the roster
           above rather than as more of it. */}
-      {inactive.length > 0 ? (
+      {splitNeedsReauth ? (
+        <InactiveSplit
+          inactive={inactive}
+          now={now}
+          bordered={bordered}
+          rows={rows}
+        />
+      ) : inactive.length > 0 ? (
         <div className="space-y-2 opacity-70">
           <p className="text-eyebrow px-2">
             Inactive · unused for over a week, or no longer usable
@@ -971,5 +981,67 @@ export function ConnectionsList({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Waiting for re-auth, then everything else that is not in use. */
+function InactiveSplit({
+  inactive,
+  now,
+  bordered,
+  rows,
+}: {
+  inactive: ConnectionGroup[];
+  now: number;
+  bordered: boolean;
+  rows: (groups: ConnectionGroup[]) => JSX.Element;
+}): JSX.Element {
+  const needsReauth: ConnectionGroup[] = [];
+  const rest: ConnectionGroup[] = [];
+  for (const group of inactive) {
+    (groupAttentionState(group, now) === "needs_reauth"
+      ? needsReauth
+      : rest
+    ).push(group);
+  }
+  // The count above includes sessions still signed in whose service sign-in lapsed.
+  const anyCounted = needsReauth.some((group) =>
+    group.sessions.some(
+      (session) =>
+        !session.revokedAt && session.refreshExpiresAt.getTime() > now,
+    ),
+  );
+  const anyRevoked = rest.some((group) =>
+    group.sessions.some(
+      (session) => connectionState(session, now) === "revoked",
+    ),
+  );
+  return (
+    <>
+      {needsReauth.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-eyebrow px-2">
+            {anyCounted
+              ? "Needs re-auth"
+              : "Needs re-auth · not counted as active"}
+          </p>
+          <div className={cn(bordered && "border-border border")}>
+            {rows(needsReauth)}
+          </div>
+        </div>
+      ) : null}
+      {rest.length > 0 ? (
+        <div className="space-y-2 opacity-70">
+          <p className="text-eyebrow px-2">
+            {anyRevoked
+              ? "Not used in the last week, or revoked"
+              : "Not used in the last week"}
+          </p>
+          <div className={cn(bordered && "border-border border")}>
+            {rows(rest)}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -1004,6 +1004,38 @@ test("tool meta flows through to manifest", () => {
   expect(tool?.meta).toEqual({ "ui/resourceUri": "ui://charts/bar" });
 });
 
+test("resource meta flows through to manifest", () => {
+  const csp = { connectDomains: ["https://api.example.com"] };
+  const g = new Gram()
+    .experimental_uiResource({
+      name: "chart",
+      description: "Bar chart",
+      content: "<html>chart</html>",
+      meta: { ui: { csp } },
+    })
+    .resource({
+      name: "direct",
+      uri: "resource://direct",
+      description: "Direct resource with meta",
+      content: "hello",
+      meta: { owner: "docs" },
+    })
+    .resource({
+      name: "plain",
+      uri: "resource://plain",
+      description: "No meta",
+      content: "hello",
+    });
+
+  const manifest = g.manifest();
+  const chart = manifest.resources?.find((r) => r.name === "chart");
+  expect(chart?.meta).toEqual({ ui: { csp } });
+  const direct = manifest.resources?.find((r) => r.name === "direct");
+  expect(direct?.meta).toEqual({ owner: "docs" });
+  const plain = manifest.resources?.find((r) => r.name === "plain");
+  expect(plain).not.toHaveProperty("meta");
+});
+
 test("manifest omits resources key when no resources registered", () => {
   const g = new Gram().tool({
     name: "echo",

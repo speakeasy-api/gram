@@ -16,9 +16,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -92,7 +92,7 @@ func TestGetHooksRollout_Empty(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, currentHooksVersion(t), result.CurrentVersion)
 	require.Nil(t, result.DefaultPin)
-	require.Equal(t, hooksrollout.CanaryOrganizationSlugs(), result.CanaryOrganizationSlugs)
+	require.Empty(t, result.CanaryOrganizationSlugs, "no staff organization is configured")
 	require.Empty(t, result.Overrides)
 	require.Empty(t, result.RecentChanges)
 }
@@ -199,18 +199,40 @@ func TestOrganizationHooksRollout_OverrideAndDefault(t *testing.T) {
 	require.Nil(t, platform.RecentChanges[0].Version, "the newest change cleared the override")
 }
 
-func TestOrganizationHooksRollout_CanaryIgnoresPins(t *testing.T) {
+func TestGetHooksRollout_ListsStaffOrganizationAsCanary(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	ctx = hooksRolloutContext(ctx)
-	canarySlug := hooksrollout.CanaryOrganizationSlugs()[0]
-	orgID := createHooksRolloutOrganization(t, ctx, conn, canarySlug)
+	svc.staffOrg = staff.NewOrganization(createHooksRolloutOrganization(t, ctx, conn, "hooks-rollout-staff"))
+
+	result, err := svc.GetHooksRollout(ctx, &gen.GetHooksRolloutPayload{AdminSessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, []string{"hooks-rollout-staff"}, result.CanaryOrganizationSlugs)
+}
+
+func TestOrganizationHooksRollout_StaffOrganizationIgnoresPins(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	orgID := createHooksRolloutOrganization(t, ctx, conn, "hooks-rollout-staff-pins")
+	svc.staffOrg = staff.NewOrganization(orgID)
 
 	result, err := svc.SetOrganizationHooksRollout(ctx, &gen.SetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID, Version: 1})
 	require.NoError(t, err)
 	require.Equal(t, gen.AdminHooksRolloutSource("canary"), result.Source)
 	require.Nil(t, result.EffectiveVersion)
 	require.True(t, *result.Eligible)
+}
+
+func TestOrganizationHooksRollout_StaffSlugIsNotACanary(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	ctx = hooksRolloutContext(ctx)
+	orgID := createHooksRolloutOrganization(t, ctx, conn, "speakeasy-team")
+
+	result, err := svc.SetOrganizationHooksRollout(ctx, &gen.SetOrganizationHooksRolloutPayload{AdminSessionToken: nil, OrganizationID: orgID, Version: 1})
+	require.NoError(t, err)
+	require.Equal(t, gen.AdminHooksRolloutSource("organization"), result.Source, "the canary follows the staff organization ID, not a slug")
 }
 
 func TestOrganizationHooksRollout_UnknownOrganization(t *testing.T) {

@@ -96,7 +96,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, fmt.Errorf("get installable platform mcp server: %w", err)
 	}
-	if err := s.authorization.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String())); err != nil {
+	if err := s.authorization.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Connect()); err != nil {
 		if isAuthorizationDenied(err) {
 			return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
 		}
