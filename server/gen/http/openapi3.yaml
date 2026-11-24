@@ -139661,6 +139661,9 @@ components:
                     type: string
                     description: The change ID.
                     format: uuid
+                path:
+                    type: string
+                    description: 'The file the change edits, relative to the skill root: SKILL.md or a supporting file such as references/REFERENCE.md.'
                 proposed_diff:
                     type: string
                     description: The change as a unified diff against the content the changes before it produce.
@@ -139681,6 +139684,7 @@ components:
                 - feedback_count
                 - feedback_session_count
                 - created_at
+                - path
         SkillEfficacyInsight:
             type: object
             properties:

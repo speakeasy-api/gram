@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/skills/skillprompt"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -303,7 +306,7 @@ func TestJudgeCallTreatsEmptyContentAsModelFailure(t *testing.T) {
 func TestSystemPromptSuppressesPrescribedCorrectionsButAllowsComplaints(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "v11", JudgePromptVersion)
+	require.Equal(t, "v12", JudgePromptVersion)
 
 	for _, issueType := range recommendationIssueTypes {
 		require.Contains(t, SystemPrompt, issueType)
@@ -339,6 +342,39 @@ func TestBuildJudgePromptCarriesSkillAndTranscript(t *testing.T) {
 	require.Equal(t, in.SkillContent, payload.SkillContent)
 	require.Equal(t, in.Surface, payload.Surface)
 	require.Equal(t, in.Transcript, payload.Transcript)
+	require.Empty(t, payload.SupportingFiles)
+	require.NotContains(t, prompt, "supporting_files", "a single-file skill keeps the prompt shape it always had")
+}
+
+func TestBuildJudgePromptCarriesSupportingFilesWithinBudget(t *testing.T) {
+	t.Parallel()
+
+	in := testJudgeInput()
+	in.SkillContent = "Follow references/commits.md before committing."
+	in.SupportingFiles = []skilltree.File{
+		{Path: "scripts/lint.sh", Content: []byte("#!/bin/sh\nmake lint\n"), ContentType: ""},
+		{Path: "references/huge.md", Content: []byte(strings.Repeat("x", judgeSupportingFilesBudgetBytes+1)), ContentType: ""},
+		{Path: "references/commits.md", Content: []byte("Run the linter, then write an imperative subject line.\n"), ContentType: ""},
+		{Path: "assets/banner.png", Content: []byte{0x89, 'P', 'N', 'G', 0}, ContentType: "image/png"},
+	}
+
+	prompt, err := BuildJudgePrompt(in)
+	require.NoError(t, err)
+
+	var payload judgePromptPayload
+	require.NoError(t, json.Unmarshal([]byte(prompt), &payload))
+	require.Equal(t, []skillprompt.File{
+		{Path: "references/commits.md", Content: "Run the linter, then write an imperative subject line.\n"},
+		{Path: "scripts/lint.sh", Content: "#!/bin/sh\nmake lint\n"},
+	}, payload.SupportingFiles)
+	require.Equal(t, []skillprompt.OmittedFile{
+		{Path: "references/huge.md", Reason: skillprompt.OmitBudget},
+		{Path: "assets/banner.png", Reason: skillprompt.OmitBinary},
+	}, payload.OmittedFiles)
+	require.Less(t, strings.Index(prompt, `"skill_content"`), strings.Index(prompt, `"supporting_files"`), "SKILL.md comes first")
+	require.Less(t, strings.Index(prompt, `"supporting_files"`), strings.Index(prompt, `"transcript"`))
+	require.Contains(t, SystemPrompt, `"supporting_files"`)
+	require.Contains(t, SystemPrompt, `"omitted_supporting_files"`)
 }
 
 // TestVerdictSchemaHasNoUnsupportedBounds guards the constraint that makes

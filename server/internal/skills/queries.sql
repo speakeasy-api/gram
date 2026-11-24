@@ -604,14 +604,16 @@ INSERT INTO skill_edit_suggestion_changes (
   suggestion_id,
   proposed_diff,
   rationale,
-  position
+  position,
+  path
 )
 SELECT
   suggestion.project_id,
   suggestion.id,
   @proposed_diff,
   @rationale,
-  @position
+  @position,
+  sqlc.narg(path)
 FROM skill_edit_suggestions suggestion
 WHERE suggestion.project_id = @project_id
   AND suggestion.id = @suggestion_id

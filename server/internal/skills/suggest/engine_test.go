@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skillprompt"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -289,6 +291,33 @@ func TestBuildPromptBoundsNotesDropsOldestEvidenceAndOmitsSessionIDs(t *testing.
 	for _, item := range payload.Transcripts {
 		require.NotEqual(t, "oldest", item.Surface)
 	}
+}
+
+func TestBuildPromptCarriesSupportingFilesAfterSkillMDWithinBudget(t *testing.T) {
+	t.Parallel()
+
+	prompt, err := BuildPrompt(DefaultConfig(), GenerateInput{
+		OrganizationID: "unused", ProjectID: uuid.New(), SkillName: "with-files",
+		Base: repo.ResolveSkillSuggestionBaseRow{BaseContent: "---\nname: with-files\n---\n\nRead references/rollback.md.\n"},
+		BaseFiles: []skilltree.File{
+			{Path: "references/rollback.md", Content: []byte("Revert the deploy.\n"), ContentType: ""},
+			{Path: "references/huge.md", Content: []byte(strings.Repeat("x", promptSupportingFilesBudgetBytes+1)), ContentType: ""},
+			{Path: "assets/diagram.png", Content: []byte{0x89, 'P', 'N', 'G', 0}, ContentType: "image/png"},
+		},
+		Feedback: nil, Trend: trend{}, Transcripts: nil, ValidationError: "",
+	})
+	require.NoError(t, err)
+
+	var payload promptPayload
+	require.NoError(t, json.Unmarshal(prompt, &payload))
+	require.Equal(t, []skillprompt.File{{Path: "references/rollback.md", Content: "Revert the deploy.\n"}}, payload.SupportingFiles)
+	require.Equal(t, []skillprompt.OmittedFile{
+		{Path: "references/huge.md", Reason: skillprompt.OmitBudget},
+		{Path: "assets/diagram.png", Reason: skillprompt.OmitBinary},
+	}, payload.OmittedFiles)
+	require.Less(t, strings.Index(string(prompt), `"current_skill_md"`), strings.Index(string(prompt), `"supporting_files"`))
+	require.Contains(t, SystemPrompt, `"path"`)
+	require.Contains(t, SystemPrompt, "scripts/ are read-only")
 }
 
 func TestBuildPromptRejectsOversizedBaseWithoutCallingModel(t *testing.T) {

@@ -797,6 +797,9 @@ type SkillSuggestionChange struct {
 	FeedbackCount        int64  `json:"feedback_count"`
 	FeedbackSessionCount int64  `json:"feedback_session_count"`
 	CreatedAt            string `json:"created_at"`
+	// Path is the file the change edits: SKILL.md or a supporting file such
+	// as references/REFERENCE.md.
+	Path string `json:"path"`
 }
 
 type SkillSuggestionSummary struct {
@@ -1586,7 +1589,7 @@ func buildSkillSuggestions(rows []*types.SkillEditSuggestion, includeProposedCon
 		changes := make([]SkillSuggestionChange, 0, len(row.Changes))
 		for _, change := range row.Changes {
 			if change != nil {
-				changes = append(changes, SkillSuggestionChange{ID: change.ID, ProposedDiff: change.ProposedDiff, Rationale: change.Rationale, AppliesCleanly: change.AppliesCleanly, FeedbackCount: change.FeedbackCount, FeedbackSessionCount: change.FeedbackSessionCount, CreatedAt: change.CreatedAt})
+				changes = append(changes, SkillSuggestionChange{ID: change.ID, ProposedDiff: change.ProposedDiff, Rationale: change.Rationale, AppliesCleanly: change.AppliesCleanly, FeedbackCount: change.FeedbackCount, FeedbackSessionCount: change.FeedbackSessionCount, CreatedAt: change.CreatedAt, Path: change.Path})
 			}
 		}
 		proposedContent := ""

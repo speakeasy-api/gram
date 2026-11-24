@@ -44,9 +44,14 @@ func ReplayOpenSuggestionOntoBase(ctx context.Context, queries *repo.Queries, pr
 		return fmt.Errorf("list skill suggestion changes for replay: %w", err)
 	}
 
+	tree, err := LoadSuggestionTree(ctx, queries, projectID, skillID, base.BaseVersionID, base.BaseContent)
+	if err != nil {
+		return fmt.Errorf("load skill suggestion base files for replay: %w", err)
+	}
+
 	remaining := 0
 	for _, change := range changes {
-		replayed, err := replayDiff(base.BaseContent, change.ProposedDiff)
+		replayed, err := replayDiff(tree, change.Path.String, change.ProposedDiff)
 		if err != nil {
 			return err
 		}
@@ -87,10 +92,18 @@ func ReplayOpenSuggestionOntoBase(ctx context.Context, queries *repo.Queries, pr
 	return nil
 }
 
-// replayDiff re-renders a stored diff against newer content. It returns an
-// empty diff when the change has nothing left to propose, either because it
-// conflicts with the newer content or because it is already applied.
-func replayDiff(baseContent, proposedDiff string) (string, error) {
+// replayDiff re-renders a stored diff against the same file in newer content.
+// An empty path means SKILL.md. It returns an empty diff when the change has
+// nothing left to propose: it conflicts with the newer content, its file is
+// gone or no longer text, or it is already applied.
+func replayDiff(tree skilldiff.Tree, path, proposedDiff string) (string, error) {
+	baseContent, err := tree.Text(path)
+	if errors.Is(err, skilldiff.ErrConflict) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read replayed skill file: %w", err)
+	}
 	proposed, err := skilldiff.Apply(baseContent, proposedDiff)
 	if errors.Is(err, skilldiff.ErrConflict) {
 		return "", nil
@@ -99,7 +112,7 @@ func replayDiff(baseContent, proposedDiff string) (string, error) {
 		return "", fmt.Errorf("replay open skill suggestion: %w", err)
 	}
 
-	replayed, err := skilldiff.Unified(baseContent, proposed)
+	replayed, err := skilldiff.UnifiedFile(skilldiff.FilePath(path), baseContent, proposed)
 	if err != nil {
 		return "", fmt.Errorf("re-render replayed skill suggestion: %w", err)
 	}

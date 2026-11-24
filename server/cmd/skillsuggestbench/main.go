@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -375,7 +376,7 @@ func generateOnce(
 // applyProposal anchors and validates a proposal exactly as resolveGeneration
 // does in production, returning the number of applied changes.
 func applyProposal(tc testCase, generation suggest.Generation) (int, error) {
-	content, resolved, err := suggest.ResolveChanges(tc.SkillContent, generation.Changes)
+	proposed, resolved, err := suggest.ResolveChanges(skilldiff.Tree{Manifest: tc.SkillContent, Files: nil}, generation.Changes)
 	if err != nil {
 		return 0, fmt.Errorf("anchor: %w", err)
 	}
@@ -383,7 +384,7 @@ func applyProposal(tc testCase, generation suggest.Generation) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid case manifest: %w", err)
 	}
-	if _, err := skills.ValidateSkillSuggestion(content, tc.SkillName, baseSHA); err != nil {
+	if _, err := skills.ValidateSkillSuggestion(proposed, tc.SkillName, baseSHA); err != nil {
 		return 0, fmt.Errorf("validate: %w", err)
 	}
 	return len(resolved), nil
@@ -394,7 +395,7 @@ func applyProposal(tc testCase, generation suggest.Generation) (int, error) {
 // parser. The bench needs it so the no-op check in ValidateSkillSuggestion is
 // exercised exactly as production exercises it.
 func canonicalSHA(content, name string) (string, error) {
-	validated, err := skills.ValidateSkillSuggestion(content, name, "")
+	validated, err := skills.ValidateSkillSuggestion(skilldiff.Tree{Manifest: content, Files: nil}, name, "")
 	if err != nil {
 		return "", err
 	}

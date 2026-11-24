@@ -5809,6 +5809,9 @@ type SkillEditSuggestionChangeResponseBody struct {
 	FeedbackSessionCount *int64 `form:"feedback_session_count,omitempty" json:"feedback_session_count,omitempty" xml:"feedback_session_count,omitempty"`
 	// When the change was recorded.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The file the change edits, relative to the skill root: SKILL.md or a
+	// supporting file such as references/REFERENCE.md.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 }
 
 // SkillFeedbackCountsResponseBody is used to define fields on response body
@@ -18509,6 +18512,9 @@ func ValidateSkillEditSuggestionChangeResponseBody(body *SkillEditSuggestionChan
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

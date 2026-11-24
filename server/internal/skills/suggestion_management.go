@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -98,11 +100,34 @@ func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggesti
 		return nil, oops.E(oops.CodeUnexpected, err, "list skill suggestion changes").LogError(ctx, logger)
 	}
 
+	// Only suggestions that edit a supporting file need their base files to
+	// show whether those edits still apply.
+	baseFiles := make(map[uuid.UUID][]skilltree.File)
+	for i := range rows {
+		suggestion := rows[i].SkillEditSuggestion
+		if _, loaded := baseFiles[suggestion.ID]; loaded || !editsSupportingFile(changes, suggestion.ID) {
+			continue
+		}
+		files, loadErr := LoadSkillVersionFiles(ctx, queries, *authCtx.ProjectID, suggestion.SkillID, suggestion.BaseVersionID)
+		if loadErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, loadErr, "load skill suggestion base files").LogError(ctx, logger)
+		}
+		baseFiles[suggestion.ID] = files
+	}
+
 	return &gen.ListSkillSuggestionsResult{
-		Suggestions:    mv.BuildSkillEditSuggestionListView(rows, changes),
+		Suggestions:    mv.BuildSkillEditSuggestionListView(rows, changes, baseFiles),
 		TotalOpenCount: totalOpenCount,
 		NextCursor:     nextCursor,
 	}, nil
+}
+
+// editsSupportingFile reports whether any of a suggestion's changes targets a
+// file other than SKILL.md.
+func editsSupportingFile(changes []repo.ListSkillEditSuggestionChangesRow, suggestionID uuid.UUID) bool {
+	return slices.ContainsFunc(changes, func(change repo.ListSkillEditSuggestionChangesRow) bool {
+		return change.SuggestionID == suggestionID && !skilldiff.IsManifestPath(change.Path.String)
+	})
 }
 
 type suggestionApproval struct {
@@ -148,6 +173,7 @@ func (s *Service) approveSuggestion(
 			SkillName:            details.SkillName,
 			SkillDisplayName:     details.SkillDisplayName,
 			BaseContent:          details.BaseContent,
+			BaseFiles:            nil,
 			Changes:              nil,
 			FeedbackCount:        details.FeedbackCount,
 			FeedbackSessionCount: details.FeedbackSessionCount,
@@ -159,6 +185,11 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeConflict, nil, "skill suggestion is not open")
 	}
 
+	initialTree, err := LoadSuggestionTree(ctx, queries, *authCtx.ProjectID, details.SkillEditSuggestion.SkillID, details.SkillEditSuggestion.BaseVersionID, details.BaseContent)
+	if err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "load skill suggestion base files for approval").LogError(ctx, logger)
+	}
+	approval.evidence.BaseFiles = initialTree.Files
 	content := ""
 	if editedContent != nil {
 		content = *editedContent
@@ -170,10 +201,11 @@ func (s *Service) approveSuggestion(
 			return approval, oops.E(oops.CodeUnexpected, listErr, "load skill suggestion changes for approval").LogError(ctx, logger)
 		}
 		approval.evidence.Changes = changes
-		content, _, err = approvalContent(details.BaseContent, changes, changeIDs)
-		if err != nil {
-			return approval, err
+		proposed, _, proposeErr := approvalContent(initialTree, changes, changeIDs)
+		if proposeErr != nil {
+			return approval, proposeErr
 		}
+		content = proposed.Manifest
 	}
 	initialParsed, err := parseSkillManifest(content)
 	if err != nil {
@@ -229,6 +261,11 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "resolve skill suggestion base for approval").LogError(ctx, logger)
 	}
 	approval.evidence.BaseContent = base.BaseContent
+	baseTree, err := LoadSuggestionTree(ctx, queries, *authCtx.ProjectID, suggestion.SkillID, base.BaseVersionID, base.BaseContent)
+	if err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "load skill base files for approval").LogError(ctx, logger)
+	}
+	approval.evidence.BaseFiles = baseTree.Files
 	if suggestion.BaseVersionID != base.BaseVersionID {
 		superseded, supersedeErr := queries.SupersedeOpenSkillEditSuggestionByID(ctx, repo.SupersedeOpenSkillEditSuggestionByIDParams{
 			ProjectID: *authCtx.ProjectID,
@@ -253,21 +290,30 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "load skill suggestion changes for approval").LogError(ctx, logger)
 	}
 	approval.evidence.Changes = changes
+	// A reviewer's edit replaces SKILL.md only; the supporting files carry
+	// over from the base version unchanged.
+	proposedTree := skilldiff.Tree{Manifest: content, Files: baseTree.Files}
 	var remaining []repo.ListSkillEditSuggestionChangesRow
 	if editedContent == nil {
-		content, remaining, err = approvalContent(base.BaseContent, changes, changeIDs)
+		proposedTree, remaining, err = approvalContent(baseTree, changes, changeIDs)
 		if err != nil {
 			return approval, err
 		}
 	}
 
+	// Files the reviewer sends replace the version's supporting files
+	// outright. Otherwise the version keeps the base version's files with the
+	// taken changes applied.
+	if files.explicit {
+		proposedTree.Files = entryFiles(files.entries)
+	}
 	rejectCode := oops.CodeConflict
 	if editedContent != nil || files.explicit {
 		rejectCode = oops.CodeBadRequest
 	}
-	// The no-op check below compares whole skill trees, so the manifest-only
-	// comparison is skipped here.
-	validated, err := ValidateSkillSuggestion(content, skill.Name, "")
+	// The no-op check compares whole skill trees, so an edit to a supporting
+	// file alone is a real change.
+	validated, err := ValidateSkillSuggestion(proposedTree, skill.Name, base.BaseCanonicalSha256)
 	if err != nil {
 		return approval, oops.E(rejectCode, nil, "%s", err.Error())
 	}
@@ -275,17 +321,9 @@ func (s *Service) approveSuggestion(
 	if err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "parse validated skill suggestion").LogError(ctx, logger)
 	}
-	// Omitted files carry the base version's supporting files forward.
-	entries, err := files.resolve(ctx, queries, *authCtx.ProjectID, skill.ID, uuid.NullUUID{UUID: suggestion.BaseVersionID, Valid: true})
-	if err != nil {
-		return approval, oops.E(oops.CodeUnexpected, err, "resolve approved skill version files").LogError(ctx, logger)
-	}
-	parsed, err = parsed.withSupportingFiles(entries)
+	parsed, err = parsed.withSupportingFiles(validated.Files)
 	if err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "digest approved skill files").LogError(ctx, logger)
-	}
-	if parsed.CanonicalSHA256 == base.BaseCanonicalSha256 {
-		return approval, oops.E(rejectCode, nil, "validate proposed skill manifest: content is unchanged from base: %s", ErrSkillSuggestionNoOp.Error())
 	}
 
 	// Taking a subset leaves the suggestion open carrying the rest. Writing
@@ -366,6 +404,7 @@ func (s *Service) approveSuggestion(
 			return approval, oops.E(oops.CodeUnexpected, err, "re-read remaining skill suggestion").LogError(ctx, logger)
 		default:
 			approval.evidence.BaseContent = validated.Content
+			approval.evidence.BaseFiles = proposedTree.Files
 			approval.evidence.Changes, err = queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
 				ProjectID: *authCtx.ProjectID, SuggestionIds: []uuid.UUID{approved.ID},
 			})
@@ -389,15 +428,17 @@ func (s *Service) approveSuggestion(
 
 // approvalContent resolves what a reviewer is taking from a suggestion: every
 // proposed change, or a subset with the rest left to propose. Each change
-// applies to what the changes before it produce, so a subset replays only the
-// taken edits, in their proposed order, onto the current manifest.
+// applies to the file it names, as the changes before it left that file, so a
+// subset replays only the taken edits, in their proposed order, onto the
+// current version. Binary files pass through untouched; a change aimed at one
+// is a conflict.
 func approvalContent(
-	baseContent string,
+	base skilldiff.Tree,
 	changes []repo.ListSkillEditSuggestionChangesRow,
 	changeIDs []uuid.UUID,
-) (string, []repo.ListSkillEditSuggestionChangesRow, error) {
+) (skilldiff.Tree, []repo.ListSkillEditSuggestionChangesRow, error) {
 	if len(changes) == 0 {
-		return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer proposes any changes")
+		return skilldiff.Tree{}, nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer proposes any changes")
 	}
 
 	requested := make(map[uuid.UUID]struct{}, len(changeIDs))
@@ -419,23 +460,23 @@ func approvalContent(
 			remaining = append(remaining, change)
 		}
 		if len(requested) > 0 {
-			return "", nil, oops.E(oops.CodeConflict, nil, "a selected proposed change is no longer part of this suggestion")
+			return skilldiff.Tree{}, nil, oops.E(oops.CodeConflict, nil, "a selected proposed change is no longer part of this suggestion")
 		}
 	}
 
-	content := baseContent
+	tree := base
 	for _, change := range taken {
-		applied, err := skilldiff.Apply(content, change.ProposedDiff)
+		applied, err := tree.ApplyChange(change.Path.String, change.ProposedDiff)
 		if err != nil {
 			if len(changeIDs) > 0 {
-				return "", nil, oops.E(oops.CodeConflict, nil, "a selected proposed change no longer applies to the current skill")
+				return skilldiff.Tree{}, nil, oops.E(oops.CodeConflict, nil, "a selected proposed change no longer applies to the current skill")
 			}
-			return "", nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+			return skilldiff.Tree{}, nil, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
 		}
-		content = applied
+		tree = applied
 	}
 
-	return content, remaining, nil
+	return tree, remaining, nil
 }
 
 func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSuggestionPayload) (*gen.ApproveSkillSuggestionResult, error) {
@@ -544,10 +585,15 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill suggestion changes for dismissal").LogError(ctx, logger)
 	}
+	baseFiles, err := LoadSkillVersionFiles(ctx, queries, *authCtx.ProjectID, suggestion.SkillID, suggestion.BaseVersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill suggestion base files for dismissal").LogError(ctx, logger)
+	}
 	evidence := mv.SkillEditSuggestionEvidence{
 		SkillName:            skill.Name,
 		SkillDisplayName:     skill.DisplayName,
 		BaseContent:          details.BaseContent,
+		BaseFiles:            baseFiles,
 		Changes:              changes,
 		FeedbackCount:        details.FeedbackCount,
 		FeedbackSessionCount: details.FeedbackSessionCount,

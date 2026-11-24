@@ -1,5 +1,7 @@
-// Package skilldiff represents a proposed SKILL.md edit as a unified diff so a
-// suggestion outlives the exact version it was generated against.
+// Package skilldiff represents a proposed edit to a skill file as a unified diff
+// so a suggestion outlives the exact version it was generated against. A diff
+// names the file it edits in its a/<path> and b/<path> headers; SKILL.md and
+// text supporting files such as references/REFERENCE.md diff the same way.
 package skilldiff
 
 import (
@@ -10,6 +12,8 @@ import (
 
 	"github.com/gitleaks/go-gitdiff/gitdiff"
 	"github.com/pmezard/go-difflib/difflib"
+
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 // ErrConflict reports that a diff no longer lines up with the content it is
@@ -17,21 +21,28 @@ import (
 var ErrConflict = errors.New("skill diff conflicts with the current content")
 
 const (
-	fromFile     = "a/SKILL.md"
-	toFile       = "b/SKILL.md"
+	fromPrefix   = "a/"
+	toPrefix     = "b/"
 	contextLines = 3
 )
 
-// Unified renders the edit that turns base into proposed. Both sides are
-// normalized to end in a newline, and an unchanged edit renders as the empty
-// diff, which Apply replays as the identity.
+// Unified renders the edit that turns base into proposed for SKILL.md. Both
+// sides are normalized to end in a newline, and an unchanged edit renders as
+// the empty diff, which Apply replays as the identity.
 func Unified(base, proposed string) (string, error) {
+	return UnifiedFile(skilltree.ManifestPath, base, proposed)
+}
+
+// UnifiedFile renders the edit that turns base into proposed for the skill file
+// at path, relative to the skill root. It behaves like Unified except for the
+// file named in the a/ and b/ headers.
+func UnifiedFile(path, base, proposed string) (string, error) {
 	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A:        splitLines(base),
-		FromFile: fromFile,
+		FromFile: fromPrefix + path,
 		FromDate: "",
 		B:        splitLines(proposed),
-		ToFile:   toFile,
+		ToFile:   toPrefix + path,
 		ToDate:   "",
 		Eol:      "",
 		Context:  contextLines,

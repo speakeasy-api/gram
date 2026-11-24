@@ -1248,8 +1248,9 @@ var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {
 	Attribute("feedback_count", Int64, "Feedback records cited as the reason for this change.")
 	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind this change.")
 	Attribute("created_at", String, "When the change was recorded.", func() { Format(FormatDateTime) })
+	Attribute("path", String, "The file the change edits, relative to the skill root: SKILL.md or a supporting file such as references/REFERENCE.md.")
 
-	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at")
+	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at", "path")
 })
 
 var SkillFeedbackSource = Type("SkillFeedbackSource", String, func() {

@@ -5795,6 +5795,9 @@ type SkillEditSuggestionChangeResponseBody struct {
 	FeedbackSessionCount int64 `form:"feedback_session_count" json:"feedback_session_count" xml:"feedback_session_count"`
 	// When the change was recorded.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The file the change edits, relative to the skill root: SKILL.md or a
+	// supporting file such as references/REFERENCE.md.
+	Path string `form:"path" json:"path" xml:"path"`
 }
 
 // SkillFeedbackCountsResponseBody is used to define fields on response body

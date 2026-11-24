@@ -400,15 +400,22 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 		return err
 	}
 
+	supportingFiles, err := domainskills.LoadSkillVersionFiles(ctx, repo.New(p.db), projectID, input.SkillID, input.SkillVersionID)
+	if err != nil {
+		result.Retryable++
+		return fmt.Errorf("load skill files for efficacy judge: %w", err)
+	}
+
 	judged, err := p.judge.Judge(ctx, JudgeInput{
-		OrgID:        input.OrganizationID,
-		ProjectID:    projectID.String(),
-		SkillName:    input.SkillName,
-		SkillURN:     urn.NewSkill(input.SkillID).String(),
-		SkillContent: input.SkillContent,
-		Surface:      input.Surface,
-		ActivatedAt:  input.ObservedAt.Time,
-		Transcript:   transcript,
+		OrgID:           input.OrganizationID,
+		ProjectID:       projectID.String(),
+		SkillName:       input.SkillName,
+		SkillURN:        urn.NewSkill(input.SkillID).String(),
+		SkillContent:    input.SkillContent,
+		SupportingFiles: supportingFiles,
+		Surface:         input.Surface,
+		ActivatedAt:     input.ObservedAt.Time,
+		Transcript:      transcript,
 	})
 	switch {
 	case err != nil && errors.Is(err, ErrModelFailure):

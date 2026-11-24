@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
@@ -102,11 +103,17 @@ func (m parsedSkillManifest) withSupportingFiles(files []skilltree.Entry) (parse
 	return m, nil
 }
 
-// ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
+// ValidatedSkillSuggestion is a proposed skill tree that differs canonically
 // from its base version.
 type ValidatedSkillSuggestion struct {
-	Content         string
+	// Content is the proposed SKILL.md.
+	Content string
+
+	// CanonicalSHA256 is the tree digest of the proposed SKILL.md and Files.
 	CanonicalSHA256 string
+
+	// Files are the proposed supporting files, validated and sorted by path.
+	Files []skilltree.Entry
 }
 
 // ValidateSkillManifest applies the canonical SKILL.md parser and spec
@@ -126,9 +133,12 @@ func ValidateSkillManifest(content, expectedName string) error {
 }
 
 // ValidateSkillSuggestion applies the SKILL.md parser and spec validation used
-// by skill versions, verifies the target skill, and rejects canonical no-ops.
-func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) (ValidatedSkillSuggestion, error) {
-	proposed, err := parseSkillManifest(content)
+// by skill versions, checks the supporting files against the skill tree rules,
+// verifies the target skill, and rejects canonical no-ops. A proposal is a
+// no-op when its tree digest equals the base version's, so an edit to a
+// supporting file alone is a real change.
+func ValidateSkillSuggestion(proposedTree skilldiff.Tree, expectedName, baseCanonicalSHA256 string) (ValidatedSkillSuggestion, error) {
+	proposed, err := parseSkillManifest(proposedTree.Manifest)
 	if err != nil {
 		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: %w", err)
 	}
@@ -139,13 +149,18 @@ func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) 
 		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: name %q does not match skill %q", proposed.Name, expectedName)
 	}
 
-	if proposed.CanonicalSHA256 == baseCanonicalSHA256 {
+	treeSHA256, entries, err := CanonicalTreeSHA256(proposedTree.Manifest, proposedTree.Files)
+	if err != nil {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill tree: %w", err)
+	}
+	if treeSHA256 == baseCanonicalSHA256 {
 		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: content is unchanged from base: %w", ErrSkillSuggestionNoOp)
 	}
 
 	return ValidatedSkillSuggestion{
 		Content:         proposed.RawContent,
-		CanonicalSHA256: proposed.CanonicalSHA256,
+		CanonicalSHA256: treeSHA256,
+		Files:           entries,
 	}, nil
 }
 

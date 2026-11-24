@@ -6982,6 +6982,7 @@ func unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionCha
 		FeedbackCount:        *v.FeedbackCount,
 		FeedbackSessionCount: *v.FeedbackSessionCount,
 		CreatedAt:            *v.CreatedAt,
+		Path:                 *v.Path,
 	}
 
 	return res

@@ -1068,17 +1068,19 @@ INSERT INTO skill_edit_suggestion_changes (
   suggestion_id,
   proposed_diff,
   rationale,
-  position
+  position,
+  path
 )
 SELECT
   suggestion.project_id,
   suggestion.id,
   $1,
   $2,
-  $3
+  $3,
+  $4
 FROM skill_edit_suggestions suggestion
-WHERE suggestion.project_id = $4
-  AND suggestion.id = $5
+WHERE suggestion.project_id = $5
+  AND suggestion.id = $6
 RETURNING id, project_id, suggestion_id, proposed_diff, rationale, position, path, created_at, updated_at
 `
 
@@ -1086,6 +1088,7 @@ type CreateSkillEditSuggestionChangeParams struct {
 	ProposedDiff string
 	Rationale    string
 	Position     int32
+	Path         pgtype.Text
 	ProjectID    uuid.UUID
 	SuggestionID uuid.UUID
 }
@@ -1095,6 +1098,7 @@ func (q *Queries) CreateSkillEditSuggestionChange(ctx context.Context, arg Creat
 		arg.ProposedDiff,
 		arg.Rationale,
 		arg.Position,
+		arg.Path,
 		arg.ProjectID,
 		arg.SuggestionID,
 	)
