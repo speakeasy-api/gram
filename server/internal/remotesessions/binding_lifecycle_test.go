@@ -26,16 +26,22 @@ func TestRemoteSessionSweeps_AttachmentReachParity(t *testing.T) {
 	t.Parallel()
 	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
 	for _, state := range states {
-		t.Run("refresh/"+state, func(t *testing.T) { checkAttachmentReachLifecycle(t, state, false) })
+		t.Run("refresh/"+state, func(t *testing.T) {
+			t.Parallel()
+			checkAttachmentReachLifecycle(t, state, false)
+		})
 		// Refresh policy is intentionally not part of recheck reach.
 		if state != "opt-out" && state != "policy-disabled" {
-			t.Run("recheck/"+state, func(t *testing.T) { checkAttachmentReachLifecycle(t, state, true) })
+			t.Run("recheck/"+state, func(t *testing.T) {
+				t.Parallel()
+				checkAttachmentReachLifecycle(t, state, true)
+			})
 		}
 	}
 }
 
 func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool) {
-	t.Parallel()
+	t.Helper()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
