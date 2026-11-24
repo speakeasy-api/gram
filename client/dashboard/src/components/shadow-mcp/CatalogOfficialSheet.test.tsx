@@ -324,7 +324,7 @@ describe("CatalogOfficialSheet", () => {
     ).toBeTruthy();
   });
 
-  it("keeps Turn on off until the sign-in is saved, and shows why setup is needed", async () => {
+  it("keeps Turn on off until a credential is set up, and shows why setup is needed", async () => {
     mocks.signInReady = false;
     installWith([
       {
@@ -342,7 +342,9 @@ describe("CatalogOfficialSheet", () => {
     const turnOn = screen.getByRole("button", { name: "Turn on and link" });
     expect((turnOn as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.getByText("Save the sign-in settings above to turn it on."),
+      screen.getByText(
+        "Add or turn on an upstream credential above to enable this server.",
+      ),
     ).toBeTruthy();
   });
 

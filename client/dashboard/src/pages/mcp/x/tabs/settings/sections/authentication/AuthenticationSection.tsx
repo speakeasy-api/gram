@@ -29,29 +29,10 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { SetupStepBanner } from "./SetupStepBanner";
-import { UpstreamCredentialsSection } from "./UpstreamCredentialsSection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
-function authenticationSectionDescription(
-  isUnproxied: boolean,
-  isRemoteMcp: boolean,
-  upstreamName: string,
-): string {
-  if (isUnproxied) {
-    return "Speakeasy doesn't manage authentication for unproxied servers.";
-  }
-  if (isRemoteMcp) {
-    return `How callers are identified to ${upstreamName}. Changes take effect on new connections.`;
-  }
-  return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
-}
-
-/**
- * Chrome wrapper for the remote/tunneled MCP server settings tab. The
- * target-agnostic body below also mounts on the toolset detail page inside
- * that page's own section chrome.
- */
+/** Caller authentication for non-remote server settings. */
 export function AuthenticationSection({
   mcpServer,
   mcpUrl,
@@ -61,30 +42,16 @@ export function AuthenticationSection({
   mcpUrl?: string;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
-  const isRemoteMcp = !!mcpServer.remoteMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
-
-  if (isRemoteMcp && !isUnproxied) {
-    return (
-      <div id={MCP_AUTHENTICATION_SECTION_ID}>
-        <SetupStepBanner mcpServer={mcpServer} />
-        <UpstreamCredentialsSection key={mcpServer.id} mcpServer={mcpServer} />
-      </div>
-    );
-  }
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>
-          {isRemoteMcp ? "Identity" : "Authentication"}
-        </SettingsSection.Title>
+        <SettingsSection.Title>Authentication</SettingsSection.Title>
         <SettingsSection.Description>
-          {authenticationSectionDescription(
-            isUnproxied,
-            isRemoteMcp,
-            mcpServer.name?.trim() || "the upstream service",
-          )}
+          {isUnproxied
+            ? "Speakeasy doesn't manage authentication for unproxied servers."
+            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
         </SettingsSection.Description>
       </SettingsSection.Header>
       {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
@@ -123,23 +90,6 @@ function UnproxiedAuthenticationNotice(): JSX.Element {
  * heading, so each shell supplies only the header above it.
  */
 export function AuthenticationSectionBody({
-  target,
-  additionalSetupAction,
-}: {
-  target: AuthTarget;
-  additionalSetupAction?: ReactNode;
-}): JSX.Element {
-  // Remote targets configure upstream through the server-scoped typed panel.
-  if (target.kind === "remote-mcp") return <></>;
-  return (
-    <StandardAuthenticationSectionBody
-      target={target}
-      additionalSetupAction={additionalSetupAction}
-    />
-  );
-}
-
-function StandardAuthenticationSectionBody({
   target,
   additionalSetupAction,
 }: {

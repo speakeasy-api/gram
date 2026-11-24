@@ -13,15 +13,6 @@ export { REDACTED_SECRET } from "./model/secret";
 
 export { providerUrlLabel } from "./model/provider";
 
-export { headerDraftErrors } from "./drafts/headerDrafts";
-export type {
-  HeaderDraft,
-  HeaderDraftError,
-  HeaderSource,
-} from "./drafts/headerDrafts";
-
-export type { HeaderDraftsState } from "./drafts/useHeaderDrafts";
-
 export { useAgentCredentialFields } from "./drafts/useCredentialDraft";
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 

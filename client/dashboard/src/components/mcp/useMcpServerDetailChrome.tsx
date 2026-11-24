@@ -610,8 +610,8 @@ function identitySummary(
       };
     }
   }
-  if (auth.needsHeaderCleanup)
-    return { label: "Needs cleanup", href, warn: true, tone: "warning" };
+  if (auth.hasLegacyForwardedAuthorization)
+    return { label: "Add a credential", href, warn: true, tone: "warning" };
   if (setupPending) return setupPending;
   const presentation = enumPresentation(
     UPSTREAM_AUTH_STATUS,

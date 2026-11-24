@@ -58,15 +58,13 @@ lib/remote-identity/
 
   model/                    pure. no React, no network
     identity.ts             IdentityMode and its derivation
-    headers.ts              Authorization rules, ManagedHeader
+    headers.ts              Authorization header classification
     provider.ts             capabilities, tier, display names
     credential.ts           AgentCredential <-> Authorization header
     secret.ts               Secret: { unchanged } | { set, value }
 
   drafts/                   editing server state
     draft.ts                Draft<T>, reconcile, DraftError
-    headerDrafts.ts         one header row, and the rules for writing it
-    useHeaderDrafts.ts      the header rows, as one editable list
     useIdentityDraft.ts     the provider and client choice
     useCredentialDraft.ts   the static credential
 
@@ -94,28 +92,9 @@ components stay free of query wiring.
   `pages/remote-identity-providers/` edit an issuer _as an issuer_. They
   consume `model/` but keep their own forms — AIM-230 deliberately keeps the
   complex OAuth surface there, out of the linear setup flow.
-- **Header row markup.** `HeadersSection` still draws the rows. It is
-  presentational now: the state, the validation and the write are
-  `useHeaderDrafts`, so the identity panel's Save can commit rows and identity
-  together.
-
-## The rule the module exists to enforce
-
-The identity choice **owns** the `Authorization` header: a shared credential writes
-one, User Identity forbids one, Manual rejects the name outright. That
-ownership flows one direction only.
-
-```ts
-type ManagedHeader = {
-  ownedBy: "user" | "agent";
-  headerId: string | null; // null: owned, not written yet
-};
-```
-
-`HeadersSection` used to call the derivation itself and re-find the managed row
-— the same computation the identity section had already done, from a second
-fetch that nothing kept in step. One owner publishes it now, and the rows
-neither validate that row nor write it.
+- **Typed credential headers.** The credential editor under
+  `pages/mcp/x/tabs/settings/sections/authentication/` edits the headers on
+  an offered credential. Identity settings no longer edit source headers.
 
 ## Drafts
 

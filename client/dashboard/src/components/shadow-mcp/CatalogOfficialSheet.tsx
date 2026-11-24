@@ -646,7 +646,7 @@ function TurnOnAndLink({
           (unavailable
             ? "Could not verify upstream sign-in."
             : signInOpen && !checking
-              ? "Save the sign-in settings above to turn it on."
+              ? "Add or turn on an upstream credential above to enable this server."
               : "")}
       </Text>
       <Button
