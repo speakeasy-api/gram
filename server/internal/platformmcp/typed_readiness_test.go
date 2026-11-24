@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -140,8 +141,10 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	require.NoError(t, err)
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "typed-offer-target", Version: "1.0.0"}, nil)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, nil)
+	var allowAnonymous atomic.Bool
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer usable-offer-token" {
+		authorization := r.Header.Get("Authorization")
+		if authorization != "Bearer usable-offer-token" && !(authorization == "" && allowAnonymous.Load()) {
 			http.Error(w, "authorization required", http.StatusUnauthorized)
 			return
 		}
@@ -167,4 +170,13 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	result = f.probe(t, conn, nil)
 	require.Equal(t, ReadinessNeedsConfiguration, result.State)
 	require.Equal(t, "upstream_identity_provider_not_configured", result.EvidenceCode)
+
+	// The same offer-free target can still check readiness when the upstream
+	// accepts anonymous requests; it must not borrow the sibling's grant.
+	allowAnonymous.Store(true)
+	result = f.probe(t, conn, nil)
+	require.Equal(t, ReadinessReady, result.State)
+	require.Equal(t, "tools_list_ok", result.EvidenceCode)
+	require.Equal(t, "anonymous", result.AuthorizationIdentity.Absence)
+	require.Equal(t, uuid.Nil, result.AuthorizationIdentity.RemoteSessionClientID)
 }
