@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
@@ -76,7 +77,9 @@ func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec
 
 func seedNativePostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
 	t.Helper()
-	_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec)
+	logger := testenv.NewLogger(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
+	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec)
 	require.NoError(t, err)
 }
 

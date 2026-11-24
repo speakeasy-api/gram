@@ -1,11 +1,13 @@
 package authz
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestMandatoryWorkloadAuthClientUsesAdmittedOwner(t *testing.T) {

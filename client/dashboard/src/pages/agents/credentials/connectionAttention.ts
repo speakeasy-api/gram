@@ -118,3 +118,48 @@ export function missingSignInsSentence(
         ];
   return `${progress}Still needs a connection to ${andList.format(parts)}.`;
 }
+
+/**
+ * What a re-read of a server's connection found, told once it lands. An
+ * expired connection reads the same before and after, so without this the
+ * refresh looks like it did nothing.
+ */
+export function refreshOutcome(
+  serverName: string,
+  connection: ServerConnection,
+): { tone: "success" | "warning" | "info" | "error"; message: string } {
+  if (connection.status === "ready")
+    return {
+      tone: "success",
+      message: `The connection to ${serverName} is working.`,
+    };
+  if (connection.status === "ended")
+    return {
+      tone: "warning",
+      message: `The connection to ${serverName} is still expired. Reauthenticate to sign in again.`,
+    };
+  // Some of its sign-ins may already be connected: say what is left, not
+  // that nothing is there.
+  if (connection.status === "missing" && (connection.connected ?? 0) > 0)
+    return {
+      tone: "info",
+      message: `Checked ${serverName}. ${
+        missingSignInsSentence({ name: serverName }, connection) ??
+        "It still needs another sign-in."
+      }`,
+    };
+  if (connection.status === "missing")
+    return {
+      tone: "info",
+      message: `No connection to ${serverName} yet. Connect an account to add one.`,
+    };
+  if (connection.status === "error")
+    return {
+      tone: "error",
+      message: `Could not check the connection to ${serverName}. Try again.`,
+    };
+  return {
+    tone: "info",
+    message: `Checked the connection to ${serverName}.`,
+  };
+}

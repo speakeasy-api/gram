@@ -144,9 +144,9 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 	}
 }
 
-// A server that moves onto a target with no other consumer keeps its offers.
-// It does not inherit either issuer's compatibility parents.
-func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourceBinding(t *testing.T) {
+// A server keeps its configured offer, but a downstream issuer move does not
+// turn leftover links at either issuer into upstream offers.
+func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerKeepsOnlyConfiguredOffer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -162,10 +162,9 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
-	want := []uuid.UUID{ownRegistration}
 	registrations, err := authclientbackfill.New(ti.conn).ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{movedServer}})
 	require.NoError(t, err)
-	assert.Equal(t, want, registrations)
+	assert.Equal(t, []uuid.UUID{ownRegistration}, registrations)
 }
 
 func leftoverEnableEnforcement(t *testing.T, ctx context.Context, ti *testInstance, enforced bool) {

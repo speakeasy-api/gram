@@ -768,6 +768,15 @@ type ClearOrganizationHooksRolloutRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// RunTailscaleOAuthMigrationStepRequestBody is the type of the "admin" service
+// "runTailscaleOAuthMigrationStep" endpoint HTTP request body.
+type RunTailscaleOAuthMigrationStepRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The step to run.
+	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -3483,6 +3492,57 @@ type ClearOrganizationHooksRolloutResponseBody struct {
 	// Whether the organization's next publish moves its hooks plugin to
 	// current_version. Absent for legacy_flag, which the admin server cannot read.
 	Eligible *bool `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationResponseBody is the type of the "admin" service
+// "listTailscaleOAuthMigration" endpoint HTTP response body.
+type ListTailscaleOAuthMigrationResponseBody struct {
+	// Every organization with saved Tailscale OAuth credentials, by name.
+	Organizations []*AdminTailscaleOAuthMigrationOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// How long an organization must stay in dual_write before it can be finalized.
+	MinimumDualWriteSeconds int64 `form:"minimum_dual_write_seconds" json:"minimum_dual_write_seconds" xml:"minimum_dual_write_seconds"`
+}
+
+// RunTailscaleOAuthMigrationStepResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body.
+type RunTailscaleOAuthMigrationStepResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64 `form:"waiting" json:"waiting" xml:"waiting"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64 `form:"unreadable" json:"unreadable" xml:"unreadable"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -28016,6 +28076,424 @@ type ClearOrganizationHooksRolloutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListTailscaleOAuthMigrationUnavailableResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unavailable" error.
+type ListTailscaleOAuthMigrationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnauthorizedResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListTailscaleOAuthMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationForbiddenResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type ListTailscaleOAuthMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationBadRequestResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTailscaleOAuthMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationNotFoundResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "not_found" error.
+type ListTailscaleOAuthMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationConflictResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "conflict" error.
+type ListTailscaleOAuthMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListTailscaleOAuthMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationInvalidResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "invalid" error.
+type ListTailscaleOAuthMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListTailscaleOAuthMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationUnexpectedResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type ListTailscaleOAuthMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTailscaleOAuthMigrationGatewayErrorResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListTailscaleOAuthMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnavailableResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unavailable" error.
+type RunTailscaleOAuthMigrationStepUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnauthorizedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unauthorized" error.
+type RunTailscaleOAuthMigrationStepUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepForbiddenResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "forbidden" error.
+type RunTailscaleOAuthMigrationStepForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepBadRequestResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "bad_request" error.
+type RunTailscaleOAuthMigrationStepBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepNotFoundResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "not_found" error.
+type RunTailscaleOAuthMigrationStepNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepConflictResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "conflict" error.
+type RunTailscaleOAuthMigrationStepConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepInvalidResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body for the
+// "invalid" error.
+type RunTailscaleOAuthMigrationStepInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepInvariantViolationResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RunTailscaleOAuthMigrationStepInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepUnexpectedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unexpected" error.
+type RunTailscaleOAuthMigrationStepUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunTailscaleOAuthMigrationStepGatewayErrorResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "gateway_error" error.
+type RunTailscaleOAuthMigrationStepGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -29809,6 +30287,48 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetBy string `form:"set_by" json:"set_by" xml:"set_by"`
 	// When the change was made.
 	SetAt string `form:"set_at" json:"set_at" xml:"set_at"`
+}
+
+// AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
+// fields on response body types.
+type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The transition state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64 `form:"generation" json:"generation" xml:"generation"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64 `form:"waiting" json:"waiting" xml:"waiting"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64 `form:"unreadable" json:"unreadable" xml:"unreadable"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64 `form:"platform_copies" json:"platform_copies" xml:"platform_copies"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -33088,6 +33608,52 @@ func NewClearOrganizationHooksRolloutResponseBody(res *admin.AdminOrganizationHo
 	}
 	if res.DefaultPin != nil {
 		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationResponseBody builds the HTTP response body
+// from the result of the "listTailscaleOAuthMigration" endpoint of the "admin"
+// service.
+func NewListTailscaleOAuthMigrationResponseBody(res *admin.AdminTailscaleOAuthMigrationOrganizations) *ListTailscaleOAuthMigrationResponseBody {
+	body := &ListTailscaleOAuthMigrationResponseBody{
+		MinimumDualWriteSeconds: res.MinimumDualWriteSeconds,
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminTailscaleOAuthMigrationOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminTailscaleOAuthMigrationOrganizationToAdminTailscaleOAuthMigrationOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminTailscaleOAuthMigrationOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepResponseBody builds the HTTP response body
+// from the result of the "runTailscaleOAuthMigrationStep" endpoint of the
+// "admin" service.
+func NewRunTailscaleOAuthMigrationStepResponseBody(res *admin.AdminTailscaleOAuthMigrationOrganization) *RunTailscaleOAuthMigrationStepResponseBody {
+	body := &RunTailscaleOAuthMigrationStepResponseBody{
+		OrganizationID:          res.OrganizationID,
+		Name:                    res.Name,
+		Slug:                    res.Slug,
+		State:                   res.State,
+		Generation:              res.Generation,
+		StateChangedAt:          res.StateChangedAt,
+		Waiting:                 res.Waiting,
+		Unreadable:              res.Unreadable,
+		PlatformCopies:          res.PlatformCopies,
+		LastBackfillStartedAt:   res.LastBackfillStartedAt,
+		LastBackfillCompletedAt: res.LastBackfillCompletedAt,
+		LastBackfillError:       res.LastBackfillError,
+		LastVerifiedAt:          res.LastVerifiedAt,
+		PlatformCopiesClearedAt: res.PlatformCopiesClearedAt,
+		VerificationFailures:    res.VerificationFailures,
 	}
 	return body
 }
@@ -52348,6 +52914,336 @@ func NewClearOrganizationHooksRolloutGatewayErrorResponseBody(res *goa.ServiceEr
 	return body
 }
 
+// NewListTailscaleOAuthMigrationUnavailableResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnavailableResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnavailableResponseBody {
+	body := &ListTailscaleOAuthMigrationUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnauthorizedResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnauthorizedResponseBody {
+	body := &ListTailscaleOAuthMigrationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationForbiddenResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationForbiddenResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationForbiddenResponseBody {
+	body := &ListTailscaleOAuthMigrationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationBadRequestResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationBadRequestResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationBadRequestResponseBody {
+	body := &ListTailscaleOAuthMigrationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationNotFoundResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationNotFoundResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationNotFoundResponseBody {
+	body := &ListTailscaleOAuthMigrationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationConflictResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationConflictResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationConflictResponseBody {
+	body := &ListTailscaleOAuthMigrationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody {
+	body := &ListTailscaleOAuthMigrationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationInvalidResponseBody builds the HTTP response
+// body from the result of the "listTailscaleOAuthMigration" endpoint of the
+// "admin" service.
+func NewListTailscaleOAuthMigrationInvalidResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationInvalidResponseBody {
+	body := &ListTailscaleOAuthMigrationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationInvariantViolationResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationInvariantViolationResponseBody {
+	body := &ListTailscaleOAuthMigrationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationUnexpectedResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationUnexpectedResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationUnexpectedResponseBody {
+	body := &ListTailscaleOAuthMigrationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTailscaleOAuthMigrationGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listTailscaleOAuthMigration" endpoint
+// of the "admin" service.
+func NewListTailscaleOAuthMigrationGatewayErrorResponseBody(res *goa.ServiceError) *ListTailscaleOAuthMigrationGatewayErrorResponseBody {
+	body := &ListTailscaleOAuthMigrationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnavailableResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnavailableResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnavailableResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepForbiddenResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepForbiddenResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepForbiddenResponseBody {
+	body := &RunTailscaleOAuthMigrationStepForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepBadRequestResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepBadRequestResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepBadRequestResponseBody {
+	body := &RunTailscaleOAuthMigrationStepBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepNotFoundResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepNotFoundResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepNotFoundResponseBody {
+	body := &RunTailscaleOAuthMigrationStepNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepConflictResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepConflictResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepConflictResponseBody {
+	body := &RunTailscaleOAuthMigrationStepConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepInvalidResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepInvalidResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepInvalidResponseBody {
+	body := &RunTailscaleOAuthMigrationStepInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody {
+	body := &RunTailscaleOAuthMigrationStepInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepUnexpectedResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepUnexpectedResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepUnexpectedResponseBody {
+	body := &RunTailscaleOAuthMigrationStepUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "runTailscaleOAuthMigrationStep"
+// endpoint of the "admin" service.
+func NewRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(res *goa.ServiceError) *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody {
+	body := &RunTailscaleOAuthMigrationStepGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -54008,6 +54904,27 @@ func NewClearOrganizationHooksRolloutPayload(body *ClearOrganizationHooksRollout
 	return v
 }
 
+// NewListTailscaleOAuthMigrationPayload builds a admin service
+// listTailscaleOAuthMigration endpoint payload.
+func NewListTailscaleOAuthMigrationPayload(adminSessionToken *string) *admin.ListTailscaleOAuthMigrationPayload {
+	v := &admin.ListTailscaleOAuthMigrationPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepPayload builds a admin service
+// runTailscaleOAuthMigrationStep endpoint payload.
+func NewRunTailscaleOAuthMigrationStepPayload(body *RunTailscaleOAuthMigrationStepRequestBody, adminSessionToken *string) *admin.RunTailscaleOAuthMigrationStepPayload {
+	v := &admin.RunTailscaleOAuthMigrationStepPayload{
+		OrganizationID: *body.OrganizationID,
+		Step:           *body.Step,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -55145,6 +56062,23 @@ func ValidateSetOrganizationHooksRolloutRequestBody(body *SetOrganizationHooksRo
 func ValidateClearOrganizationHooksRolloutRequestBody(body *ClearOrganizationHooksRolloutRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepRequestBody runs the validations
+// defined on RunTailscaleOAuthMigrationStepRequestBody
+func ValidateRunTailscaleOAuthMigrationStepRequestBody(body *RunTailscaleOAuthMigrationStepRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Step == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
+	}
+	if body.Step != nil {
+		if !(*body.Step == "enroll" || *body.Step == "backfill" || *body.Step == "finalize" || *body.Step == "clear_platform_copies" || *body.Step == "rollback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.step", *body.Step, []any{"enroll", "backfill", "finalize", "clear_platform_copies", "rollback"}))
+		}
 	}
 	return
 }

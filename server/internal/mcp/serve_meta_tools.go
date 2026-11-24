@@ -245,34 +245,56 @@ func describeToolsMemberArguments(slug string, toolNames []string) []byte {
 	return arguments
 }
 
+// memberToolDispositions is which member tools one gateway call may run.
+type memberToolDispositions string
+
+const (
+	// memberToolAnyDisposition runs any member tool the caller may call.
+	memberToolAnyDisposition memberToolDispositions = "any"
+
+	// memberToolReadOnly runs only member tools whose effective annotations
+	// classify them read-only, the classification per-tool RBAC uses.
+	memberToolReadOnly memberToolDispositions = "read_only"
+)
+
+// readOnlyToolRefusal is the isError message for a tool that
+// execute_read_only_tool may not run.
+func readOnlyToolRefusal(toolName string) string {
+	return fmt.Sprintf("tool %q is not annotated read-only, so %s cannot run it; call it with %s instead", toolName, metamcp.ToolExecuteReadOnlyTool, metamcp.ToolExecuteTool)
+}
+
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The
 // synthetic tools/call carries the outer request ID, so the dispatch envelope
-// answers directly; the result's _meta identity stays the member's.
+// answers directly; the result's _meta identity stays the member's. toolName
+// is the gateway tool called, execute_tool or execute_read_only_tool.
 func (s *Service) handleMetaExecuteToolCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	gate *metaGateContext,
 	members []metaMember,
 	req *rawRequest,
+	toolName string,
 	argsRaw json.RawMessage,
 	meta *mcprequests.WireMeta,
+	dispositions memberToolDispositions,
 ) (json.RawMessage, error) {
 	start := time.Now()
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
-		s.logMetaToolCallFailure(ctx, gate, metamcp.ToolExecuteTool, argsRaw, newMetaToolCallAttempt(start), err)
+		s.logMetaToolCallFailure(ctx, gate, toolName, argsRaw, newMetaToolCallAttempt(start), err)
 		return nil, err
 	}
 
-	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
+	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta, dispositions)
 }
 
-// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
-// and Code Mode. A call that fails before its member dispatch writes the
-// member's tool_call row is logged here, so every failed call leaves one row
-// stamped with this gateway.
-func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool
+// and execute_read_only_tool, and Code Mode. A call that fails before its
+// member dispatch writes the member's tool_call row is logged here, so every
+// failed call leaves one row stamped with this gateway.
+func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta, dispositions memberToolDispositions) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
+	attempt.dispositions = dispositions
 	// A row from earlier in the request is about something else, not this call.
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
@@ -328,6 +350,19 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
+		// A hosted member's tool is checked once handleToolsCall resolves it.
+		if attempt.dispositions == memberToolReadOnly {
+			dispositions, err := s.remoteProxyManager.Dispositions(ctx, member.serverID.String(), member.projectID.String())
+			if err != nil {
+				return nil, oops.E(oops.CodeUnavailable, err, "could not read the tool's annotations; retry shortly").LogError(ctx, logger)
+			}
+			// A tool the catalog has not recorded has no disposition and is refused.
+			if dispositions[toolName] != authz.DispositionReadOnly {
+				message := readOnlyToolRefusal(toolName)
+				attempt.fail(http.StatusForbidden, message)
+				return marshalMetaToolError(ctx, logger, req.ID, message)
+			}
+		}
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 

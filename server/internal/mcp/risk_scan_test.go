@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -652,7 +653,7 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 		Scale: pgtype.Int4{Int32: 1, Valid: true},
 	})
 	require.NoError(t, err)
-	_, err = deployments.CreateDeploymentFunctionsAccess(ctx, deploymentsrepo.CreateDeploymentFunctionsAccessParams{
+	_, err = testrepo.New(ti.conn).CreateFunctionsAccessFixture(ctx, testrepo.CreateFunctionsAccessFixtureParams{
 		ProjectID: projectID, DeploymentID: deploymentID, FunctionID: function.ID,
 		EncryptionKey: conv.NewSecret([]byte("unused-runner-key")), BearerFormat: conv.ToPGText("v1"),
 	})

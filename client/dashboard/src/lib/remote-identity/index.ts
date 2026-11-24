@@ -7,20 +7,8 @@
  * consumers import — not everything the module happens to define. Internals
  * stay internal until something outside needs them.
  */
-export type { IdentityMode } from "./model/identity";
-
-export { REDACTED_SECRET } from "./model/secret";
 
 export { providerUrlLabel } from "./model/provider";
-
-export { headerDraftErrors } from "./drafts/headerDrafts";
-export type {
-  HeaderDraft,
-  HeaderDraftError,
-  HeaderSource,
-} from "./drafts/headerDrafts";
-
-export type { HeaderDraftsState } from "./drafts/useHeaderDrafts";
 
 export { useAgentCredentialFields } from "./drafts/useCredentialDraft";
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";

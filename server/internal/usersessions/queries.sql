@@ -2534,8 +2534,9 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 
 -- name: ListRemoteSessionUpstreamsForSubjects :many
 -- The outbound leg of the brokered connections on one page of user_sessions.
--- For a user, inventory attributes an upstream grant to the sign-in issuer
--- recorded on the grant, not to other issuers linked to its registration.
+-- A user grant keeps its original issuer provenance even after same-tenant
+-- re-consent. Show it under that issuer, or under another issuer that reaches
+-- its registration through a live typed offer, not a compatibility link.
 -- For an agent, only the exact pinned owner session is inventory evidence.
 -- The compatibility parent for its FK is not authorization. Reauthorization
 -- of that same owner session does not substitute another attached session.
@@ -2581,7 +2582,46 @@ JOIN (
      ) AS pair
   ON (
     (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn
-      AND rs.user_session_issuer_id = pair.issuer_id)
+      AND (rs.user_session_issuer_id = pair.issuer_id OR (
+        pair.subject_urn LIKE 'user:%' AND EXISTS (
+          SELECT 1 FROM user_session_issuers AS provenance
+          LEFT JOIN projects AS source_project ON source_project.id = provenance.project_id
+          WHERE provenance.id = rs.user_session_issuer_id
+            AND (source_project.organization_id = @organization_id::text
+                 OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        ) AND EXISTS (
+          SELECT 1 FROM mcp_auth_clients AS ac
+          JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+            AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+          JOIN projects AS p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
+          JOIN mcp_servers AS ms ON ms.id = offer.mcp_server_id AND ms.project_id = p.id AND ms.deleted IS FALSE
+          JOIN remote_session_clients AS registration ON registration.id = ac.remote_session_client_id AND registration.deleted IS FALSE
+          JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id AND provider.deleted IS FALSE
+          JOIN user_session_issuers AS target ON target.id = pair.issuer_id AND target.deleted IS FALSE
+          WHERE ac.remote_session_client_id = rs.remote_session_client_id
+            AND ac.organization_id = @organization_id::text AND ac.enabled AND ac.deleted IS FALSE
+            AND (ac.project_id IS NULL OR ac.project_id = p.id)
+            AND (registration.project_id = p.id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = p.organization_id)))
+            AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
+            AND p.id = ANY(@project_ids::uuid[])
+            AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = p.organization_id))
+            AND (
+              (sqlc.narg('gateway_id')::uuid IS NULL AND (
+                (NOT @gateway_inventory::boolean AND ms.user_session_issuer_id = target.id)
+                OR (target.project_id IS NULL AND target.organization_id = p.organization_id)
+              ))
+              OR EXISTS (
+                SELECT 1 FROM meta_mcp_server_members AS member
+                JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+                  AND gateway.project_id = member.project_id AND gateway.deleted IS FALSE
+                WHERE member.project_id = p.id AND member.mcp_server_id = ms.id AND member.deleted IS FALSE
+                  AND gateway.user_session_issuer_id = target.id
+                  AND (gateway.id = sqlc.narg('gateway_id')
+                       OR (sqlc.narg('gateway_id')::uuid IS NULL AND NOT @gateway_inventory::boolean))
+              )
+            )
+        )
+      )))
     OR EXISTS (
       SELECT 1
       FROM principal_remote_session_bindings AS b
@@ -3128,6 +3168,18 @@ mapped AS (
                AND other.client_type IN ('remote_session', 'service_account', 'ema')
            ))
     GROUP BY d.mcp_server_id
+),
+-- The insert's foreign-key checks lock each server it records, in whatever
+-- order the plan yields them, interleaved with locks on the clients each row
+-- names. EMA writers (authclientbackfill.LockEMAWriterScope) lock every server
+-- in a project FOR UPDATE in UUID order before its clients, so the servers
+-- are locked here first, in that order, or the two deadlock.
+locked_servers AS (
+    SELECT s.id
+    FROM mcp_servers AS s
+    WHERE s.id IN (SELECT mcp_server_id FROM decided)
+    ORDER BY s.id
+    FOR KEY SHARE OF s
 )
 INSERT INTO upstream_client_selections (
     project_id,
@@ -3154,6 +3206,8 @@ SELECT d.project_id,
        COALESCE(auth_client.attachment_scope, named.attachment_scope),
        @source::text
 FROM decided AS d
+JOIN locked_servers AS locked
+  ON locked.id = d.mcp_server_id
 CROSS JOIN session_issuer AS si
 JOIN projects AS server_project
   ON server_project.id = d.project_id
@@ -3819,7 +3873,7 @@ SELECT id FROM projects WHERE organization_id = @organization_id AND deleted IS 
 -- sessions authorize all endpoints using that issuer; resource-bound sessions
 -- authorize only the selected gateway's endpoint URLs.
 WITH members AS (
-SELECT ms.id, ac.remote_session_client_id
+SELECT ms.id, p.id AS project_id, ac.remote_session_client_id
  FROM mcp_servers ms
  JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
  JOIN mcp_server_auth_clients offer ON offer.mcp_server_id = ms.id
@@ -3886,7 +3940,23 @@ FROM remote_sessions AS rs
 JOIN LATERAL (SELECT s.subject_urn::text AS subject_urn, s.user_session_issuer_id AS issuer_id) AS pair
   ON (
     (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn
-      AND rs.user_session_issuer_id = pair.issuer_id)
+      AND (rs.user_session_issuer_id = pair.issuer_id OR (
+        pair.subject_urn LIKE 'user:%' AND EXISTS (
+          SELECT 1 FROM user_session_issuers AS provenance
+          LEFT JOIN projects AS source_project ON source_project.id = provenance.project_id
+          WHERE provenance.id = rs.user_session_issuer_id
+            AND (source_project.organization_id = @organization_id::text
+                 OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        ) AND EXISTS (
+          SELECT 1 FROM members
+          JOIN remote_session_clients AS registration ON registration.id = members.remote_session_client_id AND registration.deleted IS FALSE
+          JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id AND provider.deleted IS FALSE
+          WHERE registration.id = rs.remote_session_client_id
+            AND (sqlc.narg('server_id')::uuid IS NULL OR members.id = sqlc.narg('server_id'))
+            AND (registration.project_id = members.project_id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = @organization_id::text)))
+            AND (provider.project_id = members.project_id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = @organization_id::text)))
+        )
+      )))
     OR EXISTS (
       SELECT 1
       FROM principal_remote_session_bindings AS b

@@ -208,7 +208,6 @@ func galleryDescriptors() []Descriptor {
 		func(r *Registrar) { registerDeviceCoverageTools(r, &DeviceCoverageService{}) },
 		func(r *Registrar) { registerOrganizationGatewayActivityTool(r, &OrganizationGatewayActivityService{}) },
 		func(r *Registrar) { registerOrganizationGatewayTool(r, &OrganizationGatewayService{}) },
-		func(r *Registrar) { registerGatewayProxyTools(r, &GatewayProxyService{}) },
 		func(r *Registrar) { registerSignalTools(r, &SignalAuthoringService{}) },
 		func(r *Registrar) { registerChatMetadataTools(r, &ChatMetadataService{}) },
 		func(r *Registrar) { registerWorkflowRunTool(r, &WorkflowRunService{}) },

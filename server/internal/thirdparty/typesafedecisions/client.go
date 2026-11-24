@@ -77,8 +77,10 @@ type Client struct {
 	endpoint   string
 }
 
-func New(httpClient *guardian.HTTPClient, resolveKey func(context.Context, string) (string, error)) *Client {
-	return &Client{httpClient: httpClient, resolveKey: resolveKey, endpoint: "https://openrouter.ai/api/alpha/decisions"}
+// New constructs a client that sends Decisions requests to the OpenRouter API
+// at baseURL, such as https://openrouter.ai/api.
+func New(httpClient *guardian.HTTPClient, resolveKey func(context.Context, string) (string, error), baseURL string) *Client {
+	return &Client{httpClient: httpClient, resolveKey: resolveKey, endpoint: strings.TrimSuffix(baseURL, "/") + "/alpha/decisions"}
 }
 
 func (c *Client) Evaluate(ctx context.Context, orgID string, state json.RawMessage, questions map[string]Question) (Result, error) {

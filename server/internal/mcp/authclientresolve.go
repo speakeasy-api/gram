@@ -866,8 +866,8 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 
 // serveAuthClient applies a resolution to a direct proxied endpoint's
 // request: the client's own material, none, or the registration or server
-// headers of a compatibility path. A gap writes the reconnect challenge and a
-// refused client a request-access error.
+// headers of a compatibility path. A gap asks for setup or reconnect; a
+// refused client returns a request-access error.
 func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, res authClientResolution) (upstreamChoice, error) {
 	var none upstreamChoice
 	// The connection the permit was decided for binds every token path,
@@ -891,6 +891,13 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
+		needsSetup, err := s.directReconnectNeedsSetup(ctx, authentication)
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
+		}
+		if needsSetup {
+			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
+		}
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
@@ -914,6 +921,36 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	authentication.chosenClient = res.choice.clientID
 	authentication.chosenNoAuth = false
 	return res.choice, nil
+}
+
+// directReconnectNeedsSetup detects upstream setup that a new consent
+// cannot turn into a typed serving choice. It inspects only
+// configuration; it never resolves credentials. Once typed consent supports
+// explicit no-auth for a detached offer, reconnect remains valid.
+func (s *Service) directReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
+	endpoint := authentication.endpoint
+	if endpoint.UserSessionIssuerID == uuid.Nil ||
+		(authentication.subject.Kind != urn.SessionSubjectKindUser && authentication.subject.Kind != urn.SessionSubjectKindAnonymous) {
+		return false, nil
+	}
+	serverID := endpoint.McpServerID.UUID
+	offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	if err != nil {
+		return false, err
+	}
+	offer, known := offers[serverID]
+	if !known || len(offer.clients) != 0 {
+		return false, nil
+	}
+	if offer.pending {
+		return true, nil
+	}
+	typedConsent, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil || typedConsent {
+		return false, err
+	}
+	associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	return len(associated[serverID]) > 0, err
 }
 
 // authClientNoAccessError refuses a caller the chosen client, with a link to
@@ -984,6 +1021,3 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 	}
 	return reconnect, none, true, nil
 }
-
-// legacyChoiceOutcome names the upstream client choice's outcome in the
-// resolver's terms, for shadow comparison.

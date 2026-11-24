@@ -489,7 +489,7 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
 	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
-		return s.hostedUpstreamTokens(ctx, authentication.refreshAttribution(ctx), endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, endpoint.UserSessionIssuerID, authentication.subject, skipUnusable)
+		return s.hostedUpstreamTokens(ctx, authentication.refreshAttribution(ctx), endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, endpoint.UserSessionIssuerID, tokenSubject(ctx, authentication.subject, authentication.authorizerOwner), skipUnusable)
 	}
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
@@ -669,15 +669,14 @@ func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject u
 // resolveChosenMemberTokens resolves one gateway member's credential from its
 // chosen client for subject.
 func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	// Under enforcement the connection a member's permit was decided
-	// for binds its tokens, typed or handed back to the upstream
-	// client choice. Without its token the member fails: an empty
+	// The connection a member's permit was decided for binds its tokens,
+	// including named compatibility registrations. Without its token the member fails: an empty
 	// resolution would dial anonymously or chain another identity.
 	pinned, authorizerOwner := uuid.Nil, ""
 	if member.authClient != nil {
 		pinned, authorizerOwner = member.authClient.attachedSession, member.authClient.authorizerOwner
 	}
-	// Under enforcement the resolver checked every chosen registration
+	// The resolver checked every chosen registration
 	// against the member, which authorizes it without a sign-in link.
 	tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 		ProjectID:           member.projectID,

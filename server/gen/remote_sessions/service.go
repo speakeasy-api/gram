@@ -54,12 +54,12 @@ type Service interface {
 	TestServerConnection(context.Context, *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
-	// links an existing client, creates a manual client, or automatically prefers
-	// CIMD over DCR. Existing-client linking requires mcp:write on the target and
-	// on every other MCP server sharing its user session issuer, because the
-	// client binding is keyed by issuer; creating a provider or client
-	// additionally requires project:write. Unsupported automatic registration
-	// returns manual_setup_required without changing local state.
+	// offers an existing client, creates a manual client, or automatically prefers
+	// CIMD over DCR. Requires mcp:write on the target and any servers explicitly
+	// named for replacement. Creating a provider or client also requires
+	// project:write. The commit changes server offers, not issuer-client bindings.
+	// Unsupported automatic registration returns manual_setup_required without
+	// changing local state.
 	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
 	// Preview which other MCP servers and gateways a client binding change on a
 	// user session issuer would affect, across every project in the organization
@@ -166,8 +166,8 @@ type AttachServerClientAssociationPayload struct {
 type AttachServerClientAssociationResult struct {
 	// The server's association with the client.
 	Association *ServerClientAssociation
-	// The issuers of gateways fronting the server that this attach bound the
-	// client to. Empty when they already held it.
+	// Deprecated: always empty. This field is retained for compatibility; attach
+	// no longer binds the client to user session issuers.
 	BoundUserSessionIssuerIds []string
 }
 
@@ -207,8 +207,8 @@ type CommitServerIdentityConfigurationPayload struct {
 	McpServerID string
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string
-	// Refuse a save if the user session issuer also serves another MCP server.
-	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Refuse a save if the user session issuer also serves another MCP server. Set
+	// this to require a dedicated user session issuer for the target server.
 	// Explicitly assign a dedicated issuer before retrying.
 	TargetServerOnly *bool
 	// A new project-scoped Remote Identity Provider to create.

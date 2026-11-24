@@ -295,6 +295,7 @@ WITH due AS (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -485,6 +486,7 @@ WITH due AS (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -990,6 +992,7 @@ WHERE s.id = $1
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -3956,6 +3959,7 @@ WHERE s.id = $1
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -4132,6 +4136,7 @@ CROSS JOIN LATERAL (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -4907,7 +4912,7 @@ WHERE link.mcp_server_id = $2::uuid AND link.project_id = $3::uuid AND link.orga
   AND (NOT $6::boolean OR server.user_session_issuer_id = issuer.id)
   AND NOT issuer.deleted AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
   AND NOT client.deleted AND client.credential_owner = 'subject'
-  AND (client.project_id = project.id OR (client.project_id IS NULL AND client.organization_id = project.organization_id))
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
   AND upstream.id = $7::uuid AND NOT upstream.deleted AND (upstream.project_id = project.id OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = project.organization_id)))
   AND NOT EXISTS (
     SELECT 1 FROM mcp_server_remote_session_clients AS other
@@ -6886,6 +6891,7 @@ WITH bound AS (
     FROM mcp_server_remote_session_clients AS assignment
     JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
       AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
     JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
     JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
     JOIN user_session_issuers AS sign_in ON sign_in.id = $2::uuid AND NOT sign_in.deleted
@@ -13117,6 +13123,49 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 			return nil, err
 		}
 		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVisibleRemoteSessionClientPlacementIssuers = `-- name: ListVisibleRemoteSessionClientPlacementIssuers :many
+SELECT DISTINCT usi.id
+FROM mcp_server_remote_session_clients AS link
+JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+  AND associated.project_id = link.project_id AND NOT associated.deleted
+JOIN projects AS associated_project ON associated_project.id = associated.project_id
+  AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+WHERE link.remote_session_client_id = $1::uuid AND NOT link.deleted
+  AND link.organization_id = $2::text
+  AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
+  AND (usi.project_id IS NULL OR usi.project_id = $3::uuid)
+ORDER BY usi.id
+`
+
+type ListVisibleRemoteSessionClientPlacementIssuersParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+}
+
+// The caller must first select the registration through an exact server offer.
+// Return only live placements in the requested project or its organization.
+func (q *Queries) ListVisibleRemoteSessionClientPlacementIssuers(ctx context.Context, arg ListVisibleRemoteSessionClientPlacementIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listVisibleRemoteSessionClientPlacementIssuers, arg.RemoteSessionClientID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

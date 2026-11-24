@@ -436,7 +436,7 @@ it.each(["setup_incomplete", "no_auth_required"])(
   },
 );
 
-it("points legacy forwarded Authorization cleanup to Identity, not guided Setup", () => {
+it("points legacy forwarded Authorization to typed credential setup in Identity", () => {
   state.upstreamAuthQuery = {
     data: { status: "setup_incomplete", clients: [] },
   };
@@ -444,7 +444,7 @@ it("points legacy forwarded Authorization cleanup to Identity, not guided Setup"
     { name: "Authorization", valueFromRequestHeader: "Authorization" },
   ];
   renderIdentity();
-  expect(screen.getByText("Needs cleanup").getAttribute("data-href")).toBe(
+  expect(screen.getByText("Add a credential").getAttribute("data-href")).toBe(
     "/example/projects/default/mcp/slack/settings#settings-sign-in",
   );
   expect(screen.queryByText("Setup pending")).toBeNull();

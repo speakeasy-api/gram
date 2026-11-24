@@ -54,12 +54,21 @@ vi.mock("./KeyCredentialChoice", () => ({
   ),
 }));
 
+const toast = vi.hoisted(() => ({
+  success: vi.fn<(message: string) => void>(),
+  warning: vi.fn<(message: string) => void>(),
+  info: vi.fn<(message: string) => void>(),
+  error: vi.fn<(message: string) => void>(),
+}));
+vi.mock("sonner", () => ({ toast }));
+
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  for (const tell of Object.values(toast)) tell.mockClear();
 });
 
 const server: InventoryServer = {
@@ -84,6 +93,32 @@ const expired = {
   hasRefreshToken: false,
   accessExpiresAt: new Date(0),
 } as RemoteSession;
+
+it("links incomplete typed setup to the owning server's Sign-in settings", () => {
+  render(
+    <StepAuthentication
+      servers={[{ ...server, connectUrl: "https://example.test/connect" }]}
+      allServers={false}
+      onRemove={vi.fn<(id: string) => void>()}
+      connections={{
+        byServer: new Map([[server.id, { status: "setup-required" }]]),
+        refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      }}
+    />,
+    { wrapper: MemoryRouter },
+  );
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: /Example server.*Upstream setup required/,
+    }),
+  );
+  expect(
+    screen
+      .getByRole("link", { name: "Open Sign-in settings" })
+      .getAttribute("href"),
+  ).toBe("/org/projects/project-one/mcp/example/settings#authentication");
+  expect(screen.queryByRole("button", { name: "Connect account" })).toBeNull();
+});
 
 describe("authentication assignment warnings", () => {
   const assignedNone = (
@@ -473,5 +508,138 @@ describe("an agent connection the viewer may not see", () => {
         .getByText("Credential picker for Example server")
         .getAttribute("data-accounts"),
     ).toBe("true");
+  });
+});
+
+describe("refreshing a connection's status", () => {
+  const connectable = { ...server, connectUrl: "https://example.test/connect" };
+  const ownExpired = { ...expired, subjectUrn: "user:editor" } as RemoteSession;
+  function row(connection: "ended" | "ready", refetch: () => Promise<void>) {
+    return (
+      <StepAuthentication
+        servers={[connectable]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              connectable.id,
+              connection === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "ended", sessions: [ownExpired] },
+            ],
+          ]),
+          refetch,
+        }}
+      />
+    );
+  }
+  const refreshButton = () =>
+    screen.getByRole("button", {
+      name: "Refresh Example server connection status",
+    });
+
+  it("shows it is checking until the re-read lands", async () => {
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(refreshButton());
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshButton().hasAttribute("disabled")).toBe(true);
+    expect(refreshButton().getAttribute("aria-busy")).toBe("true");
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(true);
+    await act(async () => finish());
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(false);
+    expect(refreshButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says a connection that is still expired needs reauthenticating", async () => {
+    const refetch = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    await act(async () => fireEvent.click(refreshButton()));
+    expect(toast.warning).toHaveBeenCalledWith(
+      "The connection to Example server is still expired. Reauthenticate to sign in again.",
+    );
+  });
+
+  it("says the connection works once the re-read finds a new one", async () => {
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(refreshButton());
+    // Signed in again in another tab: the re-read finds the new connection.
+    view.rerender(row("ready", refetch));
+    await act(async () => finish());
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "The connection to Example server is working.",
+      ),
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("says the check failed when the re-read is rejected", async () => {
+    const refetch = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error("network"));
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    await act(async () => fireEvent.click(refreshButton()));
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not check the connection to Example server. Try again.",
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(refreshButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("holds every row's refresh until the running one lands", async () => {
+    const other = { ...connectable, id: "server_two", name: "Other server" };
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(
+      <StepAuthentication
+        servers={[connectable, other]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [connectable.id, { status: "ended", sessions: [ownExpired] }],
+            [other.id, { status: "ended", sessions: [ownExpired] }],
+          ]),
+          refetch,
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByText("Other server"));
+    fireEvent.click(refreshButton());
+    const otherRefresh = screen.getByRole("button", {
+      name: "Refresh Other server connection status",
+    });
+    expect(otherRefresh.hasAttribute("disabled")).toBe(true);
+    expect(otherRefresh.getAttribute("aria-busy")).toBe("false");
+    await act(async () => finish());
+    expect(otherRefresh.hasAttribute("disabled")).toBe(false);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

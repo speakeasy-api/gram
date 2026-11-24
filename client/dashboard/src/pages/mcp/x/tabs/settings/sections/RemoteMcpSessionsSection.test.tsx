@@ -30,16 +30,6 @@ const mcpServer = {
 afterEach(cleanup);
 
 describe("RemoteMcpSessionsSection", () => {
-  it("offers a downstream sign-in even when an issuer is not attached yet", () => {
-    render(
-      <RemoteMcpSessionsSection
-        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
-      />,
-    );
-
-    expect(screen.getByText("User session issuer")).toBeDefined();
-  });
-
   it("shows only the provider picker; its settings live in MCP Sessions", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
@@ -48,5 +38,14 @@ describe("RemoteMcpSessionsSection", () => {
     expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it("can configure downstream sessions before an issuer is selected", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+    expect(screen.getByText("User session issuer")).toBeDefined();
   });
 });

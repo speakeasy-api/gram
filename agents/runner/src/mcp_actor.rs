@@ -21,10 +21,12 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
+use tracing::Instrument;
 
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpSessionClient, TokenRegistry};
+use crate::telemetry::mcp_trace_decorator;
 use crate::wire::McpServer;
 
 const MCP_CMD_CAPACITY: usize = 32;
@@ -47,6 +49,9 @@ const MCP_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
 /// fresh `assistant_mcp_auth_required` notices.
 const MCP_AUTH_URL_TTL: Duration = Duration::from_secs(15 * 60);
 
+/// Every command carries `parent`, the sender's span. The actor runs on its
+/// own task, so without it connection work would export as detached root
+/// spans instead of nesting under the tool call or turn that asked for it.
 pub enum McpCmd {
     /// Sent by `tool_search` before every search. The actor connects any
     /// configured server that is not yet connected (creating an auth flow
@@ -55,6 +60,7 @@ pub enum McpCmd {
     /// coverage plus authorization links.
     EnsureConnected {
         reply: oneshot::Sender<Vec<McpServerStatus>>,
+        parent: tracing::Span,
     },
     /// Sent by the catalog dispatch layer when the model calls a tool that a
     /// configured server exposed before its connection was closed — at a
@@ -63,6 +69,7 @@ pub enum McpCmd {
     ConnectForTool {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
+        parent: tracing::Span,
     },
     /// Sent by the catalog dispatch layer when an MCP-backed tool call
     /// fails with a transport-shaped error. The actor reseats the owning
@@ -70,6 +77,7 @@ pub enum McpCmd {
     ReconnectTool {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
+        parent: tracing::Span,
     },
     /// Sent by the serialized loop after the prior turn and compaction.
     /// Clears credential-specific MCP sessions/auth/retry state before rotating
@@ -80,6 +88,7 @@ pub enum McpCmd {
         token: String,
         desired: Option<Vec<McpServer>>,
         reply: oneshot::Sender<Result<(), RunnerError>>,
+        parent: tracing::Span,
     },
 }
 
@@ -155,7 +164,8 @@ pub fn spawn_mcp_actor(
     tokens: &TokenRegistry,
     inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
-    let mut manager = McpServerManager::new();
+    // Each tool call carries its own trace context to the server.
+    let mut manager = McpServerManager::new().with_request_decorator(mcp_trace_decorator());
     let catalog = manager.source();
     let mut configured = BTreeMap::new();
     let token = tokens.current()?;
@@ -216,24 +226,45 @@ impl McpActor {
     async fn run(mut self, mut cmd_rx: mpsc::Receiver<McpCmd>) {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
-                McpCmd::EnsureConnected { reply } => {
-                    let statuses = self.ensure_connected().await;
+                McpCmd::EnsureConnected { reply, parent } => {
+                    let span = tracing::info_span!(parent: &parent, "mcp.ensure_connected");
+                    let statuses = self.ensure_connected().instrument(span).await;
                     let _ = reply.send(statuses);
                 }
-                McpCmd::ConnectForTool { tool_name, reply } => {
-                    let result = self.connect_for_tool(&tool_name).await;
+                McpCmd::ConnectForTool {
+                    tool_name,
+                    reply,
+                    parent,
+                } => {
+                    let span = tracing::info_span!(
+                        parent: &parent,
+                        "mcp.connect_for_tool",
+                        "gen_ai.tool.name" = %tool_name,
+                    );
+                    let result = self.connect_for_tool(&tool_name).instrument(span).await;
                     let _ = reply.send(result);
                 }
-                McpCmd::ReconnectTool { tool_name, reply } => {
-                    let result = self.reconnect_for_tool(&tool_name).await;
+                McpCmd::ReconnectTool {
+                    tool_name,
+                    reply,
+                    parent,
+                } => {
+                    let span = tracing::info_span!(
+                        parent: &parent,
+                        "mcp.reconnect_for_tool",
+                        "gen_ai.tool.name" = %tool_name,
+                    );
+                    let result = self.reconnect_for_tool(&tool_name).instrument(span).await;
                     let _ = reply.send(result);
                 }
                 McpCmd::TurnBoundary {
                     token,
                     desired,
                     reply,
+                    parent,
                 } => {
-                    let result = self.turn_boundary(token, desired).await;
+                    let span = tracing::info_span!(parent: &parent, "mcp.turn_boundary");
+                    let result = self.turn_boundary(token, desired).instrument(span).await;
                     let _ = reply.send(result);
                 }
             }
@@ -278,7 +309,7 @@ impl McpActor {
             .cloned()
             .collect();
         for id in pending {
-            self.connect_pending(&id).await;
+            self.connect_pending(&id, "first_use").await;
         }
 
         self.server_statuses()
@@ -288,14 +319,14 @@ impl McpActor {
     /// transient failure for its status. Auth-pending servers fail fast, so
     /// they retry unconditionally; hard failures wait out the cooldown so
     /// repeated calls don't re-pay the handshake timeout for a down server.
-    async fn connect_pending(&mut self, id: &str) {
+    async fn connect_pending(&mut self, id: &str, reason: &'static str) {
         if !self.auth_pending.contains_key(id)
             && let Some((_, at)) = self.last_errors.get(id)
             && at.elapsed() < MCP_RETRY_COOLDOWN
         {
             return;
         }
-        match self.connect_one(id).await {
+        match self.connect_one(id, reason).await {
             Ok(()) => {
                 self.auth_pending.remove(id);
                 self.last_errors.remove(id);
@@ -324,7 +355,7 @@ impl McpActor {
             ));
         };
         if !self.is_connected(&id) {
-            self.connect_pending(&id).await;
+            self.connect_pending(&id, "deferred").await;
         }
         if self.is_connected(&id) {
             return Ok(());
@@ -420,7 +451,7 @@ impl McpActor {
         self.last_reconnects.insert(id.clone(), Instant::now());
 
         self.drop_connection(&id, "reconnect").await;
-        match self.connect_one(&id).await {
+        match self.connect_one(&id, "reconnect").await {
             Ok(()) => {
                 self.auth_pending.remove(&id);
                 self.last_errors.remove(&id);
@@ -568,6 +599,7 @@ impl McpActor {
         match self
             .gram_client
             .create_mcp_auth_flow(&self.thread_id, server_id, &server.url, &self.tokens)
+            .instrument(tracing::info_span!("mcp.create_auth_flow", "mcp.server.id" = %server_id))
             .await
         {
             Ok(flow) => {
@@ -586,9 +618,12 @@ impl McpActor {
                 );
             }
             Err(flow_err) => {
+                // Class and status only: a non-2xx body could land in the
+                // trace, since this runs inside an actor command span.
                 tracing::warn!(
                     server_id,
-                    error = %flow_err,
+                    error_class = flow_err.class(),
+                    http_status = flow_err.http_status(),
                     "failed to create assistant mcp auth flow; will retry on next search"
                 );
                 self.auth_pending.insert(server_id.to_string(), None);
@@ -600,14 +635,63 @@ impl McpActor {
     /// agentkit removes the handle before `close()` can fail, so close
     /// errors are log-only and never retried.
     async fn drop_connection(&mut self, id: &str, action: &'static str) {
-        if let Err(err) = self.manager.disconnect_server(&McpServerId::new(id)).await {
-            tracing::warn!(server_id = %id, error = %err, action, "mcp disconnect reported error");
+        let span = tracing::info_span!("mcp.disconnect", "mcp.server.id" = %id, action);
+        if let Err(err) = self
+            .manager
+            .disconnect_server(&McpServerId::new(id))
+            .instrument(span)
+            .await
+        {
+            tracing::warn!(
+                server_id = %id,
+                error_class = mcp_error_class(&err),
+                action,
+                "mcp disconnect reported error"
+            );
         }
     }
 
-    async fn connect_one(&mut self, id: &str) -> Result<(), McpConnectFailure> {
+    /// Connects one server: transport setup plus the MCP initialize and
+    /// tool-discovery handshake, bounded by [`MCP_HANDSHAKE_TIMEOUT`]. The
+    /// `mcp.connect` span (created before the connect and dropped after it,
+    /// never entered while connecting) times that handshake; `reason` says why
+    /// it ran (`first_use` from tool_search, `deferred` from a call to a
+    /// tool whose session closed, `reconnect` after a failed call).
+    async fn connect_one(
+        &mut self,
+        id: &str,
+        reason: &'static str,
+    ) -> Result<(), McpConnectFailure> {
         let server_uid = McpServerId::new(id);
-        match self.manager.connect_server(&server_uid).await {
+        let span = tracing::info_span!(
+            "mcp.connect",
+            "mcp.server.id" = %id,
+            reason,
+            outcome = tracing::field::Empty,
+            "mcp.tools.count" = tracing::field::Empty,
+        );
+        // rmcp spawns the session's service task under the span current at
+        // connect, and that task lives as long as the session. Running the
+        // connect under its own root `mcp.session` span keeps the session
+        // from holding `mcp.connect` (and the turn above it) open, so
+        // `mcp.connect` ends when the handshake does.
+        let session = tracing::info_span!(parent: None, "mcp.session", "mcp.server.id" = %id);
+        session.follows_from(&span);
+        let result = self
+            .manager
+            .connect_server(&server_uid)
+            .instrument(session)
+            .await;
+        let _entered = span.enter();
+        span.record(
+            "outcome",
+            match &result {
+                Ok(_) => "connected",
+                Err(McpError::AuthRequired(_)) => "auth_required",
+                Err(_) => "failed",
+            },
+        );
+        match result {
             Ok(handle) => {
                 let tools: BTreeSet<String> = handle
                     .snapshot()
@@ -615,13 +699,19 @@ impl McpActor {
                     .iter()
                     .map(|tool| handle.namespace().apply(&server_uid, tool.name.as_ref()))
                     .collect();
+                span.record("mcp.tools.count", tools.len());
                 tracing::info!(server_id = %server_uid, tools = tools.len(), "mcp connect ok");
                 self.known_tools.record(id, tools);
                 Ok(())
             }
             Err(e) => {
                 let auth_required = matches!(e, McpError::AuthRequired(_));
-                tracing::warn!(server_id = %server_uid, error = %e, "mcp connect failed");
+                // Class only: the error text can come from the MCP server.
+                tracing::warn!(
+                    server_id = %server_uid,
+                    error_class = mcp_error_class(&e),
+                    "mcp connect failed"
+                );
                 Err(McpConnectFailure {
                     message: e.to_string(),
                     auth_required,
@@ -634,6 +724,22 @@ impl McpActor {
         if self.inbox_tx.send(notice).is_err() {
             tracing::warn!("drop mcp notice: thread inbox closed");
         }
+    }
+}
+
+/// Stable class name for an MCP error, for logs and spans. The `Display`
+/// text can carry server-supplied content, so traces record only this.
+fn mcp_error_class(err: &McpError) -> &'static str {
+    match err {
+        McpError::Io(_) => "io",
+        McpError::Serialize(_) => "serialization",
+        McpError::Transport(_) => "transport",
+        McpError::Timeout { .. } => "timeout",
+        McpError::Protocol(_) => "protocol",
+        McpError::AuthRequired(_) => "auth_required",
+        McpError::AuthResolution(_) => "auth_resolution",
+        McpError::Invocation(_) => "invocation",
+        McpError::UnknownServer(_) => "unknown_server",
     }
 }
 
@@ -737,6 +843,11 @@ mod tests {
                 let method = message["method"].as_str().unwrap().to_string();
                 events.send((endpoint.clone(), bearer, method.clone())).unwrap();
                 if message.get("id").is_none() { return axum::http::StatusCode::ACCEPTED.into_response(); }
+                // A server that predates `server/discover` rejects it, which is
+                // what makes the client fall back to `initialize`.
+                if method == "server/discover" {
+                    return Json(json!({"jsonrpc":"2.0", "id":message["id"], "error":{"code":-32601, "message":"Method not found"}})).into_response();
+                }
                 let result = if method == "initialize" {
                     json!({"protocolVersion": message["params"]["protocolVersion"], "capabilities":{"tools":{}}, "serverInfo":{"name":"fixture", "version":"1"}})
                 } else { json!({"tools":[]}) };
@@ -777,7 +888,12 @@ mod tests {
         )
         .unwrap();
         let (reply, ack) = oneshot::channel();
-        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        cmd.send(McpCmd::EnsureConnected {
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
         assert_eq!(
             ack.await.unwrap()[0].status,
             McpServerConnectionStatus::Connected
@@ -797,6 +913,7 @@ mod tests {
                     token: token.into(),
                     desired: Some(vec![replacement]),
                     reply,
+                    parent: tracing::Span::none(),
                 })
                 .await
                 .unwrap();
@@ -810,7 +927,12 @@ mod tests {
                     "failed preparation must not publish the next credential"
                 );
                 let (reply, ack) = oneshot::channel();
-                cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+                cmd.send(McpCmd::EnsureConnected {
+                    reply,
+                    parent: tracing::Span::none(),
+                })
+                .await
+                .unwrap();
                 assert_eq!(
                     ack.await.unwrap()[0].status,
                     McpServerConnectionStatus::Connected
@@ -827,12 +949,18 @@ mod tests {
                 ..old
             }]),
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();
         ack.await.unwrap().unwrap();
         let (reply, ack) = oneshot::channel();
-        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        cmd.send(McpCmd::EnsureConnected {
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
         assert_eq!(
             ack.await.unwrap()[0].status,
             McpServerConnectionStatus::Connected
@@ -920,6 +1048,11 @@ mod tests {
                 let method = message["method"].as_str().unwrap().to_string();
                 events.send((bearer.clone(), method.clone())).unwrap();
                 if message.get("id").is_none() { return axum::http::StatusCode::ACCEPTED.into_response(); }
+                // A server that predates `server/discover` rejects it, which is
+                // what makes the client fall back to `initialize`.
+                if method == "server/discover" {
+                    return Json(json!({"jsonrpc":"2.0", "id":message["id"], "error":{"code":-32601, "message":"Method not found"}})).into_response();
+                }
                 let result = if method == "initialize" {
                     json!({"protocolVersion": message["params"]["protocolVersion"], "capabilities":{"tools":{}}, "serverInfo":{"name":"fixture", "version":"1"}})
                 } else { json!({"tools":[{"name":"echo", "inputSchema":{"type":"object"}}]}) };
@@ -960,7 +1093,12 @@ mod tests {
         )
         .unwrap();
         let (reply, ack) = oneshot::channel();
-        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        cmd.send(McpCmd::EnsureConnected {
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
         let tool = ack.await.unwrap()[0].tools[0].clone();
         let name = agentkit_tools_core::ToolName::new(tool.clone());
         assert!(catalog.get(&name).is_some());
@@ -970,6 +1108,7 @@ mod tests {
             token: "opaque-b".into(),
             desired: None,
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();
@@ -984,6 +1123,7 @@ mod tests {
         cmd.send(McpCmd::ConnectForTool {
             tool_name: tool.clone(),
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();
@@ -997,6 +1137,7 @@ mod tests {
         cmd.send(McpCmd::ConnectForTool {
             tool_name: "mcp_other_tool".into(),
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();
@@ -1010,6 +1151,7 @@ mod tests {
             token: "opaque-b".into(),
             desired: Some(Vec::new()),
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();
