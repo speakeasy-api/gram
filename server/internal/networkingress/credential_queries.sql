@@ -113,26 +113,38 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(n.credentials_encrypted, 'UTF8'))
 WHERE n.organization_id = @organization_id;
 
--- name: ClearNetworkIngressCredentialPlatformCopies :execrows
+-- name: ClearNetworkIngressCredentialPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's credentials
 -- after finalize. Credentials with an organization-key copy keep it; those
 -- recorded as unreadable have none, so they are left with no credentials at
 -- all. Either way this is not new desired state, so updated_at stays.
-UPDATE network_ingresses AS n
-SET credentials_encrypted = NULL
-WHERE n.id IN (
-    SELECT target.id FROM network_ingresses AS target
-    WHERE target.organization_id = @organization_id
-      AND target.credentials_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND n.organization_id = @organization_id
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = n.organization_id AND t.use_case = 'tailscale-oauth-clients'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
+WITH cleared AS (
+    UPDATE network_ingresses AS n
+    SET credentials_encrypted = NULL
+    WHERE n.id IN (
+        SELECT target.id FROM network_ingresses AS target
+        WHERE target.organization_id = @organization_id
+          AND target.credentials_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND n.organization_id = @organization_id
+      AND n.credentials_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = n.organization_id AND t.use_case = 'tailscale-oauth-clients'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (n.credentials_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: SetNetworkIngressCredentialCopiesFixture :one
 -- Test fixture: plants both copies as given, unsealed and unfenced.
