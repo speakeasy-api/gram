@@ -80,12 +80,30 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = $1
   AND c.remote_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = $3::uuid AND p.organization_id = $4::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
+  -- This is mirror cleanup, not a principal attachment revocation.
   AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1 FROM principal_remote_session_bindings AS binding
+    WHERE binding.remote_session_client_id = l.remote_session_client_id
+      AND binding.user_session_issuer_id = l.user_session_issuer_id
+      AND binding.revoked_at IS NULL
+  )
+  AND NOT EXISTS (
+    -- Project-owned links are local. A shared client on an organization
+    -- issuer must keep its link for consumers in every live project.
     SELECT 1
     FROM mcp_servers AS s
+    JOIN projects AS consumer_project
+      ON consumer_project.id = s.project_id
+     AND consumer_project.organization_id = $4::text
+     AND NOT consumer_project.deleted
     JOIN mcp_server_remote_session_clients AS a
       ON a.mcp_server_id = s.id
      AND a.project_id = s.project_id
@@ -104,9 +122,13 @@ WHERE l.remote_session_client_id = c.id
     JOIN meta_mcp_servers AS mm
       ON mm.project_id = m.project_id
      AND mm.id = m.meta_mcp_server_id
+     AND mm.organization_id = consumer_project.organization_id
      AND mm.deleted IS FALSE
+    JOIN user_session_issuers AS gateway_issuer
+      ON gateway_issuer.id = mm.user_session_issuer_id
+     AND (gateway_issuer.project_id = s.project_id OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = consumer_project.organization_id))
     WHERE s.deleted IS FALSE
-      AND s.project_id = $3
+      AND (c.project_id IS NULL OR c.project_id = s.project_id)
       AND mm.user_session_issuer_id = $1
   )
 `
@@ -115,6 +137,7 @@ type AutoDetachMemberProviderClientParams struct {
 	GatewayIssuerID uuid.UUID
 	RemoteIssuerID  uuid.UUID
 	ProjectID       uuid.UUID
+	OrganizationID  string
 }
 
 // Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
@@ -127,7 +150,12 @@ type AutoDetachMemberProviderClientParams struct {
 // Run after the member row is soft-deleted so the just-removed member is
 // already excluded by the deleted filter below.
 func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient,
+		arg.GatewayIssuerID,
+		arg.RemoteIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1520,6 +1548,42 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMemberProviderClientParents = `-- name: LockMemberProviderClientParents :exec
+SELECT l.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+WHERE l.user_session_issuer_id = $1
+  AND c.remote_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = $3::uuid AND p.organization_id = $4::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
+ORDER BY l.remote_session_client_id
+FOR UPDATE OF l
+`
+
+type LockMemberProviderClientParentsParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+}
+
+// Lock parents before the attachment check in the delete's fresh snapshot.
+func (q *Queries) LockMemberProviderClientParents(ctx context.Context, arg LockMemberProviderClientParentsParams) error {
+	_, err := q.db.Exec(ctx, lockMemberProviderClientParents,
+		arg.GatewayIssuerID,
+		arg.RemoteIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	return err
 }
 
 const lockMetaMCPMember = `-- name: LockMetaMCPMember :one

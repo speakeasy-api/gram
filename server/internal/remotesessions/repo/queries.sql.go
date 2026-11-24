@@ -54,16 +54,10 @@ SELECT p.id, p.organization_id, $1, usi.id, c.id, s.id, s.grant_generation, $2
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = $3::uuid
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
-JOIN projects AS p ON p.id = $3 AND p.organization_id = $4 AND p.deleted IS FALSE
-WHERE link.user_session_issuer_id = $5
-  -- The issuer a connection was made through, such as a team gateway's, is
-  -- provenance only, as at runtime: it must still exist in this tenant, but
-  -- whether it binds the client now does not matter. The binding's own issuer
-  -- must bind the client.
-  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+JOIN projects AS p ON p.id = $4 AND p.organization_id = $5 AND p.deleted IS FALSE
+WHERE (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
@@ -71,6 +65,7 @@ WHERE link.user_session_issuer_id = $5
   AND s.deleted IS FALSE AND s.subject_urn = $2
   AND s.id = $6
   AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = $1 AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
+FOR UPDATE OF s
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
 DO UPDATE SET grant_generation = EXCLUDED.grant_generation, updated_at = clock_timestamp()
 WHERE principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
@@ -83,9 +78,9 @@ RETURNING id, principal_id, user_session_issuer_id, remote_session_client_id, re
 type AttachPrincipalRemoteSessionBindingParams struct {
 	PrincipalID         uuid.UUID
 	SubjectUrn          string
+	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
-	UserSessionIssuerID uuid.UUID
 	RemoteSessionID     uuid.UUID
 }
 
@@ -98,13 +93,15 @@ type AttachPrincipalRemoteSessionBindingRow struct {
 	GrantGeneration       int64
 }
 
+// Lock the exact grant to serialize insertion with session revoke/reconnect.
+// The sign-in a connection came from is provenance, not registration authority.
 func (q *Queries) AttachPrincipalRemoteSessionBinding(ctx context.Context, arg AttachPrincipalRemoteSessionBindingParams) (AttachPrincipalRemoteSessionBindingRow, error) {
 	row := q.db.QueryRow(ctx, attachPrincipalRemoteSessionBinding,
 		arg.PrincipalID,
 		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
-		arg.UserSessionIssuerID,
 		arg.RemoteSessionID,
 	)
 	var i AttachPrincipalRemoteSessionBindingRow
@@ -3443,6 +3440,46 @@ func (q *Queries) EnsureEMABinding(ctx context.Context, arg EnsureEMABindingPara
 	return err
 }
 
+const ensurePrincipalAttachmentParents = `-- name: EnsurePrincipalAttachmentParents :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT DISTINCT c.id, u.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers AS u ON u.id = $1::uuid AND NOT u.deleted
+WHERE c.id = ANY($2::uuid[]) AND NOT c.deleted
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = $3::text AND NOT p.deleted
+      AND ($4::uuid IS NULL OR p.id = $4::uuid)
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+      AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  )
+ORDER BY c.id, u.id
+ON CONFLICT (remote_session_client_id, user_session_issuer_id)
+DO UPDATE SET user_session_issuer_id = EXCLUDED.user_session_issuer_id WHERE FALSE
+`
+
+type EnsurePrincipalAttachmentParentsParams struct {
+	UserSessionIssuerID uuid.UUID
+	ClientIds           []uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+}
+
+// Temporary FK compatibility only. Call inside the transaction that inserts
+// or rekeys validated attachments. Lock existing parents without updating
+// them, so a guarded legacy unlink cannot delete one before the FK check.
+func (q *Queries) EnsurePrincipalAttachmentParents(ctx context.Context, arg EnsurePrincipalAttachmentParentsParams) error {
+	_, err := q.db.Exec(ctx, ensurePrincipalAttachmentParents,
+		arg.UserSessionIssuerID,
+		arg.ClientIds,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const forceRemoteSessionClientRegistrationFixture = `-- name: ForceRemoteSessionClientRegistrationFixture :execrows
 UPDATE remote_session_clients
 SET client_secret_expires_at = $1,
@@ -5038,7 +5075,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
 JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 WHERE b.project_id = $1::uuid
   AND b.organization_id = $2::text
@@ -8666,7 +8702,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
 JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 WHERE b.project_id = $1::uuid
   AND b.organization_id = $2::text
@@ -10565,17 +10600,11 @@ SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remo
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = $1::uuid
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
-JOIN projects AS p ON p.id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
+JOIN projects AS p ON p.id = $2 AND p.organization_id = $3 AND p.deleted IS FALSE
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE link.user_session_issuer_id = $3
-  -- The issuer a connection was made through, such as a team gateway's, is
-  -- provenance only, as at runtime: it must still exist in this tenant, but
-  -- whether it binds the client now does not matter. The binding's own issuer
-  -- must bind the client.
-  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+WHERE (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
@@ -10588,9 +10617,9 @@ LIMIT $7::int
 `
 
 type ListPrincipalRemoteSessionCandidatesParams struct {
+	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
 	OrganizationID      string
-	UserSessionIssuerID uuid.UUID
 	SubjectUrn          urn.SessionSubject
 	Cursor              uuid.NullUUID
 	ClientFilter        uuid.NullUUID
@@ -10603,11 +10632,12 @@ type ListPrincipalRemoteSessionCandidatesRow struct {
 	SubjectEmail       pgtype.Text
 }
 
+// The sign-in a connection came from is provenance, not registration authority.
 func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg ListPrincipalRemoteSessionCandidatesParams) ([]ListPrincipalRemoteSessionCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionCandidates,
+		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
-		arg.UserSessionIssuerID,
 		arg.SubjectUrn,
 		arg.Cursor,
 		arg.ClientFilter,
@@ -13096,6 +13126,30 @@ func (q *Queries) LockPreparationSubmission(ctx context.Context, bindingKey stri
 	return err
 }
 
+const lockPrincipalAttachmentIssuer = `-- name: LockPrincipalAttachmentIssuer :one
+SELECT usi.id
+FROM user_session_issuers AS usi
+JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = $2::text AND NOT p.deleted
+WHERE usi.id = $3::uuid AND NOT usi.deleted
+  AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+FOR SHARE OF usi
+`
+
+type LockPrincipalAttachmentIssuerParams struct {
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+// Serialize creation/refresh with an issuer rekey or deletion before taking
+// any attachment-parent or grant locks.
+func (q *Queries) LockPrincipalAttachmentIssuer(ctx context.Context, arg LockPrincipalAttachmentIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPrincipalAttachmentIssuer, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockPrincipalBindingForRefresh = `-- name: LockPrincipalBindingForRefresh :one
 SELECT id, project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, issuer_attachment_scope, client_attachment_scope, grant_generation, attached_by_subject_id, revoked_at, created_at, updated_at FROM principal_remote_session_bindings
 WHERE id = $1 AND principal_id = $2 AND project_id = $3
@@ -13323,15 +13377,24 @@ func (q *Queries) LockRemoteSessionClientTemplate(ctx context.Context, arg LockR
 
 const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
 SELECT 1
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-  AND user_session_issuer_id = $2
-FOR UPDATE
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+WHERE l.remote_session_client_id = $1
+  AND l.user_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = $3::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )
+FOR UPDATE OF l
 `
 
 type LockRemoteSessionClientUserSessionIssuerLinkParams struct {
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
+	OrganizationID        string
 }
 
 // Lock the join-table row an agent attachment's foreign key check reads, before
@@ -13339,7 +13402,7 @@ type LockRemoteSessionClientUserSessionIssuerLinkParams struct {
 // concurrent attachment either commits first, and the check sees it, or waits
 // for this transaction to end.
 func (q *Queries) LockRemoteSessionClientUserSessionIssuerLink(ctx context.Context, arg LockRemoteSessionClientUserSessionIssuerLinkParams) error {
-	_, err := q.db.Exec(ctx, lockRemoteSessionClientUserSessionIssuerLink, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	_, err := q.db.Exec(ctx, lockRemoteSessionClientUserSessionIssuerLink, arg.RemoteSessionClientID, arg.UserSessionIssuerID, arg.OrganizationID)
 	return err
 }
 
@@ -13444,7 +13507,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.
 JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
 JOIN user_session_issuers AS target ON target.id = $1 AND NOT target.deleted
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
 JOIN projects AS p ON p.id = $2 AND p.organization_id = $3 AND NOT p.deleted
 JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 JOIN organization_user_relationships AS membership ON membership.user_id = u.id AND membership.organization_id = p.organization_id AND membership.deleted_at IS NULL
@@ -16611,27 +16673,64 @@ WHERE s.subject_urn = $2
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = $4
   AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
-  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
-  AND c.deleted IS FALSE
   AND (
-    EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS link
-      WHERE link.remote_session_client_id = s.remote_session_client_id
-        AND link.user_session_issuer_id = usi.id
+    (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text))
+    OR EXISTS (
+      SELECT 1 FROM projects AS client_project
+      WHERE client_project.id = c.project_id AND client_project.organization_id = $6::text
+        AND (client_project.id = $5::uuid OR $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid)
     )
+  )
+  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM user_session_issuers provenance
+    LEFT JOIN projects origin ON origin.id = provenance.project_id
+    WHERE provenance.id = s.user_session_issuer_id
+      AND (origin.organization_id = $6::text
+           OR (provenance.project_id IS NULL AND provenance.organization_id = $6::text))
+  )
+  AND (
+    ($3::boolean AND EXISTS (
+      SELECT 1 FROM user_sessions downstream
+      WHERE downstream.id = ANY($7::uuid[]) AND downstream.subject_urn = s.subject_urn
+        AND downstream.user_session_issuer_id = usi.id AND downstream.deleted_at = $1::timestamptz
+    ))
     OR s.user_session_issuer_id = usi.id
+    OR EXISTS (
+      SELECT 1
+      FROM user_sessions downstream
+      JOIN upstream_client_selections choice
+        ON choice.credential_kind = 'user_session'
+       AND choice.credential_id = COALESCE(downstream.credential_id, downstream.id)
+       AND choice.organization_id = $6::text
+       AND NOT choice.deleted AND NOT choice.no_auth
+      JOIN projects p ON p.id = choice.project_id AND p.organization_id = choice.organization_id AND NOT p.deleted
+      JOIN mcp_servers server ON server.id = choice.mcp_server_id AND server.project_id = p.id AND NOT server.deleted
+      JOIN mcp_server_auth_clients offer ON offer.mcp_server_id = server.id AND offer.project_id = p.id
+        AND offer.organization_id = p.organization_id AND offer.auth_client_id = choice.auth_client_id AND NOT offer.deleted
+      JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+        AND (auth.project_id IS NULL OR auth.project_id = p.id) AND NOT auth.deleted AND auth.enabled
+        AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
+        AND (c.project_id IS NULL OR c.project_id = p.id)
+      JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+        AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
+      WHERE downstream.id = ANY($7::uuid[])
+        AND downstream.deleted AND downstream.user_session_issuer_id = usi.id AND downstream.subject_urn = s.subject_urn
+        AND (downstream.project_id IS NULL OR downstream.project_id = p.id)
+        AND ($5::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR p.id = $5::uuid)
+    )
   )
 RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted
 `
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
-	RevokedAt           pgtype.Timestamptz
-	SubjectUrn          urn.SessionSubject
-	AlreadyRevoked      bool
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-	OrganizationID      string
+	RevokedAt            pgtype.Timestamptz
+	SubjectUrn           urn.SessionSubject
+	AlreadyRevoked       bool
+	UserSessionIssuerID  uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	DownstreamSessionIds []uuid.UUID
 }
 
 type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
@@ -16643,26 +16742,10 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 	RefreshTokenOrgEncrypted pgtype.Text
 }
 
-// Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds that the revoking user session issuer can reach, and returns
-// their stored credentials. Reachable is either arm of the disjunction below:
-// the grant's client is currently bound to that issuer, or the grant was
-// minted through it. The second arm matters because a client detached from
-// the issuer after minting keeps no binding row, and without it the revoke
-// would report success while leaving those upstream tokens live. Both arms
-// name the requesting issuer, so neither crosses a tenant, and the client's
-// own project/org tenancy is checked either way (mirroring
-// CheckRemoteSessionClientBindingForUserSessionIssuer).
-//
-// A subject's grant is shared by every MCP client it authenticates, because
-// remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
-// user-session-client column. The stored user_session_issuer_id is provenance
-// from INSERT, not a lookup key, so a revoke through one bound issuer must
-// still tombstone a row minted by another. A revoke that left the upstream
-// tokens alive would not be a revoke.
-// Agent-management stamps grants with the durable user-session revocation boundary.
-// Retries match only that exact boundary, never live or unrelated deleted grants.
-// Ordinary revocations pass no boundary and only match live grants.
+// A revoked downstream session may retire a same-subject grant minted on its
+// issuer, or a grant reached by that exact downstream credential's live typed
+// choice. A shared registration or compatibility link is not consent.
+// Agent retries use the original timestamp without re-deciding current offers.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer,
 		arg.RevokedAt,
@@ -16671,6 +16754,7 @@ func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx cont
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.DownstreamSessionIds,
 	)
 	if err != nil {
 		return nil, err
