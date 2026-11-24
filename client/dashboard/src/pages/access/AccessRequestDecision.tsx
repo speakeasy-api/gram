@@ -9,7 +9,10 @@ import { invalidateAllTemporaryGrants } from "@gram/client/react-query/temporary
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
-import { approvalChoices } from "./approvalChoices";
+import {
+  approvalWindowsFor,
+  requestedDurationLabel,
+} from "./requestedDuration";
 
 /**
  * Approve a pending access request for a fixed window, or deny it. Approving
@@ -57,8 +60,9 @@ export function AccessRequestDecision({
     // The window starts when the administrator clicks, not when the dialog
     // opened.
     const expiresAt = approve
-      ? approvalChoices(new Date()).find((option) => option.key === key)
-          ?.expiresAt
+      ? approvalWindowsFor(request, new Date()).windows.find(
+          (option) => option.key === key,
+        )?.expiresAt
       : undefined;
     if (approve && !expiresAt) return;
     setChoice(key);
@@ -73,15 +77,24 @@ export function AccessRequestDecision({
     });
   };
 
+  const now = new Date();
+  const { windows, suggested } = approvalWindowsFor(request, now);
+  const asked = requestedDurationLabel(request, now);
+
   return (
     <div className="space-y-2">
       <Text className="text-eyebrow">Give temporary access</Text>
+      {asked && (
+        <Text variant="body" className="text-sm">
+          {requesterName} asked to have it {asked}.
+        </Text>
+      )}
       <div className="flex flex-wrap gap-2">
-        {approvalChoices(new Date()).map((option) => (
+        {windows.map((option) => (
           <Button
             key={option.key}
             size="sm"
-            variant={option.key === "1h" ? "primary" : "secondary"}
+            variant={option.key === suggested ? "primary" : "secondary"}
             disabled={decide.isPending}
             onClick={() => submit(option.key, true)}
           >

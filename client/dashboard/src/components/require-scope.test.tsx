@@ -177,6 +177,32 @@ describe("RequestScopeAccess", () => {
     expect(await screen.findByText("Request pending")).toBeTruthy();
   });
 
+  it("asks how long the access is needed while requests are stored", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    expect(screen.getByLabelText("How long do you need it?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+    // No preference is the default, so the request carries no window.
+    expect(mutateAsync).toHaveBeenCalledWith({
+      request: {
+        requestAccessForm: { scope: "log:read", resourceId: "project-1" },
+      },
+    });
+  });
+
+  it("does not ask how long while requests only send email", () => {
+    render(<RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />);
+
+    expect(screen.queryByLabelText("How long do you need it?")).toBeNull();
+  });
+
   it("shows a request made earlier as pending without asking again", () => {
     accessRequests.on = true;
     accessRequests.grantable = new Set(["log:read"]);

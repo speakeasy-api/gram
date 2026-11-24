@@ -5,6 +5,13 @@ import { useSearchParams, useNavigate } from "react-router";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { FullScreenPage } from "@/components/full-screen-page";
+import { RequestDurationSelect } from "@/components/request-duration-select";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import {
+  requestedDurationFields,
+  type RequestedDurationKey,
+} from "./requestedDuration";
 import React, { useState } from "react";
 
 /**
@@ -26,6 +33,11 @@ export default function RequestAccess(): React.JSX.Element {
   >("idle");
 
   const requestAccessMutation = useRequestAccessMutation();
+  // How long the requester needs the access, kept only on stored requests,
+  // which the access requests rollout turns on.
+  const accessRequestsOn =
+    useFeatureFlag(FEATURE_FLAGS.accessRequests).status === "enabled";
+  const [duration, setDuration] = useState<RequestedDurationKey>("none");
 
   // Validate that scope is a valid requestable scope
   const validScopes = Object.values(RequestAccessFormScope);
@@ -43,6 +55,9 @@ export default function RequestAccess(): React.JSX.Element {
             scope: scope as RequestAccessFormScope,
             resourceId,
             resourceName,
+            ...(accessRequestsOn
+              ? requestedDurationFields(duration, new Date())
+              : {}),
           },
         },
       });
@@ -102,6 +117,10 @@ export default function RequestAccess(): React.JSX.Element {
                 )}
               </Stack>
             </div>
+
+            {requestState === "idle" && accessRequestsOn && (
+              <RequestDurationSelect value={duration} onChange={setDuration} />
+            )}
 
             {/* Request button */}
             {requestState === "idle" && (

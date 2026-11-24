@@ -36,6 +36,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/Popover";
 import { SelfGrantAccess } from "./temporary-access";
+import { RequestDurationSelect } from "./request-duration-select";
+import {
+  requestedDurationFields,
+  type RequestedDurationKey,
+} from "@/pages/access/requestedDuration";
 
 type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
@@ -425,6 +430,7 @@ function RequestScopeAccessButton({
   const { hasScope } = useRBAC();
   const { catalogue } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
+  const [duration, setDuration] = React.useState<RequestedDurationKey>("none");
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const missingScopes = scopes.filter(
@@ -490,6 +496,9 @@ function RequestScopeAccessButton({
             requestAccessForm: {
               scope: scopeToRequest,
               resourceId,
+              ...(accessRequestsOn
+                ? requestedDurationFields(duration, new Date())
+                : {}),
             },
           },
         }),
@@ -543,18 +552,31 @@ function RequestScopeAccessButton({
         </div>
       );
     case "idle":
-    case "sending":
-      return (
+    case "sending": {
+      const button = (
         <Button
           variant="secondary"
           size="sm"
-          className={className}
+          className={accessRequestsOn ? undefined : className}
           onClick={() => void handleRequestAccess()}
           disabled={state === "sending"}
         >
           {state === "sending" ? "Sending…" : "Request Access"}
         </Button>
       );
+      // Only a stored request keeps how long it is needed for.
+      if (!accessRequestsOn) return button;
+      return (
+        <div className={cn(stack, "gap-2")}>
+          <RequestDurationSelect
+            value={duration}
+            onChange={setDuration}
+            disabled={state === "sending"}
+          />
+          {button}
+        </div>
+      );
+    }
     case "sent":
       return (
         <div className={stack}>
