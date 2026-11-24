@@ -3,7 +3,7 @@ import { ListScopesResult$inboundSchema } from "@gram/client/models/components/l
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { listUserGrantsResultFromJSON } from "@gram/client/models/components/listusergrantsresult.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   canInGrants,
   exclusionScopesForScope,
@@ -783,6 +783,9 @@ describe("canInGrants", () => {
   });
 
   it("refuses a check whose id cannot name a resource", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const everything = [{ scope: "mcp:write", subScopes: ["mcp:read"] }];
     expect(canInGrants(everything, authz.mcpServer("s", "").write())).toBe(
       false,
@@ -793,5 +796,7 @@ describe("canInGrants", () => {
     expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
       true,
     );
+    expect(consoleError).toHaveBeenCalledTimes(2);
+    consoleError.mockRestore();
   });
 });
