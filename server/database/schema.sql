@@ -244,7 +244,8 @@ COMMENT ON COLUMN billing_metadata.organization_id IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_customer_id IS '@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_subscription_id IS '@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_billing_cycle_anchor IS '@access: confidential';
-COMMENT ON COLUMN billing_metadata.stripe_checkout_idempotency_key IS '@access: confidential';
+COMMENT ON COLUMN billing_metadata.stripe_checkout_idempotency_key IS 'Stripe checkout idempotency key. Encodes the organization, billing anchor, trial fingerprint and possibly a base64 return URL.
+@access: restricted';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_billing_cycle_anchor IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_trial_end IS '@access: confidential';
 COMMENT ON COLUMN billing_metadata.stripe_checkout_expires_at IS '@access: confidential';
@@ -1535,7 +1536,8 @@ COMMENT ON COLUMN api_keys.id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.organization_id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN api_keys.created_by_user_id IS '@access: confidential';
-COMMENT ON COLUMN api_keys.name IS '@access: confidential';
+COMMENT ON COLUMN api_keys.name IS 'Label the customer chose for the key.
+@access: opaque-confidential';
 COMMENT ON COLUMN api_keys.key_prefix IS '@access: secret-restricted';
 COMMENT ON COLUMN api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN api_keys.scopes IS '@access: confidential';
@@ -1875,8 +1877,8 @@ COMMENT ON COLUMN device_agent_state_reports.remote_config_etag IS '@access: con
 COMMENT ON COLUMN device_agent_state_reports.remote_config_failed IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.withheld_plugins IS 'Marketplace and plugin slugs chosen by the organization.
 @access: opaque-confidential';
-COMMENT ON COLUMN device_agent_state_reports.tools IS 'Speakeasy-defined tool ids and enforcement enums.
-@access: confidential';
+COMMENT ON COLUMN device_agent_state_reports.tools IS 'Per-tool enforcement state. Tool ids are reported by the device agent and stored as sent; layer and outcome fields are normalized enums.
+@access: opaque-confidential';
 COMMENT ON COLUMN device_agent_state_reports.degraded_tool_count IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.drift_counting_since IS '@access: confidential';
 COMMENT ON COLUMN device_agent_state_reports.speakeasyd_version IS '@access: confidential';
@@ -4001,8 +4003,8 @@ COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP s
 @access: confidential';
 COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 @access: confidential';
-COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.
-@access: confidential';
+COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source, chosen by the customer.
+@access: opaque-confidential';
 COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 @access: secret-restricted';
 COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.
@@ -7235,7 +7237,8 @@ COMMENT ON COLUMN chat_messages.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.role IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.content IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_raw IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.content_asset_url IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.content_asset_url IS 'Asset path of the stored message content; its file name is a digest of that content.
+@access: restricted';
 COMMENT ON COLUMN chat_messages.model IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.finish_reason IS '@access: confidential';
@@ -7256,7 +7259,8 @@ COMMENT ON COLUMN chat_messages.tool_urn IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_outcome IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.content_hash IS '@access: confidential';
+COMMENT ON COLUMN chat_messages.content_hash IS 'SHA-256 digest of the message content. Reveals when two messages have equal content.
+@access: restricted';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.capture_kind IS 'Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
 @access: confidential';
@@ -12441,14 +12445,20 @@ COMMENT ON COLUMN risk_results.chat_message_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.chat_content_part_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.skill_version_id IS '@access: confidential';
 COMMENT ON COLUMN risk_results.source IS '@access: confidential';
-COMMENT ON COLUMN risk_results.found IS '@access: confidential';
-COMMENT ON COLUMN risk_results.rule_id IS '@access: confidential';
+COMMENT ON COLUMN risk_results.found IS 'Whether the scan found a risk in the anchored content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.rule_id IS 'Detection rule that matched. Security finding.
+@access: restricted';
 COMMENT ON COLUMN risk_results.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_results.match IS '@access: secret-restricted';
-COMMENT ON COLUMN risk_results.start_pos IS '@access: confidential';
-COMMENT ON COLUMN risk_results.end_pos IS '@access: confidential';
-COMMENT ON COLUMN risk_results.confidence IS '@access: confidential';
-COMMENT ON COLUMN risk_results.tags IS '@access: confidential';
+COMMENT ON COLUMN risk_results.start_pos IS 'Start offset of the primary match in the scanned content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.end_pos IS 'End offset of the primary match in the scanned content. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.confidence IS 'Detector confidence for the finding. Security finding.
+@access: restricted';
+COMMENT ON COLUMN risk_results.tags IS 'Detector tags for the finding. Security finding.
+@access: restricted';
 COMMENT ON COLUMN risk_results.spans IS '@access: secret-restricted';
 COMMENT ON COLUMN risk_results.dead_letter_reason IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_results.excluded_at IS '@access: confidential';

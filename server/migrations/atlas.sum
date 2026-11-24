@@ -1,4 +1,4 @@
-h1:0ePoKsy2EZE0Kls0nBaD6OQIJBDLfW3UYrBKk3OtXto=
+h1:C5mOxGmI45PperAoM8dMSuG7WvfH2QaTATtMRg8Zaqk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -560,3 +560,4 @@ h1:0ePoKsy2EZE0Kls0nBaD6OQIJBDLfW3UYrBKk3OtXto=
 20261123155518_functions-access-org-encrypted-columns.sql h1:5KMn8u4K9AkPwwJah3Oj3BhIAM4wgwIGaYznejQuhiE=
 20261124152736_access-requests-add-requested-duration.sql h1:2bMNCsx9KxWi43HznmvD3tekjRMCl86Xf0aFbR+fz2k=
 20261124170626_network-ingresses-org-encrypted-credentials.sql h1:1pAOsr8FYmnQW4zcB1yRckorfkojHiQiKU2KSWnrh94=
+20261124181125_reclassify_column_comments.sql h1:aseRZk9Fvfix+C22+tDaW3sSpHJq2IYYe6pqig51OTM=
