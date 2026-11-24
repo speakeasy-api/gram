@@ -49,9 +49,6 @@ vi.mock("./sections/DangerZoneSection", () => ({
 vi.mock("./sections/RestartSetupSection", () => ({
   RestartSetupSection: () => <h2>Guided setup</h2>,
 }));
-vi.mock("./sections/HeadersSection", () => ({
-  HeadersSection: () => <h2>Custom Headers</h2>,
-}));
 vi.mock("./sections/PublicRateLimitsSection", () => ({
   PublicRateLimitsSection: () => <h2>Public Rate Limits</h2>,
 }));

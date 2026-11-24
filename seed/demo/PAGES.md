@@ -417,6 +417,10 @@ demo intentionally shows no box; component and Stripe transport fixtures cover
 verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
 No Stripe subscription, promotion, or local billing settings are seeded for it.
 
+### Hosted toolset sign-in
+
+The seeded hosted support toolset explicitly requires no upstream authentication (`requires_upstream_auth = FALSE`). Hosted upstream OAuth uses a registration assigned to the exact server; it does not borrow an upstream offer from another server with the same downstream sign-in issuer.
+
 ### Gateway discovery
 
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.

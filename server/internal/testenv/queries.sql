@@ -2798,3 +2798,11 @@ USING remote_session_clients AS c
 WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid;
+
+-- name: SetAPIKeyActivityFixture :exec
+-- Backdates a key's creation and last use so the plugin key reaper sees it as
+-- old or recently used.
+UPDATE api_keys
+SET created_at = @created_at
+  , last_accessed_at = sqlc.narg(last_accessed_at)
+WHERE id = @id;

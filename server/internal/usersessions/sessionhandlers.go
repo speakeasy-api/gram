@@ -29,7 +29,10 @@ import (
 // Distinct pairs are collected first because a subject commonly holds several
 // sessions against the same issuer — one per MCP client — and every one of them
 // shares the same upstream tokens.
-func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectIDs []uuid.UUID, organizationID string, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
+// A gateway ID always limits reach to that gateway. Without an ID,
+// gatewayInventory distinguishes the organization/project gateway from the
+// general session list, which can also see direct and stored gateway offers.
+func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectIDs []uuid.UUID, organizationID string, gatewayID uuid.NullUUID, gatewayInventory bool, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
 	if len(rows) == 0 {
 		return map[mv.UpstreamKey][]*types.UserSessionUpstream{}, nil
 	}
@@ -51,8 +54,10 @@ func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectIDs []uui
 	}
 
 	upstreamRows, err := repo.New(s.db).ListRemoteSessionUpstreamsForSubjects(ctx, repo.ListRemoteSessionUpstreamsForSubjectsParams{
-		SubjectUrns: subjectURNs,
-		IssuerIds:   issuerIDs,
+		SubjectUrns:      subjectURNs,
+		IssuerIds:        issuerIDs,
+		GatewayID:        gatewayID,
+		GatewayInventory: gatewayInventory,
 		// Scopes on the user_session_issuer's tenancy, with org-level clients
 		// additionally pinned to the caller's organization so a stray
 		// cross-tenant binding row can never surface a foreign credential.
@@ -156,7 +161,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)
 	}
 
-	upstreams, err := s.loadUpstreamsForSessions(ctx, []uuid.UUID{*authCtx.ProjectID}, authCtx.ActiveOrganizationID, rows)
+	upstreams, err := s.loadUpstreamsForSessions(ctx, []uuid.UUID{*authCtx.ProjectID}, authCtx.ActiveOrganizationID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, false, rows)
 	if err != nil {
 		return nil, err
 	}

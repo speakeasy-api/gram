@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -55,6 +56,12 @@ func testCreateDoesNotInheritOAuthBeforeCommit(t *testing.T, enforced bool) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer, Valid: true}, server.RemoteSessionIssuerID)
+	associations, err := upstreamclientsrepo.New(tx).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{
+		McpServerID: server.ID,
+		ProjectID:   *auth.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, associations, "selecting a downstream issuer does not associate its upstream registration")
 	links, err := backfill.New(tx).ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
 	require.Empty(t, links, "selecting a downstream issuer does not configure an upstream offer")

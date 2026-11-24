@@ -44,7 +44,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
 	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
@@ -133,7 +133,7 @@ func (s *Service) AttachServerClientAssociation(ctx context.Context, payload *ge
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
 	clientID, err := uuid.Parse(payload.RemoteSessionClientID)
@@ -420,7 +420,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
 	clientID, err := uuid.Parse(payload.RemoteSessionClientID)

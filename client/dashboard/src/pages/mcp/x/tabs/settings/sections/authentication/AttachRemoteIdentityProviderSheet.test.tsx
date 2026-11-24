@@ -151,7 +151,6 @@ vi.mock("./useIssuerDiscovery", () => ({
 
 function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
   return {
-    kind: "standard",
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",
@@ -313,89 +312,38 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     ).toBeUndefined();
   });
 
-  it("confirms before re-pointing servers that share the user session issuer", async () => {
-    mocks.impact.mockReturnValue({
-      servers: [
-        {
-          id: "mcp-server-2",
-          name: "Sibling",
-          projectId: "project-1",
-          projectName: "Project",
-          impact: "clear",
-        },
-      ],
-      hiddenServerCount: 0,
-    });
-    renderSheet(["provider-old"], { id: "usi-1" } as UserSessionIssuer, {
-      mcpServerId: "mcp-server-1",
-    });
+  it("does not inspect siblings or gate a server-scoped attachment on them", async () => {
+    mocks.impact.mockReturnValue({ servers: [], hiddenServerCount: 1 });
+    renderSheet([], { id: "usi-1", projectId: "" } as UserSessionIssuer);
 
     await submitManualClient();
 
-    expect(
-      await screen.findByText("Change the upstream of other servers?"),
-    ).toBeTruthy();
-    expect(screen.getByText("Sibling")).toBeTruthy();
-    expect(mocks.createProvider).not.toHaveBeenCalled();
-    expect(mocks.impact).toHaveBeenLastCalledWith({
-      userSessionIssuerId: "usi-1",
-      mcpServerId: "mcp-server-1",
-      change: "attach",
-      providerId: undefined,
-      clientId: undefined,
-    });
-
-    const confirm = screen.getAllByRole("button", {
-      name: "Attach authorization server",
-    });
-    fireEvent.click(confirm[confirm.length - 1] as HTMLElement);
-    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
-  });
-
-  it("attaches without confirming when no other server is affected", async () => {
-    renderSheet(["provider-old"], { id: "usi-1" } as UserSessionIssuer, {
-      permissionResourceId: "toolset-1",
-      mcpServerId: "mcp-server-1",
-    });
-
-    await submitManualClient();
-
-    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.attachClient).toHaveBeenCalledOnce());
+    expect(mocks.impact).not.toHaveBeenCalled();
     expect(
       screen.queryByText("Change the upstream of other servers?"),
     ).toBeNull();
   });
 
-  it("names affected servers in other projects and blocks on hidden ones", async () => {
-    mocks.impact.mockReturnValue({
-      servers: [
-        {
-          id: "mcp-server-9",
-          name: "Elsewhere",
-          projectId: "project-2",
-          projectName: "Other project",
-          impact: "repoint",
-        },
-      ],
-      hiddenServerCount: 1,
-    });
-    renderSheet([], { id: "usi-1", projectId: "" } as UserSessionIssuer);
-
+  it("can leave retry mode after a failed attachment without deleting the registration", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.attachClient.mockRejectedValueOnce(
+      new Error("Already has a registration"),
+    );
+    renderSheet();
     await submitManualClient();
 
-    expect(await screen.findByText("Elsewhere (Other project)")).toBeTruthy();
-    expect(
-      screen.getByText(
-        /1 more server you don't have access to shares this user session issuer and may be affected/,
-      ),
-    ).toBeTruthy();
-    const confirm = screen.getAllByRole("button", {
-      name: "Attach authorization server",
-    });
-    expect((confirm[confirm.length - 1] as HTMLButtonElement).disabled).toBe(
-      true,
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Choose a different registration",
+      }),
     );
-    expect(mocks.createProvider).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Retry setup" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Attach authorization server" }),
+    ).toBeTruthy();
+    expect(mocks.attachClient).toHaveBeenCalledOnce();
+    expect(mocks.linkTarget).not.toHaveBeenCalled();
   });
 
   it("searches the listing on the server and resolves the pick by id", async () => {

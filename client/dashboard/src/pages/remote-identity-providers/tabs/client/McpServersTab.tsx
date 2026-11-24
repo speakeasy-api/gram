@@ -35,7 +35,7 @@ function mcpServerHref(
   return `/${orgSlug}/projects/${server.projectSlug}/mcp/${mcpServerRouteParam(server)}/overview`;
 }
 
-// mcpServerIdentityHref points at the server's own Identity settings, where an
+// mcpServerIdentityHref points at the server's own Sign-in settings, where an
 // organization served by typed auth clients changes what the server offers.
 function mcpServerIdentityHref(
   orgSlug: string | undefined,
@@ -87,7 +87,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
           ? [
               {
                 label: server.url
-                  ? "Manage in Identity"
+                  ? "Manage in Sign-in"
                   : "Open server settings",
                 onClick: () => void navigate(identityHref),
               },

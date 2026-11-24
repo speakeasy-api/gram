@@ -869,6 +869,18 @@ FROM remote_session_client_user_session_issuers AS link
 WHERE link.remote_session_client_id = @remote_session_client_id
 ORDER BY link.user_session_issuer_id;
 
+-- name: ListVisibleUserSessionIssuerIDsForRemoteSessionClient :many
+-- The caller must already have selected a client visible in this scope.
+-- A platform-global client can be offered in multiple tenants, so only
+-- return live issuer links visible in this project or its organization.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.remote_session_client_id = @remote_session_client_id::uuid
+  AND usi.deleted IS FALSE
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+ORDER BY link.user_session_issuer_id;
+
 -- name: ReplaceRemoteSessionClientRegistration :one
 -- Swaps the row onto a freshly registered upstream client in place, so the
 -- issuer bindings, MCP server attachments, and key set links that reference
@@ -1175,6 +1187,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.deleted IS FALSE
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
@@ -2667,6 +2680,7 @@ WITH due AS (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -2843,6 +2857,7 @@ CROSS JOIN LATERAL (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -3001,6 +3016,7 @@ WITH due AS (
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -3138,6 +3154,7 @@ WHERE s.id = @id
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -3249,6 +3266,7 @@ WHERE s.id = @id
       FROM mcp_server_remote_session_clients AS assignment
       JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
         AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
       JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
       JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
       JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
@@ -3361,6 +3379,7 @@ WITH bound AS (
     FROM mcp_server_remote_session_clients AS assignment
     JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
       AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+        AND hosted.visibility IN ('public', 'private') AND c.credential_owner = 'subject'
     JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
     JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
     JOIN user_session_issuers AS sign_in ON sign_in.id = @user_session_issuer_id::uuid AND NOT sign_in.deleted
@@ -7626,7 +7645,7 @@ WHERE link.mcp_server_id = @mcp_server_id::uuid AND link.project_id = @project_i
   AND (NOT @direct_server::boolean OR server.user_session_issuer_id = issuer.id)
   AND NOT issuer.deleted AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
   AND NOT client.deleted AND client.credential_owner = 'subject'
-  AND (client.project_id = project.id OR (client.project_id IS NULL AND client.organization_id = project.organization_id))
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
   AND upstream.id = @remote_session_issuer_id::uuid AND NOT upstream.deleted AND (upstream.project_id = project.id OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = project.organization_id)))
   AND NOT EXISTS (
     SELECT 1 FROM mcp_server_remote_session_clients AS other

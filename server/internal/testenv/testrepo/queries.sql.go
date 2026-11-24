@@ -6729,6 +6729,26 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyActivityFixture = `-- name: SetAPIKeyActivityFixture :exec
+UPDATE api_keys
+SET created_at = $1
+  , last_accessed_at = $2
+WHERE id = $3
+`
+
+type SetAPIKeyActivityFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	LastAccessedAt pgtype.Timestamptz
+	ID             uuid.UUID
+}
+
+// Backdates a key's creation and last use so the plugin key reaper sees it as
+// old or recently used.
+func (q *Queries) SetAPIKeyActivityFixture(ctx context.Context, arg SetAPIKeyActivityFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyActivityFixture, arg.CreatedAt, arg.LastAccessedAt, arg.ID)
+	return err
+}
+
 const setAPIKeyCreatorFixture = `-- name: SetAPIKeyCreatorFixture :exec
 UPDATE api_keys
 SET created_by_user_id = $1

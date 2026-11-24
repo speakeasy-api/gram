@@ -489,7 +489,7 @@ func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issue
 func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
 	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
-		return s.hostedUpstreamTokens(ctx, authentication.refreshAttribution(ctx), endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, endpoint.UserSessionIssuerID, authentication.subject, skipUnusable)
+		return s.hostedUpstreamTokens(ctx, authentication.refreshAttribution(ctx), endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, endpoint.UserSessionIssuerID, tokenSubject(ctx, authentication.subject, authentication.authorizerOwner), skipUnusable)
 	}
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil

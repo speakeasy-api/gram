@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -279,6 +280,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 	return openrouter.NewUnifiedClient(
 		logger,
 		policy,
+		openrouter.EndpointsFor(partition.US),
 		prov,
 		&openrouter.PlatformKeyResolver{Provisioner: prov},
 		nil, // message capture  (nil-guarded)

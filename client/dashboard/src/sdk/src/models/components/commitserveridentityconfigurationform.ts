@@ -82,7 +82,7 @@ export type CommitServerIdentityConfigurationForm = {
    */
   replaceClientServerIds?: Array<string> | undefined;
   /**
-   * Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
+   * Refuse a save if the user session issuer also serves another MCP server. Set this to require a dedicated user session issuer for the target server. Explicitly assign a dedicated issuer before retrying.
    */
   targetServerOnly?: boolean | undefined;
 };

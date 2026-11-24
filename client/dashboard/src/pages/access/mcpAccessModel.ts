@@ -6,11 +6,6 @@ import { enumPresentation } from "@/lib/enum";
 
 import type { Disposition } from "@gram/client/models/components/selector.js";
 
-import {
-  TOOL_ANNOTATIONS,
-  type ToolAnnotation,
-} from "@/components/tool-selection/annotations";
-
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
 /** The four tool annotations the backend checks, in the order shown. */
@@ -56,28 +51,20 @@ export const DISPOSITION_COPY: Record<
 export type ToolLimit =
   | { kind: "all" }
   | { kind: "tools"; tools: string[] }
-  | { kind: "annotations"; dispositions: Disposition[] };
+  | {
+      kind: "annotations";
+      dispositions: Disposition[];
+      tools?: string[];
+    };
 
 export type ToolLimitKind = ToolLimit["kind"];
 
 interface ToolHints {
-  readOnlyHint?: boolean | null;
-  destructiveHint?: boolean | null;
-  idempotentHint?: boolean | null;
-  openWorldHint?: boolean | null;
+  readOnlyHint?: boolean | null | undefined;
+  destructiveHint?: boolean | null | undefined;
+  idempotentHint?: boolean | null | undefined;
+  openWorldHint?: boolean | null | undefined;
 }
-
-/**
- * The order the backend picks a tool's one disposition in when it carries
- * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
- * tool that is both read-only and idempotent counts as read-only.
- */
-export const DISPOSITION_PRECEDENCE = [
-  "read_only",
-  "destructive",
-  "idempotent",
-  "open_world",
-] as const satisfies readonly Disposition[];
 
 /**
  * The one disposition the server assigns a tool (authz.DispositionFromHints):
@@ -87,7 +74,7 @@ export const DISPOSITION_PRECEDENCE = [
  * the tests check this function against them.
  */
 export function toolDisposition(tool: {
-  annotations?: ToolHints | null;
+  annotations?: ToolHints | null | undefined;
 }): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
@@ -98,15 +85,48 @@ export function toolDisposition(tool: {
   return "unannotated";
 }
 
+export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
+  switch (limit.kind) {
+    case "all":
+      return true;
+    case "tools":
+      return limit.tools.includes(tool.name);
+    case "annotations":
+      return (
+        limit.dispositions.includes(toolDisposition(tool)) ||
+        (limit.tools ?? []).includes(tool.name)
+      );
+  }
+}
+
 /**
- * The server matches a tool by one disposition only, so a tool with several
- * hints must not count under the others.
+ * Kinds are kept when a tool is ticked, so tools of that kind added later stay
+ * covered: ticking update_task on read-only tools names it beside them.
+ * Unticking a tool a kind covers turns the rule into a tool list, because a
+ * kind cannot leave one tool out.
  */
-export function toolDispositionAnnotations(tool: {
-  annotations?: ToolHints | null;
-}): ToolAnnotation[] {
-  const disposition = toolDisposition(tool);
-  return TOOL_ANNOTATIONS.filter((annotation) => annotation === disposition);
+export function limitAfterToggle(
+  limit: ToolLimit,
+  tools: ServerTool[],
+  name: string,
+  next: string[],
+): ToolLimit {
+  if (limit.kind !== "annotations") {
+    if (next.length === tools.length) return { kind: "all" };
+    return { kind: "tools", tools: next };
+  }
+  const named = limit.tools ?? [];
+  const tool = tools.find((candidate) => candidate.name === name);
+  const kindCovers =
+    tool !== undefined && limit.dispositions.includes(toolDisposition(tool));
+  if (next.includes(name)) {
+    if (kindCovers || named.includes(name)) return limit;
+    return { ...limit, tools: [...named, name] };
+  }
+  if (!kindCovers) {
+    return { ...limit, tools: named.filter((other) => other !== name) };
+  }
+  return { kind: "tools", tools: next };
 }
 
 /**
@@ -128,7 +148,7 @@ export function convertToolLimit(
         .filter((tool) => {
           if (limit.kind === "all") return true;
           if (limit.kind !== "annotations") return false;
-          return limit.dispositions.includes(toolDisposition(tool));
+          return toolLimitReaches(limit, tool);
         })
         .map((tool) => tool.name);
       return { kind: "tools", tools: names };

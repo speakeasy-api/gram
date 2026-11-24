@@ -12442,7 +12442,7 @@ examples:
         application/json: {"id": "debf903f-956d-4b64-ad70-c9f849ad2ba7"}
       responses:
         "200":
-          application/json: {"access_expires_at": "2025-12-11T10:46:03.238Z", "created_at": "2025-11-15T04:52:56.504Z", "has_refresh_token": true, "id": "ac6b175f-ad75-41ec-b49b-11c32d865266", "remote_session_client_id": "2b7b676f-a00b-4112-82a1-3f0cfbcc4eb7", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "subject_urn": "<value>", "updated_at": "2026-10-03T10:11:55.708Z", "user_session_issuer_id": "93adcc88-0a63-48b1-8efa-a6adadecc722"}
+          application/json: {"created_at": "2025-11-15T04:52:56.504Z", "has_refresh_token": true, "id": "ac6b175f-ad75-41ec-b49b-11c32d865266", "remote_session_client_id": "2b7b676f-a00b-4112-82a1-3f0cfbcc4eb7", "scopes": ["<value 1>", "<value 2>", "<value 3>"], "subject_urn": "<value>", "updated_at": "2026-10-03T10:11:55.708Z", "user_session_issuer_id": "93adcc88-0a63-48b1-8efa-a6adadecc722"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

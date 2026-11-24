@@ -90,7 +90,7 @@ async function openRowMenu(user: ReturnType<typeof userEvent.setup>) {
   if (trigger) await user.click(trigger);
 }
 
-it("links to the server's own Identity", async () => {
+it("links to the server's own Sign-in", async () => {
   const { user } = setup();
   await openRowMenu(user);
   expect(
@@ -98,7 +98,7 @@ it("links to the server's own Identity", async () => {
     "never offers the legacy binding control",
   ).toBeNull();
 
-  await user.click(await screen.findByText("Manage in Identity"));
+  await user.click(await screen.findByText("Manage in Sign-in"));
   expect(screen.getByTestId("location").textContent).toBe(
     "/org/projects/proj/mcp/example-server/settings#authentication",
   );
@@ -107,7 +107,7 @@ it("links to the server's own Identity", async () => {
 it("opens settings without guessing an Identity anchor when usage has no remote URL", async () => {
   const { user } = setup("");
   await openRowMenu(user);
-  expect(screen.queryByText("Manage in Identity")).toBeNull();
+  expect(screen.queryByText("Manage in Sign-in")).toBeNull();
   await user.click(await screen.findByText("Open server settings"));
   expect(screen.getByTestId("location").textContent).toBe(
     "/org/projects/proj/mcp/example-server/settings",
