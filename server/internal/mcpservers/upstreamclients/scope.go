@@ -44,8 +44,11 @@ func ProjectsConsumingIssuers(ctx context.Context, db repo.DBTX, organizationID 
 	return mergeProjects(projects, consumers), nil
 }
 
-// ProjectsAssociatedWithClient is every project of the organization with a
-// live MCP server associated with clientID, tombstoned associations included.
+// ProjectsAssociatedWithClient returns projects in the organization where a
+// registration change may write an association mirror or a live typed offer.
+// Mirror rows on retired servers or projects still count because pruning can
+// delete them. Typed offers on those targets cannot serve and retirement
+// leaves them alone, so they do not expand the writer scope.
 func ProjectsAssociatedWithClient(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := repo.New(db).ListServersAssociatedWithClient(ctx, repo.ListServersAssociatedWithClientParams{
 		RemoteSessionClientID: clientID,
