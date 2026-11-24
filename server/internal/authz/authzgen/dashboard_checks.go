@@ -394,11 +394,17 @@ func renderDashboardCaseConstructors(r registry.Registry) ([]byte, error) {
 
 // tsSpaceClass is the body of a regular expression character class holding
 // every rune unicode.IsSpace accepts. JavaScript's \s differs: it has U+FEFF
-// and lacks U+0085.
+// and lacks U+0085. The control characters are written by name, which the
+// no-control-regex lint allows.
 func tsSpaceClass() string {
+	named := map[rune]string{'\t': `\t`, '\n': `\n`, '\v': `\v`, '\f': `\f`, '\r': `\r`}
 	var b strings.Builder
 	for r := rune(0); r <= unicode.MaxRune; r++ {
 		if !unicode.IsSpace(r) {
+			continue
+		}
+		if name, ok := named[r]; ok {
+			b.WriteString(name)
 			continue
 		}
 		end := r
