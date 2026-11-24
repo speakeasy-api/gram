@@ -63,37 +63,41 @@ func (s *Service) getPlatformSkill(ctx context.Context, req *rawRequest) (json.R
 }
 
 // readPlatformResource answers resources/read while the platform toolset
-// declares the Skills extension. An embedded skill's SKILL.md is read from the
-// catalog; any other URI, skill:// or not, names no resource this surface
-// serves and is answered with InvalidParams (-32602), as SEP-2640 requires.
+// declares the Skills extension. A file of an embedded skill, its SKILL.md or
+// a supporting file, is read from the catalog; any other URI, skill:// or
+// not, names no resource this surface serves and is answered with
+// InvalidParams (-32602), as SEP-2640 requires.
 func (s *Service) readPlatformResource(ctx context.Context, req *rawRequest) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.URI == "" {
 		return nil, oops.E(oops.CodeInvalid, err, "resource URI is required").LogWarn(ctx, s.logger)
 	}
-	if _, _, ok := mcpskills.ParseSkillURI(params.URI); !ok {
+	if _, _, _, ok := mcpskills.ParseSkillResourceURI(params.URI); !ok {
 		return nil, oops.E(oops.CodeInvalid, nil, "no resource is served at %s", params.URI).LogWarn(ctx, s.logger)
 	}
 	return s.readPlatformSkill(ctx, req, params.URI)
 }
 
-// readPlatformSkill answers resources/read for an embedded skill's SKILL.md
+// readPlatformSkill answers resources/read for a file of an embedded skill
 // with the exact embedded bytes. Embedded skills are reviewed Speakeasy
-// content rather than a customer's managed skill, so a read is counted on the
-// skill read metric but recorded as no activation: there is no stored version
-// to observe. uri is the skill URI the request named, already known to have
-// the shape of a served skill.
+// content rather than a customer's managed skill, so a SKILL.md read is
+// counted on the skill read metric but recorded as no activation: there is no
+// stored version to observe. A supporting-file read is not counted, since it
+// follows a load that already was. uri is the skill URI the request named,
+// already known to have the shape of a file of a served skill.
 func (s *Service) readPlatformSkill(ctx context.Context, req *rawRequest, uri string) (json.RawMessage, error) {
-	entry, ok := s.platformSkills.Get(uri)
+	_, resource, ok := s.platformSkills.Read(uri)
 	if !ok {
 		return nil, skillNotFound(ctx, s.logger, mcpskills.ErrSkillNotFound, uri)
 	}
 
-	bs, err := marshalSkillRead(ctx, s.logger, req.ID, entry, serverInfoPlatformToolset)
+	bs, err := marshalSkillRead(ctx, s.logger, req.ID, resource, serverInfoPlatformToolset)
 	if err != nil {
 		return nil, err
 	}
-	s.metrics.RecordSkillRead(ctx, mcpmetrics.SurfacePlatform, mcpmetrics.SkillOriginEmbedded)
+	if resource.IsManifest() {
+		s.metrics.RecordSkillRead(ctx, mcpmetrics.SurfacePlatform, mcpmetrics.SkillOriginEmbedded)
+	}
 	return bs, nil
 }
 

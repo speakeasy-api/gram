@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 
@@ -49,10 +50,6 @@ type skillsGetResult struct {
 	// Skill is the entry for the requested URI.
 	Skill mcpskills.Skill `json:"skill"`
 }
-
-// skillMimeType is the media type resources/read reports for a served
-// SKILL.md, which is Markdown with YAML frontmatter.
-const skillMimeType = "text/markdown"
 
 // parseSkillsListParams decodes the params of skills/list. Absent or null
 // params are an unpaginated request. Every surface answers a listing in one
@@ -125,20 +122,28 @@ func marshalSkillsGet(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 	return bs, nil
 }
 
-// marshalSkillRead renders a resources/read response carrying an entry's
-// SKILL.md as Markdown text: exactly the bytes the entry's digest covers.
-func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, entry mcpskills.Entry, identity serverInfo) (json.RawMessage, error) {
+// marshalSkillRead renders a resources/read response carrying one file of a
+// served skill: exactly the bytes its digest covers, as text for UTF-8 text
+// and as a base64 blob otherwise, under the file's media type.
+func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, resource mcpskills.Resource, identity serverInfo) (json.RawMessage, error) {
+	content := resourceContent{
+		URI:      resource.URI,
+		Name:     nil,
+		MimeType: new(resource.MimeType),
+		Text:     "",
+		Blob:     "",
+		Meta:     nil,
+	}
+	if resource.Text {
+		content.Text = string(resource.Content)
+	} else {
+		content.Blob = base64.StdEncoding.EncodeToString(resource.Content)
+	}
+
 	bs, err := json.Marshal(result[resourceReadResult]{
 		ID: id,
 		Result: resourceReadResult{
-			Contents: []resourceContent{{
-				URI:      entry.URI(),
-				Name:     nil,
-				MimeType: new(skillMimeType),
-				Text:     entry.Content,
-				Blob:     "",
-				Meta:     nil,
-			}},
+			Contents: []resourceContent{content},
 		},
 		serverIdentity: identity,
 		cacheHints:     cacheHintsCallerVarying,
@@ -218,15 +223,15 @@ func skillRecipientUserID(ctx context.Context, authUserID string) string {
 }
 
 // skillResourceURI reports the skill URI a resources/read request names, when
-// its params decode and the URI has the shape of a served skill's SKILL.md.
-// Any other request, including one whose params are malformed, is left to
-// the toolset resource path to answer.
+// its params decode and the URI has the shape of a file of a served skill:
+// its SKILL.md or a supporting file. Any other request, including one whose
+// params are malformed, is left to the toolset resource path to answer.
 func skillResourceURI(params json.RawMessage) (string, bool) {
 	var read resourceReadParams
 	if err := json.Unmarshal(params, &read); err != nil {
 		return "", false
 	}
-	if _, _, ok := mcpskills.ParseSkillURI(read.URI); !ok {
+	if _, _, _, ok := mcpskills.ParseSkillResourceURI(read.URI); !ok {
 		return "", false
 	}
 	return read.URI, true

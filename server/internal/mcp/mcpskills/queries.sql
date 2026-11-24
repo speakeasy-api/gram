@@ -132,6 +132,28 @@ FROM winners w
 ORDER BY w.project_slug ASC, w.skill_name ASC
 LIMIT @row_limit;
 
+-- name: ListServedSkillFileMetadata :many
+-- The supporting files of served skill versions, without their content, so a
+-- listing can enumerate every file of each skill. A gateway serves skills
+-- from every project in its organization, so the read is bounded by the
+-- projects that own the served versions; each version belongs to exactly one
+-- of them.
+SELECT skill_version_id, path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = ANY(@project_ids::uuid[])
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
+
+-- name: GetServedSkillFile :one
+-- One supporting file of a served skill version, with its content, for a
+-- resources/read of the file's skill:// URI.
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
 -- name: CreateMCPSkillLink :one
 -- Links a skill to the MCP surface that serves it. The caller validates that
 -- the id columns fit target_kind; the foreign keys keep the skill, its pinned

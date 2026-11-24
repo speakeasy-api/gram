@@ -2869,9 +2869,12 @@ WHERE l.token = @token
 -- the share link to the organization that owns the serving domain, so one
 -- tenant's skill can never be rendered under another tenant's custom domain.
 SELECT
+  s.project_id,
+  s.id AS skill_id,
   s.name,
   s.display_name,
   s.summary,
+  latest.id AS skill_version_id,
   latest.content,
   latest.created_at AS version_created_at
 FROM skill_share_links l
@@ -2884,7 +2887,7 @@ JOIN skills s
   AND s.id = l.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
+  SELECT sv.id, sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
   FROM skill_versions sv
   WHERE sv.skill_id = l.skill_id
   ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC

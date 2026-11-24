@@ -86,7 +86,7 @@ func servePlatformDiscover(t *testing.T, ti *testInstance, f *platformSkillsFixt
 
 // embeddedPlatformSkills returns the reviewed skills the server embeds, which
 // is what the platform toolset must serve.
-func embeddedPlatformSkills(t *testing.T) map[string][]byte {
+func embeddedPlatformSkills(t *testing.T) map[string]plugins.PlatformMCPSkill {
 	t.Helper()
 
 	sources, err := plugins.PlatformMCPSkills()
@@ -161,12 +161,13 @@ func TestServePlatformToolset_Skills_ListIsTheEmbeddedSet(t *testing.T) {
 		require.Equal(t, mcpskills.EmbeddedProjectSlug, projectSlug, "uri=%s", skill.URI)
 		names = append(names, name)
 
-		content, ok := embedded[name]
+		source, ok := embedded[name]
 		require.True(t, ok, "listed skill %q is not embedded", name)
+		content := source.Manifest
 		digest := sha256.Sum256(content)
 		require.Equal(t, name, skill.Frontmatter["name"])
 		require.NotEmpty(t, skill.Frontmatter["description"])
-		require.Len(t, skill.Resources, 1)
+		require.Len(t, skill.Resources, 1+len(source.Files))
 		require.Equal(t, skill.URI, skill.Resources[0].URI)
 		require.Equal(t, "sha256:"+hex.EncodeToString(digest[:]), skill.Resources[0].Digest)
 		require.Equal(t, len(content), skill.Resources[0].Size)
@@ -201,10 +202,10 @@ func TestServePlatformToolset_Skills_GetByURI(t *testing.T) {
 
 	var skill wireSkill
 	require.NoError(t, json.Unmarshal(result["skill"], &skill))
-	digest := sha256.Sum256(embedded[name])
+	digest := sha256.Sum256(embedded[name].Manifest)
 	require.Equal(t, uri, skill.URI)
 	require.Equal(t, name, skill.Frontmatter["name"])
-	require.Len(t, skill.Resources, 1)
+	require.Len(t, skill.Resources, 1+len(embedded[name].Files))
 	require.Equal(t, "sha256:"+hex.EncodeToString(digest[:]), skill.Resources[0].Digest)
 
 	w, err = servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, "not-an-embedded-skill")}), f.token)
@@ -219,7 +220,8 @@ func TestServePlatformToolset_Skills_ReadServesEmbeddedBytesWithoutActivation(t 
 	f := newPlatformSkillsFixture(t, ctx, ti)
 	embedded := embeddedPlatformSkills(t)
 
-	for name, content := range embedded {
+	for name, source := range embedded {
+		content := source.Manifest
 		uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 		w, err := servePlatformHTTP(t, ti, f.slug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), f.token)
 		require.NoError(t, err)

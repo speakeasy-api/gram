@@ -19,14 +19,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// handleSkillResourceRead answers resources/read for a served skill's
-// SKILL.md with its stored content, exactly the bytes the entry's digest
-// covers. The read is answered from the skill distribution rather than a
-// toolset resource: it invokes nothing, so it is neither metered nor billed.
-// A successful read is recorded as an activation of the served version, best
-// effort, counted on the skill read metric, and written to the tool-usage
-// logs as a load of the named skill; a URI the caller is not
-// served is the extension's invalid-params error. uri is the skill URI the
+// handleSkillResourceRead answers resources/read for a file of a served
+// skill, its SKILL.md or a supporting file, with the stored content: exactly
+// the bytes the file's digest covers. The read is answered from the skill
+// distribution rather than a toolset resource: it invokes nothing, so it is
+// neither metered nor billed. A successful SKILL.md read is recorded as an
+// activation of the served version, best effort, counted on the skill read
+// metric, and written to the tool-usage logs as a load of the named skill; a
+// URI the caller is not served is the extension's invalid-params error. uri
+// is the skill URI the
 // request named, already known to have the shape of a served skill; now is
 // when the read is recorded as seen.
 func handleSkillResourceRead(
@@ -70,12 +71,26 @@ func readServedSkill(
 	if !ok {
 		return nil, skillNotFound(ctx, logger, mcpskills.ErrSkillNotFound, uri)
 	}
-	entry, err := resolver.Get(ctx, scope, uri)
+	entry, resource, err := resolver.Read(ctx, scope, uri)
 	if errors.Is(err, mcpskills.ErrSkillNotFound) {
 		return nil, skillNotFound(ctx, logger, err, uri)
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read skill").LogError(ctx, logger)
+	}
+
+	// Whether the URI resolves at all depends on the caller's organization
+	// membership, so the content is private to the caller.
+	bs, err := marshalSkillRead(ctx, logger, req.ID, resource, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	// Loading a skill is reading its SKILL.md. A supporting file is read
+	// after the skill was loaded, so it is served without being counted,
+	// recorded or logged as another activation.
+	if !resource.IsManifest() {
+		return bs, nil
 	}
 
 	// The activation is bookkeeping about the read, not part of it: a
@@ -93,13 +108,6 @@ func readServedSkill(
 		)
 	}
 	metrics.RecordSkillRead(ctx, surface, mcpmetrics.SkillOriginDistribution)
-
-	// Whether the URI resolves at all depends on the caller's organization
-	// membership, so the content is private to the caller.
-	bs, err := marshalSkillRead(ctx, logger, req.ID, *entry, identity)
-	if err != nil {
-		return nil, err
-	}
 	logSkillRead(ctx, logger, telemLogger, clientInfoStore, payload, *entry, len(bs), now)
 	return bs, nil
 }

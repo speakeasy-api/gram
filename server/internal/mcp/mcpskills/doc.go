@@ -13,10 +13,11 @@
 // between two different pins the newer version wins. Skills from different
 // projects that share a name are separate skills and are all served.
 //
-// Every served skill is a single SKILL.md file addressed as
-// skill://<project-slug>/<name>/SKILL.md; the project slug keeps same-named
-// skills apart, and the final path segment is the frontmatter name SEP-2640
-// requires. The package produces the SEP-2640 entry shape for
-// it, and the MCP surfaces decide when the extension is advertised and how
-// its methods are dispatched.
+// Every served skill is a skill directory: its SKILL.md, addressed as
+// skill://<project-slug>/<name>/SKILL.md, and any supporting files, addressed
+// as skill://<project-slug>/<name>/<path>. The project slug keeps same-named
+// skills apart, and the SKILL.md URI's final path segment is the frontmatter
+// name SEP-2640 requires. The package produces the SEP-2640 entry shape, which
+// lists every file as a resource, and the MCP surfaces decide when the
+// extension is advertised and how its methods are dispatched.
 package mcpskills

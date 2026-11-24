@@ -81,7 +81,16 @@ func TestCreateTree_BoundsUploadsAndCancelsOnFailure(t *testing.T) {
 
 func TestPushFiles_SmallTextStaysInline(t *testing.T) {
 	t.Parallel()
-	files := map[string][]byte{"README.md": []byte("Hello 日本語\n"), "run.sh": []byte("#!/bin/sh\n"), "empty.txt": {}}
+	files := map[string][]byte{
+		"README.md":                       []byte("Hello 日本語\n"),
+		"run.sh":                          []byte("#!/bin/sh\n"),
+		"empty.txt":                       {},
+		"plugin/skills/pdf/scripts/x.py":  []byte("print(1)\n"),
+		"plugin/skills/pdf/references/a":  []byte("ref\n"),
+		"plugin/skills/pdf/SKILL.md":      []byte("---\n---\n"),
+		"plugin/skills/scripts/README.md": []byte("not a skill script\n"),
+	}
+	executable := map[string]bool{"run.sh": true, "plugin/skills/pdf/scripts/x.py": true}
 	treeCalls, commits, updates := 0, 0, 0
 	client := uploadTestClient(func(req *http.Request) (*http.Response, error) {
 		switch {
@@ -104,10 +113,10 @@ func TestPushFiles_SmallTextStaysInline(t *testing.T) {
 				require.NotContains(t, entry, "sha")
 				require.Equal(t, "blob", entry["type"])
 				mode := "100644"
-				if strings.HasSuffix(entry["path"], ".sh") {
+				if executable[entry["path"]] {
 					mode = "100755"
 				}
-				require.Equal(t, mode, entry["mode"])
+				require.Equal(t, mode, entry["mode"], entry["path"])
 				paths = append(paths, entry["path"])
 			}
 			require.True(t, slices.IsSorted(paths))

@@ -15,10 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
-// skillMIMEType is the media type a served SKILL.md is read as: Markdown
-// with YAML frontmatter, as on every other surface that serves skills.
-const skillMIMEType = "text/markdown"
-
 // SkillsGate decides whether the external Platform MCP serves the Skills
 // extension (SEP-2640) to an organization.
 type SkillsGate interface {
@@ -164,19 +160,25 @@ func skillsMiddleware(catalog *mcpskills.EmbeddedCatalog, gate SkillsGate) mcp.M
 				if !mcpskills.IsSkillURI(read.Params.URI) || !skillsEnabled(ctx, gate) {
 					return next(ctx, method, req)
 				}
-				entry, found := catalog.Get(read.Params.URI)
+				_, resource, found := catalog.Read(read.Params.URI)
 				if !found {
 					return nil, skillNotFound(read.Params.URI)
 				}
+				contents := &mcp.ResourceContents{
+					URI:      resource.URI,
+					MIMEType: resource.MimeType,
+					Text:     "",
+					Blob:     nil,
+					Meta:     nil,
+				}
+				if resource.Text {
+					contents.Text = string(resource.Content)
+				} else {
+					contents.Blob = resource.Content
+				}
 				return &mcp.ReadResourceResult{ //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 					Cacheable: privateCacheable(),
-					Contents: []*mcp.ResourceContents{{
-						URI:      entry.URI(),
-						MIMEType: skillMIMEType,
-						Text:     entry.Content,
-						Blob:     nil,
-						Meta:     nil,
-					}},
+					Contents:  []*mcp.ResourceContents{contents},
 				}, nil
 			default:
 				return next(ctx, method, req)

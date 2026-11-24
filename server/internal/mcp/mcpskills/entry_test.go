@@ -53,6 +53,30 @@ func TestEntryWireMatchesSpecShape(t *testing.T) {
 	require.JSONEq(t, expected, string(encoded))
 }
 
+func TestEntryWireListsSupportingFiles(t *testing.T) {
+	t.Parallel()
+
+	content := "---\nname: pdf\ndescription: Work with PDFs\n---\n"
+	digest := sha256.Sum256([]byte(content))
+	entry := mcpskills.Entry{
+		SkillID: uuid.New(), VersionID: uuid.New(), ProjectID: uuid.New(), ProjectSlug: "default", Name: "pdf",
+		Content: content, RawSHA256: hex.EncodeToString(digest[:]),
+		Frontmatter: map[string]any{"name": "pdf", "description": "Work with PDFs"},
+		Files: []mcpskills.File{
+			{Path: "references/FORMS.md", SHA256: "AB12", Size: 42, ContentType: "text/markdown", Content: nil},
+			{Path: "scripts/fill.py", SHA256: "cd34", Size: 7, ContentType: "text/x-python", Content: nil},
+		},
+	}
+
+	wire := entry.Wire()
+	require.Equal(t, []mcpskills.SkillResource{
+		{URI: "skill://default/pdf/SKILL.md", Digest: "sha256:" + hex.EncodeToString(digest[:]), Size: len(content)},
+		{URI: "skill://default/pdf/references/FORMS.md", Digest: "sha256:ab12", Size: 42},
+		{URI: "skill://default/pdf/scripts/fill.py", Digest: "sha256:cd34", Size: 7},
+	}, wire.Resources)
+	require.Equal(t, "skill://default/pdf/SKILL.md", wire.URI, "the entry is still identified by its SKILL.md")
+}
+
 func TestEntryDigestIsLowercaseHex(t *testing.T) {
 	t.Parallel()
 

@@ -51,10 +51,22 @@ func NewEmbeddedCatalog() (*EmbeddedCatalog, error) {
 		entries: make([]Entry, 0, len(sources)),
 		byName:  make(map[string]Entry, len(sources)),
 	}
-	for name, content := range sources {
+	for name, source := range sources {
+		content := source.Manifest
 		frontmatter, err := skills.SkillFrontmatter(string(content))
 		if err != nil {
 			return nil, fmt.Errorf("parse embedded platform skill %q frontmatter: %w", name, err)
+		}
+
+		files := make([]File, 0, len(source.Files))
+		for _, file := range source.Files {
+			files = append(files, File{
+				Path:        file.Path,
+				SHA256:      file.SHA256,
+				Size:        file.Size,
+				ContentType: file.ContentType,
+				Content:     file.Content,
+			})
 		}
 
 		digest := sha256.Sum256(content)
@@ -67,6 +79,7 @@ func NewEmbeddedCatalog() (*EmbeddedCatalog, error) {
 			Content:     string(content),
 			RawSHA256:   hex.EncodeToString(digest[:]),
 			Frontmatter: frontmatter,
+			Files:       files,
 		}
 		if err := entry.CheckFrontmatterName(); err != nil {
 			return nil, fmt.Errorf("embedded platform skill %q: %w", name, err)
@@ -96,4 +109,26 @@ func (c *EmbeddedCatalog) Get(uri string) (entry Entry, ok bool) {
 	}
 	entry, ok = c.byName[name]
 	return entry, ok
+}
+
+// Read returns the content of the file a skill URI names, SKILL.md or a
+// supporting file, with the entry it belongs to, or false when the URI names
+// no file of a served skill.
+func (c *EmbeddedCatalog) Read(uri string) (entry Entry, resource Resource, ok bool) {
+	projectSlug, name, filePath, ok := ParseSkillResourceURI(uri)
+	if !ok || projectSlug != EmbeddedProjectSlug {
+		return entry, resource, false
+	}
+	served, ok := c.byName[name]
+	if !ok {
+		return entry, resource, false
+	}
+	if filePath == "" {
+		return served, served.ManifestResource(), true
+	}
+	file, ok := served.file(filePath)
+	if !ok {
+		return entry, resource, false
+	}
+	return served, served.fileResource(file, file.Content), true
 }

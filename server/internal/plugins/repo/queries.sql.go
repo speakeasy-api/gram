@@ -2252,6 +2252,48 @@ func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPlug
 	return items, nil
 }
 
+const listPluginSkillFilesForProject = `-- name: ListPluginSkillFilesForProject :many
+SELECT skill_version_id, path, content
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_version_id = ANY($2::uuid[])
+ORDER BY skill_version_id, path
+`
+
+type ListPluginSkillFilesForProjectParams struct {
+	ProjectID       uuid.UUID
+	SkillVersionIds []uuid.UUID
+}
+
+type ListPluginSkillFilesForProjectRow struct {
+	SkillVersionID uuid.UUID
+	Path           string
+	Content        []byte
+}
+
+// The supporting files of the skill versions ListPluginSkillsForProject
+// resolved, so a plugin package carries each skill's whole directory next to
+// its SKILL.md.
+func (q *Queries) ListPluginSkillFilesForProject(ctx context.Context, arg ListPluginSkillFilesForProjectParams) ([]ListPluginSkillFilesForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginSkillFilesForProject, arg.ProjectID, arg.SkillVersionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginSkillFilesForProjectRow
+	for rows.Next() {
+		var i ListPluginSkillFilesForProjectRow
+		if err := rows.Scan(&i.SkillVersionID, &i.Path, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginSkillsForProject = `-- name: ListPluginSkillsForProject :many
 SELECT
   p.id AS plugin_id,
@@ -2259,6 +2301,7 @@ SELECT
   p.slug AS plugin_slug,
   p.description AS plugin_description,
   s.name AS skill_name,
+  resolved.id AS skill_version_id,
   resolved.content AS skill_content
 FROM skill_distributions sd
 JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
@@ -2267,7 +2310,7 @@ JOIN skills s
   AND s.id = sd.skill_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.content
+  SELECT sv.id, sv.content
   FROM skill_versions sv
   LEFT JOIN skill_version_origins svo
     ON svo.project_id = sd.project_id
@@ -2299,6 +2342,7 @@ type ListPluginSkillsForProjectRow struct {
 	PluginSlug        string
 	PluginDescription pgtype.Text
 	SkillName         string
+	SkillVersionID    uuid.UUID
 	SkillContent      string
 }
 
@@ -2323,6 +2367,7 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 			&i.PluginSlug,
 			&i.PluginDescription,
 			&i.SkillName,
+			&i.SkillVersionID,
 			&i.SkillContent,
 		); err != nil {
 			return nil, err

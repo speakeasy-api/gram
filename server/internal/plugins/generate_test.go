@@ -24,6 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 	"unicode/utf16"
 
@@ -5004,6 +5005,129 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 		require.NotContains(t, path, "/hooks/")
 		require.NotContains(t, path, "speakeasy.json")
 	}
+}
+
+func TestGenerateMCPFilesEmitsSkillSupportingFiles(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	content := "---\nname: release-notes\ndescription: d\n---\n\nbody\n"
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "d",
+		Servers:     []PluginServerInfo{{DisplayName: "crm-tools", MCPURL: "https://app.getgram.ai/mcp/acme-abc12"}},
+		Skills: []PluginSkillInfo{{
+			Name:    "release-notes",
+			Content: content,
+			Files: []PluginSkillFile{
+				{Path: "scripts/render.py", Content: []byte("print('hi')\n")},
+				{Path: "assets/template.bin", Content: []byte{0x00, 0x01}},
+				// Not a clean relative path — must never become a path.
+				{Path: "../escape.txt", Content: []byte("nope")},
+			},
+		}},
+	}}
+
+	files, err := generateMCPFiles(plugins, cfg)
+	require.NoError(t, err)
+
+	for _, root := range []string{"engineering-tools", cursorPluginRoot + "/engineering-tools-cursor", "engineering-tools-codex"} {
+		require.Equal(t, []byte(content), files[root+"/skills/release-notes/SKILL.md"], root)
+		require.Equal(t, []byte("print('hi')\n"), files[root+"/skills/release-notes/scripts/render.py"], root)
+		require.Equal(t, []byte{0x00, 0x01}, files[root+"/skills/release-notes/assets/template.bin"], root)
+	}
+	for p := range files {
+		require.NotContains(t, p, "escape", "invalid supporting-file paths must be dropped, not emitted")
+	}
+}
+
+func TestReadPlatformMCPSkillReadsWholeDirectory(t *testing.T) {
+	t.Parallel()
+	manifest := []byte("---\nname: demo-skill\ndescription: Demonstrates a skill directory.\n---\n\nBody\n")
+	fsys := fstest.MapFS{
+		"skills/demo-skill/SKILL.md":                {Data: manifest},
+		"skills/demo-skill/scripts/run.py":          {Data: []byte("print(1)\n")},
+		"skills/demo-skill/references/REFERENCE.md": {Data: []byte("# Ref\n")},
+	}
+
+	skill, err := readPlatformMCPSkill(fsys, "skills/demo-skill", "demo-skill")
+	require.NoError(t, err)
+	require.Equal(t, manifest, skill.Manifest)
+	require.Len(t, skill.Files, 2)
+	require.Equal(t, "references/REFERENCE.md", skill.Files[0].Path)
+	require.Equal(t, "scripts/run.py", skill.Files[1].Path)
+	require.Equal(t, []byte("print(1)\n"), skill.Files[1].Content)
+	require.NotEmpty(t, skill.Files[1].SHA256)
+
+	fsys["skills/demo-skill/skill.md"] = &fstest.MapFile{Data: []byte("shadow manifest")}
+	_, err = readPlatformMCPSkill(fsys, "skills/demo-skill", "demo-skill")
+	require.Error(t, err, "a supporting file may not shadow the manifest")
+}
+
+func TestPlatformMCPPackagesShipEmbeddedSkillDirectories(t *testing.T) {
+	t.Parallel()
+	skills, err := PlatformMCPSkills()
+	require.NoError(t, err)
+
+	files := map[string][]byte{}
+	require.NoError(t, emitPlatformMCPSkills(files, "root"))
+	for name, skill := range skills {
+		require.Equal(t, skill.Manifest, files["root/skills/"+name+"/SKILL.md"])
+		for _, file := range skill.Files {
+			require.Equal(t, file.Content, files["root/skills/"+name+"/"+file.Path])
+		}
+	}
+}
+
+func TestMCPFingerprintsChangeWithSkillSupportingFiles(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	makePlugins := func(script string) []PluginInfo {
+		return []PluginInfo{{
+			Name: "Plugin A", Slug: "plugin-a", Description: "A",
+			Servers: []PluginServerInfo{{DisplayName: "a1", MCPURL: "https://app.getgram.ai/mcp/a1"}},
+			Skills: []PluginSkillInfo{{
+				Name: "release-notes", Content: "v1",
+				Files: []PluginSkillFile{{Path: "scripts/run.sh", Content: []byte(script)}},
+			}},
+		}}
+	}
+
+	first, err := publishMCPFingerprints(makePlugins("echo 1"), nil, cfg, true)
+	require.NoError(t, err)
+	second, err := publishMCPFingerprints(makePlugins("echo 2"), nil, cfg, true)
+	require.NoError(t, err)
+	require.NotEqual(t, first["plugin-a"], second["plugin-a"], "a changed supporting file must change the plugin's fingerprint")
+}
+
+func TestWritePluginZipMakesSkillScriptsExecutable(t *testing.T) {
+	t.Parallel()
+	files := map[string][]byte{
+		"skills/pdf/scripts/extract.py":             []byte("print('x')\n"),
+		"plugin/skills/pdf/scripts/nested/tool.js":  []byte("console.log(1)\n"),
+		"skills/pdf/references/scripts.md":          []byte("# not a script\n"),
+		"skills/pdf/SKILL.md":                       []byte("---\n---\n"),
+		"scripts/top-level.py":                      []byte("print('not a skill')\n"),
+		"skills/scripts/SKILL.md":                   []byte("---\n---\n"),
+		"engineering-tools/skills/pdf/scripts/a.rb": []byte("puts 1\n"),
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, writePluginZip(&buf, files))
+	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+	modes := make(map[string]uint32, len(r.File))
+	for _, f := range r.File {
+		modes[f.Name] = uint32(f.Mode().Perm())
+	}
+
+	require.Equal(t, uint32(0o755), modes["skills/pdf/scripts/extract.py"])
+	require.Equal(t, uint32(0o755), modes["plugin/skills/pdf/scripts/nested/tool.js"])
+	require.Equal(t, uint32(0o755), modes["engineering-tools/skills/pdf/scripts/a.rb"])
+	require.Equal(t, uint32(0o644), modes["skills/pdf/references/scripts.md"])
+	require.Equal(t, uint32(0o644), modes["skills/pdf/SKILL.md"])
+	require.Equal(t, uint32(0o644), modes["scripts/top-level.py"])
+	require.Equal(t, uint32(0o644), modes["skills/scripts/SKILL.md"])
 }
 
 // Distributing a skill (or changing its resolved content) must move the

@@ -315,6 +315,50 @@ func (q *Queries) GetMCPSkillLink(ctx context.Context, arg GetMCPSkillLinkParams
 	return i, err
 }
 
+const getServedSkillFile = `-- name: GetServedSkillFile :one
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+  AND path = $4
+`
+
+type GetServedSkillFileParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	Path           string
+}
+
+type GetServedSkillFileRow struct {
+	Path        string
+	Content     []byte
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+// One supporting file of a served skill version, with its content, for a
+// resources/read of the file's skill:// URI.
+func (q *Queries) GetServedSkillFile(ctx context.Context, arg GetServedSkillFileParams) (GetServedSkillFileRow, error) {
+	row := q.db.QueryRow(ctx, getServedSkillFile,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.Path,
+	)
+	var i GetServedSkillFileRow
+	err := row.Scan(
+		&i.Path,
+		&i.Content,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.ContentType,
+	)
+	return i, err
+}
+
 const insertMCPSkillObservation = `-- name: InsertMCPSkillObservation :execrows
 WITH inserted AS (
   INSERT INTO skill_observations (
@@ -568,6 +612,58 @@ func (q *Queries) ListMCPSkillLinks(ctx context.Context, arg ListMCPSkillLinksPa
 			&i.McpServerSlug,
 			&i.ToolsetName,
 			&i.MetaMcpServerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServedSkillFileMetadata = `-- name: ListServedSkillFileMetadata :many
+SELECT skill_version_id, path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = ANY($1::uuid[])
+  AND skill_version_id = ANY($2::uuid[])
+ORDER BY skill_version_id, path
+`
+
+type ListServedSkillFileMetadataParams struct {
+	ProjectIds      []uuid.UUID
+	SkillVersionIds []uuid.UUID
+}
+
+type ListServedSkillFileMetadataRow struct {
+	SkillVersionID uuid.UUID
+	Path           string
+	Sha256         string
+	SizeBytes      int64
+	ContentType    string
+}
+
+// The supporting files of served skill versions, without their content, so a
+// listing can enumerate every file of each skill. A gateway serves skills
+// from every project in its organization, so the read is bounded by the
+// projects that own the served versions; each version belongs to exactly one
+// of them.
+func (q *Queries) ListServedSkillFileMetadata(ctx context.Context, arg ListServedSkillFileMetadataParams) ([]ListServedSkillFileMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listServedSkillFileMetadata, arg.ProjectIds, arg.SkillVersionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServedSkillFileMetadataRow
+	for rows.Next() {
+		var i ListServedSkillFileMetadataRow
+		if err := rows.Scan(
+			&i.SkillVersionID,
+			&i.Path,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.ContentType,
 		); err != nil {
 			return nil, err
 		}

@@ -5,11 +5,17 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 // digestPrefix is the algorithm label SEP-2640 fixes for resource digests:
 // "sha256:" followed by 64 lowercase hexadecimal characters.
 const digestPrefix = "sha256:"
+
+// manifestMimeType is the media type resources/read reports for a served
+// SKILL.md, which is Markdown with YAML frontmatter.
+const manifestMimeType = "text/markdown"
 
 // Skill is the SEP-2640 skill entry returned by skills/list and skills/get.
 type Skill struct {
@@ -23,8 +29,9 @@ type Skill struct {
 	// because the Agent Skills specification requires them.
 	Frontmatter map[string]any `json:"frontmatter"`
 
-	// Resources enumerates every file of the skill. Speakeasy serves
-	// single-file skills, so it holds exactly the SKILL.md entry.
+	// Resources enumerates every file of the skill: SKILL.md first, then each
+	// supporting file sorted by path. Every one is readable through
+	// resources/read.
 	Resources []SkillResource `json:"resources"`
 }
 
@@ -75,6 +82,55 @@ type Entry struct {
 
 	// Frontmatter is the parsed YAML frontmatter of Content.
 	Frontmatter map[string]any
+
+	// Files are the version's supporting files, sorted by path.
+	Files []File
+}
+
+// File is one supporting file of a served skill version.
+type File struct {
+	// Path is the slash-separated path relative to the skill root, for
+	// example references/REFERENCE.md.
+	Path string
+
+	// SHA256 is the lowercase hex SHA-256 of the file's bytes.
+	SHA256 string
+
+	// Size is the byte length of the file.
+	Size int64
+
+	// ContentType is the media type stored with the file.
+	ContentType string
+
+	// Content is the file's bytes. An EmbeddedCatalog entry carries it; a
+	// resolved entry leaves it nil and Resolver.Read loads it on demand.
+	Content []byte
+}
+
+// Resource is the content of one file of a served skill, as resources/read
+// returns it.
+type Resource struct {
+	// URI is the file's resource URI.
+	URI string
+
+	// Path is the supporting file's path, or empty for SKILL.md.
+	Path string
+
+	// MimeType is the media type the read reports: text/markdown for
+	// SKILL.md, the stored content type for a supporting file.
+	MimeType string
+
+	// Content is the file's exact bytes, the ones its digest covers.
+	Content []byte
+
+	// Text reports whether Content is UTF-8 text the read returns as text
+	// rather than as a base64 blob.
+	Text bool
+}
+
+// IsManifest reports whether the resource is the skill's SKILL.md.
+func (r Resource) IsManifest() bool {
+	return r.Path == ""
 }
 
 // URI returns the entry's resource URI,
@@ -114,16 +170,53 @@ func (e Entry) Size() int {
 	return len(e.Content)
 }
 
-// Wire renders the entry in the shape skills/list and skills/get return.
+// Wire renders the entry in the shape skills/list and skills/get return:
+// one resource for SKILL.md, then one per supporting file.
 func (e Entry) Wire() Skill {
 	uri := e.URI()
+	resources := make([]SkillResource, 0, len(e.Files)+1)
+	resources = append(resources, SkillResource{
+		URI:    uri,
+		Digest: e.Digest(),
+		Size:   e.Size(),
+	})
+	for _, file := range e.Files {
+		resources = append(resources, SkillResource{
+			URI:    SkillFileURI(e.ProjectSlug, e.Name, file.Path),
+			Digest: Digest(file.SHA256),
+			Size:   int(file.Size),
+		})
+	}
 	return Skill{
 		URI:         uri,
 		Frontmatter: e.Frontmatter,
-		Resources: []SkillResource{{
-			URI:    uri,
-			Digest: e.Digest(),
-			Size:   e.Size(),
-		}},
+		Resources:   resources,
 	}
+}
+
+// ManifestResource returns the entry's SKILL.md as a resource.
+func (e Entry) ManifestResource() Resource {
+	return Resource{URI: e.URI(), Path: "", MimeType: manifestMimeType, Content: []byte(e.Content), Text: true}
+}
+
+// fileResource returns one supporting file of the entry, with content, as a
+// resource.
+func (e Entry) fileResource(file File, content []byte) Resource {
+	return Resource{
+		URI:      SkillFileURI(e.ProjectSlug, e.Name, file.Path),
+		Path:     file.Path,
+		MimeType: file.ContentType,
+		Content:  content,
+		Text:     skilltree.IsText(file.ContentType, content),
+	}
+}
+
+// file returns the supporting file at filePath, if the entry has one.
+func (e Entry) file(filePath string) (file File, ok bool) {
+	for _, candidate := range e.Files {
+		if candidate.Path == filePath {
+			return candidate, true
+		}
+	}
+	return file, false
 }

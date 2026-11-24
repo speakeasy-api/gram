@@ -452,7 +452,7 @@ func (c *Client) createTreeAttempt(ctx context.Context, installationID int64, ow
 				return fmt.Errorf("blob upload canceled: %w", err)
 			}
 			mode := "100644"
-			if strings.HasSuffix(path, ".sh") {
+			if strings.HasSuffix(path, ".sh") || isSkillScript(path) {
 				mode = "100755"
 			}
 			entry := map[string]string{"path": path, "mode": mode, "type": "blob"}
@@ -613,4 +613,19 @@ func (c *Client) updateRef(ctx context.Context, installationID int64, owner, rep
 	}
 
 	return nil
+}
+
+// isSkillScript reports whether a tree path is a file in a distributed
+// skill's scripts/ directory (.../skills/<name>/scripts/...). The Agent
+// Skills specification puts executable code there, so published packages
+// mark those files executable whatever their extension. The plugin ZIP
+// writer in plugins/impl.go applies the same rule; keep them in sync.
+func isSkillScript(p string) bool {
+	segments := strings.Split(p, "/")
+	for i := 0; i+3 < len(segments); i++ {
+		if segments[i] == "skills" && segments[i+2] == "scripts" {
+			return true
+		}
+	}
+	return false
 }

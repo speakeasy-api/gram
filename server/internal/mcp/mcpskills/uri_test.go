@@ -54,6 +54,64 @@ func TestParseSkillURI(t *testing.T) {
 	}
 }
 
+func TestSkillFileURI(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "skill://default/pdf/references/FORMS.md", mcpskills.SkillFileURI("default", "pdf", "references/FORMS.md"))
+	require.Equal(t, "skill://default/pdf/assets/my%20logo%23v2.png", mcpskills.SkillFileURI("default", "pdf", "assets/my logo#v2.png"))
+}
+
+func TestParseSkillResourceURI(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		uri      string
+		wantSlug string
+		wantName string
+		wantPath string
+		wantOK   bool
+	}{
+		{name: "manifest", uri: "skill://default/pdf/SKILL.md", wantSlug: "default", wantName: "pdf", wantPath: "", wantOK: true},
+		{name: "supporting file", uri: "skill://default/pdf/references/FORMS.md", wantSlug: "default", wantName: "pdf", wantPath: "references/FORMS.md", wantOK: true},
+		{name: "top-level file", uri: "skill://default/pdf/LICENSE.txt", wantSlug: "default", wantName: "pdf", wantPath: "LICENSE.txt", wantOK: true},
+		{name: "escaped segment", uri: "skill://default/pdf/assets/my%20logo.png", wantSlug: "default", wantName: "pdf", wantPath: "assets/my logo.png", wantOK: true},
+		{name: "unnecessary escape", uri: "skill://default/pdf/scripts/%72un.py", wantOK: false},
+		{name: "escaped slash", uri: "skill://default/pdf/scripts%2Frun.py", wantOK: false},
+		{name: "parent segment", uri: "skill://default/pdf/../other/SKILL.md", wantOK: false},
+		{name: "dot segment", uri: "skill://default/pdf/./SKILL.md", wantOK: false},
+		{name: "empty segment", uri: "skill://default/pdf/scripts//run.py", wantOK: false},
+		{name: "lowercase manifest", uri: "skill://default/pdf/skill.md", wantOK: false},
+		{name: "trailing slash", uri: "skill://default/pdf/scripts/", wantOK: false},
+		{name: "directory", uri: "skill://default/pdf", wantOK: false},
+		{name: "invalid name", uri: "skill://default/PDF/references/FORMS.md", wantOK: false},
+		{name: "invalid escape", uri: "skill://default/pdf/a%zz", wantOK: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			slug, name, filePath, ok := mcpskills.ParseSkillResourceURI(tc.uri)
+			require.Equal(t, tc.wantOK, ok)
+			require.Equal(t, tc.wantSlug, slug)
+			require.Equal(t, tc.wantName, name)
+			require.Equal(t, tc.wantPath, filePath)
+		})
+	}
+}
+
+func TestParseSkillResourceURIRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	for _, filePath := range []string{"references/REFERENCE.md", "assets/a b/c#d?.png", "scripts/run.py"} {
+		slug, name, parsed, ok := mcpskills.ParseSkillResourceURI(mcpskills.SkillFileURI("default", "pdf", filePath))
+		require.True(t, ok, filePath)
+		require.Equal(t, "default", slug)
+		require.Equal(t, "pdf", name)
+		require.Equal(t, filePath, parsed)
+	}
+}
+
 func TestParseSkillURIRoundTrip(t *testing.T) {
 	t.Parallel()
 
