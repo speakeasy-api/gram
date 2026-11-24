@@ -627,7 +627,7 @@ const ROUTE_STRUCTURE = {
           // Which MCP servers the agent calls, and how Speakeasy signs in to
           // each. Changed here, not by walking the setup wizard again.
           mcpSignIn: {
-            title: "Agent MCP Sign-in",
+            title: "Agent Server Sign-in",
             url: "mcp-sign-in",
           },
           // An agent's activity is the changes made to it and by it, so the

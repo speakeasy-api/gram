@@ -142,7 +142,7 @@ export function StepAuthentication({
     <div className="space-y-5">
       {showHeader && (
         <WizardStepHeader
-          title="MCP sign-in"
+          title="Server sign-in"
           description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
         />
       )}
@@ -250,7 +250,7 @@ export function StepAuthentication({
                       />
                     )}
                     <Badge
-                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // Blue, like the step's Server sign-in arrow: each pill
                       // says how Speakeasy signs in to that server.
                       variant={
                         sharedChosen

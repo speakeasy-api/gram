@@ -633,7 +633,7 @@ open their effective assignments; the dropdown always offers compact member sear
     - Locally, after the `enterprise-sign-in` sign-in below, the server's binding reads as
       accepted and `remote_session_ema_credentials` holds one row for the
       developer.
-    - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
+    - Open an agent's **Server sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (the
       toolset's canonical wrapper), Example OAuth and Example Shared
       Credential, plus Linear and Notion: five in all in the demo org (Acme
