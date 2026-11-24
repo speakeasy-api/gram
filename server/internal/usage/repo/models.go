@@ -20,7 +20,8 @@ type BillingMetadatum struct {
 	StripeSubscriptionID pgtype.Text
 	// @access: confidential
 	StripeBillingCycleAnchor pgtype.Timestamptz
-	// @access: confidential
+	// Stripe checkout idempotency key. Encodes the organization, billing anchor, trial fingerprint and possibly a base64 return URL.
+	// @access: restricted
 	StripeCheckoutIdempotencyKey pgtype.Text
 	// @access: confidential
 	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz

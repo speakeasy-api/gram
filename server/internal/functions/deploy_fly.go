@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -79,7 +80,7 @@ type FlyRunner struct {
 	defaultOrg      string
 	defaultRegion   string
 	imgSelector     ImageSelector
-	encryption      *encryption.Client
+	keys            *runnerkeys.Keys
 	ua              string
 }
 
@@ -97,7 +98,7 @@ func NewFlyRunner(
 	assetStorage assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
 	imageSelector ImageSelector,
-	encryption *encryption.Client,
+	keys *runnerkeys.Keys,
 	o FlyRunnerOptions,
 ) *FlyRunner {
 	ua := fmt.Sprintf("%s/%s", o.ServiceName, o.ServiceVersion)
@@ -136,7 +137,7 @@ func NewFlyRunner(
 		defaultOrg:      o.DefaultFlyOrg,
 		defaultRegion:   o.DefaultFlyRegion,
 		imgSelector:     imageSelector,
-		encryption:      encryption,
+		keys:            keys,
 		ua:              ua,
 	}
 }
@@ -156,17 +157,19 @@ func (f *FlyRunner) prepareFunctionAuth(ctx context.Context, logger *slog.Logger
 		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").LogError(ctx, logger)
 	}
 
-	format := row.BearerFormat.String
-	sec := row.EncryptionKey.Reveal()
-	if format == "" || len(sec) == 0 {
+	if row.BearerFormat.String == "" {
 		return "", nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials").LogError(ctx, logger)
 	}
 
-	unsealedAuthKey, err := f.encryption.Decrypt(string(sec))
+	unsealedAuthKey, err := f.keys.Open(ctx, runnerkeys.Stored{
+		OrganizationID: row.OrganizationID,
+		Platform:       row.EncryptionKey,
+		Org:            row.EncryptionKeyOrgEncrypted,
+	})
 	if err != nil {
-		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials").LogError(ctx, logger)
+		return "", nil, runnerkeys.Error(ctx, logger, err, "failed to access credentials")
 	}
-	enc, err = encryption.NewWithBytes([]byte(unsealedAuthKey))
+	enc, err = encryption.NewWithBytes(unsealedAuthKey)
 	if err != nil {
 		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client").LogError(ctx, logger)
 	}

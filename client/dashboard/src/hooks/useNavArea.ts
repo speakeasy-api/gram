@@ -31,6 +31,8 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "shadow-ai": "Security and Policy",
   "request-access": "Security and Policy",
   "detection-rules": "Security and Policy",
+  // Staff-only intent policies live at security/intent-policies.
+  security: "Security and Policy",
   // MCP Gateway
   mcp: "MCP Gateway",
   deployments: "MCP Gateway",

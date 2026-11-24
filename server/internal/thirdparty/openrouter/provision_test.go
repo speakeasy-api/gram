@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -70,8 +71,9 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, enc, staff.Organization{})
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, enc, staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	const workers = 8
 	keys := make([]string, workers)
@@ -151,8 +153,9 @@ func TestProvisionAPIKey_WaitsForBillingLock(t *testing.T) {
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	billingConn, err := conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -225,8 +228,9 @@ func TestProvisionAPIKey_MissingCiphertextErrors(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	require.Error(t, err)

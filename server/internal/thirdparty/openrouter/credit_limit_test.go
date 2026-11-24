@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -43,7 +44,7 @@ func TestDefaultCreditLimitUnconfiguredStaffOrganizationExemptsNobody(t *testing
 func TestDefaultLimitForOrgUsesConfiguredStaffOrganization(t *testing.T) {
 	t.Parallel()
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, "test", "provisioning-key", nil, nil, nil, staff.NewOrganization("org-staff"))
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil, "test", partition.US, "provisioning-key", nil, nil, nil, staff.NewOrganization("org-staff"))
 
 	limit := provisioner.defaultLimitForOrg(t.Context(), nil, orgRepo.OrganizationMetadatum{ID: "org-staff", GramAccountType: string(billing.TierBase)})
 	require.Equal(t, staffOrganizationCreditLimit, limit)
