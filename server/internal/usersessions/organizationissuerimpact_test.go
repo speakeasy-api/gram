@@ -75,6 +75,9 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	clientID := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, member, registration)
 	hostedOffer := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, hosted, hostedRegistration)
 	fixtures := selectionbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: hosted, RemoteSessionClientID: hostedRegistration,
+	}))
 	gateway := uuid.New()
 	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gateway, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "typed-gateway", UserSessionIssuerID: conv.ToNullUUID(source)}))
 	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member}))
@@ -105,7 +108,8 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	hostedOffers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, hosted)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{hostedOffer}, hostedOffers, "the source-linked registration survives as the exact hosted offer, not as a target link")
-	for _, id := range []uuid.UUID{member, hosted, targetServer} {
+	require.Equal(t, []uuid.UUID{hostedRegistration}, impactAssociatedClients(t, ctx, ti, hosted), "the exact hosted placement remains available to per-server readers")
+	for _, id := range []uuid.UUID{member, targetServer} {
 		require.Empty(t, impactAssociatedClients(t, ctx, ti, id))
 	}
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: source.String(), TargetID: target.String()})
