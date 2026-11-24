@@ -24,6 +24,7 @@ import (
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -409,12 +410,16 @@ func TestRemoteSessionRecheck_PrivateOnlyEndpointIsProbedPrivately(t *testing.T)
 	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 }
 
-// A gateway member's grant is placed through the gateway endpoint and judged by the member it routes to.
 func TestRemoteSessionRecheck_VerifiesExactHostedAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-keepalive")
 	makeKeepaliveShaped(t, ctx, fx, "hosted-keepalive")
-	_, err := mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+	// The exact hosted grant lookup requires a live organization member.
+	_, err := organizationsrepo.New(fx.ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: fx.endpoint.OrganizationID, UserID: conv.ToPGText(fx.subject.ID),
+	})
+	require.NoError(t, err)
+	_, err = mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:       fx.endpoint.ProjectID,
 		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -431,6 +436,7 @@ func TestRemoteSessionRecheck_VerifiesExactHostedAssignment(t *testing.T) {
 	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 }
 
+// A gateway member's grant is placed through the gateway endpoint and judged by the member it routes to.
 func TestRemoteSessionRecheck_ProbesMetaMemberThroughGateway(t *testing.T) {
 	t.Parallel()
 
