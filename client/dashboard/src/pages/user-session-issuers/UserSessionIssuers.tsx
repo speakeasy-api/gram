@@ -78,8 +78,8 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={organizationTier}
             showProject={false}
-            emptyHeading="No organization-wide MCP Authentication Providers"
-            emptyDescription="Make a project's MCP Authentication Provider organization-wide to share it with every project."
+            emptyHeading="No organization-wide MCP sign-ins"
+            emptyDescription="Make a project's MCP sign-in organization-wide to share it with every project."
             {...actions}
           />
         </Stack>
@@ -96,7 +96,7 @@ function UserSessionIssuersOverview(): JSX.Element {
           <IssuerTable
             tier={projectTier}
             showProject
-            emptyHeading="No project-specific MCP Authentication Providers"
+            emptyHeading="No project-specific MCP sign-ins"
             emptyDescription="Projects get one when they add sign-in to an MCP server."
             {...actions}
           />
@@ -152,7 +152,7 @@ function IssuerTable({
     return tier.isError ? (
       <InlineEmptyState
         icon="triangle-alert"
-        heading="Couldn't load MCP Authentication Providers"
+        heading="Couldn't load MCP sign-ins"
         action={
           <Button variant="secondary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>
@@ -183,7 +183,7 @@ function IssuerTable({
           <DotRow
             key={issuer.id}
             href={detailHref(issuer.id)}
-            ariaLabel={`View MCP Authentication Provider ${issuer.slug}`}
+            ariaLabel={`View MCP sign-in ${issuer.slug}`}
           >
             <td className="px-3 py-3">
               <Text
@@ -231,7 +231,7 @@ function IssuerTable({
       {tier.isError ? (
         <Stack direction="horizontal" align="center" gap={3} className="py-2">
           <Text small className="text-destructive">
-            Couldn&apos;t load every MCP Authentication Provider.
+            Couldn&apos;t load every MCP sign-in.
           </Text>
           <Button variant="tertiary" size="sm" onClick={tier.retry}>
             <Button.Text>Retry</Button.Text>

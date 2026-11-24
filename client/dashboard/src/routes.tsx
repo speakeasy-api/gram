@@ -455,15 +455,15 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
   },
   mcpSessions: {
-    title: "MCP Sessions",
+    title: "MCP Sign-in",
     url: "mcp-sessions",
     icon: "users",
     subPages: {
-      // One MCP Authentication Provider, chosen with the header's picker.
+      // One MCP sign-in, chosen with the header's picker.
       // The index opens the one an old `?issuerId=` link names, else the one
       // picked last, else the organization's default, else the first.
       provider: {
-        title: "MCP Authentication Provider",
+        title: "MCP Sign-in",
         url: ":issuerId",
         subPages: {
           // Overview and Connection Logs: mcp-connection-health flag only.
@@ -485,7 +485,7 @@ const ROUTE_STRUCTURE = {
         legacyRedirect: true,
         subPages: {
           issuerDetail: {
-            title: "MCP Authentication Provider",
+            title: "MCP Sign-in",
             url: ":issuerId",
             legacyRedirect: true,
           },
@@ -1211,7 +1211,7 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "key-round",
     subPages: {
       issuerDetail: {
-        title: "MCP Authentication Provider",
+        title: "MCP Sign-in",
         url: ":issuerId",
       },
     },
@@ -1308,7 +1308,7 @@ const ORG_ROUTE_STRUCTURE = {
     legacyRedirect: true,
   },
   legacyMcpSessions: {
-    title: "MCP Sessions",
+    title: "MCP Sign-in",
     url: "mcp-sessions",
     legacyRedirect: true,
   },

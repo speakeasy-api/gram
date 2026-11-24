@@ -178,7 +178,7 @@ it.each([
 });
 
 it("keeps Org Gateway and leaves MCP Authentication out of Settings", () => {
-  // MCP Authentication lives on each project's MCP Sessions page now.
+  // MCP Authentication lives on each project's MCP Sign-in page now.
   mocks.userSessionIssuersFlag = "enabled";
   renderSidebar();
   const settings = screen.getByRole("navigation", { name: "Settings" });

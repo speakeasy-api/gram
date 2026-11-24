@@ -301,8 +301,7 @@ function KnownClients({
           <div className="flex flex-col gap-0.5">
             <Text className="text-sm">Allowed by your organization</Text>
             <Text small muted>
-              Clients you add yourself, for this MCP Authentication Provider
-              only.
+              Clients you add yourself, for this MCP sign-in only.
             </Text>
           </div>
           {path.kind !== "elsewhere" && (
@@ -373,7 +372,7 @@ function OrganizationClientList({
   if (path.kind === "elsewhere") {
     return (
       <Text small muted>
-        See them in {path.projectName}&apos;s MCP Sessions configuration.
+        See them in {path.projectName}&apos;s MCP Sign-in configuration.
       </Text>
     );
   }

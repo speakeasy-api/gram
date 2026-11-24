@@ -1527,10 +1527,12 @@ describe("Connecting a GKE cluster", () => {
     // It is not on the Authorization Servers page, so the step points at the
     // page that lists it, in the project that owns it.
     expect(
-      screen.getByText(/listed on the MCP Sessions page as an MCP/),
+      screen.getByText(
+        /listed on the MCP Sign-in page, not on the Authorization/,
+      ),
     ).toBeTruthy();
     const link = screen.getByRole("link", {
-      name: "Open assistant-shared in MCP Sessions",
+      name: "Open assistant-shared in MCP Sign-in",
     });
     expect(link.getAttribute("href")).toBe(
       "/acme/projects/project-two/mcp-sessions/usi_project/mcp-servers",
@@ -1639,7 +1641,7 @@ describe("Connecting a GKE cluster", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
 

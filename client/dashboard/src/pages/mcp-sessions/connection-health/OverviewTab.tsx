@@ -74,7 +74,7 @@ const SIGN_IN_ACTIVITY_FILTERS: AttemptFilters = {
   steps: [...SIGN_IN_STEPS],
 };
 
-/** MCP Sessions › Overview: how sign-in through this provider is going. */
+/** MCP Sign-in › Overview: how sign-in through this provider is going. */
 export function OverviewTab({
   provider,
 }: {
@@ -228,7 +228,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. MCP sign-ins and renewals through this provider."
+        description="Latest first. Sign-ins and renewals through this provider."
         action={
           <ArrowLink
             to={logsHref(
@@ -251,7 +251,7 @@ export function OverviewTab({
           </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
-            No MCP sign-ins or renewals in the last 30 days.
+            No sign-ins or renewals in the last 30 days.
           </p>
         ) : (
           <AttemptsTable

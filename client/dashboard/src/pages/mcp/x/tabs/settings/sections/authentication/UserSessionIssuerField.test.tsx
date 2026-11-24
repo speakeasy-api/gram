@@ -219,9 +219,7 @@ describe("UserSessionIssuerField", () => {
 
     chooseCandidateAndSave();
 
-    expect(
-      screen.getByText("Change MCP Authentication Provider?"),
-    ).toBeDefined();
+    expect(screen.getByText("Change MCP sign-in?")).toBeDefined();
     expect(link).not.toHaveBeenCalled();
     expect(testState.impactRequests).toContainEqual({
       toolsetId: "toolset-1",
@@ -235,7 +233,7 @@ describe("UserSessionIssuerField", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
@@ -261,7 +259,7 @@ describe("UserSessionIssuerField", () => {
     expect(screen.getByText(/Couldn't check whether/)).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
@@ -297,7 +295,7 @@ describe("UserSessionIssuerField", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Change MCP Authentication Provider" })
+        .getByRole("button", { name: "Change MCP sign-in" })
         .hasAttribute("disabled"),
     ).toBe(true);
   });
@@ -316,7 +314,7 @@ describe("UserSessionIssuerField", () => {
     // The row badge, and the note explaining it.
     expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
     const confirm = screen.getByRole("button", {
-      name: "Change MCP Authentication Provider",
+      name: "Change MCP sign-in",
     });
     expect(confirm.hasAttribute("disabled")).toBe(true);
 

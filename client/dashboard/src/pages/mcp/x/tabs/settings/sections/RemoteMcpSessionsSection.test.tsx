@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("RemoteMcpSessionsSection", () => {
-  it("shows only the provider picker; its settings live in MCP Sessions", () => {
+  it("shows only the provider picker; its settings live in MCP Sign-in", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
     expect(screen.getByText("User session issuer")).toBeDefined();

@@ -171,6 +171,6 @@ it("shows another project's provider read-only and says where to change it", () 
   expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   expect(
-    screen.getByText("Change this in Default's MCP Sessions configuration."),
+    screen.getByText("Change this in Default's MCP Sign-in configuration."),
   ).toBeTruthy();
 });

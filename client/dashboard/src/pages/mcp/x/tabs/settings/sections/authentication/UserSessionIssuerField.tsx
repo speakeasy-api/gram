@@ -59,26 +59,23 @@ export function UserSessionIssuerField({
         invalidateAllUserSessionIssuer(queryClient, { refetchType: "all" }),
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
-      toast.success("MCP Authentication Provider updated");
+      toast.success("MCP sign-in updated");
     },
   });
 
   let control: JSX.Element;
   if (isLoading) {
-    control = (
-      <Skeleton label="Loading user session issuers" className="h-9 w-64" />
-    );
+    control = <Skeleton label="Loading MCP sign-ins" className="h-9 w-64" />;
   } else if (isError) {
     control = (
       <FieldError>
-        Failed to load MCP Authentication Providers. Refresh the page to try
-        again.
+        Failed to load MCP sign-ins. Refresh the page to try again.
       </FieldError>
     );
   } else if (issuers.length === 0) {
     control = (
       <Text muted small>
-        No MCP Authentication Provider is available yet.
+        No MCP sign-in is available yet.
       </Text>
     );
   } else {
@@ -107,7 +104,7 @@ export function UserSessionIssuerField({
 
   return (
     <AuthRow
-      label="MCP Authentication Provider"
+      label="MCP sign-in"
       hint="Where people sign in to this server. Its settings apply to every server that uses it."
     >
       {control}
@@ -159,7 +156,7 @@ export function UserSessionIssuerField({
   );
 }
 
-/** Opens the server's MCP Authentication Provider, where its settings live. */
+/** Opens the server's MCP sign-in, where its settings live. */
 function OpenProviderLink({ issuerId }: { issuerId: string }): JSX.Element {
   const routes = useRoutes();
   return (
@@ -167,7 +164,7 @@ function OpenProviderLink({ issuerId }: { issuerId: string }): JSX.Element {
       variant="secondary"
       size="sm"
       asChild
-      aria-label="Open MCP Authentication Provider settings"
+      aria-label="Open MCP sign-in settings"
     >
       <Link to={routes.mcpSessions.provider.settings.href(issuerId)}>
         <Button.LeftIcon>

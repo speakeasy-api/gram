@@ -69,7 +69,7 @@ const CONNECTIONS_DESCRIPTION =
   "Connections Speakeasy brokers through this provider. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
 
 /**
- * One provider's connections: today's MCP Sessions list, narrowed to the
+ * One provider's connections: today's MCP Sign-in list, narrowed to the
  * provider the header's picker chose.
  */
 export function ConnectionsTab({

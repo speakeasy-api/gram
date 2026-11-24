@@ -113,7 +113,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    Compare with Watchdog using the same detection-time window and severity.
    Optional finding breakdowns are not the dashboard's display sections.
 
-10. **MCP connections**: on the organization **MCP Sessions** page, the
+10. **MCP connections**: on the organization **MCP Sign-in** page, the
     Connections issuer's five registered agents and five connections. Grouped by
     **Agent**: `Partner Reconciliation Agent` carries a green
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
@@ -123,7 +123,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     **View registration** opens the detail sheet with an **Authentication**
     field.
 
-11. **Workload sessions** — on the project **MCP Sessions** page, two rows show
+11. **Workload sessions** — on the project **MCP Sign-in** page, two rows show
     a workflow icon instead of an avatar and a blue **Workload** badge reading
     `Acme CI · Agent …`. One names the active managed agent, the other the
     suspended one, which the badge says in parentheses. Hovering a badge shows
@@ -185,7 +185,7 @@ open their effective assignments; the dropdown always offers compact member sear
     Markdown formatting appears. Internal notes remain visible only on the
     admin management record/history surfaces. Finally, confirm the retired
     addresses still resolve, and that the forward keeps the reader where they
-    were: from **MCP Sessions** filtered to a non-default project and a
+    were: from **MCP Sign-in** filtered to a non-default project and a
     non-default date range, the killswitch icon beside a person opens their
     Access tab in that same project with `range`/`from`/`to`/`label` intact;
     `/<org>/killswitch` forwards to **Identities**; and
@@ -507,7 +507,7 @@ open their effective assignments; the dropdown always offers compact member sear
       authentication method `none`, without an error boundary.
     - Open the client's **Sessions** tab. Expect **No active sessions for this
       client** and disabled **Revoke all sessions**. Search for
-      `demo-resource-client` in the project's **MCP Sessions** page: expect no
+      `demo-resource-client` in the project's **MCP Sign-in** page: expect no
       matching connection. Do not create a session or attach this inert public
       registration merely to populate a selector or connection inventory.
     - The current client Overview does not display `grant_types`, and the issuer

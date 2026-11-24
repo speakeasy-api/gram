@@ -33,7 +33,7 @@ export function RemoteMcpSessionsSection({
   }
 
   // The provider's sign-in details and session settings live on its own
-  // page in MCP Sessions, which the picker opens.
+  // page in MCP Sign-in, which the picker opens.
   return (
     <SettingsSection id={MCP_SESSIONS_SECTION_ID}>
       <SettingsSection.Header>

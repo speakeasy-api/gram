@@ -71,7 +71,7 @@ describe("ConnectionLogsView on a server's tab", () => {
     expect(screen.queryByText("Reset filters")).toBeNull();
     expect(screen.getByText(/^No attempts in the/)).toBeTruthy();
     const open = screen.getByRole("link", {
-      name: /Open in MCP Sessions with this server/,
+      name: /Open in MCP Sign-in with this server/,
     });
     expect(open.getAttribute("href")).toBe(
       "/p/provider_1/connection-logs?server=srv_1",
