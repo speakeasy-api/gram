@@ -50,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
 	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
-	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -357,6 +356,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, pluginPublicationConsumeFlag())
 	flags = append(flags, gcpFlags()...)
+	flags = append(flags, orgEncryptionServiceFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
@@ -492,11 +492,11 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
-			// Streams does not configure organization encryption: organizations
-			// still on the platform key work, and enrolled ones fail closed.
-			// TODO(DNO-1571): wire organization encryption before enrolling an
-			// organization in ai-provider-keys.
-			aiProviderKeys := aiproviderkeys.WithoutOrganizationEncryption(logger, db, encryptionClient)
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, newGCPIdentity(ctx, logger, c), newAuditLogger())
+			if err != nil {
+				return fmt.Errorf("configure organization encryption: %w", err)
+			}
+			aiProviderKeys := orgEncryption.AIProviderKeys(logger, encryptionClient)
 			orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
