@@ -2801,6 +2801,12 @@ SET bundle_ids = array_append(bundle_ids, NULL),
   client_info_names = array_append(client_info_names, NULL)
 WHERE id = @id;
 
+-- Stores binaries as a nested array, which the schema allows.
+-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = @id;
+
 -- Inserts even where a soft-deleted row holds the URL, unlike the seed.
 -- name: InsertDocumentFixture :exec
 INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)

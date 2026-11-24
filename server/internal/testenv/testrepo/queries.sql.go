@@ -5760,6 +5760,18 @@ func (q *Queries) MutateAttachmentSuspendedAgentFixture(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const nestProductBinariesFixture = `-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = $1
+`
+
+// Stores binaries as a nested array, which the schema allows.
+func (q *Queries) NestProductBinariesFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, nestProductBinariesFixture, id)
+	return err
+}
+
 const orphanDelegationSessionFixture = `-- name: OrphanDelegationSessionFixture :exec
 UPDATE trusted_issuer_sessions SET remote_session_client_id = NULL, organization_id = NULL WHERE id = $1
 `
