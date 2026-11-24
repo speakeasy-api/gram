@@ -383,7 +383,7 @@ function HostedNoUpstreamAction({
       hint={
         noUpstream
           ? "No upstream authentication required. The server’s user sign-in settings are unchanged."
-          : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."
+          : "Use the authorization server setup action to assign a registration, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."
       }
     >
       {!noUpstream && (

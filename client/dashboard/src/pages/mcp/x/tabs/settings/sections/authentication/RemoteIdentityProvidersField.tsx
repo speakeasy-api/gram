@@ -26,8 +26,6 @@ export function RemoteIdentityProvidersField({
   onEdit,
   onDelete,
   readOnly = false,
-  members,
-  hiddenIssuerIds,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   associations?: readonly ServerClientAssociation[] | undefined;
@@ -51,18 +49,7 @@ export function RemoteIdentityProvidersField({
     association?: ServerClientAssociation,
   ) => void;
   readOnly?: boolean;
-  /**
-   * A gateway’s proxied members, whose upstream state is separate from its
-   * existing authorization-server configuration.
-   */
-  members?: ReactNode;
-  /** Servers the member rows already show, so each appears once. */
-  hiddenIssuerIds?: ReadonlySet<string>;
 }): JSX.Element {
-  const guided = members !== undefined;
-  const others = hiddenIssuerIds
-    ? associatedIssuers.filter((issuer) => !hiddenIssuerIds.has(issuer.id))
-    : associatedIssuers;
   const addButton = (
     <RequireScope scope="mcp:write" resourceId={projectId} level="component">
       <Button variant="secondary" size="md" onClick={onAdd}>
@@ -81,35 +68,7 @@ export function RemoteIdentityProvidersField({
   );
 
   let providerControls: ReactNode;
-  if (guided) {
-    providerControls = (
-      <div className="space-y-3">
-        {members}
-        {isLoading ? null : (
-          <>
-            {others.length > 0 ? (
-              <div className="space-y-3">
-                <Text muted small className="block">
-                  Other authorization servers:
-                </Text>
-                {others.map((issuer) => (
-                  <RemoteIdentityProviderRow
-                    key={issuer.id}
-                    issuer={issuer}
-                    projectId={projectId}
-                    onEdit={() => onEdit(issuer)}
-                    onDelete={() => onDelete(issuer)}
-                    readOnly={readOnly}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {isError && loadError}
-          </>
-        )}
-      </div>
-    );
-  } else if (isLoading) {
+  if (isLoading) {
     providerControls = (
       <Skeleton label="Loading authorization servers" className="h-9 w-48" />
     );
@@ -159,9 +118,8 @@ export function RemoteIdentityProvidersField({
       label="Authorization servers"
       hint={
         <>
-          {guided
-            ? "The gateway uses each proxied member’s own upstream configuration."
-            : "Where each user signs in to the upstream service. Speakeasy keeps their token and sends it with their requests."}
+          Where each user signs in to the upstream service. Speakeasy keeps
+          their token and sends it with their requests.
           <ExplainerDialog title="Authorization servers">
             <Text muted small className="block">
               An authorization server issues the OAuth tokens that let this

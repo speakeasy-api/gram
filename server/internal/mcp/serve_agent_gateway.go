@@ -455,7 +455,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 	if res.clientType != "" {
 		permit.ClientType = res.clientType
 	}
-	connection, err := s.authClientConnection(ctx, permit)
+	connection, err := s.authClientConnection(ctx, permit, true)
 	if err != nil {
 		return none, noCredential, err
 	}
