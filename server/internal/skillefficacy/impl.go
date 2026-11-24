@@ -86,7 +86,7 @@ func NewService(
 }
 
 func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsPayload) (*gen.SkillEfficacyInsightsResult, error) {
-	authCtx, logger, err := s.requireProjectAccess(ctx, authz.ScopeSkillRead)
+	authCtx, logger, err := s.requireProjectAccess(ctx, authz.SkillCollection.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +116,7 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		if payload.Limit < 1 || payload.Limit > 100 {
 			return nil, oops.E(oops.CodeBadRequest, nil, "scored sessions limit must be between 1 and 100")
 		}
-		if err := s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeChatRead,
-			ResourceKind: "",
-			ResourceID:   authCtx.ProjectID.String(),
-			Dimensions:   nil,
-		}); err != nil {
+		if err := s.authz.Require(ctx, authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 		cursorScoredAt, cursorID, err = decodeScoredSessionsCursor(payload.Cursor)
@@ -288,12 +283,12 @@ func (s *Service) querySkillInsights(ctx context.Context, spanName string, param
 	return rows, nil
 }
 
-func (s *Service) requireProjectAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireProjectAccess(ctx context.Context, permission func(authz.SkillCollection) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Skills(authz.ProjectIDOf(*authCtx.ProjectID)))); err != nil {
 		return nil, s.logger, err
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -514,18 +509,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, s.logger, err
 	}
 
@@ -545,7 +535,7 @@ func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contex
 }
 
 func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*gen.SkillEfficacySettings, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +552,7 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 }
 
 func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSettingsPayload) (*gen.SkillEfficacySettings, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}

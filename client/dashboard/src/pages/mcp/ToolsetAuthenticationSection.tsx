@@ -29,7 +29,7 @@ export function ToolsetAuthenticationSection({
   return (
     <>
       <PageSection
-        heading="Authentication"
+        heading="Sign-in method"
         description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
         <AuthenticationSectionBody

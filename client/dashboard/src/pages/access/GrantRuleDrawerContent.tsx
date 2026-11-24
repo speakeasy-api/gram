@@ -7,6 +7,7 @@ import {
   type ToolSelectionTool,
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
+import { isToolAnnotation } from "@/components/tool-selection/annotations";
 import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -18,6 +19,7 @@ import { Link } from "react-router";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 import {
+  selectorsAfterAnnotationToggle,
   selectorsAfterToolBatch,
   selectorsAfterToolToggle,
 } from "./toolSelectionTransition";
@@ -32,6 +34,7 @@ import {
 } from "./types";
 import { computePanelState, isProjectWideSelector } from "./computePanelState";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
+import { toolDisposition } from "./mcpAccessModel";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { useOrgAssistants } from "./useOrgAssistants";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
@@ -944,18 +947,8 @@ function RemoteToolMetadataLoader({
   return null;
 }
 
-function serverToolAnnotations(tool: ServerTool): ToolAnnotation[] {
-  const annotations: ToolAnnotation[] = [];
-  const hints = tool.annotations;
-  if (hints?.readOnlyHint) annotations.push("read_only");
-  if (hints?.destructiveHint) annotations.push("destructive");
-  if (hints?.idempotentHint) annotations.push("idempotent");
-  if (hints?.openWorldHint) annotations.push("open_world");
-  return annotations;
-}
-
 function toSelectionTool(tool: ServerTool): ToolSelectionTool {
-  return { name: tool.name, annotations: serverToolAnnotations(tool) };
+  return { name: tool.name, disposition: toolDisposition(tool) };
 }
 
 function remoteServerStatus(
@@ -1131,8 +1124,9 @@ function RoleToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of allServers) {
       for (const tool of server.tools) {
-        for (const annotation of serverToolAnnotations(tool)) {
-          counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
+        const disposition = toolDisposition(tool);
+        if (isToolAnnotation(disposition)) {
+          counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
         }
       }
     }
@@ -1166,11 +1160,10 @@ function RoleToolSelectionPanel({
         );
         onChangeAnnotations(hints);
         onChangeSelectors(
-          hints.map((hint) => ({
-            resourceKind: "mcp" as const,
-            resourceId: "*",
-            disposition: ANNOTATION_TO_DISPOSITION[hint],
-          })),
+          selectorsAfterAnnotationToggle(
+            selectors,
+            hints.map((hint) => ANNOTATION_TO_DISPOSITION[hint]),
+          ),
         );
         return;
       }

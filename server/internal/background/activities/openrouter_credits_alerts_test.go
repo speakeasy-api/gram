@@ -164,12 +164,11 @@ func createAlertOrgWithAccountType(t *testing.T, ctx context.Context, conn *pgxp
 		require.NoError(t, err)
 
 		_, err = modelkeysrepo.New(conn).InsertKey(ctx, modelkeysrepo.InsertKeyParams{
-			OrganizationID:  orgID,
-			ProjectID:       project.ID,
-			Slot:            byokSlot,
-			Provider:        "openrouter",
-			ApiKeyEncrypted: "encrypted",
-			Enabled:         true,
+			OrganizationID: orgID,
+			ProjectID:      project.ID,
+			Slot:           byokSlot,
+			Provider:       "openrouter",
+			Enabled:        true,
 		})
 		require.NoError(t, err)
 	}

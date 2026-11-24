@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { Spinner } from "@/components/ui/Spinner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -237,6 +238,30 @@ function OpenServerButton({
   );
 }
 
+/**
+ * A button label that keeps its width while the action runs. Swapping the
+ * text for "Making official" widened the button and shoved its neighbour
+ * sideways mid-click; the spinner sits over the hidden label instead.
+ */
+function PendingLabel({
+  pending,
+  children,
+}: {
+  pending: boolean;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <span className="relative inline-flex items-center justify-center">
+      <span className={cn(pending && "invisible")}>{children}</span>
+      {pending ? (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Spinner className="mr-0 size-4 motion-reduce:animate-none" />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
   // Without automatic links, removing the link is the only way out, as it
@@ -258,9 +283,9 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const restoreLink = async () => {
     try {
       await save(previous);
-      toast.success(`Linked to “${official.name}” again`);
+      toast.success(`“${official.name}” is the official server again`);
     } catch {
-      toast.error("Could not restore the link. Try again.");
+      toast.error("Could not restore the official server. Try again.");
     }
   };
 
@@ -271,12 +296,20 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         action: { label: "Undo", onClick: () => void restoreLink() },
       });
     } catch {
-      toast.error("Could not change the link. Try again.");
+      toast.error("Could not change the official server. Try again.");
     }
   };
 
   return (
-    <section aria-label="Official server" className={PANEL_CLASS}>
+    // Fades in: linking swaps the options for this panel in place, under
+    // the cursor that just clicked, and an instant swap read as a jump.
+    <section
+      aria-label="Official server"
+      className={cn(
+        PANEL_CLASS,
+        "animate-in fade-in duration-300 motion-reduce:animate-none",
+      )}
+    >
       <PanelHeading
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
@@ -332,8 +365,9 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
       {autoLinks || automatic ? null : (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Text muted small className="max-w-xl">
-            Remove the link to let direct connections follow the usual rules
-            again. You can add it back at any time.
+            Stop using it as the official server to let direct connections
+            follow the usual rules again. You can make it official again at any
+            time.
           </Text>
           <Button
             variant="tertiary"
@@ -342,11 +376,11 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
             onClick={() =>
               void change(
                 { serverUrl: server.canonicalServerUrl },
-                `Link to “${official.name}” removed`,
+                `“${official.name}” is no longer the official server`,
               )
             }
           >
-            <Button.Text>Remove link</Button.Text>
+            <Button.Text>Stop using as official</Button.Text>
           </Button>
         </div>
       )}
@@ -354,8 +388,8 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Text muted small className="max-w-xl">
             {automatic
-              ? "A server that proxies this URL is linked by default. If it is not ready yet, keep the direct connection; you can link it again at any time."
-              : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is linked automatically."}
+              ? "A server that proxies this URL is made official by default. If it is not ready yet, keep the direct connection; you can make it official again at any time."
+              : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is made official automatically."}
           </Text>
           <div className="flex flex-wrap items-center gap-2">
             {automatic ? null : (
@@ -623,9 +657,9 @@ function UnlinkedPanel({
           ? { serverUrl: url }
           : { serverUrl: url, mcpServerId: suggested.mcpServerId },
       );
-      toast.success(`Linked to “${suggested.name}”`);
+      toast.success(`“${suggested.name}” is now the official server`);
     } catch {
-      toast.error("Could not link the server. Try again.");
+      toast.error("Could not make the server official. Try again.");
     }
   };
 
@@ -634,7 +668,7 @@ function UnlinkedPanel({
       await save({ serverUrl: url });
       toast.success("Direct connection no longer kept");
     } catch {
-      toast.error("Could not change the link. Try again.");
+      toast.error("Could not change the official server. Try again.");
     }
   };
 
@@ -687,12 +721,12 @@ function UnlinkedPanel({
         <OptionRow
           key="link"
           recommended={isRecommended}
-          icon={<Icon name="link" className="size-4" />}
+          icon={<Icon name="badge-check" className="size-4" />}
           title={`Already served as “${suggested.name}”`}
           description={
             declined
-              ? "A server in this project proxies the same URL. You kept the direct connection instead; link it again to send agents there."
-              : "A server in this project proxies the same URL. Link it to make it the official version: no new server, no setup."
+              ? "A server in this project proxies the same URL. You kept the direct connection instead; make it official to send agents there."
+              : "A server in this project proxies the same URL. Make it official to block direct connections and send agents to it. No new server, no setup."
           }
           actions={
             <>
@@ -704,9 +738,13 @@ function UnlinkedPanel({
                 size="sm"
                 variant={isRecommended ? "primary" : "secondary"}
                 disabled={linking}
+                aria-busy={linking}
                 onClick={() => void linkSuggested()}
+                aria-label={`Make official: “${suggested.name}”`}
               >
-                <Button.Text>{linking ? "Linking" : "Link it"}</Button.Text>
+                <Button.Text>
+                  <PendingLabel pending={linking}>Make official</PendingLabel>
+                </Button.Text>
               </Button>
             </>
           }
@@ -719,7 +757,7 @@ function UnlinkedPanel({
           recommended={isRecommended}
           icon={<CatalogLogo server={catalogEntry} className="size-5" />}
           title={`In the Speakeasy catalog as “${catalogEntry.title || serverName}”`}
-          description="Its setup is known, so it is added here in one step and linked as soon as it is on."
+          description="Its setup is known, so it is added here in one step and made official as soon as it is on."
           actions={
             <CreateServerGate allowed={canCreateServer}>
               <Button
@@ -807,7 +845,7 @@ function UnlinkedPanel({
         title="Make this an official server"
         description={
           declined
-            ? "You kept the direct connection, so no server is linked automatically. Direct connections follow the usual Shadow MCP rules."
+            ? "You kept the direct connection, so no server is made official automatically. Direct connections follow the usual Shadow MCP rules."
             : "Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
         }
         badge={
@@ -823,8 +861,8 @@ function UnlinkedPanel({
         // appears later be linked automatically.
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Text muted small className="max-w-xl">
-            Go back to the default to link a server that proxies this URL as
-            soon as one exists.
+            Go back to the default to make a server that proxies this URL
+            official as soon as one exists.
           </Text>
           <Button
             variant="secondary"
@@ -901,6 +939,9 @@ function LinkAnotherServer({
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const chosenLabel = candidates.find(
+    (candidate) => candidate.id === selected,
+  )?.label;
   const onLink = async () => {
     const chosen = candidates.find((candidate) => candidate.id === selected);
     try {
@@ -908,21 +949,26 @@ function LinkAnotherServer({
         serverUrl: server.canonicalServerUrl,
         mcpServerId: selected,
       });
-      toast.success(`Linked to “${chosen?.label ?? "the server"}”`);
+      toast.success(
+        `“${chosen?.label ?? "The server"}” is now the official server`,
+      );
     } catch {
-      toast.error("Could not link the server. Try again.");
+      toast.error("Could not make the server official. Try again.");
     }
   };
 
   return (
     <OptionRow
       icon={<Icon name="server" className="size-4" />}
-      title="Link another server"
-      description="Link any server in this project as the official version, for example when several servers proxy this URL or one is at a different URL."
+      title="Use another server as official"
+      description="Make any server in this project the official version, for example when several servers proxy this URL or one is at a different URL."
     >
       <div className="flex max-w-xl items-center gap-2">
         <Select value={selected} onValueChange={setSelected}>
-          <SelectTrigger aria-label="Server to link" className="w-full">
+          <SelectTrigger
+            aria-label="Server to make official"
+            className="w-full"
+          >
             <SelectValue placeholder="Choose a server" />
           </SelectTrigger>
           <SelectContent>
@@ -937,9 +983,17 @@ function LinkAnotherServer({
           variant="secondary"
           size="sm"
           disabled={selected === "" || isPending}
+          aria-busy={isPending}
           onClick={() => void onLink()}
+          aria-label={
+            chosenLabel
+              ? `Make official: “${chosenLabel}”`
+              : "Make official: chosen server"
+          }
         >
-          <Button.Text>{isPending ? "Linking" : "Link"}</Button.Text>
+          <Button.Text>
+            <PendingLabel pending={isPending}>Make official</PendingLabel>
+          </Button.Text>
         </Button>
       </div>
     </OptionRow>

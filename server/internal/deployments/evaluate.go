@@ -52,7 +52,7 @@ func (s *Service) EvaluateOpenAPIv3(ctx context.Context, form *gen.EvaluateOpenA
 	}
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +109,7 @@ func (s *Service) GetDeploymentEvaluation(ctx context.Context, form *gen.GetDepl
 	}
 	projectID := *authCtx.ProjectID
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Read()); err != nil {
 		return nil, err
 	}
 

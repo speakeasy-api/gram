@@ -17,14 +17,14 @@ func RolePluginsForResource(ctx context.Context, db repo.DBTX, engine *authz.Eng
 	if _, ok := authz.GrantsFromContext(ctx); !ok {
 		return nil, nil
 	}
-	admin, err := engine.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	admin, err := engine.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin assignment disclosure: %w", err)
 	}
 	if !admin {
 		return nil, nil
 	}
-	reader, err := engine.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	reader, err := engine.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Read())
 	if err != nil {
 		return nil, fmt.Errorf("evaluate plugin read: %w", err)
 	}

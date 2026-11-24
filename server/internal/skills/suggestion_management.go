@@ -12,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -25,8 +26,15 @@ import (
 )
 
 func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggestionsPayload) (*gen.ListSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 	if payload.Limit < 1 || payload.Limit > 50 {
@@ -416,8 +424,15 @@ func approvalContent(
 }
 
 func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSuggestionPayload) (*gen.ApproveSkillSuggestionResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	suggestionID, err := uuid.Parse(payload.ID)
@@ -451,8 +466,15 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 }
 
 func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	suggestionID, err := uuid.Parse(payload.ID)
@@ -552,8 +574,15 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 }
 
 func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	suggestionIDs := make([]uuid.UUID, 0, len(payload.SuggestionIds))
@@ -618,8 +647,15 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 }
 
 func (s *Service) ListSuggestionFeedback(ctx context.Context, payload *gen.ListSuggestionFeedbackPayload) (*gen.ListSkillSuggestionFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 	if payload.Limit < 1 || payload.Limit > 50 {

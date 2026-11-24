@@ -98,7 +98,6 @@ func TestHooks_GetStatus_AnthropicInferenceHooks(t *testing.T) {
 		Provider:               "anthropic_inference",
 		ProjectID:              *authCtx.ProjectID,
 		ExternalOrganizationID: pgtype.Text{String: "", Valid: false},
-		ApiKeyEncrypted:        "encrypted",
 		Enabled:                true,
 		BillingMode:            pgtype.Text{String: "", Valid: false},
 	})

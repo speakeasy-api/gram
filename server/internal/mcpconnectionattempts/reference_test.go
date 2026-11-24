@@ -29,7 +29,7 @@ func TestReference_IsTheStoredRowsID(t *testing.T) {
 	t.Parallel()
 
 	var rows []Row
-	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, logsOn)
+	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, nil, logsOn)
 	ctx := withSlot(t)
 
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
@@ -42,11 +42,11 @@ func TestReference_NotShownWhenLogsAreOff(t *testing.T) {
 	t.Parallel()
 
 	offCtx := withSlot(t)
-	NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return false, nil }).Once(offCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	NewCapturing(func(Row) {}, nil, func(context.Context, string) (bool, error) { return false, nil }).Once(offCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	require.Empty(t, contextvalues.ConnectionReference(offCtx))
 
 	noCheckCtx := withSlot(t)
-	NewCapturing(func(Row) {}, nil).Once(noCheckCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	NewCapturing(func(Row) {}, nil, nil).Once(noCheckCtx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	require.Empty(t, contextvalues.ConnectionReference(noCheckCtx))
 }
 
@@ -121,7 +121,7 @@ func TestReference_APanickingLogsCheckShowsNoneAndIsCounted(t *testing.T) {
 func TestReference_DifferentFailuresInOneSlotShowNone(t *testing.T) {
 	t.Parallel()
 
-	recorder := NewCapturing(func(Row) {}, logsOn)
+	recorder := NewCapturing(func(Row) {}, nil, logsOn)
 	ctx := withSlot(t)
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
@@ -147,7 +147,7 @@ func TestReference_ARefreshThatLeftNoIDBlocksClaiming(t *testing.T) {
 func TestReference_AFailureThatLeftNoIDHidesAnEarlierOne(t *testing.T) {
 	t.Parallel()
 
-	recorder := NewCapturing(func(Row) {}, logsOn)
+	recorder := NewCapturing(func(Row) {}, nil, logsOn)
 	ctx := withSlot(t)
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	require.NotEmpty(t, contextvalues.ConnectionReference(ctx))
@@ -160,7 +160,7 @@ func TestReference_AFailureThatLeftNoIDHidesAnEarlierOne(t *testing.T) {
 func TestReference_ASuccessKeepsAnEarlierFailure(t *testing.T) {
 	t.Parallel()
 
-	recorder := NewCapturing(func(Row) {}, logsOn)
+	recorder := NewCapturing(func(Row) {}, nil, logsOn)
 	ctx := withSlot(t)
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	reference := contextvalues.ConnectionReference(ctx)
@@ -199,21 +199,21 @@ func TestReference_FailuresThatLeaveNoIDHideAnEarlierOne(t *testing.T) {
 
 	t.Run("invalid row", func(t *testing.T) {
 		t.Parallel()
-		recorder := NewCapturing(func(Row) {}, logsOn)
+		recorder := NewCapturing(func(Row) {}, nil, logsOn)
 		ctx := earlier(t)
 		recorder.Step(ctx, Begin(testScope()), Step{}, CodeProviderUnreachable)
 		require.Empty(t, contextvalues.ConnectionReference(ctx))
 	})
 	t.Run("logs off", func(t *testing.T) {
 		t.Parallel()
-		recorder := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return false, nil })
+		recorder := NewCapturing(func(Row) {}, nil, func(context.Context, string) (bool, error) { return false, nil })
 		ctx := earlier(t)
 		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
 		require.Empty(t, contextvalues.ConnectionReference(ctx))
 	})
 	t.Run("panic", func(t *testing.T) {
 		t.Parallel()
-		recorder := NewCapturing(func(Row) { panic("capture panicked") }, logsOn)
+		recorder := NewCapturing(func(Row) { panic("capture panicked") }, nil, logsOn)
 		ctx := earlier(t)
 		recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
 		require.Empty(t, contextvalues.ConnectionReference(ctx))
@@ -272,7 +272,7 @@ func TestReference_NonFailuresLeaveNone(t *testing.T) {
 
 	for _, what := range []Happened{CodeRefreshedUnverified, CodeCanceled, CodeReviewCanceled} {
 		ctx := withSlot(t)
-		NewCapturing(func(Row) {}, logsOn).Once(ctx, testScope(), StepMCPRequest, what)
+		NewCapturing(func(Row) {}, nil, logsOn).Once(ctx, testScope(), StepMCPRequest, what)
 		require.Empty(t, contextvalues.ConnectionReference(ctx))
 	}
 }
@@ -281,7 +281,7 @@ func TestReference_AFailedRefreshIsNotShownUntilClaimed(t *testing.T) {
 	t.Parallel()
 
 	var rows []Row
-	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, logsOn)
+	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, nil, logsOn)
 	ctx := withSlot(t)
 
 	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
@@ -294,7 +294,7 @@ func TestReference_AFailedRefreshIsNotShownUntilClaimed(t *testing.T) {
 func TestReference_SeveralFailedRefreshesCannotBeClaimed(t *testing.T) {
 	t.Parallel()
 
-	recorder := NewCapturing(func(Row) {}, logsOn)
+	recorder := NewCapturing(func(Row) {}, nil, logsOn)
 	ctx := withSlot(t)
 	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
 	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
@@ -324,7 +324,7 @@ func TestReference_NoneForASuccess(t *testing.T) {
 	t.Parallel()
 
 	ctx := withSlot(t)
-	NewCapturing(func(Row) {}, logsOn).Once(ctx, testScope(), StepMCPRequest, ResultAccepted)
+	NewCapturing(func(Row) {}, nil, logsOn).Once(ctx, testScope(), StepMCPRequest, ResultAccepted)
 	require.Empty(t, contextvalues.ConnectionReference(ctx))
 }
 
