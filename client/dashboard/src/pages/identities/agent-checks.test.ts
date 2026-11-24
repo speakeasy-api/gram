@@ -36,6 +36,25 @@ describe("groupChecks", () => {
     expect(groups[0]?.latest.toISOString()).toBe("2026-01-01T10:09:00.000Z");
   });
 
+  it("groups an auth client's checks by the server it was used on", () => {
+    const refused = (server: string, at: string) =>
+      check("mcp:auth", "client_a", at, "mcp_auth_client", {
+        selector: { mcp_server_id: server },
+        reason: "connection_owner_mismatch",
+      });
+    const groups = groupChecks([
+      refused("server_a", "2026-01-01T10:00:00Z"),
+      refused("server_b", "2026-01-01T10:05:00Z"),
+      refused("server_a", "2026-01-01T10:09:00Z"),
+    ]);
+    expect(
+      groups.map((g) => [g.resourceId, g.serverId, g.count, g.reason]),
+    ).toEqual([
+      ["client_a", "server_a", 2, "connection_owner_mismatch"],
+      ["client_a", "server_b", 1, "connection_owner_mismatch"],
+    ]);
+  });
+
   it("keeps the newest check's project, so the resource can be named", () => {
     const [group] = groupChecks([
       check("environment:read", "env_one", "2026-01-01T10:09:00Z", "env", {

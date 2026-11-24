@@ -17,9 +17,22 @@ export type CheckGroup = {
    * tools, recorded with no scope and no resource.
    */
   toolListFilter: boolean;
+  /**
+   * For an auth client (upstream credential) check, the MCP server it was
+   * used on. One client serves several servers, so each gets its own group.
+   */
+  serverId?: string;
+  /** Why the newest check was decided as it was. */
+  reason?: AuthzChallenge["reason"];
   count: number;
   latest: Date;
 };
+
+/** The resource kind of an auth client (upstream credential) check. */
+const AUTH_CLIENT_KIND = "mcp_auth_client";
+
+/** Where a refused auth client check records the server it was used on. */
+const SERVER_SELECTOR_KEY = "mcp_server_id";
 
 /**
  * Groups checks by scope and resource, newest group first. The count is the
@@ -33,9 +46,13 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
     const resourceId = check.resourceId ?? "";
     const toolListFilter =
       check.operation === "filter" && !check.scope && !resourceId;
+    const serverId =
+      resourceKind === AUTH_CLIENT_KIND
+        ? check.selector?.[SERVER_SELECTOR_KEY] || undefined
+        : undefined;
     const key = toolListFilter
       ? "tool-list-filter"
-      : `${check.scope}|${resourceKind}|${resourceId}`;
+      : `${check.scope}|${resourceKind}|${resourceId}|${serverId ?? ""}`;
     const group = groups.get(key);
     if (!group) {
       groups.set(key, {
@@ -45,6 +62,8 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
         resourceId,
         projectId: check.projectId,
         toolListFilter,
+        serverId,
+        reason: check.reason,
         count: 1,
         latest: check.timestamp,
       });
@@ -54,6 +73,7 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
     if (check.timestamp <= group.latest) continue;
     group.latest = check.timestamp;
     group.projectId = check.projectId ?? group.projectId;
+    group.reason = check.reason;
   }
   return [...groups.values()].sort(
     (a, b) => b.latest.getTime() - a.latest.getTime(),

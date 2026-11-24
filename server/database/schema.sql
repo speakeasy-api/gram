@@ -6657,6 +6657,11 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   -- never returned by the API. Nullable while pre-encryption rows are
   -- migrated; reads prefer this column and fall back to key.
   key_encrypted TEXT,
+  -- The same upstream OpenRouter key sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  key_org_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -6676,6 +6681,7 @@ COMMENT ON COLUMN openrouter_api_keys.organization_id IS '@access: confidential'
 COMMENT ON COLUMN openrouter_api_keys.key_type IS '@access: confidential';
 COMMENT ON COLUMN openrouter_api_keys.key IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.monthly_credits IS '@access: restricted';
 COMMENT ON COLUMN openrouter_api_keys.disabled IS '@access: confidential';
@@ -7216,6 +7222,43 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+
+-- A non-partial unique index supplies the composite message ownership target.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
+ON chat_messages (project_id, id);
+
+-- Encrypted transcript shadows retain the lifecycle of their source message.
+CREATE TABLE IF NOT EXISTS chat_message_transcripts (
+  message_id UUID NOT NULL,
+  project_id UUID NOT NULL,
+  organization_id TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  source_hash BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
+  CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_source_hash_check CHECK (octet_length(source_hash) = 32)
+);
+
+COMMENT ON COLUMN chat_message_transcripts.message_id IS 'Source message identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.project_id IS 'Owning project identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organization identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -9744,7 +9787,13 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
   external_organization_id TEXT,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same credential as api_key_encrypted (an API key, or the Anthropic
+  -- webhook signing-secret JSON) sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   -- Billing mode for the provider org this integration covers. Dashboard cost
   -- figures are derived from token usage (tokens x published API price), which
@@ -9777,6 +9826,7 @@ COMMENT ON COLUMN ai_integration_configs.provider IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.project_id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.external_organization_id IS '@access: restricted';
 COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
@@ -11795,12 +11845,31 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
-  -- Opaque URL token issued at marketplace setup. The marketplace proxy uses
-  -- it to resolve a Claude Code install URL back to this connection, whose
-  -- installation_id + owner/repo locate the upstream content. Nullable so
-  -- existing connections (and any future connection without the marketplace
-  -- surface enabled) are unconstrained.
+  -- The marketplace token in plaintext, being replaced by
+  -- marketplace_token_hash and its two sealed copies below. Once the publish
+  -- path stores those instead, nothing writes this column: it is read only as a
+  -- fallback for connections the marketplace token backfill has not moved yet,
+  -- which clears it, and is dropped in a later contract migration.
   marketplace_token TEXT,
+  -- The organization that owns the connection's project, stored on the row so
+  -- the organization encryption fence of the marketplace token copies compares
+  -- against the row's own organization. Nullable so connections stored before
+  -- this column stay valid until the publish path or the marketplace token
+  -- backfill fills it in.
+  organization_id TEXT,
+  -- Hex-encoded SHA-256 of the marketplace token, the URL-as-secret credential
+  -- of the marketplace proxy. The proxy hashes the token from the install URL
+  -- and resolves the connection by this value, whose installation_id and
+  -- owner/repo locate the upstream content. Nullable so connections without a
+  -- marketplace token are unconstrained.
+  marketplace_token_hash TEXT CHECK (marketplace_token_hash <> ''),
+  -- The marketplace token sealed under the platform key, which the server opens
+  -- to show the marketplace install URL again. Written while the organization's
+  -- marketplace-tokens use case is in platform_key or dual_write.
+  marketplace_token_encrypted TEXT,
+  -- The marketplace token sealed under the organization's key. Written while
+  -- the organization's marketplace-tokens use case is in dual_write or org_kms.
+  marketplace_token_org_encrypted TEXT,
   -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
   -- when hooks and MCP plugin generation were decoupled. No longer written or
   -- read; retained per expand-contract and dropped in a later contract migration.
@@ -11837,7 +11906,11 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- organization_id must be the project's own organization: the encryption
+  -- fence reads it, and token copies are sealed for it.
+  CONSTRAINT plugin_github_connections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN plugin_github_connections.id IS '@access: confidential';
@@ -11846,6 +11919,10 @@ COMMENT ON COLUMN plugin_github_connections.installation_id IS '@access: confide
 COMMENT ON COLUMN plugin_github_connections.repo_owner IS '@access: confidential-pii';
 COMMENT ON COLUMN plugin_github_connections.repo_name IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.marketplace_token IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN plugin_github_connections.published_fingerprint IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_mcp_fingerprints IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access: confidential';
@@ -11864,12 +11941,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
 
--- Lookup index for the marketplace proxy. Partial so existing rows without a
--- token (and any future rows where the marketplace surface isn't enabled)
--- aren't constrained against each other.
+-- DEPRECATED: lookup index for the plaintext marketplace_token fallback,
+-- dropped with that column in a later contract migration.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
+
+-- Lookup index for the marketplace proxy, which resolves an install URL token
+-- by its hash. Partial so connections without a token aren't constrained
+-- against each other.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_hash_key
+  ON plugin_github_connections (marketplace_token_hash)
+  WHERE marketplace_token_hash IS NOT NULL;
+
+-- The marketplace token backfill, verification and finalize of organization
+-- encryption read one organization's connections.
+CREATE INDEX IF NOT EXISTS plugin_github_connections_organization_id_idx
+  ON plugin_github_connections (organization_id)
+  WHERE organization_id IS NOT NULL;
 
 -- Hooks version rollout pins, set by Speakeasy staff from the admin dashboard.
 -- A pin names the highest hooksGeneratorVersion an organization is cleared to
@@ -13764,7 +13853,12 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
   project_id uuid NOT NULL,
   slot TEXT NOT NULL,
   provider TEXT NOT NULL,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same key as api_key_encrypted sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -13781,6 +13875,7 @@ COMMENT ON COLUMN model_provider_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.slot IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.provider IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN model_provider_keys.enabled IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.created_at IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.updated_at IS '@access: confidential';

@@ -1,3 +1,4 @@
+import { MCP_SERVER_KIND_LABEL } from "@/components/mcp/mcp-server-kind";
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
@@ -158,8 +159,8 @@ const breadcrumbSubstitutions = {
   "from-existing-source": "From Existing Source",
   openapi: "OpenAPI",
   remote: "Remote MCP",
-  tunneled: "Tunneled MCP",
-  unproxied: "Unproxied MCP",
+  tunneled: MCP_SERVER_KIND_LABEL.tunneled,
+  unproxied: MCP_SERVER_KIND_LABEL.unproxied,
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",

@@ -15,14 +15,15 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/anthropicinference"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,12 +60,12 @@ func (s *inferenceSecrets) rotate(secret string, now time.Time) {
 
 // AnthropicInferenceResolver loads the current organization binding and signing keys for each delivery.
 type AnthropicInferenceResolver struct {
-	db  *pgxpool.Pool
-	enc *encryption.Client
+	db   *pgxpool.Pool
+	keys *aiproviderkeys.Keys
 }
 
-func NewAnthropicInferenceResolver(db *pgxpool.Pool, enc *encryption.Client) *AnthropicInferenceResolver {
-	return &AnthropicInferenceResolver{db: db, enc: enc}
+func NewAnthropicInferenceResolver(db *pgxpool.Pool, keys *aiproviderkeys.Keys) *AnthropicInferenceResolver {
+	return &AnthropicInferenceResolver{db: db, keys: keys}
 }
 
 func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (anthropicinference.Config, error) {
@@ -80,7 +81,7 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	if err != nil {
 		return empty, fmt.Errorf("load inference integration: %w", err)
 	}
-	secrets, err := decryptInferenceSecrets(r.enc, row.ApiKeyEncrypted)
+	secrets, err := decryptInferenceSecrets(ctx, r.keys, nil, row)
 	if err != nil {
 		return empty, err
 	}
@@ -102,17 +103,20 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	return anthropicinference.Config{ID: row.ID.String(), OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, TenantID: "", SigningSecrets: keys}, nil
 }
 
-func decryptInferenceSecrets(enc *encryption.Client, ciphertext string) (inferenceSecrets, error) {
+// decryptInferenceSecrets opens a config row's signing secrets. db is the
+// caller's transaction, or nil.
+func decryptInferenceSecrets(ctx context.Context, keys *aiproviderkeys.Keys, db repo.DBTX, row repo.AiIntegrationConfig) (inferenceSecrets, error) {
 	var secrets inferenceSecrets
+	stored := aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted)
 	// An empty value represents a pending setup with no credentials, including demo fixtures.
-	if ciphertext == "" {
+	if !stored.Org.Valid && stored.Platform.String == "" {
 		return secrets, nil
 	}
-	plaintext, err := enc.Decrypt(ciphertext)
+	plaintext, err := keys.Open(ctx, db, row.OrganizationID, aiproviderkeys.AIIntegrationConfigs, stored)
 	if err != nil {
 		return secrets, fmt.Errorf("decrypt inference credentials: %w", err)
 	}
-	if err := json.Unmarshal([]byte(plaintext), &secrets); err != nil {
+	if err := json.Unmarshal(plaintext, &secrets); err != nil {
 		return secrets, errors.New("invalid inference credentials")
 	}
 	return secrets, nil
@@ -137,9 +141,9 @@ func (s *Service) GetAnthropicInferenceConfig(ctx context.Context, _ *gen.GetAnt
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load inference integration")
 	}
-	secrets, err := decryptInferenceSecrets(s.store.enc, row.ApiKeyEncrypted)
+	secrets, err := decryptInferenceSecrets(ctx, s.store.keys, nil, row)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read inference credentials")
+		return nil, apiKeyError(err, "read inference credentials")
 	}
 	return inferenceView(row, secrets), nil
 }
@@ -176,9 +180,9 @@ func (s *Service) UpsertAnthropicInferenceConfig(ctx context.Context, payload *g
 	projectID := before.ProjectID
 	enabled := before.Enabled
 	if exists {
-		secrets, err = decryptInferenceSecrets(s.store.enc, before.ApiKeyEncrypted)
+		secrets, err = decryptInferenceSecrets(ctx, s.store.keys, dbtx, before)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "read inference credentials")
+			return nil, apiKeyError(err, "read inference credentials")
 		}
 		beforeSnapshot = &audit.AIIntegrationSnapshot{Provider: ProviderAnthropicInference, ProjectID: projectID, Enabled: enabled, HasAPIKey: secrets.Current != "", BillingMode: ""}
 	} else {
@@ -203,18 +207,31 @@ func (s *Service) UpsertAnthropicInferenceConfig(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "encode inference credentials")
 	}
-	ciphertext, err := s.store.enc.Encrypt(plaintext)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encrypt inference credentials")
-	}
 	var row repo.AiIntegrationConfig
 	if exists {
-		row, err = queries.UpdateAnthropicInferenceConfig(ctx, repo.UpdateAnthropicInferenceConfigParams{ID: before.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, ApiKeyEncrypted: ciphertext, Enabled: enabled})
+		err = s.store.keys.Store(ctx, dbtx, authCtx.ActiveOrganizationID, aiproviderkeys.AIIntegrationConfigs, plaintext, func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+			stored, err := queries.UpdateAnthropicInferenceConfig(ctx, repo.UpdateAnthropicInferenceConfigParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, Enabled: enabled, ID: before.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, DecidedGeneration: generation})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return false, nil
+			}
+			if err != nil {
+				return false, fmt.Errorf("update inference integration: %w", err)
+			}
+			row = stored
+			return true, nil
+		})
+		if err != nil {
+			return nil, apiKeyError(err, "save inference integration")
+		}
 	} else {
-		row, err = queries.InsertConfig(ctx, repo.InsertConfigParams{OrganizationID: authCtx.ActiveOrganizationID, Provider: ProviderAnthropicInference, ProjectID: projectID, ExternalOrganizationID: pgtype.Text{String: "", Valid: false}, ApiKeyEncrypted: ciphertext, Enabled: enabled, BillingMode: pgtype.Text{String: "", Valid: false}, Settings: []byte("{}")})
-	}
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "save inference integration")
+		inserted, err := queries.InsertConfig(ctx, repo.InsertConfigParams{OrganizationID: authCtx.ActiveOrganizationID, Provider: ProviderAnthropicInference, ProjectID: projectID, ExternalOrganizationID: pgtype.Text{String: "", Valid: false}, Enabled: enabled, BillingMode: pgtype.Text{String: "", Valid: false}, Settings: []byte("{}")})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "save inference integration")
+		}
+		row, err = s.store.storeAPIKey(ctx, dbtx, authCtx.ActiveOrganizationID, inserted.ID, plaintext)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := s.audit.LogAIIntegrationUpsert(ctx, dbtx, audit.LogAIIntegrationUpsertEvent{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil, ConfigURN: urn.NewAIIntegrationConfig(row.ID), SnapshotBefore: beforeSnapshot, SnapshotAfter: &audit.AIIntegrationSnapshot{Provider: ProviderAnthropicInference, ProjectID: projectID, Enabled: enabled, HasAPIKey: secrets.Current != "", BillingMode: ""}}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit inference setup")
