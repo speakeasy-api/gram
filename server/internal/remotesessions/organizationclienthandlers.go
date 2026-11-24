@@ -1159,6 +1159,13 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return err.LogWarn(ctx, logger)
 	}
 
+	attached, err := lockAttachmentParentForUnlink(ctx, txRepo, authCtx.ActiveOrganizationID, clientID, server.UserSessionIssuerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+	}
+	if attached {
+		return oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
 	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,

@@ -455,21 +455,28 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").LogError(ctx, logger)
 	}
 
-	// Tombstone the upstream grants of every subject whose session just
-	// cascaded, deduplicated: one client can hold a session per user, and a
-	// subject's grants hang off (subject, issuer) rather than off the session,
-	// so without this the same grants would be soft-deleted — and revoked
-	// upstream — once per session the subject held.
-	seenSubjects := make(map[string]struct{}, len(revokedSessions))
-	var revokedUpstream []remotesessions.RevokedCredentials
+	// Each downstream credential can have different choices. Group the IDs
+	// by their actual project scope without dropping any choices.
+	type subjectIssuer struct {
+		subject string
+		issuer  uuid.UUID
+		project uuid.UUID
+	}
+	var order []subjectIssuer
+	groups := make(map[subjectIssuer][]uuid.UUID, len(revokedSessions))
+	subjects := make(map[subjectIssuer]urn.SessionSubject, len(revokedSessions))
 	for _, session := range revokedSessions {
-		key := session.SubjectUrn.String() + "\x00" + session.UserSessionIssuerID.String()
-		if _, seen := seenSubjects[key]; seen {
-			continue
+		key := subjectIssuer{subject: session.SubjectUrn.String(), issuer: session.UserSessionIssuerID, project: session.ProjectID.UUID}
+		if _, ok := groups[key]; !ok {
+			order = append(order, key)
+			subjects[key] = session.SubjectUrn
 		}
-		seenSubjects[key] = struct{}{}
+		groups[key] = append(groups[key], session.ID)
+	}
+	var revokedUpstream []remotesessions.RevokedCredentials
+	for _, key := range order {
+		creds, err := s.revoker.SoftDeleteSubjectSessionsForCredentials(ctx, dbtx, subjects[key], key.issuer, key.project, authCtx.ActiveOrganizationID, groups[key])
 
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}

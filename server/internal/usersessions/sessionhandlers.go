@@ -292,7 +292,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 
 	// Tombstone the subject's upstream grants in the same transaction; the
 	// RFC 7009 pushes wait until it commits.
-	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, revoked.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, revoked.UserSessionIssuerID, revoked.ProjectID.UUID, authCtx.ActiveOrganizationID, revoked.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 	}

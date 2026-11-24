@@ -3915,6 +3915,89 @@ func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg Li
 	return items, nil
 }
 
+const listPrincipalRemoteSessionBindingRekeys = `-- name: ListPrincipalRemoteSessionBindingRekeys :many
+SELECT binding.id, binding.remote_session_client_id
+FROM principal_remote_session_bindings AS binding
+JOIN projects AS project ON project.id = binding.project_id AND project.organization_id = binding.organization_id AND NOT project.deleted
+JOIN agents AS a ON a.id = binding.principal_id AND a.organization_id = binding.organization_id AND NOT a.deleted
+JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+JOIN organization_user_relationships AS owner_membership ON owner_membership.user_id = owner.id
+  AND owner_membership.organization_id = a.organization_id AND owner_membership.deleted_at IS NULL
+JOIN remote_sessions AS session ON session.id = binding.remote_session_id
+JOIN users AS lender ON 'user:' || lender.id = session.subject_urn AND lender.deleted_at IS NULL
+JOIN organization_user_relationships AS lender_membership ON lender_membership.user_id = lender.id
+  AND lender_membership.organization_id = a.organization_id AND lender_membership.deleted_at IS NULL
+JOIN remote_session_clients AS client ON client.id = binding.remote_session_client_id
+JOIN remote_session_issuers AS upstream ON upstream.id = client.remote_session_issuer_id
+JOIN user_session_issuers AS provenance ON provenance.id = session.user_session_issuer_id
+JOIN user_session_issuers AS signin ON signin.id = $1::uuid
+WHERE binding.user_session_issuer_id = $2
+  AND binding.organization_id = $3::text
+  AND binding.revoked_at IS NULL
+  AND session.id = binding.remote_session_id
+  AND session.remote_session_client_id = binding.remote_session_client_id
+  AND session.subject_urn = binding.attached_by_subject_id
+  AND session.deleted IS FALSE
+  AND client.id = binding.remote_session_client_id
+  AND client.deleted IS FALSE
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
+  AND NOT upstream.deleted
+  AND (upstream.project_id = project.id OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = project.organization_id)))
+  AND NOT signin.deleted
+  AND (signin.project_id = project.id OR (signin.project_id IS NULL AND signin.organization_id = project.organization_id))
+  AND NOT provenance.deleted
+  AND (provenance.project_id = project.id OR (provenance.project_id IS NULL AND provenance.organization_id = project.organization_id))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_remote_session_bindings AS target
+    WHERE target.project_id = binding.project_id
+      AND target.principal_id = binding.principal_id
+      AND target.remote_session_client_id = binding.remote_session_client_id
+      AND target.remote_session_id = binding.remote_session_id
+      AND target.user_session_issuer_id = $1
+      AND target.revoked_at IS NULL
+  )
+ORDER BY binding.id
+FOR UPDATE OF binding, session
+`
+
+type ListPrincipalRemoteSessionBindingRekeysParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+type ListPrincipalRemoteSessionBindingRekeysRow struct {
+	ID                    uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The migration transaction has locked both issuers and already moved session
+// provenance. A duplicate attachment to the same login is left for source
+// issuer cleanup. Do not infer rekey eligibility from a junction row.
+// Keep the exact row even if its grant was reauthorized in place. Attachment
+// generation records the attach event; the current session generation is
+// locked here, as the exact session must not be revoked during the rekey.
+func (q *Queries) ListPrincipalRemoteSessionBindingRekeys(ctx context.Context, arg ListPrincipalRemoteSessionBindingRekeysParams) ([]ListPrincipalRemoteSessionBindingRekeysRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalRemoteSessionBindingRekeys, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalRemoteSessionBindingRekeysRow
+	for rows.Next() {
+		var i ListPrincipalRemoteSessionBindingRekeysRow
+		if err := rows.Scan(&i.ID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
 SELECT rs.id,
        pair.subject_urn::text AS subject_urn,
@@ -8194,59 +8277,28 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 }
 
 const updatePrincipalRemoteSessionBindingsToUserSessionIssuer = `-- name: UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer :execrows
-UPDATE principal_remote_session_bindings AS binding
-SET user_session_issuer_id = $1,
+UPDATE principal_remote_session_bindings
+SET user_session_issuer_id = $1::uuid,
     updated_at = clock_timestamp()
-FROM remote_sessions AS session, remote_session_clients AS client
-WHERE binding.user_session_issuer_id = $2
-  AND binding.organization_id = $3::text
-  AND session.id = binding.remote_session_id
-  AND session.deleted IS FALSE
-  AND client.id = binding.remote_session_client_id
-  AND client.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    WHERE link.remote_session_client_id = binding.remote_session_client_id
-      AND link.user_session_issuer_id = $1
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM principal_remote_session_bindings AS target
-    WHERE target.project_id = binding.project_id
-      AND target.principal_id = binding.principal_id
-      AND target.remote_session_client_id = binding.remote_session_client_id
-      AND target.remote_session_id = binding.remote_session_id
-      AND target.user_session_issuer_id = $1
-      AND target.revoked_at IS NULL
-  )
-  AND 2 = (
-    SELECT COUNT(*)
-    FROM user_session_issuers AS issuer
-    LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id IN ($2, $1)
-      AND issuer.deleted IS FALSE
-      AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-      )
-  )
+WHERE user_session_issuer_id = $2::uuid
+  AND organization_id = $3::text
+  AND id = ANY($4::uuid[])
 `
 
 type UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams struct {
 	TargetIssuerID uuid.UUID
 	SourceIssuerID uuid.UUID
 	OrganizationID string
+	BindingIds     []uuid.UUID
 }
 
-// Moves agents' attachments with the issuer they were made on. An attachment
-// need not share its connection's issuer, so moving the connections does not
-// move it. Only live connections of live clients the target now binds come
-// along, as only live connections move; the rest leave with the source's
-// client bindings. So does an attachment the target already holds on the same
-// login, so the agent keeps exactly one active attachment for it.
 func (q *Queries) UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx context.Context, arg UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer,
+		arg.TargetIssuerID,
+		arg.SourceIssuerID,
+		arg.OrganizationID,
+		arg.BindingIds,
+	)
 	if err != nil {
 		return 0, err
 	}
