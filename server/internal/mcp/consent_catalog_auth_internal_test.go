@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -79,7 +80,7 @@ func TestDirectConsentPickDoesNotBuildCardsForInapplicableEndpoints(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			// No card-building dependencies: the caller supplies its already-built cards.
-			picks, err := (&Service{}).consentDirectAuthClientPick(t.Context(), &tc.endpoint, tc.state, "", nil, nil)
+			picks, err := (&Service{aiCatalog: aivendorstest.NewStore()}).consentDirectAuthClientPick(t.Context(), &tc.endpoint, tc.state, "", nil, nil)
 			require.NoError(t, err)
 			require.Nil(t, picks)
 		})

@@ -642,8 +642,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
-	t.Attach(challengeState.connectionAttempt(endpoint))
+	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
+	clientCatalog := s.aiCatalog.Snapshot()
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	t.Attach(challengeState.connectionAttempt(clientCatalog, endpoint))
 	defer t.Finish(ctx)
 
 	if challengeState.Federation != nil || browserHandoffAtOrigin(challengeState) {
@@ -660,7 +662,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID
 	if !challengeState.FirstParty || catalogReview {
-		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				t.Refuse(ctx, mcpconnectionattempts.CodeUnknownClientID)
@@ -1080,12 +1082,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if catalogReview && approvalError == nil {
 		policy, previous, readErr := s.loadReconnectConnection(ctx, usersessions_repo.New(s.db), endpoint, challengeState, time.Now())
 		if readErr != nil {
-			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(endpoint), readErr)
+			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(clientCatalog, endpoint), readErr)
 			return readErr
 		}
 		inventory, readErr := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, "", endpointToolSelectionResource(endpoint)))
 		if readErr != nil {
-			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(endpoint), readErr)
+			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(clientCatalog, endpoint), readErr)
 			return fmt.Errorf("read captured review inventory: %w", readErr)
 		}
 		diff, diffErr := compareCatalogInventory(previous, inventory)
@@ -1183,7 +1185,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	if catalogReview && approvalError == nil {
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
+		s.connections.Step(ctx, challengeState.connectionAttempt(clientCatalog, endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
 	}
 	s.recordConsentPage(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, gateway, cards, consentProblem)
 
@@ -1259,9 +1261,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
+	// One snapshot covers admission and consent lookups; attempt labelling reads the store per call.
+	clientCatalog := s.aiCatalog.Snapshot()
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
-	attempt := challengeState.connectionAttempt(endpoint)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	attempt := challengeState.connectionAttempt(clientCatalog, endpoint)
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(attempt)
 	defer t.Finish(ctx)
 
@@ -1436,7 +1440,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
 		}
-		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); err != nil {
+		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(clientCatalog, r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				return agentConnectionsOutage(remoteSessionUnavailableError(w, err).LogWarn(ctx, logger), err)
@@ -1541,7 +1545,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	// Resolve the user_session_clients row id for the consent FK.
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.

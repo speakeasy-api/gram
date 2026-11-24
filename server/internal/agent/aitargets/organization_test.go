@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func target(id string) aitargets.Target {
@@ -63,13 +64,13 @@ func TestOverlayReplacesDefaultsAndAppendsAdditions(t *testing.T) {
 
 func TestOverlayLeavesTheDefaultsUntouched(t *testing.T) {
 	t.Parallel()
-	entries := aitargets.Overlay(aitargets.Defaults(), nil)
-	require.Len(t, entries, len(aitargets.Defaults()))
+	entries := aitargets.Overlay(aitargets.Defaults(aivendors.CompiledSnapshot()), nil)
+	require.Len(t, entries, len(aitargets.Defaults(aivendors.CompiledSnapshot())))
 	for _, entry := range entries {
 		require.Equal(t, aitargets.SourceDefault, entry.Source)
 		require.False(t, entry.Customized)
 	}
-	require.NoError(t, aitargets.ValidateServed(aitargets.Served(entries)))
+	require.NoError(t, aitargets.ValidateServed(aivendors.CompiledSnapshot(), aitargets.Served(entries)))
 }
 
 // The reason the definition columns are null for a built-in: an organization
@@ -120,7 +121,7 @@ func TestBothChatGPTBuildsAreDetectableInstalledAndRunning(t *testing.T) {
 	t.Parallel()
 
 	byID := func(id string) *aitargets.Target {
-		for _, entry := range aitargets.Defaults() {
+		for _, entry := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
 			if entry.ID == id {
 				return &entry
 			}
@@ -167,7 +168,7 @@ func TestOnlyTheGeneralChatGPTTargetIsEnforceable(t *testing.T) {
 	t.Parallel()
 
 	var current, classic *aitargets.Target
-	for _, entry := range aitargets.Defaults() {
+	for _, entry := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
 		switch entry.ID {
 		case "chatgpt":
 			current = &entry
@@ -221,7 +222,7 @@ func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
 	t.Parallel()
 
 	var builtin aitargets.Target
-	for _, candidate := range aitargets.Defaults() {
+	for _, candidate := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
 		if len(candidate.GatewayClient.OAuthClientIDs) > 0 {
 			builtin = candidate
 			break
@@ -233,7 +234,7 @@ func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
 	require.Empty(t, fromRow.GatewayClient.OAuthClientIDs, "the row stores no definition; that is what makes resolution necessary")
 	require.False(t, aitargets.SameDefinition(builtin, fromRow), "the unresolved row must not already look like the built-in")
 
-	resolved := aitargets.ResolveBuiltinDefinition(fromRow)
+	resolved := aitargets.ResolveBuiltinDefinition(aivendors.CompiledSnapshot(), fromRow)
 	require.True(t, aitargets.SameDefinition(builtin, resolved), "a built-in read back from its row must still be the built-in")
 	require.Equal(t, builtin.GatewayClient.OAuthClientIDs, resolved.GatewayClient.OAuthClientIDs)
 	require.Equal(t, builtin.DisplayName, resolved.DisplayName)
@@ -246,7 +247,7 @@ func TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone(t *testing.T) {
 	t.Parallel()
 
 	own := target("an-organization-target")
-	require.Equal(t, own, aitargets.ResolveBuiltinDefinition(own))
+	require.Equal(t, own, aitargets.ResolveBuiltinDefinition(aivendors.CompiledSnapshot(), own))
 }
 
 // TestSameDefinitionFoldsTheDefaultVersionPlistKey: an omitted version hint
@@ -305,7 +306,7 @@ func TestOverlayDropsTheDecisionRowOfARemovedBuiltIn(t *testing.T) {
 		UpdatedAt:  time.Time{},
 	}
 
-	entries := aitargets.Overlay(aitargets.Defaults(), []aitargets.Entry{orphan, own})
+	entries := aitargets.Overlay(aitargets.Defaults(aivendors.CompiledSnapshot()), []aitargets.Entry{orphan, own})
 
 	ids := make([]string, 0, len(entries))
 	for _, entry := range entries {

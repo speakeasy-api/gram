@@ -55,7 +55,7 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai tool decision update").LogError(ctx, s.logger)
 	}
 
-	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID, s.aiCatalog.Snapshot())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ai scan targets").LogError(ctx, s.logger)
 	}

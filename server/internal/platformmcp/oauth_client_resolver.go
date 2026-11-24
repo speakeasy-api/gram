@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
@@ -178,7 +179,7 @@ func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode cli
 // URL-shaped client_id, before any document is fetched. Returns nil when the
 // client is admitted and a *admission.DenialError when policy denies it.
 func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error {
-	decision := admission.Evaluate(platformCIMDAdmissionMode, clientID)
+	decision := admission.Evaluate(aivendors.CompiledSnapshot(), platformCIMDAdmissionMode, clientID)
 	if len(clientID) > admission.MaxClientIDLength {
 		// Evaluate applies this bound itself in the modes that consult the
 		// catalog, but not in the open mode this server runs, where every
@@ -237,7 +238,7 @@ func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error 
 // is no per-issuer custom URL table here to consult, so a catalog miss is
 // already the whole verdict.
 func (s *OAuthHTTP) shadowCIMDAdmitReason(ctx context.Context, clientID string) admission.AdmitReason {
-	shadow := admission.EvaluateShadow(clientID)
+	shadow := admission.EvaluateShadow(aivendors.CompiledSnapshot(), clientID)
 
 	switch shadow.Outcome {
 	case admission.OutcomeAdmit:

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -29,7 +30,7 @@ func TestSeededSessionsHoldFixtureTokens(t *testing.T) {
 	spec := DefaultSpec()
 	seedLocalPostgres(ctx, t, db, spec)
 
-	s := &seeder{spec: spec}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	// Validated sessions 3 to 6: they share the Per-User OAuth Server's one
 	// client, and each demo user can hold one session per client.
 	keys := []string{"attachment-session"}

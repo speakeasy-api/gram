@@ -251,7 +251,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	gate.memberChoices = &memberChoices{selector: nil, consentPreview: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+			Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(s.aiCatalog.Snapshot(), r, endpoint, challengeState),
 		})
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
