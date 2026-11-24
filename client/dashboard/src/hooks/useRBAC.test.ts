@@ -763,7 +763,11 @@ describe("canInGrants", () => {
       {
         scope: "mcp:read",
         selectors: [
-          { resourceKind: "mcp", resourceId: "server-1", projectId: "project-a" },
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            projectId: "project-a",
+          },
         ],
       },
     ];

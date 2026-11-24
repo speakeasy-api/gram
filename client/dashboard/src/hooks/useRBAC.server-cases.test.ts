@@ -16,7 +16,9 @@ type ServerCase = {
   calls: [string, string[], string, boolean, boolean][];
 };
 
-type Constructor = (...args: string[]) => Record<string, (...args: string[]) => authz.Check>;
+type Constructor = (
+  ...args: string[]
+) => Record<string, (...args: string[]) => authz.Check>;
 
 // Builds a call's check through the generated constructor of that name, so a
 // constructor that asks a different question than its Go twin fails here.

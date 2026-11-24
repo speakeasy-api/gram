@@ -75,27 +75,27 @@ type RequireScopeProps = (
    */
   children: React.ReactNode | RenderFn;
 } & (
-  | {
-      /**
-       * "page" — renders the Unauthorized full-page fallback.
-       * "section" — hides the children entirely.
-       * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
-       */
-      level: "page";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "section";
-      fallback?: React.ReactNode;
-    }
-  | {
-      level: "component";
-      /** Tooltip text shown on hover when disabled. */
-      reason?: string;
-      /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
-      className?: string;
-    }
-);
+    | {
+        /**
+         * "page" — renders the Unauthorized full-page fallback.
+         * "section" — hides the children entirely.
+         * "component" — disables children with a tooltip (wraps in a div with pointer-events-none and reduced opacity).
+         */
+        level: "page";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "section";
+        fallback?: React.ReactNode;
+      }
+    | {
+        level: "component";
+        /** Tooltip text shown on hover when disabled. */
+        reason?: string;
+        /** Extra classes applied to the disabled wrapper div (e.g. "w-full" for block-level children). */
+        className?: string;
+      }
+  );
 
 export function RequireScope(
   props: RequireScopeProps,
