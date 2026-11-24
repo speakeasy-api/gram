@@ -299,7 +299,7 @@ export default function CreateTunneledMcp(): JSX.Element {
 
             <Stack gap={1}>
               <label className="text-sm leading-none font-medium">
-                User session issuer
+                MCP sign-in
               </label>
               <UserSessionIssuerSelect
                 issuers={issuerQuery.organizationIssuers}
@@ -309,12 +309,13 @@ export default function CreateTunneledMcp(): JSX.Element {
                 disabled={issuerQuery.isLoading || issuerQuery.isError}
               />
               <Text muted small>
-                Organization issuers are shared across projects. Creating a
-                project-specific issuer is available for exceptional setups.
+                Organization-wide MCP sign-ins work in every project. Create one
+                for this project only when you need different settings.
               </Text>
               {issuerQuery.isError ? (
                 <Alert variant="error" dismissible={false}>
-                  Failed to load organization user session issuers.
+                  Couldn&apos;t load your organization&apos;s MCP sign-ins. Try
+                  again.
                 </Alert>
               ) : null}
             </Stack>

@@ -372,7 +372,7 @@ function OrganizationClientList({
   if (path.kind === "elsewhere") {
     return (
       <Text small muted>
-        See them in {path.projectName}&apos;s MCP Sign-in configuration.
+        See them on the MCP Sign-in page of the {path.projectName} project.
       </Text>
     );
   }

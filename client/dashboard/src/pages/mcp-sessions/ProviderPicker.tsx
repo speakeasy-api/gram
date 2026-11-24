@@ -78,7 +78,7 @@ export function ProviderPicker({
           contain phrasing content. */}
       <h1 className={cn(DETAIL_HEADER_NAME, "min-w-0")}>
         <PopoverTrigger
-          aria-label={`MCP sign-in: ${current.slug}. Switch MCP sign-in`}
+          aria-label={`MCP sign-in: ${current.slug}. Switch to another one`}
           className="hover:text-foreground/80 inline-flex max-w-full min-w-0 items-center gap-2 text-left transition-colors"
         >
           <span className="min-w-0 break-words">{current.slug}</span>
@@ -97,7 +97,7 @@ export function ProviderPicker({
             <CommandInput placeholder="Find an MCP sign-in" />
           ) : null}
           <CommandList>
-            <CommandEmpty>No MCP sign-in matches.</CommandEmpty>
+            <CommandEmpty>No matches.</CommandEmpty>
             {organizationWide.length > 0 ? (
               <CommandGroup heading={providerScopeLabel({ projectId: "" })}>
                 {organizationWide.map(item)}
@@ -165,7 +165,7 @@ export function ProviderSwitcher({
           if (next && next.id !== current.id) onSelect(next);
         }}
         searchPlaceholder="Find an MCP sign-in"
-        emptyMessage="No MCP sign-in matches."
+        emptyMessage="No matches."
         className="h-8 max-w-[240px]"
         contentClassName="w-[300px]"
       >

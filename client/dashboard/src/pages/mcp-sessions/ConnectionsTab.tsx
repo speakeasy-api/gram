@@ -35,7 +35,7 @@ const USER_SESSION_FILTERS = defineFilters([
   // "More filters" for the narrower cuts the split does not make — expired
   // versus revoked — and it re-pins itself as a chip once set.
   { id: "status", label: "Status", kind: "select" },
-  // The provider is the header's picker, not a filter here.
+  // The MCP sign-in is the header's picker, not a filter here.
   // "User", not "Identity": the facets endpoint lists only `user:` subjects,
   // so the wider label offered agents and keys the filter cannot select.
   { id: "subjectUrn", label: "User", kind: "select", pinned: true },
@@ -66,11 +66,11 @@ const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
 ];
 
 const CONNECTIONS_DESCRIPTION =
-  "Connections Speakeasy brokers through this provider. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
+  "Connections Speakeasy brokers through this MCP sign-in. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one.";
 
 /**
- * One provider's connections: today's MCP Sign-in list, narrowed to the
- * provider the header's picker chose.
+ * One MCP sign-in's connections: the old single list, narrowed to the
+ * MCP sign-in the header's picker chose.
  */
 export function ConnectionsTab({
   providerId,
@@ -130,7 +130,7 @@ export function ConnectionsTab({
 
   const sessions = useSessionAgents(unresolvedSessions);
 
-  // The provider's registrations, drained like the MCP server tab drains
+  // The MCP sign-in's registrations, drained like the MCP server tab drains
   // them: the agent grouping lists a registration with no sessions yet, so an
   // agent registered here shows up, and its sheet opens, before it signs in.
   const clientsQuery = useUserSessionClientsInfinite({
@@ -226,7 +226,7 @@ export function ConnectionsTab({
       <p className="text-muted-foreground text-sm">
         {deferredSearch.trim()
           ? "No connections match your search"
-          : "No one has signed in through this provider yet. Group by Agent to see its registered agents."}
+          : "No one has signed in here yet. Group by Agent to see the registered agents."}
       </p>
     );
   } else {

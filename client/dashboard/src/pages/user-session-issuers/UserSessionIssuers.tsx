@@ -63,7 +63,7 @@ function UserSessionIssuersOverview(): JSX.Element {
   return (
     <>
       <ResourceListPage
-        title="MCP Authentication"
+        title="MCP Sign-in"
         description="Where people sign in to your MCP servers. Each one decides how sign-in works for every server that uses it."
       >
         <Stack gap={4} className="mb-6">

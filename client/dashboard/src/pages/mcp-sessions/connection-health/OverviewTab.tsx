@@ -74,7 +74,7 @@ const SIGN_IN_ACTIVITY_FILTERS: AttemptFilters = {
   steps: [...SIGN_IN_STEPS],
 };
 
-/** MCP Sign-in › Overview: how sign-in through this provider is going. */
+/** MCP Sign-in › Overview: how sign-in through this MCP sign-in is going. */
 export function OverviewTab({
   provider,
 }: {
@@ -228,7 +228,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. Sign-ins and renewals through this provider."
+        description="Latest first. Sign-ins and renewals."
         action={
           <ArrowLink
             to={logsHref(
@@ -398,7 +398,7 @@ function KillswitchesInForce({
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}${hasMore ? "+" : ""}`}
-      description="Across this organization, not only this provider. They block tool calls right now."
+      description="Across this organization, not only this MCP sign-in. They block tool calls right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
       <Table columns={columns} data={killswitches} rowKey={(k) => k.id} />
@@ -510,7 +510,7 @@ function Configuration({
   return (
     <OverviewSection
       title="Configuration"
-      description="How people sign in through this provider."
+      description="How people sign in here."
       action={
         <Link
           to={settingsHref}

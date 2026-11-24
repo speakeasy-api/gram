@@ -373,8 +373,8 @@ function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
   return (
     <div className="space-y-4">
       <Text muted small className="max-w-2xl">
-        Every MCP server and gateway that signs people in through this provider.
-        Changes to its settings apply to all of them.
+        Every MCP server and gateway that uses this MCP sign-in. Changes to its
+        settings apply to all of them.
       </Text>
       <McpServersSection
         issuer={issuer}

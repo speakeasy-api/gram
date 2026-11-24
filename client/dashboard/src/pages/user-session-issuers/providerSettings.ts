@@ -36,7 +36,7 @@ export const SAVE_SCOPE: Record<"organization" | "project", Scope> = {
 /** The line under a settings panel: who it applies to, or where to change it. */
 export function settingsFooterHint(path: EditPath): string {
   if (path.kind === "elsewhere") {
-    return `Change this in ${path.projectName}'s MCP Sign-in configuration.`;
+    return `Change this on the MCP Sign-in page of the ${path.projectName} project.`;
   }
   if (path.kind === "organization") {
     return "Applies to every MCP server that uses it, in every project.";

@@ -131,7 +131,7 @@ export function useHostedVisibilityGuard({
             <Dialog.Title>Remove external OAuth first</Dialog.Title>
             <Dialog.Description>
               This server has an external OAuth configuration. Remove it or
-              convert it to a session issuer in Settings before changing who can
+              switch it to an MCP sign-in in Settings before changing who can
               reach the server.
             </Dialog.Description>
           </Dialog.Header>

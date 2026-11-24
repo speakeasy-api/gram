@@ -522,7 +522,7 @@ export function ConnectionLogsView({
         description={
           serverId
             ? "Reference search covers the last 30 days of this server."
-            : "Reference search covers the last 30 days of this provider."
+            : "Reference search covers the last 30 days of this MCP sign-in."
         }
       />
     ) : filtersActive || search ? (

@@ -24,11 +24,13 @@ export function UserSessionIssuerField({
   issuers,
   isLoading,
   isError,
+  label = "MCP sign-in",
 }: {
   target: AuthTarget;
   issuers: UserSessionIssuer[];
   isLoading: boolean;
   isError: boolean;
+  label?: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [draftIssuerId, setDraftIssuerId] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export function UserSessionIssuerField({
 
   return (
     <AuthRow
-      label="MCP sign-in"
+      label={label}
       hint="Where people sign in to this server. Its settings apply to every server that uses it."
     >
       {control}

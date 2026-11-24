@@ -113,7 +113,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
    Compare with Watchdog using the same detection-time window and severity.
    Optional finding breakdowns are not the dashboard's display sections.
 
-10. **MCP connections**: on the organization **MCP Sign-in** page, the
+10. **MCP connections**: on the project **MCP Sign-in** page, the
     Connections issuer's five registered agents and five connections. Grouped by
     **Agent**: `Partner Reconciliation Agent` carries a green
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot

@@ -452,7 +452,7 @@ function EditorContents({
           {mcpSessionsHref && (
             <Button variant="secondary" asChild>
               <Link to={mcpSessionsHref(draft.userId)}>
-                View this member in MCP Sign-in
+                View their connections in MCP Sign-in
               </Link>
             </Button>
           )}
