@@ -131,6 +131,12 @@ func requireReconnect(t *testing.T, resp *httptest.ResponseRecorder, err error, 
 	require.Contains(t, resp.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+slug)
 }
 
+func requireAuthClientSetup(t *testing.T, resp *httptest.ResponseRecorder, err error) {
+	t.Helper()
+	require.Contains(t, requireOopsCode(t, err, oops.CodeFailedPrecondition), "Ask your administrator to finish setting up its sign-in")
+	require.Empty(t, resp.Header().Get("WWW-Authenticate"))
+}
+
 // Two remote servers share one user session issuer but use different upstream
 // clients. Each forwards only its own client's credential, a server issued
 // after the credential fails closed into reconnect, and a server needing no
@@ -209,14 +215,14 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	anonymousUpstream.requireToolCallAuth(t, "")
 
 	// A credential issued before a server was configured has no choice for
-	// it, and is asked to reconnect rather than given a guessed client.
+	// it, and asks for setup rather than using a guessed client.
 	githubUpstream := newRecordingUpstream(t, "ping")
 	githubSlug := "sel-github-" + uuid.NewString()[:8]
 	github, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, githubUpstream.url, githubSlug, "public", sharedIssuerID)
 	f.associate(t, ctx, github.ID, linearClient)
 	staleBearer := linearBearer
 	resp, err = callTool(t, f.ti, githubSlug, staleBearer, "ping")
-	requireReconnect(t, resp, err, githubSlug)
+	requireAuthClientSetup(t, resp, err)
 	require.Zero(t, githubUpstream.requestCount(), "a missing choice never reaches the upstream")
 
 	// Detaching the chosen client makes the choice unusable; serving does not
@@ -232,7 +238,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	f.associate(t, ctx, notion.ID, linearClient)
 	before := notionUpstream.requestCount()
 	resp, err = callTool(t, f.ti, notionSlug, notionBearer, "ping")
-	requireReconnect(t, resp, err, notionSlug)
+	requireAuthClientSetup(t, resp, err)
 	require.Equal(t, before, notionUpstream.requestCount())
 
 	// Unbinding the chosen client from the issuer, though it stays associated
@@ -288,7 +294,7 @@ func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T)
 	f.associate(t, ctx, later.ID, client)
 	insertQualifiedRemoteSessionToken(t, ctx, f.ti, issuerID, client, subject, "token-anon", laterUpstream.url)
 	resp, err = callTool(t, f.ti, laterSlug, bearer, "ping")
-	requireReconnect(t, resp, err, laterSlug)
+	requireAuthClientSetup(t, resp, err)
 	require.Zero(t, laterUpstream.requestCount(), "a missing choice never reaches the upstream")
 }
 
