@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-The "Connect the MCP manually" option in Platform MCP setup no longer labels itself a recovery option.
+The Platform MCP install-method cards are clearer: the marketplace option shows a "Recommended" badge beside its title, and the manual option no longer labels itself a recovery option.
