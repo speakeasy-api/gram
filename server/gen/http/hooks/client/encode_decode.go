@@ -2383,6 +2383,7 @@ func marshalHooksHookSkillDataToHookSkillDataRequestBody(v *hooks.HookSkillData)
 		SourceLevel: v.SourceLevel,
 		SourcePath:  v.SourcePath,
 		RawSha256:   v.RawSha256,
+		TreeSha256:  v.TreeSha256,
 	}
 
 	return res
@@ -2705,6 +2706,7 @@ func marshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequest
 		SourceLevel: v.SourceLevel,
 		SourcePath:  v.SourcePath,
 		RawSha256:   v.RawSha256,
+		TreeSha256:  v.TreeSha256,
 	}
 
 	return res
@@ -2810,6 +2812,38 @@ func marshalHookInstallFailureDataRequestBodyToHooksHookInstallFailureData(v *Ho
 		Os:          v.Os,
 		Arch:        v.Arch,
 		Harness:     v.Harness,
+	}
+
+	return res
+}
+
+// marshalHooksSkillContentFileToSkillContentFileRequestBody builds a value of
+// type *SkillContentFileRequestBody from a value of type
+// *hooks.SkillContentFile.
+func marshalHooksSkillContentFileToSkillContentFileRequestBody(v *hooks.SkillContentFile) *SkillContentFileRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SkillContentFileRequestBody{
+		Path:    v.Path,
+		Content: v.Content,
+		Sha256:  v.Sha256,
+	}
+
+	return res
+}
+
+// marshalSkillContentFileRequestBodyToHooksSkillContentFile builds a value of
+// type *hooks.SkillContentFile from a value of type
+// *SkillContentFileRequestBody.
+func marshalSkillContentFileRequestBodyToHooksSkillContentFile(v *SkillContentFileRequestBody) *hooks.SkillContentFile {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.SkillContentFile{
+		Path:    v.Path,
+		Content: v.Content,
+		Sha256:  v.Sha256,
 	}
 
 	return res

@@ -27,11 +27,18 @@ import (
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/skills"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 const (
-	hookSkillContentSchemaV1       = "hook.skill-content.v1"
-	maxSkillUploadRequestBodyBytes = 512 * 1024
+	hookSkillContentSchemaV1 = "hook.skill-content.v1"
+
+	// maxSkillUploadRequestBodyBytes bounds a skill content upload body, on
+	// the wire and after gzip decompression. A v2 upload carries up to 10 MiB
+	// of supporting files, base64-encoded in JSON (about 13.4 MiB), plus a
+	// 64 KiB SKILL.md and 100 file paths with their worst-case JSON escaping;
+	// 16 MiB covers that with headroom.
+	maxSkillUploadRequestBodyBytes = 16 * 1024 * 1024 // 16 MiB
 )
 
 func skillScanOperationID(skillVersionID uuid.UUID, policyGenerations []string) string {
@@ -64,7 +71,21 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 		return nil
 	}
 
-	if payload == nil || payload.SchemaVersion != hookSkillContentSchemaV1 {
+	if payload == nil {
+		return oops.E(oops.CodeBadRequest, nil, "unsupported skill content schema_version")
+	}
+	var files []skilltree.File
+	switch payload.SchemaVersion {
+	case hookSkillContentSchemaV1:
+		if len(payload.Files) > 0 {
+			return oops.E(oops.CodeBadRequest, nil, "files require schema_version %s", hookSkillContentSchemaV2)
+		}
+	case hookSkillContentSchemaV2:
+		files, err = uploadedSkillFiles(payload.Files)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
+	default:
 		return oops.E(oops.CodeBadRequest, nil, "unsupported skill content schema_version")
 	}
 	if len(payload.RawSha256) != 64 || payload.RawSha256 != strings.ToLower(payload.RawSha256) {
@@ -88,7 +109,12 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 		return oops.E(oops.CodeBadRequest, nil, "raw_sha256 has not been observed for this project")
 	}
 
-	result, err := skills.CaptureSkillContent(ctx, s.db, *authCtx.ProjectID, payload.Content)
+	var result *skills.CaptureResult
+	if files != nil {
+		result, err = skills.CaptureSkillTree(ctx, s.db, *authCtx.ProjectID, payload.Content, files)
+	} else {
+		result, err = skills.CaptureSkillContent(ctx, s.db, *authCtx.ProjectID, payload.Content)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, skills.ErrInvalidCapture):
@@ -101,7 +127,7 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 	}
 
 	if s.piScanner != nil {
-		s.scanCapturedSkillVersion(ctx, authCtx, result.SkillVersionID, payload.Content)
+		s.scanCapturedSkillVersion(ctx, authCtx, result.SkillVersionID, skillScanDocument(payload.Content, files))
 	}
 	return nil
 }

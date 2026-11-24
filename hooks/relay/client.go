@@ -275,6 +275,9 @@ func (r ingestResult) unsent() bool {
 // stored exactly once.
 type client struct {
 	sdk *sdk.SpeakeasyHooks
+	// http is the HTTP client behind sdk, used directly for requests the
+	// generated SDK does not model (the v2 skill content upload).
+	http *http.Client
 	// budget caps one send end to end; a field so tests can shrink it.
 	budget time.Duration
 	// replayed stamps X-Gram-Replayed on every request via the typed SDK
@@ -284,17 +287,19 @@ type client struct {
 }
 
 func newClient(serverURL string) *client {
+	httpClient := &http.Client{
+		Timeout:   perAttemptTime,
+		Transport: ingestTransport(),
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	return &client{
 		budget: sendBudget,
+		http:   httpClient,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
-			sdk.WithClient(&http.Client{
-				Timeout:   perAttemptTime,
-				Transport: ingestTransport(),
-				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			}),
+			sdk.WithClient(httpClient),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
 			// send is reused across redeliveries. The elapsed cap keeps the

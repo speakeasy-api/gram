@@ -768,6 +768,76 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listSkillTreeCandidateFiles = `-- name: ListSkillTreeCandidateFiles :many
+WITH alias_versions AS (
+  SELECT sv.id
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+), raw_versions AS (
+  SELECT sv.id
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = $1
+    AND s.archived_at IS NULL
+    AND sv.raw_sha256 = $2
+), candidates AS (
+  SELECT id FROM alias_versions
+  UNION
+  SELECT id FROM raw_versions
+)
+SELECT c.id AS skill_version_id, svf.path, svf.sha256
+FROM candidates c
+LEFT JOIN skill_version_files svf
+  ON svf.skill_version_id = c.id
+  AND svf.project_id = $1
+ORDER BY c.id, svf.path
+LIMIT 2000
+`
+
+type ListSkillTreeCandidateFilesParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+type ListSkillTreeCandidateFilesRow struct {
+	SkillVersionID uuid.UUID
+	Path           pgtype.Text
+	Sha256         pgtype.Text
+}
+
+// Lists the supporting files of every live skill version that could be the
+// skill directory a device reports for a raw SKILL.md hash: the version the
+// raw hash alias points to, and versions created from those exact SKILL.md
+// bytes. A candidate with no supporting files returns one row with a NULL
+// path. Hook ingest compares each candidate's tree digest with the device's
+// to decide whether to request the skill directory.
+func (q *Queries) ListSkillTreeCandidateFiles(ctx context.Context, arg ListSkillTreeCandidateFilesParams) ([]ListSkillTreeCandidateFilesRow, error) {
+	rows, err := q.db.Query(ctx, listSkillTreeCandidateFiles, arg.ProjectID, arg.RawSha256)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillTreeCandidateFilesRow
+	for rows.Next() {
+		var i ListSkillTreeCandidateFilesRow
+		if err := rows.Scan(&i.SkillVersionID, &i.Path, &i.Sha256); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listToolCallBlockSurfaceEvidence = `-- name: ListToolCallBlockSurfaceEvidence :many
 SELECT
     provider

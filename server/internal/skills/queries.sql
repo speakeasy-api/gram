@@ -1306,6 +1306,22 @@ WHERE srh.project_id = @project_id
   AND srh.raw_sha256 = @raw_sha256
 LIMIT 1;
 
+-- name: RepointSkillRawHashAlias :exec
+-- Points an existing raw SKILL.md hash alias at another live version of the
+-- skill. Device capture uses it when a skill directory changes without its
+-- SKILL.md changing, so later activations attribute to the latest captured
+-- tree.
+UPDATE skill_raw_hashes srh
+SET canonical_sha256 = sv.canonical_sha256
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE srh.project_id = @project_id
+  AND srh.raw_sha256 = @raw_sha256
+  AND s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.id = @skill_version_id;
+
 -- name: GetSkillVersionOrigin :one
 SELECT *
 FROM skill_version_origins

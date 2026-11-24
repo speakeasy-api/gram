@@ -432,7 +432,18 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
 		contentRequired := !known
-		if known && s.piScanner != nil {
+		// A device that located the skill directory reports its tree digest.
+		// Ask for the directory when no stored version holds that tree, so a
+		// changed script or reference produces a new captured version even
+		// though SKILL.md is unchanged.
+		if treeSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.TreeSha256, "")); known && treeSHA256 != "" {
+			treeKnown, err := deviceSkillTreeKnown(writeCtx, s.repo, *authCtx.ProjectID, rawSHA256, treeSHA256)
+			if err != nil {
+				return nil, false, fmt.Errorf("resolve known skill tree: %w", err)
+			}
+			contentRequired = !treeKnown
+		}
+		if !contentRequired && s.piScanner != nil {
 			contentRequired, err = s.repo.SkillRawHashNeedsPromptInjectionScan(writeCtx, repo.SkillRawHashNeedsPromptInjectionScanParams{
 				ProjectID: *authCtx.ProjectID,
 				RawSha256: rawSHA256,

@@ -217,6 +217,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		if resolvedSkill.rawSHA256 != "" {
 			payload.Data.Skill.RawSha256 = new(resolvedSkill.rawSHA256)
 		}
+		if resolvedSkill.tree != nil {
+			payload.Data.Skill.TreeSha256 = new(resolvedSkill.tree.digest)
+		}
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base, r.cfg.InstallRoute)

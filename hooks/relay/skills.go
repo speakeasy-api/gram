@@ -24,6 +24,9 @@ type resolvedSkill struct {
 	rawSHA256    string
 	content      string
 	captureReady bool
+	// tree is the on-disk skill directory whose SKILL.md matched the
+	// activation, or nil when none was located.
+	tree *skillTree
 }
 
 func resolveActivatedSkill(typed any, payload *components.IngestRequestBody) *resolvedSkill {
@@ -40,6 +43,7 @@ func resolveActivatedSkill(typed any, payload *components.IngestRequestBody) *re
 	result.rawSHA256 = hex.EncodeToString(digest[:])
 	result.content = activation.Content
 	result.captureReady = true
+	result.tree = locateSkillTree(typed, activation.Name, result.rawSHA256)
 	return result
 }
 
