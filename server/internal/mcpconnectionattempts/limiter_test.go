@@ -627,6 +627,39 @@ func TestOnceLimiter_RequestMethodsFoldApart(t *testing.T) {
 	require.False(t, limiterAllows(limiter, withOption(Detail("second")), now), "a free-form detail does not split the key")
 }
 
+// Past the burst, one person's failures through two service connections fold apart, each under its own id.
+func TestOnceLimiter_ServiceConnectionsFoldApart(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	now := time.Now()
+	first, second := uuid.New(), uuid.New()
+	through := func(client uuid.UUID) Row {
+		row := limiterRow("org", "server", "provider_rejected", "user:a")
+		RemoteSessionClient(client).apply(&row)
+		return row
+	}
+	for range onceKeyBurst {
+		require.True(t, limiterAllows(limiter, through(first), now))
+	}
+	require.False(t, limiterAllows(limiter, through(first), now))
+	for range onceKeyBurst {
+		require.True(t, limiterAllows(limiter, through(second), now), "another service connection has its own burst")
+	}
+	for range 3 {
+		require.False(t, limiterAllows(limiter, through(first), now))
+		require.False(t, limiterAllows(limiter, through(second), now))
+	}
+
+	rows := limiter.pendingRows(now, true)
+	require.Len(t, rows, 2)
+	repeats := map[string]uint32{}
+	for _, row := range rows {
+		repeats[row.RemoteSessionClientID] = row.Repeats
+	}
+	require.Equal(t, map[string]uint32{first.String(): 3, second.String(): 2}, repeats)
+}
+
 func traced(ctx context.Context, n int) (context.Context, string) {
 	var id trace.TraceID
 	id[0], id[15] = 1, byte(n)

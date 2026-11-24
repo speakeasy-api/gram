@@ -39,10 +39,10 @@ const AUTH_METHOD_OPTIONS: { value: AuthMethodValue; description: string }[] = [
 ];
 
 /**
- * Registers an agent that cannot register itself. Speakeasy mints the client
- * ID and secret, so the sheet asks only for what the agent's owner knows, then
- * shows the credentials once. The secret is held in component state only and
- * is gone when the sheet closes.
+ * Registers an OAuth client that cannot register itself through DCR or CIMD.
+ * Speakeasy mints the client ID and secret, so the sheet asks only for what
+ * whoever configures the client knows, then shows the credentials once. The
+ * secret is held in component state only and is gone when the sheet closes.
  */
 export function RegisterClientSheet({
   issuerId,
@@ -120,10 +120,12 @@ export function RegisterClientSheet({
             }}
           >
             <SheetHeader>
-              <SheetTitle>Register an agent</SheetTitle>
+              <SheetTitle>Register an OAuth client</SheetTitle>
               <SheetDescription>
-                For an agent that can’t register itself. Speakeasy creates the
-                client ID and secret for you to hand to whoever runs the agent.
+                For an MCP client that can’t register itself through dynamic
+                client registration (DCR) or a client ID metadata document
+                (CIMD). Speakeasy creates a client ID and secret for you to
+                enter in the client’s connector settings.
               </SheetDescription>
             </SheetHeader>
 
@@ -196,7 +198,7 @@ export function RegisterClientSheet({
               </fieldset>
 
               {create.error && (
-                <Alert variant="error" title="Couldn’t register the agent">
+                <Alert variant="error" title="Couldn’t register the client">
                   {create.error.message}
                 </Alert>
               )}
@@ -214,7 +216,7 @@ export function RegisterClientSheet({
               </Button>
               <Button size="sm" type="submit" disabled={!canSubmit}>
                 <Button.Text>
-                  {create.isPending ? "Registering…" : "Register agent"}
+                  {create.isPending ? "Registering…" : "Register client"}
                 </Button.Text>
               </Button>
             </SheetFooter>
@@ -246,7 +248,7 @@ function RegisteredCredentials({
           {client.clientName} is registered
         </SheetTitle>
         <SheetDescription>
-          Give these to whoever runs the agent.
+          Enter these in the client’s connector settings.
         </SheetDescription>
       </SheetHeader>
 

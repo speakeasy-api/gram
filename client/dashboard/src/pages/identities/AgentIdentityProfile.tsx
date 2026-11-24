@@ -101,7 +101,7 @@ export function AgentIdentityProfile({
     case "mcp-sign-in":
       return (
         <IdentitySection
-          title="MCP sign-in"
+          title="Server sign-in"
           meta="Which MCP servers this agent calls, and how Speakeasy signs in to each"
         >
           <AgentMcpSignIn agent={agent} refresh={refresh} />

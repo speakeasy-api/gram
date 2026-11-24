@@ -193,7 +193,7 @@ RETURNING *;
 -- agent ID and bind every operation to the organization and selected agent.
 
 -- name: ListAgentPolicyGrants :many
-SELECT id, scope, selectors, created_at, updated_at
+SELECT id, scope, selectors, created_at, updated_at, expires_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = concat('agent:', @agent_id::uuid)
@@ -211,6 +211,17 @@ FOR UPDATE;
 -- name: CreateAgentPolicyGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, concat('agent:', @agent_id::uuid), @scope, @selectors)
+RETURNING id, scope, selectors, created_at, updated_at;
+
+-- name: EnsurePermanentAgentPolicyGrant :one
+-- Creates a permanent grant, or takes over a temporary grant for the same
+-- target by clearing its expiry.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, concat('agent:', @agent_id::uuid), @scope, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = NULL,
+  updated_at = clock_timestamp()
 RETURNING id, scope, selectors, created_at, updated_at;
 
 -- name: UpdateAgentPolicyGrant :one
@@ -557,7 +568,6 @@ WHERE a.organization_id = @organization_id
       JOIN remote_session_issuers issuer ON issuer.id = c.remote_session_issuer_id AND NOT issuer.deleted
       JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id AND NOT usi.deleted
       JOIN user_session_issuers provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
-      JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
       WHERE c.id = b.remote_session_client_id AND c.id = s.remote_session_client_id AND NOT c.deleted
         AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
         AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))

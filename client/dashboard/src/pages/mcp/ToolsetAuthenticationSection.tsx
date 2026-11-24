@@ -29,7 +29,7 @@ export function ToolsetAuthenticationSection({
   return (
     <>
       <PageSection
-        heading="Authentication"
+        heading="Sign-in method"
         description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
         <AuthenticationSectionBody
@@ -97,7 +97,7 @@ export function ConvertToUserSessionsButton({
   return (
     <>
       <Button variant="tertiary" onClick={() => setSheetOpen(true)}>
-        <Button.Text>Convert to User Sessions</Button.Text>
+        <Button.Text>Convert to MCP sign-in</Button.Text>
       </Button>
       <AttachRemoteIdentityProviderSheet
         open={sheetOpen}

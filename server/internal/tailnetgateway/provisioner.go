@@ -118,7 +118,6 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, enc *orgencryption.Se
 type owner struct {
 	organizationID string
 	hostname       string
-	runtime        string
 
 	// serviceHostnames are the labels whose services the gateway may have
 	// defined and not yet deleted, empty until it first defines one.
@@ -139,7 +138,7 @@ func (p *Provisioner) owner(ctx context.Context, id uuid.UUID) (owner, error) {
 	if len(labels) == 0 && row.GatewayServiceHostname.String != "" {
 		labels = []string{row.GatewayServiceHostname.String}
 	}
-	return owner{organizationID: row.OrganizationID, hostname: row.Hostname, runtime: row.Runtime.String, serviceHostnames: labels}, nil
+	return owner{organizationID: row.OrganizationID, hostname: row.Hostname, serviceHostnames: labels}, nil
 }
 
 func credentialsFrom(encoded []byte) (tailscaleapi.Credentials, error) {
@@ -651,9 +650,8 @@ func operationErrorCode(err error) string {
 }
 
 // logFailure records why a provisioner operation failed. The reconciler's
-// shared provider telemetry only reports a bounded error code, because the
-// Kubernetes operator's errors can carry Kubernetes request data. This
-// provider's errors come from the Tailscale API client and Postgres and never
+// shared provider telemetry only reports a bounded error code, so that no
+// provider's error text leaves the provider boundary. This provider's errors come from the Tailscale API client and Postgres and never
 // carry the customer's OAuth client secret or auth keys (a rejected token
 // exchange reports Tailscale's response, such as invalid_client), so the full
 // error is logged here: it is the only place the cause of a failed reconcile
@@ -712,11 +710,6 @@ func apiFailure(err error) (k8s.NetworkIngressObservation, error) {
 	default:
 		return errorObservation(""), err
 	}
-}
-
-// FindOrphans is a no-op: the gateway owns no Kubernetes resources.
-func (p *Provisioner) FindOrphans(context.Context, []k8s.NetworkIngressResourceNames) ([]k8s.NetworkIngressOrphan, error) {
-	return nil, nil
 }
 
 // encryptAuthKey seals a freshly minted auth key under the organization's

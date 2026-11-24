@@ -44,6 +44,8 @@ type LogRelayHandler struct {
 	relay          *signalRelay
 	// connectionLogRelay carries connection attempts to their own route, off the same subscription.
 	connectionLogRelay *signalRelay
+	// feedbackRelay carries MCP server feedback to its own route, off the same subscription.
+	feedbackRelay *signalRelay
 }
 
 type logProvenanceKey struct {
@@ -106,6 +108,14 @@ func NewLogRelayHandler(
 			"/v1/logs",
 			"connection log",
 		),
+		feedbackRelay: newSignalRelay(
+			db,
+			encryptionClient,
+			policy,
+			dataexports.DataSourceMCPFeedback,
+			"/v1/logs",
+			"mcp feedback",
+		),
 	}
 }
 
@@ -126,11 +136,15 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 }
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
-	telemetry, connectionLogs, excluded := splitLogRelayMessages(messages)
-	if excluded > 0 {
-		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
+	split := splitLogRelayMessages(messages)
+	if split.excluded > 0 {
+		h.recordDroppedLogs(ctx, split.excluded, relayReasonExcluded)
 	}
-	return errors.Join(h.deliver(ctx, h.relay, telemetry), h.deliver(ctx, h.connectionLogRelay, connectionLogs))
+	return errors.Join(
+		h.deliver(ctx, h.relay, split.telemetry),
+		h.deliver(ctx, h.connectionLogRelay, split.connectionLogs),
+		h.deliver(ctx, h.feedbackRelay, split.feedback),
+	)
 }
 
 func (h *LogRelayHandler) deliver(ctx context.Context, relay *signalRelay, messages []logRelayMessage) error {
@@ -265,22 +279,40 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
-// splitLogRelayMessages separates connection logs, which go to their own route,
-// from product telemetry. It drops gateway tool call records: the tool-call log
-// relay off telemetry_logs already delivers those calls, until DNO-1310.
-func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded int) {
-	telemetry = messages[:0]
+// logRelaySplit is one batch sorted by the route that carries each record.
+type logRelaySplit struct {
+	// telemetry goes to the product telemetry route.
+	telemetry []logRelayMessage
+
+	// connectionLogs goes to the MCP connection logs route.
+	connectionLogs []logRelayMessage
+
+	// feedback goes to the MCP feedback route.
+	feedback []logRelayMessage
+
+	// excluded counts records no route carries.
+	excluded int
+}
+
+// splitLogRelayMessages separates connection logs and MCP server feedback,
+// which each go to their own route, from product telemetry. It drops gateway
+// tool call records: the tool-call log relay off telemetry_logs already
+// delivers those calls, until DNO-1310.
+func splitLogRelayMessages(messages []logRelayMessage) logRelaySplit {
+	split := logRelaySplit{telemetry: messages[:0], connectionLogs: nil, feedback: nil, excluded: 0}
 	for _, message := range messages {
 		switch {
 		case isConnectionLogRecord(message.record):
-			connectionLogs = append(connectionLogs, message)
+			split.connectionLogs = append(split.connectionLogs, message)
+		case isFeedbackLogRecord(message.record):
+			split.feedback = append(split.feedback, message)
 		case logOriginalScopeName(message.record) == dialect.GatewayLogScope:
-			excluded++
+			split.excluded++
 		default:
-			telemetry = append(telemetry, message)
+			split.telemetry = append(split.telemetry, message)
 		}
 	}
-	return telemetry, connectionLogs, excluded
+	return split
 }
 
 // filterLogsBelowSeverity drops records below the route's minimum level.
@@ -303,6 +335,13 @@ func filterLogsBelowSeverity(messages []logRelayMessage, minSeverity otelv1.LogR
 // scope, which any producer can set.
 func isConnectionLogRecord(record *otelv1.LogRecord) bool {
 	return record.GetProvenance().GetSource() == dialect.ConnectionLogSource
+}
+
+// isFeedbackLogRecord reports a record only the MCP feedback route carries.
+// Like a connection log it is told by its provenance source, which a producer
+// outside the feedback recorder cannot set.
+func isFeedbackLogRecord(record *otelv1.LogRecord) bool {
+	return record.GetProvenance().GetSource() == dialect.FeedbackLogSource
 }
 
 // logOriginalScopeName is the producer's scope as the transform preserved it.

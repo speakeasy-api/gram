@@ -109,6 +109,7 @@ func handleToolsCall(
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
 	scan *mcpriskscan.Evaluator,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -139,6 +140,45 @@ func handleToolsCall(
 	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
 	attributedMCPServerID := payload.servingServerID()
 
+	// A local tool's name is taken on the server, so it is matched before any
+	// of the server's own tools and before the filters that narrow them.
+	if local != nil && attributedMCPServerID != nil {
+		if tool, ok := localToolNamed(local(ctx, logger, toolset.OrganizationID, payload), params.Name); ok {
+			// A local tool's arguments are the agent's words like any other
+			// call's, so request risk policies screen them before it answers.
+			decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+				Surface:         mcpriskscan.SurfaceHostedMCP,
+				Method:          mcpriskscan.MethodToolsCall,
+				OrganizationID:  toolset.OrganizationID,
+				ProjectID:       payload.projectID.String(),
+				ServerID:        attributedMCPServerID.String(),
+				MetaServerID:    payload.metaMcpServerID,
+				ToolsetID:       toolset.ID,
+				ToolName:        params.Name,
+				ResourceURI:     "",
+				PromptName:      "",
+				ChatID:          payload.chatID,
+				ToolAnnotations: nil,
+			}, mcpriskscan.BorrowPayload(params.Arguments)))
+			if decision.HeldForApproval() {
+				identity := serverInfoHostedToolset
+				if payload.metaMcpServerID != "" {
+					identity = serverInfoMetaServer
+				}
+				return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+			}
+			if decision.Denied() {
+				return nil, oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+			}
+			return answerHostedLocalToolCall(ctx, logger, clientInfoStore, payload, req.ID, tool, params.Arguments, reqMeta.ClientInfo)
+		}
+	}
+	// A gateway let this call through only because it named a local tool, so
+	// none of the server's own tools may answer it.
+	if localToolsOnly(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", remotemcp.ToolNotApprovedMessage).LogInfo(ctx, logger)
+	}
+
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a
 	// filtered-out tool surfaces as method-not-found.
@@ -168,9 +208,13 @@ func handleToolsCall(
 	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			found, searchErr := handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			payload.resultSucceeded = searchErr == nil
+			return found, searchErr
 		case describeToolsToolName:
-			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			described, describeErr := handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			payload.resultSucceeded = describeErr == nil
+			return described, describeErr
 		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
@@ -256,17 +300,29 @@ func handleToolsCall(
 	// privacy read and the resource id follow the wrapper when one fronts
 	// the request.
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		var disposition string
+		// A tool whose annotations cannot be read is refused: classifying it
+		// as unannotated would guess at a value the tool may not have.
 		baseTool, err := conv.ToBaseTool(tool)
-		if err == nil {
-			disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for authorization").LogError(ctx, logger)
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
-		})); err != nil {
+		disposition := toolDisposition(ctx, logger, params.Name, baseTool.Annotations)
+		if err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(payload.mcpConnectResourceID(toolset.ID)), authz.ProjectIDOf(payload.projectID)).ToolCall(params.Name, disposition)); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
+		}
+	}
+
+	// A gateway execute_read_only_tool call runs only tools whose annotations
+	// classify them read-only, the classification per-tool RBAC uses above. It
+	// runs after RBAC so a caller who may not call the tool learns nothing
+	// about its annotations.
+	if metaAttempt != nil && metaAttempt.dispositions == memberToolReadOnly {
+		baseTool, err := conv.ToBaseTool(tool)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for read-only call").LogError(ctx, logger)
+		}
+		if toolDisposition(ctx, logger, params.Name, baseTool.Annotations) != authz.DispositionReadOnly {
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", readOnlyToolRefusal(params.Name)).LogInfo(ctx, logger)
 		}
 	}
 
@@ -635,6 +691,8 @@ func handleToolsCall(
 		}
 		// The call's records follow the upstream's own isError verdict.
 		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
+		payload.backendAnswered = backendSucceeded(rw.statusCode, rw.resultIsError)
+		payload.resultSucceeded = payload.backendAnswered
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -686,7 +744,15 @@ func handleToolsCall(
 		return nil, failure
 	}
 
+	// A prompt is rendered and a platform tool is run by Speakeasy, not a backend.
+	payload.resultSucceeded = backendSucceeded(rw.statusCode, false)
+	payload.backendAnswered = payload.resultSucceeded && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
 	return bs, nil
+}
+
+// backendSucceeded is a backend answer with a 2xx status and no isError result.
+func backendSucceeded(status int, resultIsError bool) bool {
+	return status >= 200 && status < 300 && !resultIsError
 }
 
 // credentialSource is who supplied a variable a tool call may send as a credential.

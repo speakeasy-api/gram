@@ -125,7 +125,7 @@ export function ShadowMCPReplacementNotice({
               </Text>
               <Text small muted>
                 {outcome.serverName} needs setup before it can take over from{" "}
-                {link}. Once it is enabled, link it from that page.
+                {link}. Once it is enabled, make it official from that page.
               </Text>
             </div>
           );
@@ -153,7 +153,7 @@ export function ShadowMCPReplacementNotice({
             </Text>
             <Text small muted>
               {outcome.serverName} was added, but replacing {link} failed:{" "}
-              {outcome.error}. Link it from that page.
+              {outcome.error}. Make it official from that page.
             </Text>
           </div>
         );
