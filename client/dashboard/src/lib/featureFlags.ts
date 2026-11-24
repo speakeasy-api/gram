@@ -28,10 +28,6 @@ export const FEATURE_FLAGS = {
   // MCP server is linked automatically to the project server that proxies its
   // URL. Here it only picks the official server panel's actions.
   shadowMCPAutoLink: "shadow-mcp-auto-link",
-  // Org-targeted, read server-side under the same key when a private network
-  // connection is created: the tailnet gateway when enabled, the Tailscale
-  // operator otherwise. The setup sheet shows the matching steps.
-  privateNetworkGateway: "private-network-gateway",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
   // the organization runs. Read through `useFeatureFlagVariant`; the boolean
   // read is true for every variant, `off` included. `useDetectorMode` maps it
