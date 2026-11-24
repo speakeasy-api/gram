@@ -97,33 +97,33 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 	}
 	tests := []schemaCase{
 		{name: "missing relation"},
-		{name: "missing conflict target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ")"},
-		{name: "nonunique target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + "); CREATE INDEX ON public.chat_message_transcripts (message_id)"},
-		{name: "composite target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", UNIQUE (message_id, project_id))"},
-		{name: "partial target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON public.chat_message_transcripts (message_id) WHERE ciphertext <> ''"},
-		{name: "expression target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON public.chat_message_transcripts ((message_id::text))"},
-		{name: "deferrable target", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", UNIQUE (message_id) DEFERRABLE)"},
-		{name: "deferrable and immediate targets", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", UNIQUE (message_id) DEFERRABLE); CREATE UNIQUE INDEX ON public.chat_message_transcripts (message_id)"},
-		{name: "updated_at without default", ddl: "CREATE TABLE public.chat_message_transcripts (" + strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", "") + ", PRIMARY KEY (message_id))"},
-		{name: "created_at without default", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), created_at timestamptz NOT NULL)"},
-		{name: "extra required column without default", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL)"},
-		{name: "defaulted timestamps", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), created_at timestamptz NOT NULL DEFAULT clock_timestamp())", ok: true},
-		{name: "nullable extra column", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text)", ok: true},
-		{name: "defaulted extra column", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL DEFAULT '')", ok: true},
-		{name: "generated extra column", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL GENERATED ALWAYS AS (ciphertext) STORED)", ok: true},
-		{name: "identity extra column", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra bigint NOT NULL GENERATED ALWAYS AS IDENTITY)", ok: true},
-		{name: "primary key", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
-		{name: "unique index with included column", ddl: "CREATE TABLE public.chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON public.chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
+		{name: "missing conflict target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ")"},
+		{name: "nonunique target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE INDEX ON chat_message_transcripts (message_id)"},
+		{name: "composite target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id, project_id))"},
+		{name: "partial target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) WHERE ciphertext <> ''"},
+		{name: "expression target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts ((message_id::text))"},
+		{name: "deferrable target", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id) DEFERRABLE)"},
+		{name: "deferrable and immediate targets", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id) DEFERRABLE); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id)"},
+		{name: "updated_at without default", ddl: "CREATE TABLE chat_message_transcripts (" + strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", "") + ", PRIMARY KEY (message_id))"},
+		{name: "created_at without default", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), created_at timestamptz NOT NULL)"},
+		{name: "extra required column without default", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL)"},
+		{name: "defaulted timestamps", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), created_at timestamptz NOT NULL DEFAULT clock_timestamp())", ok: true},
+		{name: "nullable extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text)", ok: true},
+		{name: "defaulted extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL DEFAULT '')", ok: true},
+		{name: "generated extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra text NOT NULL GENERATED ALWAYS AS (ciphertext) STORED)", ok: true},
+		{name: "identity extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra bigint NOT NULL GENERATED ALWAYS AS IDENTITY)", ok: true},
+		{name: "primary key", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
+		{name: "unique index with included column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
 	}
 	for _, column := range []struct{ name, typ string }{
 		{"message_id", "uuid"}, {"project_id", "uuid"}, {"organization_id", "text"},
 		{"ciphertext", "text"}, {"source_hash", "bytea"}, {"updated_at", "timestamptz"},
 	} {
-		base := "CREATE TABLE public.chat_message_transcripts (" + columns + ", UNIQUE (message_id)); "
+		base := "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id)); "
 		tests = append(tests,
-			schemaCase{name: "missing " + column.name, ddl: base + "ALTER TABLE public.chat_message_transcripts DROP COLUMN " + column.name + " CASCADE"},
-			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE public.chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL"},
-			schemaCase{name: "wrong type " + column.name, ddl: "CREATE TABLE public.chat_message_transcripts (" + strings.Replace(strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", ""), column.name+" "+column.typ, column.name+" integer", 1) + ", UNIQUE (message_id))"},
+			schemaCase{name: "missing " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts DROP COLUMN " + column.name + " CASCADE"},
+			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL"},
+			schemaCase{name: "wrong type " + column.name, ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", ""), column.name+" "+column.typ, column.name+" integer", 1) + ", UNIQUE (message_id))"},
 		)
 	}
 	for _, tc := range tests {
@@ -131,7 +131,7 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 			t.Parallel()
 			db, err := infra.CloneTestDatabase(t, "transcript_shadow_preflight")
 			require.NoError(t, err)
-			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS public.chat_message_transcripts") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
+			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
 			require.NoError(t, err)
 			if tc.ddl != "" {
 				_, err = db.Exec(t.Context(), tc.ddl) //nolint:glint // notestingrawsql: isolated incompatible schema fixture.
@@ -144,7 +144,7 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 				trial, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: rollback-only PostgreSQL behavior regression test.
 				require.NoError(t, err)
 				//nolint:glint // notestingrawsql: isolated rollback-only conflict inference probe.
-				_, insertErr := trial.Exec(t.Context(), `INSERT INTO public.chat_message_transcripts
+				_, insertErr := trial.Exec(t.Context(), `INSERT INTO chat_message_transcripts
 (message_id, project_id, organization_id, ciphertext, source_hash)
 VALUES ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', 'example', 'example', '\x00')
 ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
@@ -185,7 +185,7 @@ func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
 	require.NoError(t, err)
 
 	//nolint:glint // notestingrawsql: isolated DDL fixture that moves the table into another schema.
-	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS public.chat_message_transcripts;
+	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts;
 CREATE SCHEMA app;
 CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
