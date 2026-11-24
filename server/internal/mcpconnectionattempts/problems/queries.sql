@@ -1,5 +1,5 @@
 -- name: ListServerUpstreams :many
--- Remote URL and issuer, each when set, of the live MCP servers among the ids in the organization.
+-- Remote URL and issuer, each when set, of the live MCP servers among the ids in the organization, and in the project when one is given.
 SELECT
     m.id,
     rms.url,
@@ -21,6 +21,7 @@ LEFT JOIN remote_session_issuers AS rsi
         OR (rsi.project_id IS NULL AND (rsi.organization_id = @organization_id OR rsi.organization_id IS NULL))
     )
 WHERE m.id = ANY(@server_ids::uuid[])
+    AND (sqlc.narg('project_id')::uuid IS NULL OR m.project_id = sqlc.narg('project_id')::uuid)
     AND m.deleted IS FALSE
     AND (rms.id IS NOT NULL OR rsi.id IS NOT NULL);
 

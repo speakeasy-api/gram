@@ -163,7 +163,7 @@ func UsageCommands() []string {
 		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
-		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients)",
+		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients|list-suspected-problems|get-suspected-problem)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-feedback (get-settings|update-settings|list)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
@@ -1918,6 +1918,18 @@ func ParseEndpoint(
 		mcpConnectionHealthListDeniedClientsSessionTokenFlag     = mcpConnectionHealthListDeniedClientsFlags.String("session-token", "", "")
 		mcpConnectionHealthListDeniedClientsApikeyTokenFlag      = mcpConnectionHealthListDeniedClientsFlags.String("apikey-token", "", "")
 		mcpConnectionHealthListDeniedClientsProjectSlugInputFlag = mcpConnectionHealthListDeniedClientsFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthListSuspectedProblemsFlags                = flag.NewFlagSet("list-suspected-problems", flag.ExitOnError)
+		mcpConnectionHealthListSuspectedProblemsBodyFlag             = mcpConnectionHealthListSuspectedProblemsFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthListSuspectedProblemsSessionTokenFlag     = mcpConnectionHealthListSuspectedProblemsFlags.String("session-token", "", "")
+		mcpConnectionHealthListSuspectedProblemsApikeyTokenFlag      = mcpConnectionHealthListSuspectedProblemsFlags.String("apikey-token", "", "")
+		mcpConnectionHealthListSuspectedProblemsProjectSlugInputFlag = mcpConnectionHealthListSuspectedProblemsFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetSuspectedProblemFlags                = flag.NewFlagSet("get-suspected-problem", flag.ExitOnError)
+		mcpConnectionHealthGetSuspectedProblemBodyFlag             = mcpConnectionHealthGetSuspectedProblemFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetSuspectedProblemSessionTokenFlag     = mcpConnectionHealthGetSuspectedProblemFlags.String("session-token", "", "")
+		mcpConnectionHealthGetSuspectedProblemApikeyTokenFlag      = mcpConnectionHealthGetSuspectedProblemFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetSuspectedProblemProjectSlugInputFlag = mcpConnectionHealthGetSuspectedProblemFlags.String("project-slug-input", "", "")
 
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
@@ -6225,6 +6237,8 @@ func ParseEndpoint(
 	mcpConnectionHealthGetSignInSummaryFlags.Usage = mcpConnectionHealthGetSignInSummaryUsage
 	mcpConnectionHealthGetSessionActivityFlags.Usage = mcpConnectionHealthGetSessionActivityUsage
 	mcpConnectionHealthListDeniedClientsFlags.Usage = mcpConnectionHealthListDeniedClientsUsage
+	mcpConnectionHealthListSuspectedProblemsFlags.Usage = mcpConnectionHealthListSuspectedProblemsUsage
+	mcpConnectionHealthGetSuspectedProblemFlags.Usage = mcpConnectionHealthGetSuspectedProblemUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
@@ -8387,6 +8401,12 @@ func ParseEndpoint(
 
 			case "list-denied-clients":
 				epf = mcpConnectionHealthListDeniedClientsFlags
+
+			case "list-suspected-problems":
+				epf = mcpConnectionHealthListSuspectedProblemsFlags
+
+			case "get-suspected-problem":
+				epf = mcpConnectionHealthGetSuspectedProblemFlags
 
 			}
 
@@ -11922,6 +11942,12 @@ func ParseEndpoint(
 			case "list-denied-clients":
 				endpoint = c.ListDeniedClients()
 				data, err = mcpconnectionhealthc.BuildListDeniedClientsPayload(*mcpConnectionHealthListDeniedClientsBodyFlag, *mcpConnectionHealthListDeniedClientsSessionTokenFlag, *mcpConnectionHealthListDeniedClientsApikeyTokenFlag, *mcpConnectionHealthListDeniedClientsProjectSlugInputFlag)
+			case "list-suspected-problems":
+				endpoint = c.ListSuspectedProblems()
+				data, err = mcpconnectionhealthc.BuildListSuspectedProblemsPayload(*mcpConnectionHealthListSuspectedProblemsBodyFlag, *mcpConnectionHealthListSuspectedProblemsSessionTokenFlag, *mcpConnectionHealthListSuspectedProblemsApikeyTokenFlag, *mcpConnectionHealthListSuspectedProblemsProjectSlugInputFlag)
+			case "get-suspected-problem":
+				endpoint = c.GetSuspectedProblem()
+				data, err = mcpconnectionhealthc.BuildGetSuspectedProblemPayload(*mcpConnectionHealthGetSuspectedProblemBodyFlag, *mcpConnectionHealthGetSuspectedProblemSessionTokenFlag, *mcpConnectionHealthGetSuspectedProblemApikeyTokenFlag, *mcpConnectionHealthGetSuspectedProblemProjectSlugInputFlag)
 			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -21807,6 +21833,8 @@ func mcpConnectionHealthUsage() {
 	fmt.Fprintln(os.Stderr, `    get-sign-in-summary: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.`)
 	fmt.Fprintln(os.Stderr, `    get-session-activity: Count a provider's active sessions per day and report the average session length.`)
 	fmt.Fprintln(os.Stderr, `    list-denied-clients: List apps refused at sign-in through a provider, with the reason and the last time.`)
+	fmt.Fprintln(os.Stderr, `    list-suspected-problems: List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `    get-suspected-problem: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-connection-health COMMAND --help\n", os.Args[0])
@@ -21953,6 +21981,54 @@ func mcpConnectionHealthListDeniedClientsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-denied-clients --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthListSuspectedProblemsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health list-suspected-problems", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-suspected-problems --body '{\n      \"part\": \"service\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetSuspectedProblemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-suspected-problem", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-suspected-problem --body '{\n      \"id\": \"abc123\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its

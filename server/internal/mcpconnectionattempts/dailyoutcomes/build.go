@@ -283,7 +283,7 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),
-		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, FixCandidatesOnly: false,
+		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{}, PeopleProjectID: uuid.Nil, PeopleIssuerID: uuid.Nil, PeopleIssuerServerIDs: nil, FixCandidatesOnly: false,
 	}
 	err = mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)

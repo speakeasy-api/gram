@@ -1055,7 +1055,13 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 aria-expanded={isPopoverOpen}
                 aria-haspopup="listbox"
                 aria-controls={isPopoverOpen ? listboxId : undefined}
-                aria-describedby={`${triggerDescriptionId} ${selectedCountId}`}
+                aria-describedby={[
+                  props["aria-describedby"],
+                  triggerDescriptionId,
+                  selectedCountId,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 aria-label={`Multi-select: ${selectedValues.length} of ${
                   getAllOptions().length
                 } options selected. ${placeholder}`}

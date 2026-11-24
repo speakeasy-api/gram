@@ -220,6 +220,11 @@ export function ConnectionLogsView({
     [filters.values.date, now],
   );
   const beforeRetention = startsBeforeRetention(window, now);
+  // The API takes at most 50 servers and 50 people; a longer link is not sent.
+  // A server's own tab does not apply the server filter, so only people count there.
+  const tooMany =
+    (!serverId && filters.values.server.length > MAX_FILTER_VALUES) ||
+    filters.values.person.length > MAX_FILTER_VALUES;
   // A preset these logs don't offer would label a range that is not queried.
   const unsupportedPreset =
     !customRange &&
@@ -241,9 +246,9 @@ export function ConnectionLogsView({
   const isReference = REFERENCE_PATTERN.test(search.trim());
 
   const counts = useAttemptCounts(scope, window, baseFilters, {
-    enabled: !beforeRetention,
+    enabled: !beforeRetention && !tooMany,
   });
-  // Labels come from unfiltered counts so a chip keeps its name.
+  // Labels come from unfiltered counts so a chip keeps its name, also in a link over the limit.
   const optionCounts = useAttemptCounts(scope, window, EMPTY_FILTERS, {
     enabled: !beforeRetention,
   });
@@ -272,11 +277,11 @@ export function ConnectionLogsView({
     [baseFilters, textFilters],
   );
   const searchedCounts = useAttemptCounts(scope, window, listFilters, {
-    enabled: !beforeRetention && searching,
+    enabled: !beforeRetention && !tooMany && searching,
   });
 
   const list = useConnectionAttempts(scope, window, listFilters, {
-    enabled: !beforeRetention && !isReference && !searchBlocked,
+    enabled: !beforeRetention && !tooMany && !isReference && !searchBlocked,
   });
   const {
     query: reference,
@@ -358,7 +363,7 @@ export function ConnectionLogsView({
   // Counts run whenever the list may be blocked by search, so they answer first.
   const latest = isReference
     ? reference.data
-    : (counts.data ?? list.data?.pages[0]);
+    : (counts.data ?? list.data?.pages[0] ?? optionCounts.data);
   const viewerScope = latest?.viewerScope;
   const loggingEnabled = latest?.loggingEnabled ?? true;
   const rows: AttemptRow[] = useMemo(() => {
@@ -432,9 +437,11 @@ export function ConnectionLogsView({
     tick();
     // A reference or a picked range keeps its key, so it refetches instead.
     if (isReference) void reference.refetch();
-    else if (filters.values.date.customRange) {
-      void counts.refetch();
+    else if (filters.values.date.customRange && !beforeRetention) {
       void optionCounts.refetch();
+      // refetch ignores enabled, so an over-limit link is never sent.
+      if (tooMany) return;
+      void counts.refetch();
       void list.refetch();
       if (searching) void searchedCounts.refetch();
     }
@@ -454,6 +461,20 @@ export function ConnectionLogsView({
         heading="Connection Logs needs logging"
         description={`Logging is off for ${organization.name || "this organization"}, so connection attempt logs are not kept. Turning it on starts logging from that moment.`}
         action={<EnableLoggingAction />}
+      />
+    );
+  } else if (tooMany && !isReference) {
+    body = (
+      <InlineEmptyState
+        icon="filter"
+        orientation="horizontal"
+        heading="Too many servers or people in this link"
+        description="Connection Logs can filter by up to 50 servers and 50 people. Remove some to see attempts."
+        action={
+          <Button variant="secondary" onClick={resetAll}>
+            Reset filters
+          </Button>
+        }
       />
     );
   } else if (beforeRetention && !isReference) {
@@ -531,7 +552,7 @@ export function ConnectionLogsView({
         orientation="horizontal"
         heading="No attempts match these filters"
         description={noMatchSentence(
-          serverId ? { ...filters.values, server: null } : filters.values,
+          serverId ? { ...filters.values, server: [] } : filters.values,
           optionsById,
           search,
         )}
@@ -693,20 +714,18 @@ function noMatchSentence(
   const range = rangePhrase(values, options);
   if (search) return `Nothing matches “${search}” in ${range}.`;
   const others =
-    [
-      values.person,
-      values.service,
-      values.app,
-      values.appVersion,
-      values.network,
-    ].some(Boolean) ||
+    [values.service, values.app, values.appVersion, values.network].some(
+      Boolean,
+    ) ||
+    values.person.length > 0 ||
     values.step.length > 0 ||
     values.message.length > 0;
   if (others) return `No attempts match these filters in ${range}.`;
   const verb =
     values.outcome.length === 1 ? OUTCOME_SENTENCE[values.outcome[0]!] : null;
-  const server = values.server
-    ? options.server?.find((o) => "value" in o && o.value === values.server)
+  const only = values.server.length === 1 ? values.server[0] : undefined;
+  const server = only
+    ? options.server?.find((o) => "value" in o && o.value === only)
     : undefined;
   const on = server && "label" in server ? ` on ${server.label as string}` : "";
   return verb

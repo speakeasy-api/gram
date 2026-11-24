@@ -23,7 +23,8 @@ import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { connectionHealthNow, useAttemptHere } from "./api";
-import { AskAiButton, type Investigation } from "./AskAiButton";
+import { AskAiButton } from "./AskAiButton";
+import type { Investigation } from "./investigation";
 import { OutcomeLabel } from "./AttemptsTable";
 import { logsSearch, RETENTION_MS } from "./filters";
 import {
@@ -130,21 +131,18 @@ export function AttemptDetailSheet({
   );
 }
 
-function questionFor(attempt: AttemptDetail, who: string, where: string) {
-  const to = where ? ` to ${where}` : "";
-  // An attempt with no known person is "this connection", not "No known person's".
-  const known = attempt.person && attempt.person.kind !== "anonymous";
-  const connection = `${known ? `${who}'s` : "this"} connection${to}`;
+/** A fixed question; names come from other people, so they go only in the escaped context. */
+function questionFor(attempt: AttemptDetail) {
   switch (attempt.outcome) {
     case "in_progress":
-      return `${connection.charAt(0).toUpperCase()}${connection.slice(1)} is still in progress. What has happened so far?`;
+      return "This connection is still in progress. What has happened so far?";
     case "connected":
     case "failed":
     case "blocked":
     case "declined":
     case "didnt_finish":
     default:
-      return `Why did ${connection} end as "${outcomeLabel(attempt.outcome)}", and is there anything I should change?`;
+      return `Why did this connection end as "${outcomeLabel(attempt.outcome)}", and is there anything I should change?`;
   }
 }
 
@@ -159,7 +157,7 @@ function investigationFor(attempt: AttemptDetail): Investigation {
   const who = personLabel(attempt);
   const where = serverLabel(attempt);
   return {
-    question: questionFor(attempt, who, where),
+    question: questionFor(attempt),
     context: [
       `Connection attempt ${attempt.id}`,
       `${outcomeLabel(attempt.outcome)} at step ${STEP_LABELS[attempt.step]}, ${formatFull(attempt.time)}`,
