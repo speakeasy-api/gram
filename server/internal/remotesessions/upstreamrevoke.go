@@ -199,49 +199,38 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 	return creds
 }
 
-// SoftDeleteSubjectSessions tombstones every upstream grant the subject holds
-// on clients bound to the revoking session's issuer, inside the caller's
-// transaction, and returns the credentials to hand to
-// [UpstreamRevoker.RevokeAllDetached] once that transaction commits.
-//
-// The stored user_session_issuer_id is provenance from INSERT, not a lookup
-// key: scope comes from the requesting issuer's tenant-scoped client
-// bindings, so a grant minted through a different (even since-soft-deleted)
-// issuer on a bound client is still tombstoned. Grants on clients bound only
-// to sibling issuers are deliberately left alone — those issuers' Speakeasy
-// sessions are still live and revoke through their own bindings.
-//
-// Split in two on purpose. The tombstone belongs in the caller's transaction so
-// it commits or rolls back with the revocation that triggered it; the upstream
-// POSTs must not, because they are network round trips to a third party and
-// holding a pooled connection open for them — or worse, rolling back after
-// asking a provider to destroy a token — is exactly what the post-commit split
-// exists to prevent.
-//
-// Takes a DBTX rather than a transaction type so callers in other packages can
-// pass whichever handle their own transaction gave them.
-func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
-	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
+// SoftDeleteSubjectSessions retires grants proven by issuer provenance or the
+// exact downstream session's stored typed choice. It returns credentials for
+// best-effort upstream revocation only after the caller's transaction commits.
+func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, downstreamSessionID uuid.UUID) ([]RevokedCredentials, error) {
+	return r.SoftDeleteSubjectSessionsForCredentials(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, []uuid.UUID{downstreamSessionID})
+}
+
+// SoftDeleteSubjectSessionsForCredentials batches the recorded choices of
+// cascaded downstream sessions sharing one subject and issuer.
+func (r *UpstreamRevoker) SoftDeleteSubjectSessionsForCredentials(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, downstreamSessionIDs []uuid.UUID) ([]RevokedCredentials, error) {
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, downstreamSessionIDs, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, false)
 }
 
 // SoftDeleteAgentSubjectSessions uses the persisted user-session deletion time
 // to retry only the original grants after a failed post-commit cache push.
 // Ordinary session revocation must use SoftDeleteSubjectSessions instead.
-func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) SoftDeleteAgentSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, downstreamSessionID uuid.UUID, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
 	if !revokedAt.Valid {
 		return nil, errors.New("agent session revocation boundary is required")
 	}
-	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, revokedAt, alreadyRevoked)
+	return r.softDeleteSubjectSessions(ctx, tx, subject, userSessionIssuerID, projectID, organizationID, []uuid.UUID{downstreamSessionID}, revokedAt, alreadyRevoked)
 }
 
-func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string, downstreamSessionIDs []uuid.UUID, revokedAt pgtype.Timestamptz, alreadyRevoked bool) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
-		SubjectUrn:          subject,
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           projectID,
-		OrganizationID:      organizationID,
-		RevokedAt:           revokedAt,
-		AlreadyRevoked:      alreadyRevoked,
+		SubjectUrn:           subject,
+		UserSessionIssuerID:  userSessionIssuerID,
+		ProjectID:            projectID,
+		OrganizationID:       organizationID,
+		RevokedAt:            revokedAt,
+		AlreadyRevoked:       alreadyRevoked,
+		DownstreamSessionIds: downstreamSessionIDs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)
