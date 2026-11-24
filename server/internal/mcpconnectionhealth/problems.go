@@ -75,17 +75,16 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		}
 		out.serverID = parsed.String()
 	}
-	var err error
+	issuer, err := s.provider(ctx, c, issuerID)
+	if err != nil {
+		return out, err
+	}
 	if out.loggingEnabled, err = s.loggingOn(ctx, c); err != nil || !out.loggingEnabled {
 		return out, err
 	}
 	// A problem names other people.
 	if c.ownSubjects != nil {
 		return out, nil
-	}
-	issuer, err := s.provider(ctx, c, issuerID)
-	if err != nil {
-		return out, err
 	}
 	out.issuerID = issuer.ID
 	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
@@ -475,6 +474,8 @@ func detailRowsOf(p problems.Problem) detailRows {
 				}
 			}
 		}
+		// A run keeps at most MaxEpisodeApps apps, so its own total is a floor.
+		row.appsTotal = max(row.appsTotal, e.AppsTotal)
 		if place := e.SubjectURN + "|" + k.kind + "|" + k.id + "|" + k.member; e.ReachedServer() && !seenPlace[place] {
 			seenPlace[place] = true
 			row.serversTotal++

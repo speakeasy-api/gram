@@ -513,7 +513,7 @@ var ProblemPlace = Type("SuspectedProblemPlace", func() {
 })
 
 var ProblemPerson = Type("SuspectedProblemPerson", func() {
-	Description("One person in the problem, with every app and server they fail on.")
+	Description("One person in the problem, with up to 5 of the apps and servers they fail on.")
 	Attribute("person", Person)
 	Attribute("apps", ArrayOf(App), "At most 5.")
 	Attribute("apps_total", Int64, "Apps before the cap.")

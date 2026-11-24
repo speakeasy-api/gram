@@ -1,9 +1,13 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectionLogsView } from "./ConnectionLogsView";
 
-const enabled = vi.hoisted(() => ({ calls: [] as (boolean | undefined)[] }));
+const enabled = vi.hoisted(() => ({
+  calls: [] as (boolean | undefined)[],
+  sent: [] as { people: number; enabled: boolean | undefined }[],
+  refetched: [] as number[],
+}));
 
 vi.mock("./api", async (original) => ({
   ...(await original<object>()),
@@ -11,23 +15,31 @@ vi.mock("./api", async (original) => ({
   useAttemptCounts: (
     _scope: unknown,
     _window: unknown,
-    _filters: unknown,
+    filters: { people?: string[] },
     options?: { enabled?: boolean },
-  ) => ({
-    _: enabled.calls.push(options?.enabled),
-    data: { totalAttempts: 0, loggingEnabled: true, viewerScope: "all" },
-    isPlaceholderData: false,
-    isFetching: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
+  ) => {
+    const people = filters.people?.length ?? 0;
+    enabled.calls.push(options?.enabled);
+    enabled.sent.push({ people, enabled: options?.enabled });
+    return {
+      data: { totalAttempts: 0, loggingEnabled: true, viewerScope: "all" },
+      isPlaceholderData: false,
+      isFetching: false,
+      isError: false,
+      refetch: () => enabled.refetched.push(people),
+    };
+  },
   useConnectionAttempts: (
     _scope: unknown,
     _window: unknown,
-    _filters: unknown,
+    filters: { people?: string[] },
     options?: { enabled?: boolean },
   ) => ({
     _: enabled.calls.push(options?.enabled),
+    __: enabled.sent.push({
+      people: filters.people?.length ?? 0,
+      enabled: options?.enabled,
+    }),
     data: { pages: [{ attempts: [] }] },
     isPending: false,
     isError: false,
@@ -35,7 +47,7 @@ vi.mock("./api", async (original) => ({
     isPlaceholderData: false,
     hasNextPage: false,
     fetchNextPage: vi.fn(),
-    refetch: vi.fn(),
+    refetch: () => enabled.refetched.push(filters.people?.length ?? 0),
   }),
   useAttemptHere: () => ({
     query: { data: undefined, isFetching: false, refetch: vi.fn() },
@@ -99,14 +111,39 @@ describe("ConnectionLogsView on a server's tab", () => {
   });
 
   it("does not send a link with more than 50 people", () => {
-    enabled.calls = [];
+    enabled.sent = [];
     const people = Array.from({ length: 51 }, (_, i) => `user:u${i}`).join(",");
     renderLogs(`/?person=${encodeURIComponent(people)}`);
     expect(
       screen.getByText("Too many servers or people in this link"),
     ).toBeTruthy();
-    expect(enabled.calls.length).toBeGreaterThan(0);
-    expect(enabled.calls.every((e) => e === false)).toBe(true);
+    const filtered = enabled.sent.filter((c) => c.people > 0);
+    expect(filtered.length).toBeGreaterThan(0);
+    expect(filtered.every((c) => c.enabled === false)).toBe(true);
+    // Unfiltered options still load so each pick can be removed.
+    expect(enabled.sent.some((c) => c.people === 0 && c.enabled)).toBe(true);
+  });
+
+  it("sends a link with exactly 50 people", () => {
+    enabled.sent = [];
+    const people = Array.from({ length: 50 }, (_, i) => `user:u${i}`).join(",");
+    renderLogs(`/?person=${encodeURIComponent(people)}`);
+    expect(
+      screen.queryByText("Too many servers or people in this link"),
+    ).toBeNull();
+    const filtered = enabled.sent.filter((c) => c.people === 50);
+    expect(filtered.length).toBeGreaterThan(0);
+    expect(filtered.some((c) => c.enabled === true)).toBe(true);
+  });
+
+  it("does not refetch a link with more than 50 people on Refresh", () => {
+    enabled.refetched = [];
+    const people = Array.from({ length: 51 }, (_, i) => `user:u${i}`).join(",");
+    renderLogs(
+      `/?from=2026-11-20T10:00:00.000Z&to=2026-11-20T11:00:00.000Z&person=${encodeURIComponent(people)}`,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(enabled.refetched.every((n) => n === 0)).toBe(true);
   });
 
   it("ignores the server filter on a server's own tab, where it is not applied", () => {

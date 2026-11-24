@@ -145,6 +145,20 @@ func TestProblemText_EachRule(t *testing.T) {
 		headline: "Dana Reyes can't sign in",
 		fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodePKCEMismatch),
 	})
+	viaGateway := ep("user:dana", uuid.New(), server, mcpconnectionattempts.CodeProviderServerError)
+	viaGateway.ServerKind, viaGateway.MemberID = "meta", linear.String()
+	cases = append(cases, struct {
+		name     string
+		problem  problems.Problem
+		headline string
+		fact     string
+	}{
+		name: "one person on one server directly and through a gateway",
+		problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 1,
+			Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeProviderServerError), viaGateway}},
+		headline: "Dana Reyes can't connect to Linear",
+		fact:     "On Linear. " + admin(mcpconnectionattempts.CodeProviderServerError),
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

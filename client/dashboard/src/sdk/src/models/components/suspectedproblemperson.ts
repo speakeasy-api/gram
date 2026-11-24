@@ -18,7 +18,7 @@ import {
 } from "./suspectedproblemplace.js";
 
 /**
- * One person in the problem, with every app and server they fail on.
+ * One person in the problem, with up to 5 of the apps and servers they fail on.
  */
 export type SuspectedProblemPerson = {
   /**

@@ -65,6 +65,10 @@ export function LogFilterSheet({
 }): JSX.Element {
   // The dimension whose last pick was refused for being over its limit.
   const [refused, setRefused] = useState<string | null>(null);
+  const change = (id: string, value: FilterValue) => {
+    setRefused(null);
+    onChange(id, value);
+  };
   const keepOpenOnPopover = (
     event: { detail?: { originalEvent?: Event } } & Event,
   ) => {
@@ -80,7 +84,7 @@ export function LogFilterSheet({
       return (
         <TimeRanges
           value={value as DateRangeValue}
-          onChange={(next) => onChange(dim.id, next)}
+          onChange={(next) => change(dim.id, next)}
         />
       );
     }
@@ -94,7 +98,7 @@ export function LogFilterSheet({
           )}
           counts={facets?.[facet]}
           value={value as string[]}
-          onChange={(next) => onChange(dim.id, next)}
+          onChange={(next) => change(dim.id, next)}
         />
       );
     }
@@ -105,10 +109,7 @@ export function LogFilterSheet({
         <FilterControl
           dim={dim}
           value={value}
-          onChange={(next) => {
-            setRefused(null);
-            onChange(dim.id, next);
-          }}
+          onChange={(next) => change(dim.id, next)}
           onRefused={() => setRefused(dim.id)}
           describedBy={max !== undefined ? hintId : undefined}
           options={optionsById[dim.id]}
@@ -145,7 +146,14 @@ export function LogFilterSheet({
     </div>
   );
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setRefused(null);
+        onOpenChange(next);
+      }}
+      modal={false}
+    >
       <SheetContent
         className="bg-card w-full gap-0 overflow-y-auto p-0 sm:max-w-[440px]"
         onInteractOutside={keepOpenOnPopover}
@@ -186,10 +194,21 @@ export function LogFilterSheet({
           })}
         </div>
         <SheetFooter className="bg-card sticky bottom-0 flex-row justify-between border-t px-6 py-4">
-          <Button variant="secondary" onClick={onReset}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setRefused(null);
+              onReset();
+            }}
+          >
             Reset filters
           </Button>
-          <Button onClick={() => onOpenChange(false)}>
+          <Button
+            onClick={() => {
+              setRefused(null);
+              onOpenChange(false);
+            }}
+          >
             {total === undefined
               ? "Show attempts"
               : `Show ${plural(total, "attempt")}`}

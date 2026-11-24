@@ -243,11 +243,14 @@ function ProblemBody({
             </p>
           ) : null}
           <p className="text-muted-foreground">
-            The chart, messages and Connection Logs links count every failed
-            attempt by {peopleCount === 1 ? "this person" : "these people"} on
-            these servers with these messages since {countedFrom}, an hour
-            before the first failure, including failures they later recovered
-            from.
+            {chartIsCut
+              ? "The messages and Connection Logs links"
+              : "The chart, messages and Connection Logs links"}{" "}
+            count every failed attempt by{" "}
+            {peopleCount === 1 ? "this person" : "these people"} on these
+            servers with these messages since {countedFrom}, an hour before the
+            first failure, including failures they later recovered from.
+            {chartIsCut ? " The chart shows the last 24 hours of them." : ""}
             {problem.countsWidened
               ? " Some filters could not be applied, so unrelated failures may be included."
               : ""}

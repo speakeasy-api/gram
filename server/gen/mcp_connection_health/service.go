@@ -582,7 +582,7 @@ type SuspectedProblemMessage struct {
 // to the service or the server answering fails.
 type SuspectedProblemPart string
 
-// One person in the problem, with every app and server they fail on.
+// One person in the problem, with up to 5 of the apps and servers they fail on.
 type SuspectedProblemPerson struct {
 	Person *ConnectionPerson
 	// At most 5.

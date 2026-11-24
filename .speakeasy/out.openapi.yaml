@@ -122853,7 +122853,7 @@ components:
           type: integer
           description: Servers before the cap.
           format: int64
-      description: One person in the problem, with every app and server they fail on.
+      description: One person in the problem, with up to 5 of the apps and servers they fail on.
       required:
         - person
         - apps

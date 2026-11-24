@@ -268,7 +268,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			msg:      "demo seed postflight: sign-in rows come from a browser, and only one-row requests carry repeats",
 		},
 		{
-			cond:     `(SELECT count() FROM mcp_connection_last_served WHERE organization_id = @org) < 20`,
+			cond:     `(SELECT count() FROM mcp_connection_last_served WHERE organization_id = @org AND subject_urn IN (SELECT subject_urn FROM mcp_connection_events WHERE organization_id = @org AND user_session_issuer_id = @health_issuer AND subject_urn != '')) < 20`,
 			settings: "",
 			msg:      "demo seed postflight: the connection health provider's people need served connections, or no failure can end",
 		},

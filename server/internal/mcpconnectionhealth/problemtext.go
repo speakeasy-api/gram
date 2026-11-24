@@ -170,11 +170,11 @@ func sharedReason(p problems.Problem) string {
 	return reason
 }
 
-// problemServers counts the distinct servers and gateway members the problem's people fail on.
+// problemServers counts the distinct servers the problem's people fail on.
 func problemServers(p problems.Problem) int {
 	seen := map[string]bool{}
 	for _, e := range p.Episodes {
-		seen[e.ServerKind+"/"+e.ServerID+"/"+e.MemberID] = true
+		seen[problems.ServerOf(e)] = true
 	}
 	return len(seen)
 }
@@ -184,7 +184,7 @@ func namedPlaces(p problems.Problem) []mcpconnectionattempts.FailingPerson {
 	var out []mcpconnectionattempts.FailingPerson
 	for _, e := range p.Episodes {
 		if !e.ReachedServer() || slices.ContainsFunc(out, func(o mcpconnectionattempts.FailingPerson) bool {
-			return o.ServerID == e.ServerID && o.MemberID == e.MemberID
+			return problems.ServerOf(o) == problems.ServerOf(e)
 		}) {
 			continue
 		}
@@ -218,12 +218,12 @@ func serversPhrase(n names, p problems.Problem) string {
 	}
 }
 
-// reachedServers counts the distinct servers and gateway members the problem's people fail on.
+// reachedServers counts the distinct servers the problem's people fail on, a gateway member and the same server reached directly being one.
 func reachedServers(p problems.Problem) int {
 	seen := map[string]bool{}
 	for _, e := range p.Episodes {
 		if e.ReachedServer() {
-			seen[e.ServerID+"/"+e.MemberID] = true
+			seen[problems.ServerOf(e)] = true
 		}
 	}
 	return len(seen)

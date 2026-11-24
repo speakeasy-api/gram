@@ -248,9 +248,9 @@ export function ConnectionLogsView({
   const counts = useAttemptCounts(scope, window, baseFilters, {
     enabled: !beforeRetention && !tooMany,
   });
-  // Labels come from unfiltered counts so a chip keeps its name.
+  // Labels come from unfiltered counts so a chip keeps its name, also in a link over the limit.
   const optionCounts = useAttemptCounts(scope, window, EMPTY_FILTERS, {
-    enabled: !beforeRetention && !tooMany,
+    enabled: !beforeRetention,
   });
   const optionFacets = optionCounts.data?.facets;
   const filteredFacets = counts.data?.facets;
@@ -437,9 +437,11 @@ export function ConnectionLogsView({
     tick();
     // A reference or a picked range keeps its key, so it refetches instead.
     if (isReference) void reference.refetch();
-    else if (filters.values.date.customRange) {
-      void counts.refetch();
+    else if (filters.values.date.customRange && !beforeRetention) {
       void optionCounts.refetch();
+      // refetch ignores enabled, so an over-limit link is never sent.
+      if (tooMany) return;
+      void counts.refetch();
       void list.refetch();
       if (searching) void searchedCounts.refetch();
     }

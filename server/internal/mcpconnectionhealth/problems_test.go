@@ -202,6 +202,20 @@ func TestSuspectedProblems_SayLoggingIsOff(t *testing.T) {
 	require.False(t, got.Found)
 }
 
+func TestSuspectedProblems_CheckTheProviderWhenLoggingIsOff(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.logsOn.Store(false)
+
+	_, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: "not-a-uuid", ServerID: nil, Part: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: uuid.NewString(), ServerID: nil, Part: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.GetSuspectedProblem(ctx, &gen.GetSuspectedProblemPayload{UserSessionIssuerID: uuid.NewString(), ID: "x", ServerID: nil})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestSuspectedProblems_NotFoundWhenTheFlagIsOff(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -326,8 +340,12 @@ func TestListSuspectedProblems_OnePersonNamesTheServer(t *testing.T) {
 	p := listed[0]
 	require.Equal(t, gen.SuspectedProblemRule("one_person"), p.Rule)
 	require.Equal(t, "person", p.Scope.Kind)
-	require.NotEqual(t, "Someone", p.Scope.Name, "the caller's own name resolves")
-	require.Equal(t, p.Scope.Name+" can't connect to Linear", p.Headline)
+	members, err := repo.New(ti.conn).ListMemberNames(ctx, repo.ListMemberNamesParams{OrganizationID: ti.org, Ids: []string{ti.userID}})
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+	require.NotEmpty(t, members[0].DisplayName)
+	require.Equal(t, members[0].DisplayName, p.Scope.Name, "the caller's own name resolves")
+	require.Equal(t, members[0].DisplayName+" can't connect to Linear", p.Headline)
 	require.True(t, strings.HasPrefix(p.Fact, "On Linear. "), p.Fact)
 	require.False(t, slices.Contains(strings.Fields(p.Headline), mcpconnectionattempts.CodeStaticKeyRejected.String()))
 }
@@ -688,4 +706,26 @@ func TestGetSuspectedProblem_FoldsEveryAppOfARun(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"Claude Code 2.1.0", "Cursor 2.0.1"}, names)
 	require.Equal(t, int64(2), row.Attempts)
+}
+
+// A person failing from more apps than a run keeps still reports every app in the total.
+func TestGetSuspectedProblem_CountsAppsPastTheCap(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	versions := mcpconnectionattempts.MaxEpisodeApps + 2
+	for i := range versions {
+		ti.failWith(t, ti.server, p, time.Duration(i+1)*time.Minute, time.Second, mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.FamilyClaudeCode, fmt.Sprintf("2.1.%d", i))
+	}
+	ti.failPeople(t, ti.server, 1, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 1)
+	got := ti.getProblem(t, ctx, listed[0].ID)
+	require.True(t, got.Found)
+	i := slices.IndexFunc(got.Problem.People, func(r *gen.SuspectedProblemPerson) bool { return r.Person.SubjectUrn == p.String() })
+	require.GreaterOrEqual(t, i, 0)
+	require.Equal(t, int64(versions), got.Problem.People[i].AppsTotal)
+	require.Len(t, got.Problem.People[i].Apps, mcpconnectionattempts.MaxEpisodeApps)
 }

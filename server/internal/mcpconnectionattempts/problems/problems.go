@@ -179,8 +179,8 @@ func servedKeyOf(e mcpconnectionattempts.FailingPerson) servedKey {
 // workedAt is when a family was last served and last answered on one server.
 type workedAt struct{ served, answered time.Time }
 
-// serverOf is the episode's server: its mcp_servers row, else its own kind, id and member.
-func serverOf(e mcpconnectionattempts.FailingPerson) string {
+// ServerOf is the episode's server: its mcp_servers row, else its own kind, id and member.
+func ServerOf(e mcpconnectionattempts.FailingPerson) string {
 	if id := e.BackingServerID(); id != "" {
 		return id
 	}
@@ -226,7 +226,7 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 	for i, e := range episodes {
 		g.people[i] = isPerson(e.SubjectURN)
 		g.ways[i] = wayOf(e)
-		g.servers[i] = serverOf(e)
+		g.servers[i] = ServerOf(e)
 		if g.people[i] {
 			g.scopes[i] = scopesOf(e, g.ways[i], g.servers[i], upstreams)
 			for _, sc := range g.scopes[i] {

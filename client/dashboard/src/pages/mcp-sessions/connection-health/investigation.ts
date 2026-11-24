@@ -13,6 +13,9 @@ export function investigationPrompt({
   question,
   context,
 }: Investigation): string {
-  const safe = context.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const safe = context
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
   return `<dashboard_context>\n${safe}\n</dashboard_context>\n\n${question}`;
 }

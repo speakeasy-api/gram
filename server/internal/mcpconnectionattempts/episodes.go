@@ -46,6 +46,9 @@ type Episode struct {
 	// Apps are the distinct apps of the run's failures, latest first, at most MaxEpisodeApps.
 	Apps []EpisodeApp
 
+	// AppsTotal counts the distinct apps of the run's failures, without the MaxEpisodeApps cap.
+	AppsTotal int
+
 	// ProviderHost is the provider of the latest failure.
 	ProviderHost string
 
@@ -473,8 +476,10 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 			AppKey: a.AppKey, ClientFamily: a.ClientFamily, ClientVersion: a.ClientVersion, ProviderHost: a.ProviderHost,
 			Part: latest.part, OpeningReason: latest.end.Reason, Reason: latest.end.Reason, Step: latest.end.Step,
 			OpenedAt: latest.end.At, LastFailureAt: latest.end.At, Failures: 0, LastWorkedAt: worked,
-			Apps: []EpisodeApp{{Key: a.AppKey, Family: a.ClientFamily, Version: a.ClientVersion}},
+			Apps:      []EpisodeApp{{Key: a.AppKey, Family: a.ClientFamily, Version: a.ClientVersion}},
+			AppsTotal: 1,
 		}
+		apps := map[EpisodeApp]bool{e.Apps[0]: true}
 		opening := latest
 		// Newest first, so the kept apps are the latest when there are more than MaxEpisodeApps.
 		slices.SortFunc(fs, func(x, y failure) int { return y.end.At.Compare(x.end.At) })
@@ -483,8 +488,12 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 				continue
 			}
 			e.Failures += f.a.Weight
-			if app := (EpisodeApp{Key: f.a.AppKey, Family: f.a.ClientFamily, Version: f.a.ClientVersion}); len(e.Apps) < MaxEpisodeApps && !slices.Contains(e.Apps, app) {
-				e.Apps = append(e.Apps, app)
+			if app := (EpisodeApp{Key: f.a.AppKey, Family: f.a.ClientFamily, Version: f.a.ClientVersion}); !apps[app] {
+				apps[app] = true
+				e.AppsTotal++
+				if len(e.Apps) < MaxEpisodeApps {
+					e.Apps = append(e.Apps, app)
+				}
 			}
 			if cmp.Or(f.end.At.Compare(opening.end.At), slices.Compare(f.a.AttemptID[:], opening.a.AttemptID[:])) < 0 {
 				opening = f

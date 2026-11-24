@@ -171,8 +171,9 @@ type TimeCount struct {
 
 // CountOver counts the attempts matching the filters per interval of width, every interval in the range included.
 func CountOver(ctx context.Context, ch driver.Conn, s Scope, f Filters, width time.Duration, now time.Time) ([]TimeCount, error) {
-	if width < time.Second {
-		return nil, errors.New("interval must be at least a second")
+	// ClickHouse buckets in whole seconds from the Unix epoch and Go from midnight, so both agree only on whole seconds that divide a day.
+	if width < time.Second || width%time.Second != 0 || (24*time.Hour)%width != 0 {
+		return nil, errors.New("interval must be a whole number of seconds that divides a day")
 	}
 	attempts, args, err := attemptsSQL(s, now)
 	if err != nil {

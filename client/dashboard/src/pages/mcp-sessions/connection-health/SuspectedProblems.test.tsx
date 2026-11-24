@@ -363,6 +363,31 @@ describe("ProblemDetailSheet", () => {
     expect(url.searchParams.get("message")).toBe("static_key_rejected");
   });
 
+  it("names the chart's own window when it covers only the last 24 hours", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          filters: { ...DETAIL.filters, from: "2026-11-18T09:45:00Z" },
+        },
+      },
+    };
+    renderSheet();
+    expect(
+      screen.getByText(/The messages and Connection Logs links count/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/The chart, messages/)).toBeNull();
+    expect(
+      screen.getByText(/The chart shows the last 24 hours of them\./),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Failed attempts in the last 24 hours/),
+    ).toBeTruthy();
+  });
+
   it("says the counts are wider when the filters had to be", () => {
     state.query = {
       data: {
