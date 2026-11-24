@@ -2,9 +2,9 @@
 
 AIM-1140 closes the staff rollback action without dropping data or stopping legacy mirror writes. The staff Upstream OAuth Migration page still shows enforcement, typed coverage, and repair actions. Older staff clients that call `POST /admin/upstreamOAuthMigration.disableEnforcement` receive an error and leave the organization unchanged.
 
-**Do not merge or deploy the closure change until the rollout owner has reviewed the production cutover evidence.** A green CI run or an organization marked “Ready” in the staff page is not cutover evidence. Record the following in the internal rollout record linked from AIM-1140. Keep tenant-specific evidence out of the repository.
+The closure change (#9374) has merged. Merge status, green CI, and an organization marked “Ready” in the staff page do not establish production cutover. Use the internal rollout record linked from AIM-1140 to verify the following evidence. Keep tenant-specific evidence out of the repository.
 
-## Before merging or deploying the closure change
+## Production cutover evidence
 
 1. **Enforcement:** Reconcile the complete active-organization inventory against the enforcement status. Confirm enforcement is on for every active organization, including organizations created during rollout. Confirm mandatory authorization shadow parity and communication of the cross-organization public-server denial, as required by the [AIM-595 rollout](https://linear.app/speakeasy/issue/AIM-595) and [Multiple Upstream Credentials RFC](https://app.notion.com/p/3f5726c497cc81e99b3de38dfd1224e7).
 2. **Live credentials and grants:** On the Upstream OAuth Migration page, or via `getUpstreamOAuthMigrationStatus`, record coverage by credential class. Check that live credential choices have a usable typed mapping or explicit no-auth, and confirm required auth grants without restoring intentionally revoked permissions. Check mapping totals, gap totals (the displayed detail list is bounded), pending mappings, pending grants, unresolved associations, and failed phases. Resolve gaps through supported repair, configuration, or reconnection; do not infer ambiguous choices. Missing counts, an in-progress run, or a failed phase are not evidence of zero gaps.

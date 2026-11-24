@@ -9,8 +9,8 @@
 // server's configuration, and kept: a later version carries every earlier
 // choice and only adds choices for servers that had none. A server whose
 // configuration offers exactly one client the context can use gets it,
-// except EMA, which requires an explicit choice. A
-// server offering no enabled auth client needs no upstream authentication and
+// including EMA for user-backed turns. This selects a client, not a user
+// connection or a grant. A server offering no enabled auth client needs no upstream authentication and
 // gets an explicit no-auth choice; anything else, including a server with
 // upstream credentials no auth client records yet, is left without a choice,
 // reported as a gap, and never guessed. A turn with no user (userless) never chooses a
@@ -166,7 +166,6 @@ func decide(row profileServer, execCtx Context) (decision, *Gap) {
 		return choose(uuid.Nil)
 	}
 	var candidate uuid.UUID
-	explicitOnly := false
 	for _, offer := range row.offers {
 		if !offer.AuthClientID.Valid {
 			continue
@@ -178,13 +177,9 @@ func decide(row profileServer, execCtx Context) (decision, *Gap) {
 			return gap(GapSelectionRequired)
 		}
 		candidate = offer.AuthClientID.UUID
-		explicitOnly = offer.ClientType.String == typeEMA
 	}
 	if candidate == uuid.Nil {
 		return gap(GapPersonalRequiresUser)
-	}
-	if explicitOnly {
-		return gap(GapSelectionRequired)
 	}
 	return choose(candidate)
 }
