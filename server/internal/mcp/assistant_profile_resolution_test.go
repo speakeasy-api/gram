@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,6 +62,11 @@ func TestAssistantProfileSelectionsStayPinnedAndFailClosedPerServer(t *testing.T
 		return selector
 	}
 	human := bind(executionprofiles.ContextUserBacked)
+	// Check the saved row separately from resolution: no-auth is an explicit
+	// choice in the pin, not an inferred fallback when no choice was saved.
+	choices, err := q.ListVersionChoices(ctx, executionprofiles.ListVersionChoicesParams{VersionID: human.credentialID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.Contains(t, choices, executionprofiles.ListVersionChoicesRow{McpServerID: openServer, NoAuth: true, Source: executionprofiles.SourceIssuance})
 	userlessGap := bind(executionprofiles.ContextUserless)
 	_, err = productfeaturesrepo.New(pool).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
 		OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
@@ -91,6 +97,7 @@ func TestUserBackedAssistantProfileUsesOnlyTheActingUsersConnection(t *testing.T
 	pool, err := TestInfra.CloneTestDatabase(t, "assistant_profile_connections")
 	require.NoError(t, err)
 	f := newEnforcedCallerFixture(t, pool)
+	f.service.siteURL = &url.URL{Scheme: "https", Host: "platform.example.invalid"}
 	ctx := t.Context()
 	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	f.service.authz = authz.NewEngine(f.service.logger, pool, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
