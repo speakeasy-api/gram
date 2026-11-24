@@ -1147,6 +1147,50 @@ ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSkillVersionFile :exec
+INSERT INTO skill_version_files (
+  skill_version_id,
+  skill_id,
+  project_id,
+  path,
+  content,
+  sha256,
+  size_bytes,
+  content_type
+)
+SELECT sv.id, sv.skill_id, s.project_id, @path, @content, @sha256, @size_bytes, @content_type
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND sv.id = @skill_version_id;
+
+-- name: ListSkillVersionFileMetadata :many
+-- Lists a version's supporting files without their content.
+SELECT path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+ORDER BY path;
+
+-- name: ListSkillVersionFiles :many
+-- Lists a version's supporting files with their content.
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+ORDER BY path;
+
+-- name: GetSkillVersionFile :one
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
 -- name: CreateSkillVersionLineage :exec
 INSERT INTO skill_version_lineages (
   skill_version_id,

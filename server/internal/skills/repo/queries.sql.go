@@ -1325,6 +1325,50 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	return i, err
 }
 
+const createSkillVersionFile = `-- name: CreateSkillVersionFile :exec
+INSERT INTO skill_version_files (
+  skill_version_id,
+  skill_id,
+  project_id,
+  path,
+  content,
+  sha256,
+  size_bytes,
+  content_type
+)
+SELECT sv.id, sv.skill_id, s.project_id, $1, $2, $3, $4, $5
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $6
+  AND s.id = $7
+  AND sv.id = $8
+`
+
+type CreateSkillVersionFileParams struct {
+	Path           string
+	Content        []byte
+	Sha256         string
+	SizeBytes      int64
+	ContentType    string
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) CreateSkillVersionFile(ctx context.Context, arg CreateSkillVersionFileParams) error {
+	_, err := q.db.Exec(ctx, createSkillVersionFile,
+		arg.Path,
+		arg.Content,
+		arg.Sha256,
+		arg.SizeBytes,
+		arg.ContentType,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+	)
+	return err
+}
+
 const createSkillVersionLineage = `-- name: CreateSkillVersionLineage :exec
 INSERT INTO skill_version_lineages (
   skill_version_id,
@@ -2941,6 +2985,48 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
+	)
+	return i, err
+}
+
+const getSkillVersionFile = `-- name: GetSkillVersionFile :one
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+  AND path = $4
+`
+
+type GetSkillVersionFileParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	Path           string
+}
+
+type GetSkillVersionFileRow struct {
+	Path        string
+	Content     []byte
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+func (q *Queries) GetSkillVersionFile(ctx context.Context, arg GetSkillVersionFileParams) (GetSkillVersionFileRow, error) {
+	row := q.db.QueryRow(ctx, getSkillVersionFile,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.Path,
+	)
+	var i GetSkillVersionFileRow
+	err := row.Scan(
+		&i.Path,
+		&i.Content,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.ContentType,
 	)
 	return i, err
 }
@@ -4821,6 +4907,104 @@ func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkill
 			return nil, err
 		}
 		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillVersionFileMetadata = `-- name: ListSkillVersionFileMetadata :many
+SELECT path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+ORDER BY path
+`
+
+type ListSkillVersionFileMetadataParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type ListSkillVersionFileMetadataRow struct {
+	Path        string
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+// Lists a version's supporting files without their content.
+func (q *Queries) ListSkillVersionFileMetadata(ctx context.Context, arg ListSkillVersionFileMetadataParams) ([]ListSkillVersionFileMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionFileMetadata, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionFileMetadataRow
+	for rows.Next() {
+		var i ListSkillVersionFileMetadataRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.ContentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillVersionFiles = `-- name: ListSkillVersionFiles :many
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+ORDER BY path
+`
+
+type ListSkillVersionFilesParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type ListSkillVersionFilesRow struct {
+	Path        string
+	Content     []byte
+	Sha256      string
+	SizeBytes   int64
+	ContentType string
+}
+
+// Lists a version's supporting files with their content.
+func (q *Queries) ListSkillVersionFiles(ctx context.Context, arg ListSkillVersionFilesParams) ([]ListSkillVersionFilesRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionFiles, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionFilesRow
+	for rows.Next() {
+		var i ListSkillVersionFilesRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.Content,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.ContentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 const (
@@ -265,14 +266,10 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 
 	rawDigest := sha256.Sum256([]byte(content))
 	fileDigest := sha256.Sum256([]byte(canonicalContent))
-	manifestPreimage := make([]byte, 0, len("skill-manifest-v1")+1+len("SKILL.md")+1+sha256.Size+1)
-	manifestPreimage = append(manifestPreimage, "skill-manifest-v1"...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestPreimage = append(manifestPreimage, "SKILL.md"...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestPreimage = append(manifestPreimage, fileDigest[:]...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestDigest := sha256.Sum256(manifestPreimage)
+	canonicalSHA256, err := skilltree.Digest(fileDigest, nil)
+	if err != nil {
+		return parsedSkillManifest{}, fmt.Errorf("digest skill manifest: %w", err)
+	}
 
 	return parsedSkillManifest{
 		RawContent:       content,
@@ -284,7 +281,7 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 		SpecValid:        len(validationErrors) == 0,
 		ValidationErrors: validationErrors,
 		RawSHA256:        hex.EncodeToString(rawDigest[:]),
-		CanonicalSHA256:  hex.EncodeToString(manifestDigest[:]),
+		CanonicalSHA256:  canonicalSHA256,
 		canonicalContent: canonicalContent,
 	}, nil
 }
