@@ -132,17 +132,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET access_token_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM remote_sessions AS target
+    FROM (
+        SELECT target.id, target.access_token_encrypted = '' AS was_empty
+        FROM remote_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.access_token_encrypted IS NOT NULL
       AND COALESCE((
@@ -150,11 +153,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.access_token_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.access_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: ListRemoteSessionRefreshTokensWaiting :many
@@ -238,17 +242,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET refresh_token_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM remote_sessions AS target
+    FROM (
+        SELECT target.id, target.refresh_token_encrypted = '' AS was_empty
+        FROM remote_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
@@ -256,11 +263,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: SetEMACredentialAccessToken :one
@@ -357,17 +365,20 @@ WHERE c.organization_id = @organization_id::text;
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE remote_session_ema_credentials AS c
     SET access_token_encrypted = NULL
-    WHERE c.id IN (
-        SELECT target.id FROM remote_session_ema_credentials AS target
+    FROM (
+        SELECT target.id, target.access_token_encrypted = '' AS was_empty
+        FROM remote_session_ema_credentials AS target
         WHERE target.organization_id = @organization_id::text
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE c.id = picked.id
       AND c.organization_id = @organization_id::text
       AND c.access_token_encrypted IS NOT NULL
       AND COALESCE((
@@ -375,11 +386,12 @@ WITH cleared AS (
         WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (c.access_token_org_encrypted IS NULL) AS platform_only
+    RETURNING (c.access_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: SetTrustedIssuerSessionTokens :one
@@ -508,17 +520,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET identity_assertion_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM trusted_issuer_sessions AS target
+    FROM (
+        SELECT target.id, target.identity_assertion_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.identity_assertion_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.identity_assertion_encrypted IS NOT NULL
       AND COALESCE((
@@ -526,11 +541,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.identity_assertion_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.identity_assertion_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: ListTrustedIssuerSessionRefreshTokensWaiting :many
@@ -615,17 +631,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET refresh_token_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM trusted_issuer_sessions AS target
+    FROM (
+        SELECT target.id, target.refresh_token_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.refresh_token_encrypted IS NOT NULL
       AND COALESCE((
@@ -633,11 +652,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: ListTrustedIssuerSessionUpstreamSubjectsWaiting :many
@@ -722,17 +742,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET upstream_subject_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM trusted_issuer_sessions AS target
+    FROM (
+        SELECT target.id, target.upstream_subject_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.upstream_subject_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.upstream_subject_encrypted IS NOT NULL
       AND COALESCE((
@@ -740,11 +763,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.upstream_subject_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.upstream_subject_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: ListTrustedIssuerSessionNoncesWaiting :many
@@ -829,17 +853,20 @@ WHERE s.organization_id = @organization_id::text
 -- Returns how many cleared copies stood alone and how many stood beside an
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
--- updated nor counted.
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET nonce_encrypted = NULL
-    WHERE s.id IN (
-        SELECT target.id FROM trusted_issuer_sessions AS target
+    FROM (
+        SELECT target.id, target.nonce_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
         WHERE target.organization_id = @organization_id::text
           AND target.nonce_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
-      )
+      ) AS picked
+    WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
       AND s.nonce_encrypted IS NOT NULL
       AND COALESCE((
@@ -847,11 +874,12 @@ WITH cleared AS (
         WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
         FOR KEY SHARE
       ), 0) = @decided_generation
-    RETURNING (s.nonce_org_encrypted IS NULL) AS platform_only
+    RETURNING (s.nonce_org_encrypted IS NULL) AS platform_only, picked.was_empty
 )
 SELECT
-    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
-    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
 FROM cleared;
 
 -- name: GetRemoteSessionRowFixture :one

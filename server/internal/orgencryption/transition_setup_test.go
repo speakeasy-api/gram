@@ -246,7 +246,7 @@ func (c *fakeCopyStore) ClearPlatformCopies(ctx context.Context, organizationID 
 	}
 
 	for _, id := range c.sortedIDs(organizationID, "", func(row fakeRow) bool { return row.platform.Valid }) {
-		if cleared.Total() == int64(limit) {
+		if cleared.Rows() == int64(limit) {
 			break
 		}
 		row := c.store.rows[id]

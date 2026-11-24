@@ -468,6 +468,44 @@ func TestCopyStoreClearDoesNotCountACopyAConcurrentClearDestroyed(t *testing.T) 
 	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 0, BesideOrgCopy: 0}, result.cleared, "the copy the first clear destroyed is not counted again")
 }
 
+func TestCopyStoreClearCountsAnEmptyPlatformCopyApart(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	emptyAlone := ti.createSession(t)
+	emptyBeside := ti.createSession(t)
+	valueAlone := ti.createSession(t)
+
+	for _, row := range []struct {
+		session  repo.RemoteSession
+		platform string
+		orgCopy  pgtype.Text
+	}{
+		{session: emptyAlone, platform: "", orgCopy: nullText()},
+		{session: emptyBeside, platform: "", orgCopy: conv.ToPGText("organization-key copy")},
+		{session: valueAlone, platform: "platform-key copy", orgCopy: nullText()},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(row.platform),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 2}, cleared, "'' is cleared but never reported as a platform-only straggler")
+	for _, session := range []repo.RemoteSession{emptyAlone, emptyBeside, valueAlone} {
+		require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "every platform-key copy is cleared")
+	}
+}
+
 // remoteSessionStores are the CopyStores of the remote session columns.
 func remoteSessionStores(conn *pgxpool.Pool) []orgencryption.CopyStore {
 	var stores []orgencryption.CopyStore

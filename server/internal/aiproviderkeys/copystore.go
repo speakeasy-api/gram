@@ -170,7 +170,7 @@ var aiIntegrationQueries = copyQueries{
 		if err != nil {
 			return orgencryption.ClearedCopies{}, fmt.Errorf("clear AI integration config API key platform copies: %w", err)
 		}
-		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: 0}, nil
 	},
 }
 
@@ -211,7 +211,7 @@ var modelProviderQueries = copyQueries{
 		if err != nil {
 			return orgencryption.ClearedCopies{}, fmt.Errorf("clear model provider key platform copies: %w", err)
 		}
-		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: 0}, nil
 	},
 }
 
@@ -240,6 +240,6 @@ var openRouterQueries = copyQueries{
 		if err != nil {
 			return orgencryption.ClearedCopies{}, fmt.Errorf("clear OpenRouter API key platform copies: %w", err)
 		}
-		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+		return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: 0}, nil
 	},
 }

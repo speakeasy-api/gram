@@ -257,7 +257,7 @@ func clearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, q *repo.Qu
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear access token platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listRemoteSessionRefreshTokensWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -318,7 +318,7 @@ func clearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, q *repo.Q
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear refresh token platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listEMACredentialAccessTokensWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -379,7 +379,7 @@ func clearEMACredentialAccessTokenPlatformCopies(ctx context.Context, q *repo.Qu
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear EMA access token platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listTrustedIssuerSessionIdentityAssertionsWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -440,7 +440,7 @@ func clearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Contex
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear trusted issuer session identity assertion platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listTrustedIssuerSessionRefreshTokensWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -501,7 +501,7 @@ func clearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, q 
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear trusted issuer session refresh token platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listTrustedIssuerSessionUpstreamSubjectsWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -562,7 +562,7 @@ func clearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context,
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear trusted issuer session upstream subject platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }
 
 func listTrustedIssuerSessionNoncesWaiting(ctx context.Context, q *repo.Queries, organizationID string, after uuid.NullUUID, limit int32) ([]orgencryption.WaitingValue, error) {
@@ -623,5 +623,5 @@ func clearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, q *repo.Q
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear trusted issuer session nonce platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: row.PlatformOnly, BesideOrgCopy: row.BesideOrgCopy, Empty: row.Empty}, nil
 }

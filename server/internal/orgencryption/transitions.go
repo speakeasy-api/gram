@@ -581,7 +581,7 @@ func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID st
 	var stragglers []StragglerCount
 	for _, store := range stores {
 		cleared, err := clearStore(ctx, organizationID, current.Generation, store)
-		if cleared.Total() > 0 {
+		if cleared.Values() > 0 {
 			stragglers = append(stragglers, StragglerCount{Columns: store.Columns(), Cleared: cleared})
 		}
 		if err != nil {
@@ -596,7 +596,7 @@ func clearStores(ctx context.Context, organizationID string, generation int64, s
 	var cleared int64
 	for _, store := range stores {
 		n, err := clearStore(ctx, organizationID, generation, store)
-		cleared += n.Total()
+		cleared += n.Values()
 		if err != nil {
 			return cleared, err
 		}
@@ -613,10 +613,11 @@ func clearStore(ctx context.Context, organizationID string, generation int64, st
 		n, err := store.ClearPlatformCopies(ctx, organizationID, generation, clearBatchSize)
 		cleared.PlatformOnly += n.PlatformOnly
 		cleared.BesideOrgCopy += n.BesideOrgCopy
+		cleared.Empty += n.Empty
 		if err != nil {
 			return cleared, fmt.Errorf("clear platform-key copies in %s: %w", store.Columns().PlatformColumn, err)
 		}
-		if n.Total() < clearBatchSize {
+		if n.Rows() < clearBatchSize {
 			return cleared, nil
 		}
 	}

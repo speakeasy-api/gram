@@ -81,11 +81,20 @@ type ClearedCopies struct {
 	// BesideOrgCopy counts copies beside an organization-key copy, read in
 	// the statement that cleared them. Clearing them lost nothing.
 	BesideOrgCopy int64
+
+	// Empty counts cleared copies that stored no value, such as a legacy ''.
+	// They are neither platform-only nor beside an organization-key copy.
+	Empty int64
 }
 
-// Total is how many platform-key copies the clear destroyed.
-func (c ClearedCopies) Total() int64 {
+// Values is how many stored values lost their platform-key copy.
+func (c ClearedCopies) Values() int64 {
 	return c.PlatformOnly + c.BesideOrgCopy
+}
+
+// Rows is how many rows the clear changed, Empty included. Batches page by it.
+func (c ClearedCopies) Rows() int64 {
+	return c.Values() + c.Empty
 }
 
 // CopyStore is how the helper reaches the two stored copies of one value, a

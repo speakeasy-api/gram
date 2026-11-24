@@ -129,7 +129,7 @@ func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID stri
 		return orgencryption.ClearedCopies{}, fmt.Errorf("clear marketplace token platform copies: %w", err)
 	}
 
-	return orgencryption.ClearedCopies{PlatformOnly: cleared.PlatformOnly, BesideOrgCopy: cleared.BesideOrgCopy}, nil
+	return orgencryption.ClearedCopies{PlatformOnly: cleared.PlatformOnly, BesideOrgCopy: cleared.BesideOrgCopy, Empty: 0}, nil
 }
 
 // parseAfter parses a page cursor: "" for the first page, otherwise the RowID

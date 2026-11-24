@@ -316,7 +316,7 @@ func (m *Migrator) SweepStragglers(ctx context.Context, organizationID string, u
 
 	var cleared int64
 	for _, straggler := range stragglers {
-		cleared += straggler.Cleared.Total()
+		cleared += straggler.Cleared.Values()
 		m.logger.ErrorContext(ctx, "platform-key copies found after clearing finished",
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogOrgEncryptionUseCase(useCase),
