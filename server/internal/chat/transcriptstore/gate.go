@@ -2,10 +2,12 @@ package transcriptstore
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -29,10 +31,14 @@ type CaptureGate struct {
 
 	// ready holds organization ids whose transcript key is known to exist.
 	ready sync.Map
+
+	// provisioning collapses concurrent first writes for one organization into
+	// a single key provisioning call.
+	provisioning singleflight.Group
 }
 
 func NewCaptureGate(logger *slog.Logger, flags feature.Provider, provisioner keyProvisioner) *CaptureGate {
-	return &CaptureGate{logger: logger, flags: flags, provisioner: provisioner, ready: sync.Map{}}
+	return &CaptureGate{logger: logger, flags: flags, provisioner: provisioner, ready: sync.Map{}, provisioning: singleflight.Group{}}
 }
 
 // ProjectEnabled evaluates the flag from locally cached definitions only, so a
@@ -46,7 +52,7 @@ func (g *CaptureGate) ProjectEnabled(ctx context.Context, projectID uuid.UUID) b
 }
 
 // OrganizationReady makes sure the organization has its transcript data key,
-// once per process. A failure is logged and reads as not ready, so the write
+// once per process; concurrent first writes share one provisioning call. A failure is logged and reads as not ready, so the write
 // commits without a shadow instead of failing.
 func (g *CaptureGate) OrganizationReady(ctx context.Context, organizationID string) bool {
 	if g == nil || g.provisioner == nil || organizationID == "" {
@@ -55,11 +61,22 @@ func (g *CaptureGate) OrganizationReady(ctx context.Context, organizationID stri
 	if _, ok := g.ready.Load(organizationID); ok {
 		return true
 	}
-	if err := g.provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-		g.logger.ErrorContext(ctx, "provision chat transcript key; capture stays off for this write",
+	_, err, _ := g.provisioning.Do(organizationID, func() (any, error) {
+		if _, ok := g.ready.Load(organizationID); ok {
+			return nil, nil
+		}
+		// Detach from the first caller's cancellation: every waiting write
+		// shares this result.
+		if err := g.provisioner.EnsureUseCase(context.WithoutCancel(ctx), organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
+			return nil, fmt.Errorf("provision chat transcript key: %w", err)
+		}
+		g.ready.Store(organizationID, struct{}{})
+		return nil, nil
+	})
+	if err != nil {
+		g.logger.ErrorContext(ctx, "chat transcript capture stays off for this write",
 			attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 		return false
 	}
-	g.ready.Store(organizationID, struct{}{})
 	return true
 }

@@ -3,7 +3,10 @@ package transcriptstore
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -14,12 +17,18 @@ import (
 )
 
 type countingProvisioner struct {
-	calls int
+	calls atomic.Int32
 	err   error
+
+	// release, when set, holds each call until it is closed.
+	release chan struct{}
 }
 
 func (p *countingProvisioner) EnsureUseCase(context.Context, string, orgencryption.UseCase, orgencryption.Actor) error {
-	p.calls++
+	p.calls.Add(1)
+	if p.release != nil {
+		<-p.release
+	}
 	return p.err
 }
 
@@ -43,7 +52,7 @@ func TestCaptureGateProvisionsEachOrganizationOnce(t *testing.T) {
 
 	require.True(t, gate.OrganizationReady(t.Context(), "org_a"))
 	require.True(t, gate.OrganizationReady(t.Context(), "org_a"))
-	require.Equal(t, 1, provisioner.calls)
+	require.EqualValues(t, 1, provisioner.calls.Load())
 	require.False(t, gate.OrganizationReady(t.Context(), ""))
 }
 
@@ -55,5 +64,27 @@ func TestCaptureGateSkipsCaptureWhenProvisioningFails(t *testing.T) {
 	require.False(t, gate.OrganizationReady(t.Context(), "org_a"))
 	// A failure is not cached, so the next write tries again.
 	require.False(t, gate.OrganizationReady(t.Context(), "org_a"))
-	require.Equal(t, 2, provisioner.calls)
+	require.EqualValues(t, 2, provisioner.calls.Load())
+}
+
+func TestCaptureGateSharesProvisioningAcrossConcurrentWrites(t *testing.T) {
+	t.Parallel()
+	provisioner := &countingProvisioner{release: make(chan struct{})}
+	gate := NewCaptureGate(testenv.NewLogger(t), &feature.InMemory{}, provisioner)
+
+	const writes = 8
+	var wg sync.WaitGroup
+	results := make(chan bool, writes)
+	for range writes {
+		wg.Go(func() { results <- gate.OrganizationReady(t.Context(), "org_a") })
+	}
+	require.Eventually(t, func() bool { return provisioner.calls.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+	close(provisioner.release)
+	wg.Wait()
+	close(results)
+
+	for ready := range results {
+		require.True(t, ready)
+	}
+	require.EqualValues(t, 1, provisioner.calls.Load())
 }
