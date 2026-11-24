@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -279,5 +280,9 @@ func (f gatewaySettingsQueryFailure) Query(ctx context.Context, sql string, args
 	if strings.HasPrefix(sql, "-- name: "+f.query+" ") {
 		return nil, f.cause
 	}
-	return f.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: passes through existing SQLc queries without constructing statements.
+	rows, err := f.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: passes through existing SQLc queries without constructing statements.
+	if err != nil {
+		return nil, fmt.Errorf("run generated gateway settings query: %w", err)
+	}
+	return rows, nil
 }
