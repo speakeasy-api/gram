@@ -33,10 +33,11 @@ import (
 func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, clientType          string
-		picker, alternate, repeat bool
+		name, clientType                   string
+		picker, alternate, repeat, inspect bool
 	}{
 		{name: "personal picker", clientType: authz.AuthClientTypeRemoteSession, picker: true, alternate: true},
+		{name: "gateway Inspect chooses OAuth over static", clientType: authz.AuthClientTypeRemoteSession, picker: true, inspect: true},
 		{name: "EMA picker", clientType: authz.AuthClientTypeEMA, picker: true, alternate: true},
 		{name: "sole EMA", clientType: authz.AuthClientTypeEMA},
 		{name: "default EMA with another offer", clientType: authz.AuthClientTypeEMA, alternate: true},
@@ -44,12 +45,12 @@ func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testOrganizationGatewayTypedPersonalConsentExecution(t, tc.clientType, tc.picker, tc.alternate, tc.repeat)
+			testOrganizationGatewayTypedPersonalConsentExecution(t, tc.clientType, tc.picker, tc.alternate, tc.repeat, tc.inspect)
 		})
 	}
 }
 
-func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string, picker, alternate, repeat bool) {
+func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string, picker, alternate, repeat, inspect bool) {
 	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
@@ -75,7 +76,7 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 	if picker && alternate {
 		tokens = append([]string{"unselected-personal-token"}, tokens...)
 	}
-	if !picker && alternate {
+	if (!picker && alternate) || inspect {
 		seedStaticIssuanceOffer(t, ctx, ti, ac.ActiveOrganizationID, projectID, serverID)
 	}
 	for i, token := range tokens {
@@ -99,10 +100,39 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 			}
 		}
 	}
-	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: "typed-consent-" + uuid.NewString(), ClientName: "Typed consent", RedirectUris: []string{"http://localhost:3000/callback"}, TokenEndpointAuthMethod: "none"})
+	clientID, callback := "typed-consent-"+uuid.NewString(), "http://localhost:3000/callback"
+	if inspect {
+		clientID, callback = "speakeasy-dashboard-inspect", "https://dashboard.example.test/inspect/oauth/callback"
+		ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	}
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: clientID, ClientName: "Typed consent", RedirectUris: []string{callback}, TokenEndpointAuthMethod: "none"})
 	require.NoError(t, err)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
+	statusFor := func(token string) metamcp.ConnectionStatusServer {
+		t.Helper()
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+		w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, body)
+		require.NoError(t, err)
+		var result struct {
+			StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, w)["result"], &result))
+		for _, member := range result.StructuredContent.Servers {
+			if member.Slug == "typed-personal" {
+				return member
+			}
+		}
+		t.Fatal("gateway Inspect status did not include the OAuth member")
+		return metamcp.ConnectionStatusServer{}
+	}
+	if inspect {
+		// A mint-shaped progressive session has no reviewed choice, even
+		// though this viewer already has an OAuth connection.
+		status := statusFor(mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeProgressive))
+		require.Equal(t, metamcp.SignInNeedsConsent, status.Status)
+		require.Contains(t, status.Detail, "Choose a connection")
+	}
 	approveAndCall := func() {
 		t.Helper()
 		stateID := uuid.NewString()
@@ -116,6 +146,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		page := httptest.NewRecorder()
 		require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"/connect?"+query.Encode(), nil).WithContext(ctx), endpoint))
 		require.Equal(t, http.StatusOK, page.Code)
+		if inspect {
+			require.Contains(t, page.Body.String(), `data-gateway="true"`)
+			require.Contains(t, page.Body.String(), "Progressive (dashboard Inspect)")
+			require.NotContains(t, page.Body.String(), `name="discovery_mode"`)
+		}
 		inventory := gatewayInventoryFromPage(t, page.Body.String())
 		names := make([]string, 0, len(inventory.Tools))
 		for _, tool := range inventory.Tools {
@@ -126,6 +161,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "discovery_mode": {string(metamcp.DiscoveryModeProgressive)}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "tool_filtering": {"on"}, "tools": {"typed-personal--ping"}}
 		if picker {
 			form.Set("auth_client.typed-personal", selectedClient.String())
+		}
+		if inspect {
+			// Even a posted mode cannot make the reviewed Inspect bearer lose
+			// its status and progressive discovery tools.
+			form.Set("discovery_mode", "code_mode")
 		}
 		request := httptest.NewRequest(http.MethodPost, path+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -145,6 +185,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		policy, err := toolfilter.ParseSessionPolicy(rawPolicy)
 		require.NoError(t, err)
 		require.NotNil(t, policy.Catalog)
+		if inspect {
+			require.NotNil(t, policy.Gateway)
+			require.NotNil(t, policy.Gateway.DiscoveryMode)
+			require.Equal(t, metamcp.DiscoveryModeProgressive, *policy.Gateway.DiscoveryMode)
+		}
 		require.NotNil(t, policy.Selection)
 		require.True(t, policy.Selection.AllowsName("typed-personal--ping"))
 		require.False(t, policy.Selection.AllowsName("typed-excluded--other"))
@@ -167,6 +212,9 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		choice, err := authclientfixtures.New(ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: session.CredentialID, McpServerID: serverID})
 		require.NoError(t, err)
 		require.Equal(t, conv.ToNullUUID(selectedClient), choice.AuthClientID)
+		if inspect {
+			require.Equal(t, metamcp.SignInVerifiedAtConsent, statusFor(tokens.AccessToken).Status)
+		}
 
 		for _, name := range []string{"typed-personal--ping", "typed-excluded--other"} {
 			response, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": name, "arguments": map[string]any{}}}))
