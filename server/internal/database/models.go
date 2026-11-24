@@ -52,6 +52,12 @@ type AccessRequest struct {
 	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
 	// @access: opaque-confidential
 	ChallengeIds []string
+	// How long the requester asked to have the access, in seconds. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedDurationSeconds pgtype.Int4
+	// When the requester asked to have the access until. A suggestion; the approver picks the window.
+	// @access: confidential
+	RequestedUntil pgtype.Timestamptz
 	// When a pending request lapses.
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz

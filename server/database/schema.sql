@@ -12706,6 +12706,16 @@ CREATE TABLE IF NOT EXISTS access_requests (
   -- Denied challenges this request covers, from the ClickHouse
   -- authz_challenges table (soft cross-DB reference).
   challenge_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- How long the requester asked to have the access, in seconds, counted from
+  -- approval. A suggestion only: the approver picks the window. NULL when none
+  -- was asked for. The range (at most a day, the longest temporary grant) is
+  -- validated in application code.
+  requested_duration_seconds INTEGER,
+  -- When the requester asked to have the access until, such as the end of
+  -- their day, worked out by their own client. A suggestion only, like
+  -- requested_duration_seconds; at most one of the two is set, enforced in
+  -- application code.
+  requested_until timestamptz,
   -- When a pending request lapses.
   expires_at timestamptz NOT NULL,
 
@@ -12743,6 +12753,10 @@ COMMENT ON COLUMN access_requests.temporary_grant_id IS 'The principal_grants ro
 @access: confidential';
 COMMENT ON COLUMN access_requests.challenge_ids IS 'IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
 @access: opaque-confidential';
+COMMENT ON COLUMN access_requests.requested_duration_seconds IS 'How long the requester asked to have the access, in seconds. A suggestion; the approver picks the window.
+@access: confidential';
+COMMENT ON COLUMN access_requests.requested_until IS 'When the requester asked to have the access until. A suggestion; the approver picks the window.
+@access: confidential';
 COMMENT ON COLUMN access_requests.expires_at IS 'When a pending request lapses.
 @access: confidential';
 COMMENT ON COLUMN access_requests.created_at IS '@access: confidential';
