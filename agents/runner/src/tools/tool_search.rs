@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::mcp_actor::{McpCmd, McpServerStatus};
 
-const TOOL_NAME: &str = "tool_search";
+pub const TOOL_NAME: &str = "tool_search";
 
 /// Full schemas returned per search. The compact name index always covers
 /// the whole catalog, so a miss costs one more search, not a blind spot.
@@ -80,7 +80,10 @@ impl Tool for ToolSearchTool {
 
         let (reply_tx, reply_rx) = oneshot::channel();
         self.cmd_tx
-            .send(McpCmd::EnsureConnected { reply: reply_tx })
+            .send(McpCmd::EnsureConnected {
+                reply: reply_tx,
+                parent: tracing::Span::current(),
+            })
             .await
             .map_err(|_| ToolError::Unavailable("mcp actor unavailable".into()))?;
         let servers: Vec<McpServerStatus> = reply_rx
