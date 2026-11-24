@@ -54,7 +54,9 @@ vi.mock("./sections/PublicRateLimitsSection", () => ({
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
-  RemoteMcpSessionsSection: () => <h2>MCP sign-in</h2>,
+  RemoteMcpSessionsSection: ({ mcpServer }: { mcpServer: McpServer }) => (
+    <h2 data-server-id={mcpServer.id}>MCP sign-in</h2>
+  ),
 }));
 vi.mock("./sections/UpstreamUrlSection", () => ({
   MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
@@ -307,7 +309,8 @@ const remoteServer = () =>
 
 describe("SettingsTab typed upstream identity", () => {
   it("shows typed credentials and keeps sessions on a proxied server", () => {
-    expect(renderSettings(remoteServer())).toEqual([
+    const mcpServer = remoteServer();
+    expect(renderSettings(mcpServer)).toEqual([
       "Availability",
       "General",
       "Plugins",
@@ -322,12 +325,14 @@ describe("SettingsTab typed upstream identity", () => {
     ]);
     expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
     expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
-    // The legacy anchor resolves to the replacement.
+    // The legacy anchor resolves to upstream credentials, not downstream sessions.
+    const upstream = document.getElementById("authentication");
+    const sessions = screen.getByRole("heading", { name: "MCP sign-in" });
     expect(
-      document
-        .getElementById("authentication")
-        ?.querySelector("[data-testid='upstream-credentials-section']"),
-    ).toBeTruthy();
+      upstream?.contains(screen.getByTestId("upstream-credentials-section")),
+    ).toBe(true);
+    expect(upstream?.contains(sessions)).toBe(false);
+    expect(sessions.getAttribute("data-server-id")).toBe(mcpServer.id);
   });
 
   it("keeps tunneled caller authentication alongside upstream credentials", () => {
