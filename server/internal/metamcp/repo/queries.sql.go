@@ -80,6 +80,14 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = $1
   AND c.remote_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = $3::uuid AND p.organization_id = $4::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
   -- This is mirror cleanup, not a principal attachment revocation.
   AND NOT EXISTS (
     SELECT 1 FROM principal_remote_session_bindings AS binding
@@ -88,9 +96,7 @@ WHERE l.remote_session_client_id = c.id
       AND binding.revoked_at IS NULL
   )
   AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
+    -- Count remaining gateway consumers in the project being updated.
     SELECT 1
     FROM mcp_servers AS s
     JOIN mcp_server_remote_session_clients AS a
@@ -122,6 +128,7 @@ type AutoDetachMemberProviderClientParams struct {
 	GatewayIssuerID uuid.UUID
 	RemoteIssuerID  uuid.UUID
 	ProjectID       uuid.UUID
+	OrganizationID  string
 }
 
 // Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
@@ -134,7 +141,12 @@ type AutoDetachMemberProviderClientParams struct {
 // Run after the member row is soft-deleted so the just-removed member is
 // already excluded by the deleted filter below.
 func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient,
+		arg.GatewayIssuerID,
+		arg.RemoteIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1535,6 +1547,14 @@ FROM remote_session_client_user_session_issuers AS l
 JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
 WHERE l.user_session_issuer_id = $1
   AND c.remote_session_issuer_id = $2
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = $3::uuid AND p.organization_id = $4::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
 ORDER BY l.remote_session_client_id
 FOR UPDATE OF l
 `
@@ -1542,11 +1562,18 @@ FOR UPDATE OF l
 type LockMemberProviderClientParentsParams struct {
 	GatewayIssuerID uuid.UUID
 	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
 }
 
 // Lock parents before the attachment check in the delete's fresh snapshot.
 func (q *Queries) LockMemberProviderClientParents(ctx context.Context, arg LockMemberProviderClientParentsParams) error {
-	_, err := q.db.Exec(ctx, lockMemberProviderClientParents, arg.GatewayIssuerID, arg.RemoteIssuerID)
+	_, err := q.db.Exec(ctx, lockMemberProviderClientParents,
+		arg.GatewayIssuerID,
+		arg.RemoteIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	return err
 }
 

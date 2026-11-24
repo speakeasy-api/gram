@@ -621,6 +621,14 @@ FROM remote_session_client_user_session_issuers AS l
 JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
 WHERE l.user_session_issuer_id = @gateway_issuer_id
   AND c.remote_session_issuer_id = @remote_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
 ORDER BY l.remote_session_client_id
 FOR UPDATE OF l;
 
@@ -639,6 +647,14 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = @gateway_issuer_id
   AND c.remote_session_issuer_id = @remote_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM projects AS p
+    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
+  )
   -- This is mirror cleanup, not a principal attachment revocation.
   AND NOT EXISTS (
     SELECT 1 FROM principal_remote_session_bindings AS binding
@@ -647,9 +663,7 @@ WHERE l.remote_session_client_id = c.id
       AND binding.revoked_at IS NULL
   )
   AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
+    -- Count remaining gateway consumers in the project being updated.
     SELECT 1
     FROM mcp_servers AS s
     JOIN mcp_server_remote_session_clients AS a
