@@ -109,8 +109,8 @@ func (e Episode) BackingServerID() string {
 	return id.String()
 }
 
-// ReachedServer reports whether the episode is on an MCP server, gateway or toolset.
-func (e Episode) ReachedServer() bool {
+// OnMCPServer reports whether the episode's server is an MCP server, gateway or toolset, by its kind and id only.
+func (e Episode) OnMCPServer() bool {
 	switch e.ServerKind {
 	case serverKindMCP, serverKindMeta, serverKindToolset:
 		return e.ServerID != ""

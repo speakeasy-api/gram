@@ -451,7 +451,7 @@ func detailRowsOf(p problems.Problem) detailRows {
 	// Episodes are sorted by when they opened, so a person's first episode is their earliest failure.
 	for _, e := range p.Episodes {
 		k := serverKey{e.ServerKind, e.ServerID, e.MemberID}
-		if e.ReachedServer() {
+		if e.OnMCPServer() {
 			out.attempts[k] += e.Failures
 		}
 		row := bySubject[e.SubjectURN]
@@ -476,7 +476,7 @@ func detailRowsOf(p problems.Problem) detailRows {
 		}
 		// A run keeps at most MaxEpisodeApps apps, so its own total is a floor.
 		row.appsTotal = max(row.appsTotal, e.AppsTotal)
-		if place := e.SubjectURN + "|" + k.kind + "|" + k.id + "|" + k.member; e.ReachedServer() && !seenPlace[place] {
+		if place := e.SubjectURN + "|" + k.kind + "|" + k.id + "|" + k.member; e.OnMCPServer() && !seenPlace[place] {
 			seenPlace[place] = true
 			row.serversTotal++
 			if len(row.servers) < maxFolded {

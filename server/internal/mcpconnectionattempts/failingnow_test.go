@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -1172,4 +1173,38 @@ func TestFailingNow_AProviderPageKeepsOnlyItsOwnFailures(t *testing.T) {
 	require.Empty(t, f.providerRead(issuer), "another provider's server, another project, and a row stamped only with another provider")
 	f.attempt(f.direct(AppDCR), 30*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p))
 	require.Len(t, f.providerRead(issuer), 1)
+}
+
+func TestEpisode_BackingServerIDAndOnMCPServer(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+	cases := []struct {
+		name    string
+		episode Episode
+		backing string
+		onMCP   bool
+	}{
+		{"a direct server", Episode{ServerKind: serverKindMCP, ServerID: strings.ToUpper(id.String())}, id.String(), true},
+		{"a gateway member", Episode{ServerKind: serverKindMeta, ServerID: "gw", MemberID: id.String()}, id.String(), true},
+		{"a gateway with no member", Episode{ServerKind: serverKindMeta, ServerID: id.String()}, "", true},
+		{"a toolset", Episode{ServerKind: serverKindToolset, ServerID: id.String()}, "", true},
+		{"an authorization server", Episode{ServerKind: serverKindAuthorizationServer, ServerID: "https://auth.example.com"}, "", false},
+		{"no server", Episode{ServerKind: serverKindIdentityProvider, ServerID: ""}, "", false},
+		{"an MCP server with no id", Episode{ServerKind: serverKindMCP, ServerID: ""}, "", false},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.backing, tc.episode.BackingServerID(), tc.name)
+		require.Equal(t, tc.onMCP, tc.episode.OnMCPServer(), tc.name)
+	}
+}
+
+func TestReadServedByFamily_ReadsOnlyMCPServers(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	issuer := Served{OrganizationID: f.org, ProjectID: f.project, ServerKind: serverKindAuthorizationServer, ServerID: "https://auth.example.com", SubjectURN: person().String(), ClientFamily: FamilyCursor}
+	f.served(issuer, time.Minute)
+
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, []FailingPerson{{Episode: Episode{ServerKind: serverKindAuthorizationServer, ServerID: issuer.ServerID}}})
+	require.NoError(t, err)
+	require.Empty(t, got)
 }

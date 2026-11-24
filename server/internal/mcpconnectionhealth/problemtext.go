@@ -134,7 +134,7 @@ func fact(n names, p problems.Problem) string {
 			out = append(out, fill(factAllUse, "{app}", app))
 		}
 	}
-	if p.OtherAppsServed {
+	if p.OtherAppsWorked {
 		if servers == 1 {
 			out = append(out, fill(factOtherApp, "{server}", server))
 		} else {
@@ -183,7 +183,7 @@ func problemServers(p problems.Problem) int {
 func namedPlaces(p problems.Problem) []mcpconnectionattempts.FailingPerson {
 	var out []mcpconnectionattempts.FailingPerson
 	for _, e := range p.Episodes {
-		if !e.ReachedServer() || slices.ContainsFunc(out, func(o mcpconnectionattempts.FailingPerson) bool {
+		if !e.OnMCPServer() || slices.ContainsFunc(out, func(o mcpconnectionattempts.FailingPerson) bool {
 			return problems.ServerOf(o) == problems.ServerOf(e)
 		}) {
 			continue
@@ -222,7 +222,7 @@ func serversPhrase(n names, p problems.Problem) string {
 func reachedServers(p problems.Problem) int {
 	seen := map[string]bool{}
 	for _, e := range p.Episodes {
-		if e.ReachedServer() {
+		if e.OnMCPServer() {
 			seen[problems.ServerOf(e)] = true
 		}
 	}

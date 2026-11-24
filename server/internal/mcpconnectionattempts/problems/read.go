@@ -35,7 +35,8 @@ type ReadScope struct {
 }
 
 // Read returns the suspected problems of the scope at now, or mcpconnectionattempts.ErrLogsOff.
-// Failures before recordedSince (zero for none) cannot be seen to end; app versions need served rows.
+// Episodes count from recordedSince at the earliest; app-version problems need served rows.
+// Callers pass recordedSince no earlier than when the organization's logs were last turned back on.
 func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), scope ReadScope, recordedSince, now time.Time) ([]Problem, error) {
 	switch {
 	case scope.OrganizationID == "":
@@ -46,7 +47,7 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 		return nil, errors.New("suspected problems need a project or the whole organization, not both")
 	}
 	organizationID := scope.OrganizationID
-	triedSince := now.Add(-TriedWithin)
+	triedSince := now.Add(-triedWithin)
 	if recordedSince.After(triedSince) {
 		triedSince = recordedSince
 	}
@@ -89,8 +90,7 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	return Group(organizationID, episodes, upstreams, served, now), nil
 }
 
-// sinceRecording keeps episodes whose latest failure is at or after triedSince, counts an
-// earlier opening from recordedSince, and drops those still within their reason's grace.
+// sinceRecording drops episodes last failing before triedSince or still in grace, counting from recordedSince.
 func sinceRecording(episodes []mcpconnectionattempts.FailingPerson, triedSince, recordedSince, now time.Time) []mcpconnectionattempts.FailingPerson {
 	out := episodes[:0]
 	for _, e := range episodes {
