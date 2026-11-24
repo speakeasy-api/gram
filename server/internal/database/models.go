@@ -622,7 +622,8 @@ type ApiKey struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	CreatedByUserID string
-	// @access: confidential
+	// Label the customer chose for the key.
+	// @access: opaque-confidential
 	Name string
 	// @access: secret-restricted
 	KeyPrefix string
@@ -1211,7 +1212,8 @@ type BillingMetadatum struct {
 	StripeSubscriptionID pgtype.Text
 	// @access: confidential
 	StripeBillingCycleAnchor pgtype.Timestamptz
-	// @access: confidential
+	// Stripe checkout idempotency key. Encodes the organization, billing anchor, trial fingerprint and possibly a base64 return URL.
+	// @access: restricted
 	StripeCheckoutIdempotencyKey pgtype.Text
 	// @access: confidential
 	StripeCheckoutBillingCycleAnchor pgtype.Timestamptz
@@ -1757,7 +1759,8 @@ type ChatMessage struct {
 	Content string
 	// @access: opaque-restricted
 	ContentRaw []byte
-	// @access: confidential
+	// Asset path of the stored message content; its file name is a digest of that content.
+	// @access: restricted
 	ContentAssetUrl pgtype.Text
 	// @access: confidential
 	Model pgtype.Text
@@ -1799,7 +1802,8 @@ type ChatMessage struct {
 	ToolOutcomeNotes pgtype.Text
 	// @access: opaque-restricted
 	ToolCallSummaries []byte
-	// @access: confidential
+	// SHA-256 digest of the message content. Reveals when two messages have equal content.
+	// @access: restricted
 	ContentHash []byte
 	// @access: confidential
 	Generation int32
@@ -2359,8 +2363,8 @@ type DeviceAgentStateReport struct {
 	// Marketplace and plugin slugs chosen by the organization.
 	// @access: opaque-confidential
 	WithheldPlugins []byte
-	// Speakeasy-defined tool ids and enforcement enums.
-	// @access: confidential
+	// Per-tool enforcement state. Tool ids are reported by the device agent and stored as sent; layer and outcome fields are normalized enums.
+	// @access: opaque-confidential
 	Tools []byte
 	// @access: confidential
 	DegradedToolCount int32
@@ -7048,21 +7052,27 @@ type RiskResult struct {
 	SkillVersionID uuid.NullUUID
 	// @access: confidential
 	Source string
-	// @access: confidential
+	// Whether the scan found a risk in the anchored content. Security finding.
+	// @access: restricted
 	Found bool
-	// @access: confidential
+	// Detection rule that matched. Security finding.
+	// @access: restricted
 	RuleID pgtype.Text
 	// @access: opaque-restricted
 	Description pgtype.Text
 	// @access: secret-restricted
 	Match pgtype.Text
-	// @access: confidential
+	// Start offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	StartPos pgtype.Int4
-	// @access: confidential
+	// End offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	EndPos pgtype.Int4
-	// @access: confidential
+	// Detector confidence for the finding. Security finding.
+	// @access: restricted
 	Confidence pgtype.Float8
-	// @access: confidential
+	// Detector tags for the finding. Security finding.
+	// @access: restricted
 	Tags []string
 	// @access: secret-restricted
 	Spans []byte
@@ -8715,8 +8725,8 @@ type TunneledMcpServer struct {
 	// Project that owns this tunneled MCP source. All management queries are scoped by project_id.
 	// @access: confidential
 	ProjectID uuid.UUID
-	// User-facing display name for the tunneled MCP source.
-	// @access: confidential
+	// User-facing display name for the tunneled MCP source, chosen by the customer.
+	// @access: opaque-confidential
 	Name string
 	// Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.
 	// @access: secret-restricted
