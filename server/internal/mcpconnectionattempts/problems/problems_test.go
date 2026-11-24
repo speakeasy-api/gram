@@ -309,10 +309,30 @@ func TestGroup(t *testing.T) {
 			},
 		},
 		{
-			name:     "an app version leaves out people who reached no server",
+			name:     "an app version with evidence on a server takes people who reached no server",
 			episodes: []mcpconnectionattempts.FailingPerson{signedOut("a", s1, time.Hour, cursor), signedOut("c", "", time.Hour, cursor, noServer)},
 			served:   []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
-			want:     []summary{},
+			want:     []summary{{problems.RuleSameAppVersion, cursorKey, appSignIn, person, 2, 2, cursorApp, true}},
+		},
+		{
+			name: "five people at the authorization server join one person on a server with evidence",
+			episodes: []mcpconnectionattempts.FailingPerson{
+				signedOut("a", "", time.Hour, cursor, authorizationServer), signedOut("b", "", time.Hour, cursor, authorizationServer),
+				signedOut("c", "", time.Hour, cursor, authorizationServer), signedOut("d", "", time.Hour, cursor, authorizationServer),
+				signedOut("e", "", time.Hour, cursor, authorizationServer), signedOut("f", s1, time.Hour, cursor),
+			},
+			served: []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
+			want:   []summary{{problems.RuleSameAppVersion, cursorKey, appSignIn, person, 6, 6, cursorApp, true}},
+		},
+		{
+			name: "people at the authorization server with no evidence on any server are not an app version",
+			episodes: []mcpconnectionattempts.FailingPerson{
+				signedOut("a", "", time.Hour, cursor, authorizationServer), signedOut("b", "", time.Hour, cursor, authorizationServer),
+				signedOut("c", "", time.Hour, cursor, authorizationServer), signedOut("d", "", time.Hour, cursor, authorizationServer),
+				signedOut("e", "", time.Hour, cursor, authorizationServer),
+			},
+			served: []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
+			want:   []summary{},
 		},
 		{
 			name:     "an authorization server is not a server",
@@ -366,6 +386,15 @@ func TestGroup(t *testing.T) {
 				{problems.RuleSameServer, serverScope(s2), appSignIn, person, 2, 2, noApp, false},
 				{problems.RuleSameAppVersion, cursorKey, appSignIn, person, 2, 2, cursorApp, true},
 			},
+		},
+		{
+			name: "people on no server leave with the app version's last server evidence",
+			episodes: []mcpconnectionattempts.FailingPerson{
+				signedOut("a", "", time.Hour, cursor, authorizationServer), signedOut("b", "", time.Hour, cursor, authorizationServer),
+				signedOut("f", s1, time.Hour, cursor), signedOut("g", s1, time.Hour), signedOut("h", s1, time.Hour), signedOut("i", s1, time.Hour),
+			},
+			served: []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", mcpconnectionattempts.FamilyCodexCLI, 10*time.Minute)},
+			want:   []summary{{problems.RuleSameServer, serverScope(s1), appSignIn, person, 4, 4, noApp, true}},
 		},
 		{
 			name: "one person with evidence is not an app version",

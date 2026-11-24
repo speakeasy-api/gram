@@ -9,13 +9,16 @@
 //  2. Within each way, a group is minPeople or more people whose failures share one of:
 //     - a server: the Speakeasy MCP server, gateway or toolset the app connects to. A
 //     direct server or gateway member is its mcp_servers row, anything else its own kind
-//     and id;
+//     and id (and member, when it has one);
 //     - a service, only for outbound failures the provider fixes: what the server connects
 //     out to (the remote session issuer for a service sign-in when the server has one,
 //     else the remote URL host), on minServersPerService or more servers;
-//     - an app version: a named client family and version, with only its failures on
-//     servers where another named family worked after the first failure there (was
-//     served for an app sign-in, else the outside service answered).
+//     - an app version: a named client family and version, with its failures on the
+//     connections (the same kind, id and member, not the merged server) where another
+//     named family worked after the first failure there (was served for an app sign-in,
+//     else the outside service answered); a failure at a gateway itself counts any of its
+//     members working. When it has any such failure, it also takes its failures on no
+//     MCP server; failures on connections without that evidence stay out.
 //  3. Every group becomes a problem. A failure that fits several is counted in one: the
 //     group with the most people is taken first (ties: app version, server, service, then
 //     key), its failures are set aside, and the rest are grouped again until none is left.
@@ -480,7 +483,7 @@ func (g grouper) otherAppsWorked(part mcpconnectionattempts.Part, idx []int) boo
 	return len(g.withEvidence(part, idx)) > 0
 }
 
-// withEvidence keeps the episodes on servers where a named family none of idx failed with worked after idx's first failure there.
+// withEvidence keeps the episodes on connections where a named family none of idx failed with worked after idx's first failure there, and, when any is kept, the episodes on no MCP server.
 func (g grouper) withEvidence(part mcpconnectionattempts.Part, idx []int) []int {
 	families := map[string]bool{}
 	first := map[servedKey]time.Time{}
@@ -508,9 +511,12 @@ func (g grouper) withEvidence(part mcpconnectionattempts.Part, idx []int) []int 
 			}
 		}
 	}
+	if len(worked) == 0 {
+		return nil
+	}
 	var out []int
 	for _, i := range idx {
-		if e := g.episodes[i]; e.OnMCPServer() && worked[servedKeyOf(e)] {
+		if e := g.episodes[i]; !e.OnMCPServer() || worked[servedKeyOf(e)] {
 			out = append(out, i)
 		}
 	}
