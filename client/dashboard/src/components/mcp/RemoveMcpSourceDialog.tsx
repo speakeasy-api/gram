@@ -12,16 +12,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 export type RemoveMcpSourceDialogContentProps = {
-  /** Dialog title, e.g. "Delete Remote MCP Server". */
+  /** Dialog title, e.g. "Delete remote MCP server". */
   title: string;
-  /** Noun phrase in the description, e.g. "the remote MCP server". */
+  /** Noun phrase in the description, e.g. "the remote MCP source". */
   entityDescription: string;
-  /** Label for the confirmation value, e.g. "the server URL". */
-  confirmLabel: string;
-  /** Exact string the user must type to arm the destructive action. */
-  confirmValue: string;
+  /** The server being deleted; its name is what the user types to confirm. */
+  serverName: string;
   successMessage: string;
   failureMessage: string;
+  /** The other servers the same source backs, which go with it. */
   linkedMcpServers: McpServer[];
   isPending: boolean;
   errorMessage: string | undefined;
@@ -29,7 +28,7 @@ export type RemoveMcpSourceDialogContentProps = {
   onSuccess: () => void;
   /** Performs the deletion; rejects on failure. */
   onConfirm: () => Promise<void>;
-  /** Who the deletion cuts off, shown above the typed confirmation. */
+  /** Who uses this server, shown above the typed confirmation. */
   usage?: React.ReactNode;
 };
 
@@ -71,7 +70,7 @@ function LinkedMcpServerRow({
     <li className="flex flex-col gap-1 px-3 py-2">
       <div className="flex items-center gap-2">
         <Text small className="font-medium" title={server.id}>
-          {server.name || "MCP Server"}
+          {server.name || "Unnamed server"}
         </Text>
         <Badge variant="neutral">
           <Badge.Text>{server.visibility}</Badge.Text>
@@ -92,8 +91,7 @@ function LinkedMcpServerRow({
 export function RemoveMcpSourceDialogContent({
   title,
   entityDescription,
-  confirmLabel,
-  confirmValue,
+  serverName,
   successMessage,
   failureMessage,
   linkedMcpServers,
@@ -105,7 +103,7 @@ export function RemoveMcpSourceDialogContent({
   usage,
 }: RemoveMcpSourceDialogContentProps): JSX.Element {
   const [confirmation, setConfirmation] = useState("");
-  const inputMatches = confirmation === confirmValue;
+  const inputMatches = confirmation.trim() === serverName;
   const {
     data: endpointsData,
     isError: endpointsError,
@@ -133,15 +131,18 @@ export function RemoveMcpSourceDialogContent({
       <Dialog.Header>
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Description>
-          This will permanently delete {entityDescription}, every MCP server
-          backed by it, and the MCP endpoints attached to those servers.
+          This permanently deletes <strong>{serverName}</strong>,{" "}
+          {entityDescription} behind it, and their addresses. This cannot be
+          undone.
         </Dialog.Description>
       </Dialog.Header>
 
       {linkedMcpServers.length > 0 && (
         <div className="space-y-3">
           <Text small muted>
-            The following will also be removed:
+            {linkedMcpServers.length === 1
+              ? "The source also backs another server, which will be deleted too:"
+              : `The source also backs these ${linkedMcpServers.length} servers, which will be deleted too:`}
           </Text>
           {/* Bounded so a source with many servers cannot push the
               confirmation controls below the fold. */}
@@ -165,20 +166,19 @@ export function RemoveMcpSourceDialogContent({
 
       <div className="grid gap-2">
         <Text small>
-          To confirm, type {confirmLabel}: <strong>{confirmValue}</strong>
+          To confirm, type the server name:{" "}
+          <strong className="break-all">{serverName}</strong>
         </Text>
         <Input
           value={confirmation}
           onChange={setConfirmation}
-          placeholder={confirmValue}
+          placeholder={serverName}
+          mutedPlaceholder
           disabled={isPending}
-          aria-label={`Type ${confirmLabel} to confirm`}
+          aria-label="Type the server name to confirm"
+          autoComplete="off"
         />
       </div>
-
-      <Alert variant="warning" dismissible={false}>
-        Deleting {confirmValue} cannot be undone.
-      </Alert>
 
       {errorMessage !== undefined && (
         <Alert variant="error" dismissible={false}>

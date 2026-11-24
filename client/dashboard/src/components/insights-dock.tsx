@@ -1350,16 +1350,46 @@ export function InsightsProvider({
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
+  // Dismiss genies the dock down into the sidebar-footer resume button (and
+  // the button genies it back) — same view transition as the onboarding
+  // banner. Collapse the panel too so a resume always restores the pill.
+  const {
+    dismissed: dockDismissed,
+    dismiss: dismissDock,
+    resume: resumeDock,
+  } = useInsightsDockCta();
+  const handleDockDismiss = useCallback(() => {
+    setIsExpanded(false);
+    dismissDock();
+  }, [dismissDock]);
+  // A dismissed dock renders no panel, so opening it has to bring the dock back.
+  const dockRef = useRef({
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  });
+  dockRef.current = {
+    hidden: hideTrigger,
+    dismissed: dockDismissed,
+    resume: resumeDock,
+  };
+  const expandPanel = useCallback((expanded: boolean) => {
+    const dock = dockRef.current;
+    // A page that hides the dock keeps it dismissed, and keeps its resume button.
+    if (expanded && dock.dismissed && !dock.hidden) dock.resume();
+    setIsExpanded(expanded);
+  }, []);
+
   // Bridge: the command palette's "Ask AI" row dispatches a window event from
   // outside this provider. Open the chat panel and, when a prompt was typed,
   // drop the user straight into a running conversation.
   useAskAiListener(
     useCallback(
       (prompt: string) => {
-        setIsExpanded(true);
+        expandPanel(true);
         if (prompt.trim()) handleSendPrompt(prompt);
       },
-      [handleSendPrompt],
+      [expandPanel, handleSendPrompt],
     ),
   );
 
@@ -1373,16 +1403,6 @@ export function InsightsProvider({
     },
     [handleSendPrompt],
   );
-
-  // Dismiss genies the dock down into the sidebar-footer resume button (and
-  // the button genies it back) — same view transition as the onboarding
-  // banner. Collapse the panel too so a resume always restores the pill.
-  const { dismissed: dockDismissed, dismiss: dismissDock } =
-    useInsightsDockCta();
-  const handleDockDismiss = useCallback(() => {
-    setIsExpanded(false);
-    dismissDock();
-  }, [dismissDock]);
 
   // Start a brand-new Project Assistant conversation. Bumping the runtime key
   // remounts the shared runtime onto a fresh thread; the new thread gets its
@@ -1448,7 +1468,7 @@ export function InsightsProvider({
     () => ({
       available: !hideTrigger,
       isExpanded,
-      setIsExpanded,
+      setIsExpanded: expandPanel,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
@@ -1462,6 +1482,7 @@ export function InsightsProvider({
     [
       hideTrigger,
       isExpanded,
+      expandPanel,
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,

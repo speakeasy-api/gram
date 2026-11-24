@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -81,6 +82,10 @@ type Service struct {
 	syncTrigger SyncTrigger
 	features    feature.Provider
 	reader      *Reader
+
+	// serverURL is this deployment's server URL, handed to providers as
+	// Deps.ServerURL.
+	serverURL *url.URL
 }
 
 // deviceLevelCoverage reports whether an org matches coverage on hardware
@@ -158,6 +163,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
 	features feature.Provider,
+	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
@@ -173,6 +179,7 @@ func NewService(
 		syncTrigger: syncTrigger,
 		features:    features,
 		reader:      NewReader(logger, db, features),
+		serverURL:   serverURL,
 	}
 }
 
@@ -224,7 +231,7 @@ func (s *Service) ListProviders(ctx context.Context, payload *gen.ListProvidersP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -241,7 +248,7 @@ func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +272,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -349,7 +356,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -400,7 +407,7 @@ func (s *Service) TestConnection(ctx context.Context, payload *gen.TestConnectio
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -438,7 +445,7 @@ func (s *Service) TestConnection(ctx context.Context, payload *gen.TestConnectio
 // provider implements. All outbound HTTP uses the guardian SSRF-hardened
 // client: instance URLs are customer-supplied.
 func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) error {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	switch {
 	case desc.NewInventorySource != nil:
 		if err := desc.NewInventorySource(deps).TestConnection(ctx, creds, settings); err != nil {
@@ -466,7 +473,7 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 // failure surfaces as an actionable bad-request so the customer fixes the
 // credentials/workspace instead of saving a config that can never sync.
 func (s *Service) provisionIfSupported(ctx context.Context, orgID string, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	var prov providers.Provisioner
 	switch {
 	case desc.NewEvidenceSink != nil:
@@ -496,7 +503,7 @@ func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -577,7 +584,7 @@ func (s *Service) SetScheduleEnabled(ctx context.Context, payload *gen.SetSchedu
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -644,7 +651,7 @@ func (s *Service) RetrySchedule(ctx context.Context, payload *gen.RetryScheduleP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -707,7 +714,7 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -737,7 +744,7 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -753,7 +760,7 @@ func (s *Service) ListFleetDevices(ctx context.Context, payload *gen.ListFleetDe
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -782,7 +789,7 @@ func (s *Service) GetFleetCoverage(ctx context.Context, payload *gen.GetFleetCov
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 

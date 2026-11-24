@@ -2,7 +2,6 @@
 
 import { AlertCircle } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { trackError } from "@/elements/lib/errorTracking";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 
@@ -82,11 +81,6 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Track error to Datadog RUM
-    trackError(error, {
-      source: "error-boundary",
-      componentStack: errorInfo.componentStack ?? undefined,
-    });
     this.props.onError?.(error, errorInfo);
   }
 

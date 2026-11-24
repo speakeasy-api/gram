@@ -45,6 +45,28 @@ pub enum GramClientError {
     Decode(#[from] serde_json::Error),
 }
 
+impl GramClientError {
+    /// Stable class name for logs and spans. Unlike the `Display` text, it
+    /// never carries a response body.
+    pub fn class(&self) -> &'static str {
+        match self {
+            Self::Send(_) => "send",
+            Self::Token => "token",
+            Self::Read(_) => "read",
+            Self::Status { .. } => "status",
+            Self::Decode(_) => "decode",
+        }
+    }
+
+    /// HTTP status of a non-2xx response, if that is what failed.
+    pub fn http_status(&self) -> Option<u16> {
+        match self {
+            Self::Status { status, .. } => Some(*status),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct BootstrapRequest<'a> {
     thread_id: &'a str,

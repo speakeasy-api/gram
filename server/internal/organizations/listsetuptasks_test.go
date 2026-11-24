@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -315,9 +316,10 @@ func TestService_ListSetupTasksPreservesBranchCompletionFactsWithoutWriting(t *t
 	// hand once servers are chosen.
 	_, err = pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *authCtx.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "setup-board",
-		MarketplaceToken: conv.ToPGText("synthetic-marketplace-token"), PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *authCtx.ProjectID, "synthetic-marketplace-token")
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: new(true)})
 	require.NoError(t, err)
 	require.Nil(t, setupTask(result.Tasks, "create-marketplace"))
