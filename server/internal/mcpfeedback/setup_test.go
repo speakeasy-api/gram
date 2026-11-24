@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -30,6 +31,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 )
+
+// testServiceName is the service.name the test recorder stamps on exported records.
+const testServiceName = "gram-server"
 
 var infra *testenv.Environment
 
@@ -79,7 +83,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 func newTestRecorder(t *testing.T, ti *testInstance, limits mcpfeedback.Limits) *mcpfeedback.Recorder {
 	t.Helper()
 
-	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits, mcpfeedback.WithSettingsFreshFor(0))
+	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits, testServiceName, exportOn(), mcpfeedback.WithSettingsFreshFor(0))
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -195,4 +199,11 @@ func targetOf(t *testing.T, ctx context.Context, server mcpserversrepo.McpServer
 	require.True(t, ok)
 
 	return mcpfeedback.Target{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: server.ProjectID, McpServerID: server.ID}
+}
+
+// exportOn has every organization's reports queued for the OTLP export.
+func exportOn() *feature.InMemory {
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagMCPFeedbackExport, feature.AnyDistinctID, true)
+	return flags
 }
