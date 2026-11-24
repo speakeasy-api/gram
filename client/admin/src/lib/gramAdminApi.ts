@@ -283,6 +283,9 @@ export type AdminOrganization = {
   stripe_customer_dashboard_url?: string;
   stripe_subscription_dashboard_url?: string;
   whitelisted: boolean;
+  // Staff-set label for organizations owned by Speakeasy employees for testing
+  // and dogfooding. It grants nothing; analytics use it to leave them out.
+  internal: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;
@@ -477,6 +480,8 @@ export type UpdateOrganizationRequest = {
   id: string;
   account_type?: string;
   whitelisted?: boolean;
+  // Sent on its own: the endpoint rejects it alongside either field above.
+  internal?: boolean;
 };
 
 export function updateOrganization(

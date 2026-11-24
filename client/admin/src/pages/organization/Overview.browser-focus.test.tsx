@@ -119,6 +119,7 @@ const ORG = {
   slug: "test-org",
   account_type: "pro",
   whitelisted: true,
+  internal: false,
   trial_state: "running",
   trial_tier: "enterprise",
   trial_ends_at: "2026-05-06T00:00:00Z",

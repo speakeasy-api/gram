@@ -30,6 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   AdminListOrganizationsRequest,
   DisabledStatus,
+  InternalStatus,
 } from "../models/operations/adminlistorganizations.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -219,6 +220,7 @@ export function setAdminListOrganizationsData(
       trialStates?: Array<string> | undefined;
       disabledStatus?: DisabledStatus | undefined;
       whitelisted?: boolean | undefined;
+      internalStatus?: InternalStatus | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
       createdFrom?: string | undefined;
@@ -247,6 +249,7 @@ export function invalidateAdminListOrganizations(
       trialStates?: Array<string> | undefined;
       disabledStatus?: DisabledStatus | undefined;
       whitelisted?: boolean | undefined;
+      internalStatus?: InternalStatus | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
       createdFrom?: string | undefined;

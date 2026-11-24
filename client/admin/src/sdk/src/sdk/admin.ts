@@ -1551,7 +1551,7 @@ export class Admin extends ClientSDK {
    * updateOrganization admin
    *
    * @remarks
-   * Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+   * Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.
    */
   async updateOrganization(
     request: UpdateOrganizationRequestBody,

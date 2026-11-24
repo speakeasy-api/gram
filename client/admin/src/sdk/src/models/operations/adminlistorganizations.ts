@@ -26,6 +26,19 @@ export const DisabledStatus = {
  */
 export type DisabledStatus = ClosedEnum<typeof DisabledStatus>;
 
+/**
+ * Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.
+ */
+export const InternalStatus = {
+  All: "all",
+  Internal: "internal",
+  External: "external",
+} as const;
+/**
+ * Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.
+ */
+export type InternalStatus = ClosedEnum<typeof InternalStatus>;
+
 export type AdminListOrganizationsRequest = {
   /**
    * Search term, trimmed of surrounding whitespace. Matches name and slug as a case-insensitive substring, with % and _ taken literally, and matches organization id and WorkOS id exactly, ignoring case. All filters apply even to exact ID matches.
@@ -51,6 +64,10 @@ export type AdminListOrganizationsRequest = {
    * Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.
    */
   whitelisted?: boolean | undefined;
+  /**
+   * Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.
+   */
+  internalStatus?: InternalStatus | undefined;
   /**
    * Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
    */
@@ -99,6 +116,11 @@ export const DisabledStatus$outboundSchema: z.ZodMiniEnum<
 > = z.enum(DisabledStatus);
 
 /** @internal */
+export const InternalStatus$outboundSchema: z.ZodMiniEnum<
+  typeof InternalStatus
+> = z.enum(InternalStatus);
+
+/** @internal */
 export type AdminListOrganizationsRequest$Outbound = {
   q?: string | undefined;
   account_type?: string | undefined;
@@ -106,6 +128,7 @@ export type AdminListOrganizationsRequest$Outbound = {
   trial_states?: Array<string> | undefined;
   disabled_status?: string | undefined;
   whitelisted?: boolean | undefined;
+  internal_status?: string | undefined;
   min_members?: string | undefined;
   max_members?: string | undefined;
   created_from?: string | undefined;
@@ -129,6 +152,7 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
     trialStates: z.optional(z.array(z.string())),
     disabledStatus: z.optional(DisabledStatus$outboundSchema),
     whitelisted: z.optional(z.boolean()),
+    internalStatus: z.optional(InternalStatus$outboundSchema),
     minMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
     maxMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
     createdFrom: z.optional(z.string()),
@@ -145,6 +169,7 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
       accountTypes: "account_types",
       trialStates: "trial_states",
       disabledStatus: "disabled_status",
+      internalStatus: "internal_status",
       minMembers: "min_members",
       maxMembers: "max_members",
       createdFrom: "created_from",

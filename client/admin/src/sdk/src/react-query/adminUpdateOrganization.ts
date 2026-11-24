@@ -50,7 +50,7 @@ export type AdminUpdateOrganizationMutationError =
  * updateOrganization admin
  *
  * @remarks
- * Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+ * Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.
  */
 export function useAdminUpdateOrganizationMutation(
   options?: MutationHookOptions<

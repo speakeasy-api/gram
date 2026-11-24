@@ -54,6 +54,7 @@ const DEMOTED_ORG: AdminOrganization = {
   slug: "placeholder-one",
   account_type: "free",
   whitelisted: false,
+  internal: false,
   trial_state: "demoted",
   member_count: 3,
   created_at: "2026-01-02T00:00:00Z",

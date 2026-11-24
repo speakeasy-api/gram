@@ -547,6 +547,7 @@ describe("the organization write endpoints", () => {
     slug: "placeholder-one",
     account_type: "enterprise",
     whitelisted: false,
+    internal: false,
     member_count: 1,
     created_at: "2026-01-02T00:00:00Z",
     updated_at: "2026-01-07T00:00:00Z",

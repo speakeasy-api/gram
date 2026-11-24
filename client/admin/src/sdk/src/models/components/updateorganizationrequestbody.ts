@@ -30,6 +30,10 @@ export type UpdateOrganizationRequestBody = {
    */
   id: string;
   /**
+   * New internal flag. Cannot be combined with account_type or whitelisted.
+   */
+  internal?: boolean | undefined;
+  /**
    * New whitelisted flag.
    */
   whitelisted?: boolean | undefined;
@@ -43,6 +47,7 @@ export const AccountType$outboundSchema: z.ZodMiniEnum<typeof AccountType> = z
 export type UpdateOrganizationRequestBody$Outbound = {
   account_type?: string | undefined;
   id: string;
+  internal?: boolean | undefined;
   whitelisted?: boolean | undefined;
 };
 
@@ -54,6 +59,7 @@ export const UpdateOrganizationRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     accountType: z.optional(AccountType$outboundSchema),
     id: z.string(),
+    internal: z.optional(z.boolean()),
     whitelisted: z.optional(z.boolean()),
   }),
   z.transform((v) => {

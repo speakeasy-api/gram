@@ -545,6 +545,7 @@ export function organizationFromSdk(
     stripe_customer_dashboard_url: org.stripeCustomerDashboardUrl,
     stripe_subscription_dashboard_url: org.stripeSubscriptionDashboardUrl,
     whitelisted: org.whitelisted,
+    internal: org.internal,
     disabled_at: org.disabledAt?.toISOString(),
     trial_state: org.trialState,
     trial_ends_at: org.trialEndsAt?.toISOString(),
