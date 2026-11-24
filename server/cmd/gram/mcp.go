@@ -73,7 +73,7 @@ import (
 // worker flags are accepted but never read: this command has no Temporal
 // dependency by design.
 func mcpServerFlags() []cli.Flag {
-	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
+	flags := mcpRuntimeFlags()
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
@@ -375,9 +375,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
-		return err
-	}
+	configureTranscriptShadow(ctx, logger, db, chatWriter, orgEncryption, featureFlags, tracerProvider, meterProvider)
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

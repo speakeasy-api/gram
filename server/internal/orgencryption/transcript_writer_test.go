@@ -26,6 +26,17 @@ type transcriptWriterFixture struct {
 	store     *transcriptstore.Store
 }
 
+// projectGate turns capture on for its projects and treats every organization
+// as ready, so tests control key provisioning themselves.
+type projectGate map[uuid.UUID]struct{}
+
+func (g projectGate) ProjectEnabled(_ context.Context, projectID uuid.UUID) bool {
+	_, ok := g[projectID]
+	return ok
+}
+
+func (projectGate) OrganizationReady(context.Context, string) bool { return true }
+
 func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcriptWriterFixture {
 	t.Helper()
 	ti := newTestInstance(t)
@@ -42,7 +53,7 @@ func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcrip
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
 	if shadow {
-		writer.WithTranscriptShadow(store, p.ID)
+		writer.WithTranscriptShadow(store, projectGate{p.ID: {}})
 	}
 	return &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: writer, store: store}
 }
@@ -230,13 +241,13 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, m.Params.Content, rows[0].Content)
 
-	// Neither an accidentally empty allowlist nor another project may widen
+	// Neither a gate with no projects nor one for another project may widen
 	// capture to this project or start consulting unavailable shadow storage.
-	f.writer.WithTranscriptShadow(f.store, []uuid.UUID{}...)
+	f.writer.WithTranscriptShadow(f.store, projectGate{})
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE empty allowlist")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.writer.WithTranscriptShadow(f.store, uuid.New())
+	f.writer.WithTranscriptShadow(f.store, projectGate{uuid.New(): {}})
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE excluded project")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)

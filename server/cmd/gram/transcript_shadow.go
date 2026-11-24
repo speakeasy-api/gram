@@ -3,93 +3,39 @@ package gram
 import (
 	"context"
 	"fmt"
-	"strings"
+	"log/slog"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
-// parseTranscriptShadowProjectIDs preserves an explicit, nonempty allowlist.
-// Errors deliberately omit the supplied values.
-func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
-	ids := make([]uuid.UUID, 0, len(values))
-	seen := make(map[uuid.UUID]struct{}, len(values))
-	for i, value := range values {
-		id, err := uuid.Parse(strings.TrimSpace(value))
-		if err != nil || id == uuid.Nil {
-			return nil, fmt.Errorf("invalid chat transcript shadow project UUID at position %d", i+1)
-		}
-		if _, ok := seen[id]; !ok {
-			ids = append(ids, id)
-			seen[id] = struct{}{}
-		}
+// configureTranscriptShadow wires encrypted transcript shadow capture. The
+// chat-transcript-shadow-capture PostHog flag picks projects on each write, so
+// startup only checks that capture can work. Any problem is logged and leaves
+// capture off: this optional feature never stops a process from starting.
+// Plaintext remains authoritative; startup never backfills old messages.
+func configureTranscriptShadow(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, flags feature.Provider, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) bool {
+	if db == nil || writer == nil || flags == nil || orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
+		return false
 	}
-	return ids, nil
-}
-
-// configureTranscriptShadow only opts explicit projects into encrypted shadow
-// writes. Plaintext remains authoritative; startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) error {
-	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
-	if len(values) == 0 {
-		// An explicitly supplied blank must not silently disable the feature.
-		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
-			return fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
-		}
-		return nil
-	}
-	projectIDs, err := parseTranscriptShadowProjectIDs(values)
-	if err != nil {
-		return err
-	}
-	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
-		return fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
-	}
-	if db == nil || writer == nil {
-		return fmt.Errorf("chat transcript shadow requires database and writer")
-	}
-	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
-		return err
+		logger.ErrorContext(ctx, "chat transcript shadow capture is off", attr.SlogError(err))
+		return false
 	}
-	queries := chatrepo.New(db)
-	organizations := make([]string, 0, len(projectIDs))
-	seen := make(map[string]struct{}, len(projectIDs))
-	// Resolve every target before provisioning even the first organization's keys.
-	for _, projectID := range projectIDs {
-		org, err := queries.GetProjectOrganizationID(ctx, projectID)
-		if err != nil {
-			return fmt.Errorf("resolve chat transcript shadow project: %w", err)
-		}
-		if strings.TrimSpace(org) == "" {
-			return fmt.Errorf("chat transcript shadow project has no organization")
-		}
-		if _, ok := seen[org]; !ok {
-			organizations = append(organizations, org)
-			seen[org] = struct{}{}
-		}
-	}
-	// Build the store first: it can fail, and provisioning mints keys.
 	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
 	if err != nil {
-		return fmt.Errorf("create chat transcript shadow store: %w", err)
+		logger.ErrorContext(ctx, "chat transcript shadow capture is off: create store", attr.SlogError(err))
+		return false
 	}
-	for _, org := range organizations {
-		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-			return fmt.Errorf("provision chat transcript shadow encryption: %w", err)
-		}
-	}
-	writer.WithTranscriptShadow(store, projectIDs...)
-	return nil
+	writer.WithTranscriptShadow(store, transcriptstore.NewCaptureGate(logger, flags, orgEncryption.Provisioner))
+	return true
 }
 
 // checkTranscriptShadowSchema checks only the sidecar contract used by the store.

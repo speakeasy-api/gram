@@ -234,6 +234,15 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagChatTranscriptShadowCapture turns on encrypted chat transcript shadow
+	// capture for a project: each shared message write also seals an encrypted
+	// copy in the same transaction. Evaluated locally on every message write in
+	// the server, worker, MCP and private ingress processes, with the project id
+	// as the distinct id and no groups, so the PostHog flag must be
+	// person-aggregated and match distinct_id in a list of project ids. Fails
+	// closed. Removed once transcripts are encrypted for every project.
+	FlagChatTranscriptShadowCapture Flag = "chat-transcript-shadow-capture"
+
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
 	// clients the source of its upstream issuer for an organization: the one
 	// provider among the server's live client associations routes its

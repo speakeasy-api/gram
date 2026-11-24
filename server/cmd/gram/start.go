@@ -740,7 +740,6 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
-	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",
@@ -1216,9 +1215,7 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
-				return err
-			}
+			configureTranscriptShadow(ctx, logger, db, chatWriter, orgEncryption, featureFlags, tracerProvider, meterProvider)
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
 			marketplaceTokens := orgEncryption.MarketplaceTokens(logger, encryptionClient)

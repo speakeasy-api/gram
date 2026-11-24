@@ -115,8 +115,8 @@ type ChatMessageWriter struct {
 	stokenCodec  *stokens.Codec
 	observers    []MessageObserver
 	// transcriptShadow is opt-in shadow storage, not an encrypted-only rollout.
-	transcriptShadow         *transcriptstore.Store
-	transcriptShadowProjects map[uuid.UUID]struct{}
+	transcriptShadow     *transcriptstore.Store
+	transcriptShadowGate TranscriptShadowGate
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
 	turnStream  *TurnStream
@@ -127,16 +127,16 @@ type ChatMessageWriter struct {
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
-		db:                       db,
-		logger:                   logger.With(attr.SlogComponent("chat-message-writer")),
-		assetStorage:             assetStorage,
-		stokenCodec:              stokens.NewCodec(),
-		observers:                nil,
-		transcriptShadow:         nil,
-		transcriptShadowProjects: nil,
-		shutdownCtx:              ctx,
-		cancel:                   cancel,
-		turnStream:               nil,
+		db:                   db,
+		logger:               logger.With(attr.SlogComponent("chat-message-writer")),
+		assetStorage:         assetStorage,
+		stokenCodec:          stokens.NewCodec(),
+		observers:            nil,
+		transcriptShadow:     nil,
+		transcriptShadowGate: nil,
+		shutdownCtx:          ctx,
+		cancel:               cancel,
+		turnStream:           nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
@@ -145,26 +145,35 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
+// TranscriptShadowGate decides, for each shared message write, whether the
+// project seals an encrypted transcript shadow. It is called inside the write's
+// transaction, so both methods treat any doubt as off.
+type TranscriptShadowGate interface {
+	// ProjectEnabled reports whether the project captures shadows. It must
+	// answer from local state, without a network call.
+	ProjectEnabled(ctx context.Context, projectID uuid.UUID) bool
+
+	// OrganizationReady reports whether the organization can seal shadows,
+	// preparing its transcript key on first use.
+	OrganizationReady(ctx context.Context, organizationID string) bool
+}
+
 // WithTranscriptShadow enables atomic encrypted shadow copies for shared writer
-// operations. Configure it before serving requests, after the separate schema
-// migration and organization key provisioning. It does not encrypt assets or
+// operations in projects the gate turns on. Configure it before serving
+// requests, after the separate schema migration. It does not encrypt assets or
 // remove plaintext; direct SQL updates still need backfill to refresh shadows.
-// An empty project allowlist disables capture; there is no implicit all-project
-// mode, including when the option is called from another service.
-func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, projectIDs ...uuid.UUID) *ChatMessageWriter {
+// A nil store or gate disables capture.
+func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, gate TranscriptShadowGate) *ChatMessageWriter {
 	w.transcriptShadow = store
-	w.transcriptShadowProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
-	for _, projectID := range projectIDs {
-		w.transcriptShadowProjects[projectID] = struct{}{}
-	}
+	w.transcriptShadowGate = gate
 	return w
 }
 
 func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	if w.transcriptShadow == nil {
+	if w.transcriptShadow == nil || w.transcriptShadowGate == nil || len(messageIDs) == 0 {
 		return nil
 	}
-	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
+	if !w.transcriptShadowGate.ProjectEnabled(ctx, projectID) || !w.transcriptShadowGate.OrganizationReady(ctx, organizationID) {
 		return nil
 	}
 	if err := w.transcriptShadow.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {

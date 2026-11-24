@@ -34,28 +34,32 @@ Provisioning/rotation alone does not encrypt any transcripts.
 
 ## Shadow storage and rollout gate
 
-The process flag `--chat-transcript-shadow-project-ids` (environment variable
-`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`) is empty by default. An explicit
-project allowlist is required for process-level activation; there is no implicit
-all-project rollout. Startup validates all targets and the schema prerequisite
-before provisioning keys. Missing organization encryption or a failed key operation
-aborts startup instead of silently disabling encryption. No existing-data backfill
-runs automatically at startup.
+The PostHog flag `chat-transcript-shadow-capture` picks the projects that
+capture shadows. It is evaluated locally on each message write, with the
+project id as the distinct id, so the flag must be person-aggregated and match
+`distinct_id` in a list of project ids. It is off for every project by default
+and fails closed: an unavailable or inconclusive evaluation skips capture.
+
+At startup each process checks the schema prerequisite. A failed check, or
+missing organization encryption, is logged and leaves capture off; it never
+stops the process. Before a project's first capture the writer provisions the
+organization's transcript data key, once per process. A failed provisioning is
+logged and that write commits without a shadow. No existing-data backfill runs
+automatically at startup.
 
 The shared writer captures a database snapshot in the same transaction as a
 message write. This covers Kit projection inserts/patches, native writes, caller-owned transactions, correlated
 promotions, imported messages, and complete turns. Shadow failure rolls back the
 message and its outbox events. Ordinary observer notifications remain after commit.
 Asset uploads can precede the transaction and remain outside this guarantee.
-An empty shared-writer project allowlist also disables capture; it never means
-all projects.
+A writer with no gate, or a gate that turns no project on, captures nothing.
 
 Capture resolves configuration and keys through the caller's transaction, not a
 second pooled connection. Use a writable READ COMMITTED transaction. Its private
 TTL cache reuses one DEK within a batch without publishing uncommitted state to
 the process cache or starting detached work. This currently costs a fresh KMS
 unwrap per Capture batch, even when the process cache is warm; account for that
-latency/cost when choosing a shadow allowlist. Keep this opt-in experiment
+latency/cost when choosing projects for the flag. Keep this opt-in experiment
 limited to low-volume projects; broad/high-volume activation is deferred until
 a committed-state-safe cross-transaction unwrap cache or an explicit unwrap
 rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
