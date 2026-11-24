@@ -48,7 +48,7 @@ const (
 	// memberStatusTimeout bounds the consent page's member status check; past it every row is written.
 	memberStatusTimeout = time.Second
 
-	// maxPendingAttemptEndings bounds claims waiting on a slow Redis.
+	// maxPendingAttemptEndings bounds claims and row folds waiting on a slow Redis.
 	maxPendingAttemptEndings = 256
 )
 
@@ -253,11 +253,20 @@ func (s *Service) recordConsentPage(
 }
 
 // recordConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
+// The fold reads Redis, so it runs off the request path.
 func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
 		return
 	}
+	s.recordOffRequest(ctx, logger, problem, func(ctx context.Context) {
+		s.recordConsentProblemOnce(ctx, logger, attempt, problem, opts...)
+	}, func() {
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
+	})
+}
+
+func (s *Service) recordConsentProblemOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
 	key := "connectionAttemptCatalogExpired:" + attempt.ID().String()
 	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
 	won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
@@ -335,8 +344,23 @@ func memberStatusesKey(attempt mcpconnectionattempts.Attempt) string {
 	return "connectionAttemptMembers:" + attempt.ID().String()
 }
 
-// recordMemberStatuses writes members whose status changed this attempt.
+// recordMemberStatuses writes members whose status changed this attempt. Telling which changed
+// reads Redis, so it runs off the request path; with no room there every row is written.
 func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus, opts ...mcpconnectionattempts.Option) {
+	if len(statuses) == 0 {
+		return
+	}
+	// Member rows leave no reference, so nothing waits for them.
+	s.recordOffRequest(ctx, logger, nil, func(ctx context.Context) {
+		s.recordChangedMemberStatuses(ctx, logger, attempt, statuses, opts...)
+	}, func() {
+		for _, status := range statuses {
+			s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, slices.Concat(status.opts, opts)...)
+		}
+	})
+}
+
+func (s *Service) recordChangedMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus, opts ...mcpconnectionattempts.Option) {
 	var dropped []memberStatus
 	for _, status := range s.changedMemberStatuses(ctx, logger, attempt, statuses) {
 		if !s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, slices.Concat(status.opts, opts)...) {
@@ -435,10 +459,23 @@ func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.
 }
 
 // recordRefusedConsent writes one row per attempt, client, sign-in and code, however often the page reloads; a cache failure writes it anyway.
+// The fold reads Redis, so it runs off the request path.
 func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
+	if s.userSessionRefreshReplayCoordination == nil {
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, code, opts...)
+		return
+	}
+	s.recordOffRequest(ctx, logger, code, func(ctx context.Context) {
+		s.recordRefusedConsentOnce(ctx, logger, attempt, clientID, signInID, code, opts...)
+	}, func() {
+		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, code, opts...)
+	})
+}
+
+func (s *Service) recordRefusedConsentOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	key := refusedConsentKey(attempt, clientID, signInID, code)
 	marked := false
 	if s.userSessionRefreshReplayCoordination != nil {
@@ -591,7 +628,8 @@ func (s *Service) consumeChallenge(ctx context.Context, stateID string, attempt 
 	return s.authnChallengeCache.GetAndDeleteMarking(ctx, "authnChallenge:"+stateID, attemptEndMarker(attempt), connectionAttemptEndTTL) //nolint:wrapcheck // the typed cache names the key
 }
 
-// attemptEndings runs once-only endings off the request path, so a slow Redis can't slow a sign-in.
+// attemptEndings runs once-only endings, and the Redis folds of repeatable consent rows, off the
+// request path, so a slow Redis can't slow a sign-in.
 type attemptEndings struct {
 	slots chan struct{}
 	wg    sync.WaitGroup
@@ -626,19 +664,32 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	if attempt.IsZero() {
 		return
 	}
-	wanted := contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what)
-	claimed := make(chan struct{})
-	reference := ""
-	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
-		defer close(claimed)
-		// Its own slot, so an ending accepted after the wait can't label a later error.
-		ctx = contextvalues.WithConnectionReferenceSlot(ctx)
+	s.recordOffRequest(ctx, logger, what, func(ctx context.Context) {
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
-		reference = contextvalues.ConnectionReference(ctx)
-	}) {
-		if wanted {
+	}, func() {
+		if contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what) {
 			contextvalues.SetConnectionReference(ctx, "")
 		}
+	})
+}
+
+// recordOffRequest runs work, which records what behind a Redis read, off the request path with a
+// bounded, detached context, so a slow or failing Redis can neither delay nor fail the request.
+// A failure someone will read a reference for waits up to attemptEndingReferenceWait for its row
+// to be accepted. When the work cannot be taken on (no runner, or too many waiting), unqueued runs
+// on the request path instead and must not touch Redis.
+func (s *Service) recordOffRequest(ctx context.Context, logger *slog.Logger, what mcpconnectionattempts.Happened, work func(context.Context), unqueued func()) {
+	wanted := contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what)
+	done := make(chan struct{})
+	reference := ""
+	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		defer close(done)
+		// Its own slot, so a row accepted after the wait can't label a later error.
+		ctx = contextvalues.WithConnectionReferenceSlot(ctx)
+		work(ctx)
+		reference = contextvalues.ConnectionReference(ctx)
+	}) {
+		unqueued()
 		return
 	}
 	if !wanted {
@@ -646,7 +697,7 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	}
 	// The accepted row's id, or none past the wait.
 	select {
-	case <-claimed:
+	case <-done:
 		contextvalues.SetConnectionReference(ctx, reference)
 	case <-time.After(attemptEndingReferenceWait):
 		contextvalues.SetConnectionReference(ctx, "")

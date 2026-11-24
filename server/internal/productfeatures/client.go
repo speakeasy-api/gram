@@ -132,6 +132,23 @@ func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string
 	return enabled
 }
 
+// PlatformFeatureCheckUncached is PlatformFeatureCheck reading the durable
+// feature state directly, for sign-in and consent steps that must not depend
+// on the shared feature cache being reachable. Errors, including a canceled
+// request, degrade to "disabled" and are logged.
+func (c *Client) PlatformFeatureCheckUncached(ctx context.Context, organizationID string, feature string) bool {
+	enabled, err := c.IsFeatureEnabledUncached(ctx, organizationID, Feature(feature))
+	if err != nil {
+		c.logger.ErrorContext(ctx, "uncached platform feature check failed",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(feature),
+		)
+		return false
+	}
+	return enabled
+}
+
 // SetFeatureEnabled writes a generic product-feature flag and refreshes its
 // cache entry. Callers must perform authorization and restrict feature names to
 // flags without specialized write behavior before calling this method.

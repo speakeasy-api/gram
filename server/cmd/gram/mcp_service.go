@@ -138,7 +138,10 @@ type mcpServiceDependencies struct {
 	Audit                  *audit.Logger
 	PlatformExtras         []platformtools.ExternalTool
 	PlatformFeatureChecker platformtools.FeatureChecker
-	PlatformToolsets       map[string]platformtools.Toolset
+	// AuthFeatureChecker answers feature checks on sign-in and consent steps
+	// from Postgres rather than the shared feature cache.
+	AuthFeatureChecker platformtools.FeatureChecker
+	PlatformToolsets   map[string]platformtools.Toolset
 	Identity               mcp.IdentityResolver
 	Challenges             *remotesessions.ChallengeManager
 	ProtectedResources     *protectedresource.Prober
@@ -184,6 +187,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP service: %w", err)
 	}
+	service.SetAuthFeatureChecker(d.AuthFeatureChecker)
 	service.SetCallbackOrigins(d.CallbackOrigins)
 	service.SetPlatformHosts(d.PlatformHosts)
 	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))

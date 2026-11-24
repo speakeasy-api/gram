@@ -87,6 +87,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -246,8 +247,14 @@ type Service struct {
 	auditLogger            *audit.Logger
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
-	platformToolsets       map[string]platformtools.Toolset
-	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+
+	// authFeatureChecker answers product-feature checks made on sign-in and
+	// consent steps from Postgres, so those steps never wait on the shared
+	// feature cache. Nil falls back to platformFeatureChecker. Set by
+	// SetAuthFeatureChecker.
+	authFeatureChecker  platformtools.FeatureChecker
+	platformToolsets    map[string]platformtools.Toolset
+	authnChallengeCache cache.TypedCacheObject[AuthnChallengeState]
 	// accountSwitchCache marks consent challenges an account switch spent.
 	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
 	// Short-lived install codes. Holds a live agent key, so it is
@@ -706,6 +713,7 @@ func NewService(
 		auditLogger:            auditLogger,
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
+		authFeatureChecker:     nil,
 		platformToolsets:       platformToolsets,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
@@ -775,6 +783,26 @@ func NewService(
 		remoteChallengeMgr.SetTypedAuthorizationValidator(service.ValidateRemoteLoginTypedAuthorization)
 	}
 	return service, nil
+}
+
+// SetAuthFeatureChecker sets the product-feature check that sign-in and
+// consent steps use. It should read the durable feature state rather than the
+// shared feature cache.
+func (s *Service) SetAuthFeatureChecker(checker platformtools.FeatureChecker) {
+	s.authFeatureChecker = checker
+}
+
+// authFeatureEnabled reports whether feature is on for organizationID on a
+// sign-in or consent step. With no checker wired the feature reads as off.
+func (s *Service) authFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) bool {
+	checker := s.authFeatureChecker
+	if checker == nil {
+		checker = s.platformFeatureChecker
+	}
+	if checker == nil {
+		return false
+	}
+	return checker(ctx, organizationID, string(feature))
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client

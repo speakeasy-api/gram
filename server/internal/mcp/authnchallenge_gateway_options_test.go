@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +74,53 @@ func TestConsentGatewayDefaultRecordsMode(t *testing.T) {
 	policy, err = service.consentGatewayPolicy(ctx, organizationGateway, AuthnChallengeState{}, uuid.NewString(), "")
 	require.NoError(t, err)
 	require.Nil(t, policy)
+}
+
+// Consent reads entitlements through the auth checker, not the cached
+// platform checker the serving paths use.
+func TestConsentFeatureChecksUseTheAuthChecker(t *testing.T) {
+	t.Parallel()
+
+	cachedCalls := 0
+	cached := func(context.Context, string, string) bool {
+		cachedCalls++
+		return false
+	}
+	live := map[string]bool{}
+	service := &Service{codeExecutor: availableCodeExecutor{}, platformFeatureChecker: cached}
+	service.SetAuthFeatureChecker(func(_ context.Context, _ string, feature string) bool { return live[feature] })
+	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
+
+	_, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	requireOopsCode(t, err, oops.CodeForbidden, "not entitled")
+	live[string(productfeatures.FeatureCodeMode)] = true
+	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "code_mode")
+	require.NoError(t, err)
+	require.Equal(t, metamcp.DiscoveryModeCode, *policy.Gateway.DiscoveryMode)
+
+	require.Equal(t, autoRefreshDisabled, service.resolveAutoRefreshPolicy(ctx, "org_test"))
+	live[string(productfeatures.FeatureRemoteSessionAutoRefresh)] = true
+	require.Equal(t, autoRefreshUserControlled, service.resolveAutoRefreshPolicy(ctx, "org_test"))
+	live[string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)] = true
+	require.Equal(t, autoRefreshEnforced, service.resolveAutoRefreshPolicy(ctx, "org_test"))
+
+	require.Zero(t, cachedCalls, "consent never asks the cached checker")
+	require.False(t, service.CodeModeAvailable(ctx, "org_test"), "serving paths keep the cached checker")
+	require.Equal(t, 1, cachedCalls)
+}
+
+// Without an auth checker wired, consent falls back to the platform checker.
+func TestConsentFeatureChecksFallBackToThePlatformChecker(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{codeExecutor: availableCodeExecutor{}, platformFeatureChecker: func(context.Context, string, string) bool { return true }}
+	require.True(t, service.consentCodeModeAvailable(t.Context(), "org_test"))
+	require.Equal(t, autoRefreshEnforced, service.resolveAutoRefreshPolicy(t.Context(), "org_test"))
+
+	unwired := &Service{codeExecutor: availableCodeExecutor{}}
+	require.False(t, unwired.consentCodeModeAvailable(t.Context(), "org_test"))
+	require.Equal(t, autoRefreshDisabled, unwired.resolveAutoRefreshPolicy(t.Context(), "org_test"))
 }
 
 type availableCodeExecutor struct{ codemode.Disabled }

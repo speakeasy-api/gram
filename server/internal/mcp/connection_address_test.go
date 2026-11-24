@@ -244,6 +244,7 @@ func TestServeConsent_GatewayListSaysTheSignInProviderAddress(t *testing.T) {
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "unavailable", outcomes[0].Status)
 	require.Equal(t, "Can't connect · This server's sign-in address doesn't exist. Ask your administrator.", outcomes[0].Label)
+	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 	require.Equal(t, []string{mcpconnectionattempts.CodeAddressNotFound.String()}, discoveryReasons(rec), "the row agrees with the card")
 	require.Contains(t, normalizeSpaces(page), `class="text-xs text-default-warning" data-gateway-server-status="unavailable"`, "styled as needing attention")
 
@@ -322,6 +323,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 			require.Len(t, outcomes, 1)
 			require.Equal(t, "unavailable", outcomes[0].Status)
 			require.Equal(t, tc.label, outcomes[0].Label)
+			require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 			require.Equal(t, []string{tc.reason.String()}, discoveryReasons(rec), "the row agrees with the card")
 		})
 	}

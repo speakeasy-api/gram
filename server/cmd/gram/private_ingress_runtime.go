@@ -357,7 +357,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
 		RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
-		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
+		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck, AuthFeatureChecker: productFeatures.PlatformFeatureCheckUncached,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 		ProtectedResources: protectedResources,
 	})
