@@ -82,7 +82,7 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 
 	// Any hold covering the grant's own lifetime ceiling satisfies the
 	// verifier; a day is well past it.
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(24*time.Hour))
+	guard, err := replay.NewRedisGuard(client, testenv.TestRedisKeyPrefix+string(testenv.NewCacheSuffix(t, "workload-live-replay")), assertioncore.ReplayHoldFor(24*time.Hour))
 	require.NoError(t, err)
 
 	verifier, err := workload.NewVerifier(keys, guard)

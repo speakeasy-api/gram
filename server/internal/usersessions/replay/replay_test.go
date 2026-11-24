@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // The core property: an identifier is claimable exactly once.
@@ -130,7 +131,7 @@ func TestReserveOwned_ClosedConnectionIsAnOutage(t *testing.T) {
 	}()
 	client := redis.NewClient(&redis.Options{Addr: listener.Addr().String(), MaxRetries: -1, Protocol: 2, DisableIdentity: true})
 	t.Cleanup(func() { _ = client.Close() })
-	guard, err := NewRedisGuard(client, "closed-conn", time.Hour)
+	guard, err := NewRedisGuard(client, testenv.TestRedisKeyPrefix+"closed-conn", time.Hour)
 	require.NoError(t, err)
 
 	_, err = guard.ReserveOwned(t.Context(), testKey(t, "jti-closed"), time.Now().Add(time.Minute), "owner")

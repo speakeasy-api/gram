@@ -167,7 +167,7 @@ type stateWithoutAttempt struct {
 	ID string
 }
 
-func (c cachedSignInState) CacheKey() string   { return "connectionAttemptTest:" + c.ID }
+func (c cachedSignInState) CacheKey() string   { return "test:connectionAttempt:" + c.ID }
 func (c cachedSignInState) TTL() time.Duration { return time.Minute }
 
 // Sign-in state lives in Redis, whose encoding is not JSON.
@@ -179,7 +179,7 @@ func TestAttempt_SurvivesTheRedisCache(t *testing.T) {
 	id := uuid.NewString()
 	require.NoError(t, states.Store(t.Context(), cachedSignInState{ID: id, Attempt: attempt}))
 
-	got, err := states.Get(t.Context(), "connectionAttemptTest:"+id)
+	got, err := states.Get(t.Context(), "test:connectionAttempt:"+id)
 	require.NoError(t, err)
 	require.Equal(t, attempt.ID(), got.Attempt.ID())
 	require.Equal(t, attempt.scope, got.Attempt.scope)
@@ -187,7 +187,7 @@ func TestAttempt_SurvivesTheRedisCache(t *testing.T) {
 
 	emptyID := uuid.NewString()
 	require.NoError(t, states.Store(t.Context(), cachedSignInState{ID: emptyID, Attempt: NoAttempt}))
-	got, err = states.Get(t.Context(), "connectionAttemptTest:"+emptyID)
+	got, err = states.Get(t.Context(), "test:connectionAttempt:"+emptyID)
 	require.NoError(t, err)
 	require.True(t, got.Attempt.IsZero())
 }
@@ -211,7 +211,7 @@ func TestAttempt_ZeroEncodesAsNoFieldForCompareAndSwap(t *testing.T) {
 	require.NoError(t, err)
 	adapter := cache.NewRedisCacheAdapter(client)
 
-	key := "connectionAttemptTest:" + uuid.NewString()
+	key := "test:connectionAttempt:" + uuid.NewString()
 	require.NoError(t, adapter.Set(t.Context(), key, cachedSignInState{ID: "s", Attempt: NoAttempt}, time.Minute))
 	swapped, err := adapter.CompareAndSwap(t.Context(), key, stateWithoutAttempt{ID: "s"}, stateWithoutAttempt{ID: "s"}, time.Minute)
 	require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestAttempt_RoundTripEncodesTheSameForCompareAndSwap(t *testing.T) {
 	state := cachedSignInState{ID: uuid.NewString(), Attempt: Begin(testScope())}
 	require.NoError(t, states.Store(t.Context(), state))
 
-	read, err := states.Get(t.Context(), "connectionAttemptTest:"+state.ID)
+	read, err := states.Get(t.Context(), "test:connectionAttempt:"+state.ID)
 	require.NoError(t, err)
 	swapped, err := states.CompareAndSwap(t.Context(), read, read)
 	require.NoError(t, err)

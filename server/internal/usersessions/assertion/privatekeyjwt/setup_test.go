@@ -173,7 +173,7 @@ func newVerifier(t *testing.T) *privatekeyjwt.Verifier {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "clientauth-replay")), privatekeyjwt.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(client, testenv.TestRedisKeyPrefix+string(testenv.NewCacheSuffix(t, "clientauth-replay")), privatekeyjwt.DefaultMaxReplayHold)
 	require.NoError(t, err)
 
 	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, client), guard)
