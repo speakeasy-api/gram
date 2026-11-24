@@ -17,10 +17,13 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
+  refreshOutcome,
   serversNeedingConnection,
 } from "./connectionAttention";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
@@ -101,6 +104,33 @@ export function StepAuthentication({
   // and the editor has a usable one: saving assigns that in its place,
   // exactly as creating does.
   const displayed = displayedConnections(connections);
+  // The server whose connection status is being refreshed, and then the one
+  // whose refreshed status is told once it is read.
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshed, setRefreshed] = useState<string | null>(null);
+  const refreshedConnection =
+    refreshed === null ? undefined : displayed.get(refreshed);
+  const refreshedName = servers.find((server) => server.id === refreshed)?.name;
+  useEffect(() => {
+    if (refreshed === null) return;
+    if (!refreshedConnection || refreshedConnection.status === "checking")
+      return;
+    setRefreshed(null);
+    const { tone, message } = refreshOutcome(
+      refreshedName ?? "this server",
+      refreshedConnection,
+    );
+    toast[tone](message);
+  }, [refreshed, refreshedConnection, refreshedName]);
+  const refresh = async (serverId: string) => {
+    setRefreshing(serverId);
+    try {
+      await connections.refetch();
+    } finally {
+      setRefreshing(null);
+    }
+    setRefreshed(serverId);
+  };
   const missing = serversNeedingConnection(servers, displayed);
   return (
     <div className="space-y-5">
@@ -377,11 +407,18 @@ export function StepAuthentication({
                       size="sm"
                       aria-label={`Refresh ${server.name} connection status`}
                       title="Refresh connection status"
+                      aria-busy={refreshing === server.id}
+                      disabled={refreshing === server.id}
                       onClick={() => {
-                        void connections.refetch();
+                        void refresh(server.id);
                       }}
                     >
-                      <RefreshCw className="size-4" />
+                      <RefreshCw
+                        className={cn(
+                          "size-4",
+                          refreshing === server.id && "animate-spin",
+                        )}
+                      />
                     </Button>
                   </div>
                 )}
