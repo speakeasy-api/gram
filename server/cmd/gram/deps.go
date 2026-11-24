@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -88,6 +89,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
@@ -104,11 +106,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"golang.org/x/oauth2"
 
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 func noopShutdown(context.Context) error { return nil }
@@ -473,7 +475,7 @@ type redisClientOptions struct {
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
-	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
+	redisClient := redis.NewClient(&redis.Options{
 		Addr:            opts.redisAddr,
 		Password:        opts.redisPassword,
 		DB:              db,
@@ -481,10 +483,7 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
-	if err != nil {
-		return nil, fmt.Errorf("create redis client: %w", err)
-	}
+	})
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
@@ -953,6 +952,7 @@ func newAdminOpenRouter(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
+	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
@@ -981,6 +981,7 @@ func newAdminOpenRouter(
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
+		staffOrg,
 	)
 }
 
@@ -2045,6 +2046,18 @@ func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encrypti
 // process's organization encryption and transition state.
 func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
 	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// AIProviderKeys builds the seam for AI provider and model keys over the
+// process's organization encryption.
+func (d orgEncryptionDeps) AIProviderKeys(logger *slog.Logger, platform *encryption.Client) *aiproviderkeys.Keys {
+	return aiproviderkeys.New(logger, d.Cipher(logger, platform))
+}
+
+// MarketplaceTokens builds the plugin marketplace token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
+	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

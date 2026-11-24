@@ -108,7 +108,7 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 	if err != nil {
 		return GetMyChannelsAccessOutput{}, err
 	}
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: project.ID.String()}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return GetMyChannelsAccessOutput{}, ErrForbidden
 		}
@@ -131,10 +131,11 @@ func (s *ChannelsAccessService) Get(ctx context.Context, principal Principal, in
 		return channelsAccessNotEnabled(), nil
 	}
 	permissions := make([]bool, 0, 3)
-	for _, scope := range []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeChannelsAdmin, authz.ScopeChannelsReadAll} {
-		allowed, err := s.engine.Evaluate(ctx, authz.Check{Scope: scope, ResourceID: project.ID.String()})
+	ref := authz.Project(authz.ProjectIDOf(project.ID))
+	for _, check := range []authz.Check{ref.ChannelsConnect(), ref.ChannelsAdmin(), ref.ChannelsReadAll()} {
+		allowed, err := s.engine.Evaluate(ctx, check)
 		if err != nil {
-			return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate %s: %w", scope, err)
+			return GetMyChannelsAccessOutput{}, fmt.Errorf("evaluate %s: %w", check.Scope, err)
 		}
 		permissions = append(permissions, allowed)
 	}

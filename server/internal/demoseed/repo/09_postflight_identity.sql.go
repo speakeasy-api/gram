@@ -429,6 +429,32 @@ func (q *Queries) PostflightIDGitHubCheckAccessGrants(ctx context.Context, arg P
 	return count, err
 }
 
+const postflightIDHealthUpstreamClientChoices = `-- name: PostflightIDHealthUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN user_sessions s ON s.id = u.credential_id AND s.project_id = u.project_id AND s.deleted IS FALSE
+JOIN mcp_servers m ON m.id = u.mcp_server_id AND m.project_id = u.project_id
+WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
+  AND s.user_session_issuer_id = $2::uuid
+  AND m.user_session_issuer_id = $2::uuid
+  AND u.no_auth AND u.remote_session_client_id IS NULL
+`
+
+type PostflightIDHealthUpstreamClientChoicesParams struct {
+	ProjectID      uuid.UUID
+	HealthIssuerID uuid.UUID
+}
+
+// The connection health provider's held sign-ins each record no upstream
+// sign-in on every server of the provider.
+func (q *Queries) PostflightIDHealthUpstreamClientChoices(ctx context.Context, arg PostflightIDHealthUpstreamClientChoicesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDHealthUpstreamClientChoices, arg.ProjectID, arg.HealthIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDInferenceGrants = `-- name: PostflightIDInferenceGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text AND scope = 'inference:execute'
@@ -807,13 +833,22 @@ FROM upstream_client_selections u
 WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'user_session'
   AND NOT (
-    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    EXISTS (SELECT 1 FROM user_sessions hs
+            JOIN mcp_servers hm ON hm.id = u.mcp_server_id AND hm.project_id = u.project_id
+            WHERE hs.id = u.credential_id AND hs.deleted IS FALSE
+              AND hs.user_session_issuer_id = $2::uuid
+              AND hm.user_session_issuer_id = $2::uuid)
+    AND u.no_auth AND u.remote_session_client_id IS NULL
+  )
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE
+            AND s.user_session_issuer_id IS DISTINCT FROM $2::uuid)
     AND (
-      (u.mcp_server_id = $2::uuid AND u.remote_session_client_id = $3::uuid)
-      OR (u.mcp_server_id = $4::uuid AND u.auth_client_id = $5::uuid AND NOT u.no_auth)
-      OR (u.credential_id = ANY($6::uuid[])
-          AND u.mcp_server_id = ANY($7::uuid[]) AND u.no_auth)
-      OR (u.credential_id = ANY($6::uuid[]) AND NOT u.no_auth
+      (u.mcp_server_id = $3::uuid AND u.remote_session_client_id = $4::uuid)
+      OR (u.mcp_server_id = $5::uuid AND u.auth_client_id = $6::uuid AND NOT u.no_auth)
+      OR (u.credential_id = ANY($7::uuid[])
+          AND u.mcp_server_id = ANY($8::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY($7::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_auth_clients offer
                       JOIN mcp_auth_clients client
                         ON client.id = offer.auth_client_id
@@ -834,6 +869,7 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
 
 type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	ProjectID          uuid.UUID
+	HealthIssuerID     uuid.UUID
 	LinearServerID     uuid.UUID
 	LinearClientID     uuid.UUID
 	SlackServerID      uuid.UUID
@@ -845,10 +881,12 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 // Count live choices outside the intended set: the Example OAuth server
 // through its main client, the Example Shared Credential server with no
 // upstream authentication, and the organization gateway's choices of each
-// server's associated client, each on a seeded session.
+// server's associated client, each on a seeded session. Connection health
+// sign-ins may only choose no upstream sign-in on the provider's own servers.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,
+		arg.HealthIssuerID,
 		arg.LinearServerID,
 		arg.LinearClientID,
 		arg.SlackServerID,
@@ -1453,9 +1491,14 @@ WITH live AS (
   FROM upstream_client_selections choice
   WHERE choice.project_id = $9::uuid AND choice.deleted IS FALSE
     AND choice.credential_kind = 'user_session'
+    AND NOT EXISTS (
+      SELECT 1 FROM user_sessions s
+      WHERE s.id = choice.credential_id AND s.project_id = choice.project_id
+        AND s.user_session_issuer_id = $10::uuid
+    )
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 26
+WHERE (SELECT count(*) FROM live) = 41
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1492,10 +1535,11 @@ type PostflightIDUpstreamClientChoicesParams struct {
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
 	ProjectID          uuid.UUID
+	HealthIssuerID     uuid.UUID
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// twenty-six misassigned choices cannot satisfy postflight.
+// forty-one misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,
@@ -1507,6 +1551,7 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
 		arg.ProjectID,
+		arg.HealthIssuerID,
 	)
 	var count int64
 	err := row.Scan(&count)

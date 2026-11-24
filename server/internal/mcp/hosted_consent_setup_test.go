@@ -28,6 +28,7 @@ func TestHostedConsentSetupPresentation(t *testing.T) {
 		incomplete    bool
 	}{
 		{name: "required without placement", stored: pgtype.Bool{Bool: true, Valid: true}, incomplete: true},
+		{name: "required with one placement", stored: pgtype.Bool{Bool: true, Valid: true}, placements: 1},
 		{name: "undecided without placement", incomplete: true},
 		{name: "undecided with one placement", placements: 1},
 		{name: "undecided with a deleted registration", placements: 1, invalidClient: true, incomplete: true},

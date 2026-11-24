@@ -136,6 +136,9 @@ GRAM_RISK_LLM_API_KEY = ""
 ###############################################
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
+## Partition the processes run in: us or eu. Required, with no default in the
+## server, pystreams or tunnel gateway, so local development sets it here.
+GRAM_PARTITION = "us"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
 ## Public listener hosts accept IPv4 or bracketed IPv6 literals (e.g. [::1]).
 ## Empty uses wildcard public listeners; health/control listeners use loopback.

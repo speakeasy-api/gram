@@ -825,6 +825,11 @@ func (a *App) ListActiveAssistantWakes(ctx context.Context, projectID uuid.UUID,
 
 func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []byte, headers http.Header) (*WebhookIngressResult, error) {
 	instance, err := a.repo.GetTriggerInstanceByIDPublic(ctx, instanceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Acknowledge deliveries to missing or deleted triggers without processing them.
+		a.logger.DebugContext(ctx, "discarding webhook delivery for missing or deleted trigger", attr.SlogTriggerInstanceID(instanceID.String()))
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get trigger instance: %w", err)
 	}

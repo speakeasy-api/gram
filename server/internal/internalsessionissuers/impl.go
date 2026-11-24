@@ -99,14 +99,14 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // authorize checks RBAC on the active organization; a mutation additionally
 // refuses support and impersonated sessions and non-principal API keys. It
 // reads no flags or domains, so containment works whatever their providers do.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation bool) (string, *slog.Logger, error) {
+func (s *Service) authorize(ctx context.Context, permission func(authz.OrgRef) authz.Check, mutation bool) (string, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return "", s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	organizationID := authCtx.ActiveOrganizationID
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(organizationID)))); err != nil {
 		return "", logger, err
 	}
 	if mutation {
@@ -121,8 +121,8 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation boo
 }
 
 // access authorizes and reads the issuer status for paths that depend on it.
-func (s *Service) access(ctx context.Context, scope authz.Scope, mutation bool) (string, *slog.Logger, Status, error) {
-	organizationID, logger, err := s.authorize(ctx, scope, mutation)
+func (s *Service) access(ctx context.Context, permission func(authz.OrgRef) authz.Check, mutation bool) (string, *slog.Logger, Status, error) {
+	organizationID, logger, err := s.authorize(ctx, permission, mutation)
 	if err != nil {
 		return "", logger, Status{}, err
 	}
@@ -134,7 +134,7 @@ func (s *Service) access(ctx context.Context, scope authz.Scope, mutation bool) 
 }
 
 func (s *Service) Get(ctx context.Context, _ *gensvc.GetPayload) (*gensvc.InternalSessionIssuer, error) {
-	organizationID, logger, err := s.authorize(ctx, authz.ScopeOrgRead, false)
+	organizationID, logger, err := s.authorize(ctx, authz.OrgRef.Read, false)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (s *Service) SetEnabled(ctx context.Context, payload *gensvc.SetEnabledPayl
 	if !payload.Enabled {
 		return s.disable(ctx)
 	}
-	organizationID, logger, status, err := s.access(ctx, authz.ScopeOrgAdmin, true)
+	organizationID, logger, status, err := s.access(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (s *Service) SetEnabled(ctx context.Context, payload *gensvc.SetEnabledPayl
 
 // disable turns signing off with RBAC and the database alone.
 func (s *Service) disable(ctx context.Context) (*gensvc.InternalSessionIssuer, error) {
-	organizationID, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	organizationID, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (s *Service) Rotate(ctx context.Context, payload *gensvc.RotatePayload) (*g
 	if payload.Compromised {
 		return s.rotateCompromised(ctx, payload.ActiveKid)
 	}
-	organizationID, logger, status, err := s.access(ctx, authz.ScopeOrgAdmin, true)
+	organizationID, logger, status, err := s.access(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (s *Service) Rotate(ctx context.Context, payload *gensvc.RotatePayload) (*g
 // cleanup and the replacement key follow as separate steps; a failure in
 // either leaves the issuer contained, and the response reports what is left.
 func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*gensvc.InternalSessionIssuer, error) {
-	organizationID, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	organizationID, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}

@@ -33,8 +33,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -151,7 +153,7 @@ func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, f
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -242,6 +244,8 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"https://app.getgram.ai",
 		features,
 		publisher,
+		staff.Organization{},
+		marketplacetokenstest.Tokens(t, conn),
 	)
 
 	return ctx, &testInstance{
@@ -273,6 +277,8 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		"local",
 		"https://app.getgram.ai",
 		features,
+		staff.Organization{},
+		marketplacetokenstest.Tokens(t, ti.conn),
 	)
 }
 
@@ -292,7 +298,6 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 		InstallationID:           current.InstallationID,
 		RepoOwner:                current.RepoOwner,
 		RepoName:                 current.RepoName,
-		MarketplaceToken:         current.MarketplaceToken,
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    conv.ToPGText(version),
 		PublishedHooksConfig:     current.PublishedHooksConfig,

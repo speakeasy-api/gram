@@ -12,6 +12,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -30,9 +31,10 @@ func TestService_ListSetupTasksCompletesClaudeDesktopOnceACoworkTranscriptArrive
 	// receives Cowork transcripts has already published it.
 	_, err := pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *ac.ProjectID, InstallationID: 9001, RepoOwner: "example", RepoName: "setup-board",
-		MarketplaceToken: conv.ToPGText("synthetic-marketplace-token"), PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		PublishedMcpFingerprints: nil, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *ac.ProjectID, "synthetic-marketplace-token")
 
 	chats := chatrepo.New(ti.conn)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -449,12 +450,12 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		OrganizationID: target.organizationID, ProjectID: target.projectID, ServerID: target.serverID,
 		ClientID: res.clientID, ClientType: clientType, RegistrationID: registration,
 		Subject: urn.NewAgentSubject(target.agentID), UserSessionIssuerID: issuer,
-		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "",
+		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
 	if res.clientType != "" {
 		permit.ClientType = res.clientType
 	}
-	connection, err := s.authClientConnection(ctx, permit)
+	connection, err := s.authClientConnection(ctx, permit, true)
 	if err != nil {
 		return none, noCredential, err
 	}
@@ -469,6 +470,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, agentServerCredentialError(target.slug)
 	}
 	permit.ConnectionOwner = connection.owner
+	permit.AttachedConsent = connection.consent
 	if res.clientID != uuid.Nil {
 		permitter, err := s.authClientPermitFor(true)
 		if err != nil {

@@ -26,6 +26,11 @@ func gatewayDiscoveryOptionsOffered(endpoint *ResolvedMcpEndpoint) bool {
 // approval attaches the captured catalog after publication.
 func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string) (*toolfilter.SessionPolicy, error) {
 	offered := !state.FirstParty && selectedAgentID == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	if offered && state.ClientID == dashboardInspectClientID {
+		// Inspect reads status and tools through the same reviewed session.
+		// Progressive exposes both without minting a second, unreviewed bearer.
+		modeValue = string(metamcp.DiscoveryModeProgressive)
+	}
 	var mode metamcp.DiscoveryMode
 	if modeValue == "" {
 		if !offered {

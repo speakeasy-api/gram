@@ -1,7 +1,10 @@
 import { DISPOSITION_PRECEDENCE } from "@/pages/access/mcpAccessModel";
 import { supportsAudienceReading } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
-import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
+import type {
+  ToolAnnotation,
+  ToolSelectionTool,
+} from "@/components/tool-selection/ToolSelectionPanel";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
@@ -146,9 +149,11 @@ export function isUnnarrowed(entry: {
  * so a block on idempotent tools does not reach it. Undefined when the tool
  * carries none.
  */
-function toolDisposition(tool: ToolSelectionTool): string | undefined {
+export function toolDisposition(
+  tool: ToolSelectionTool,
+): ToolAnnotation | undefined {
   return DISPOSITION_PRECEDENCE.find((disposition) =>
-    (tool.annotations as string[]).includes(disposition),
+    tool.annotations.includes(disposition),
   );
 }
 

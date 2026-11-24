@@ -83,9 +83,7 @@ export function AuthenticationSection({
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>
-          {isRemoteMcp ? "Identity" : "Authentication"}
-        </SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
           {authenticationSectionDescription(
             isUnproxied,
@@ -111,7 +109,7 @@ export function AuthenticationSection({
 function UnproxiedAuthenticationNotice(): JSX.Element {
   return (
     <Field>
-      <FieldLabel>Authentication</FieldLabel>
+      <FieldLabel>Sign-in</FieldLabel>
       <div>
         <Badge variant="success">Not applicable</Badge>
       </div>
@@ -166,7 +164,7 @@ function StandardAuthenticationSectionBody({
   });
 
   const gatewayId = target.attachImpactTarget.metaMcpServerId;
-  const serverId = target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+  const serverId = target.mcpServerId;
   const associations = useServerClientAssociations(
     { mcpServerId: serverId ?? "" },
     undefined,
@@ -386,18 +384,17 @@ function IdentityProviderSetupField({
 
 function AuthenticationLoadingField() {
   return (
-    <AuthRow label="Authentication">
-      <Skeleton label="Loading authentication" className="h-5 w-48" />
+    <AuthRow label="Sign-in">
+      <Skeleton label="Loading sign-in settings" className="h-5 w-48" />
     </AuthRow>
   );
 }
 
 function AuthenticationLoadErrorField() {
   return (
-    <AuthRow label="Authentication">
+    <AuthRow label="Sign-in">
       <FieldError>
-        Failed to load the authentication configuration. Refresh the page to try
-        again.
+        Failed to load the sign-in settings. Refresh the page to try again.
       </FieldError>
     </AuthRow>
   );
