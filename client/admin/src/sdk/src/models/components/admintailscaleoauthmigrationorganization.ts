@@ -79,6 +79,10 @@ export type AdminTailscaleOAuthMigrationOrganization = {
    */
   unreadable: number;
   /**
+   * Only returned by the backfill step: credentials whose two copies did not match, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.
+   */
+  verificationFailures?: number | undefined;
+  /**
    * Saved credentials with only a platform-key copy, which the backfill still has to seal with the organization key.
    */
   waiting: number;
@@ -114,6 +118,7 @@ export const AdminTailscaleOAuthMigrationOrganization$inboundSchema:
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
       unreadable: z.int(),
+      verification_failures: z.optional(z.int()),
       waiting: z.int(),
     }),
     z.transform((v) => {
@@ -126,6 +131,7 @@ export const AdminTailscaleOAuthMigrationOrganization$inboundSchema:
         "platform_copies": "platformCopies",
         "platform_copies_cleared_at": "platformCopiesClearedAt",
         "state_changed_at": "stateChangedAt",
+        "verification_failures": "verificationFailures",
       });
     }),
   );

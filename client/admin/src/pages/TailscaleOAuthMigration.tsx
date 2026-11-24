@@ -135,6 +135,13 @@ export function TailscaleOAuthMigrationPage(): JSX.Element {
       );
       if (step === "backfill" && updated.lastBackfillError) {
         toast.warning(`${org.name}: ${updated.lastBackfillError}`);
+      } else if (
+        step === "backfill" &&
+        (updated.verificationFailures ?? 0) > 0
+      ) {
+        toast.warning(
+          `${org.name}: ${updated.verificationFailures} saved ${updated.verificationFailures === 1 ? "credential" : "credentials"} failed verification, so finalize stays blocked. Check the server logs.`,
+        );
       } else {
         toast.success(`${org.name}: ${copy.label.toLowerCase()} done`);
       }

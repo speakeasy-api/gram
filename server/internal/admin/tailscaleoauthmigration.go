@@ -98,11 +98,16 @@ func (s *Service) RunTailscaleOAuthMigrationStep(ctx context.Context, payload *g
 	defer cancel()
 
 	stores := []orgencryption.CopyStore{migration.Store}
+	var verificationFailures *int64
 	switch payload.Step {
 	case "enroll":
 		_, err = migration.Transitions.Enroll(stepCtx, organization.ID, ingresscredentials.UseCase, actor)
 	case "backfill":
-		_, err = migration.Runner.Run(stepCtx, organization.ID, ingresscredentials.UseCase, stores)
+		var run orgencryption.RunResult
+		run, err = migration.Runner.Run(stepCtx, organization.ID, ingresscredentials.UseCase, stores)
+		// A verification that finds bad copies records no clean pass but is
+		// not an error, so report what it found.
+		verificationFailures = new(run.Mismatched + run.Unopenable)
 	case "finalize":
 		_, err = migration.Transitions.Finalize(stepCtx, organization.ID, ingresscredentials.UseCase, orgencryption.FinalizeRequest{MinimumDualWrite: tailscaleOAuthMinimumDualWrite, Stores: stores}, actor)
 	case "clear_platform_copies":
@@ -133,6 +138,7 @@ func (s *Service) RunTailscaleOAuthMigrationStep(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read Tailscale OAuth migration status").LogError(ctx, logger)
 	}
+	result.VerificationFailures = verificationFailures
 
 	return result, nil
 }
@@ -169,6 +175,7 @@ func (m *TailscaleOAuthMigration) status(ctx context.Context, organizationID, na
 		LastBackfillError:       transition.LastBackfill.Error,
 		LastVerifiedAt:          rfc3339OrNil(transition.LastVerifiedAt),
 		PlatformCopiesClearedAt: rfc3339OrNil(transition.PlatformCopiesClearedAt),
+		VerificationFailures:    nil,
 	}, nil
 }
 

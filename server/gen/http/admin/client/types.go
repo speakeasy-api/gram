@@ -3529,6 +3529,11 @@ type RunTailscaleOAuthMigrationStepResponseBody struct {
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	// When the platform-key copies were destroyed after finalize.
 	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -30353,6 +30358,11 @@ type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
 	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	// When the platform-key copies were destroyed after finalize.
 	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -54175,6 +54185,7 @@ func NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK
 		LastBackfillError:       body.LastBackfillError,
 		LastVerifiedAt:          body.LastVerifiedAt,
 		PlatformCopiesClearedAt: body.PlatformCopiesClearedAt,
+		VerificationFailures:    body.VerificationFailures,
 	}
 
 	return v

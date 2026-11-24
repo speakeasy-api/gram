@@ -33463,6 +33463,7 @@ func unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTa
 		LastBackfillError:       v.LastBackfillError,
 		LastVerifiedAt:          v.LastVerifiedAt,
 		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
+		VerificationFailures:    v.VerificationFailures,
 	}
 
 	return res

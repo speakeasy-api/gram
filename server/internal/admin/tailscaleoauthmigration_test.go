@@ -86,6 +86,8 @@ func TestTailscaleOAuthMigrationMovesAnOrganizationToItsKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(0), status.Waiting)
 	require.NotNil(t, status.LastVerifiedAt)
+	require.NotNil(t, status.VerificationFailures)
+	require.Equal(t, int64(0), *status.VerificationFailures)
 
 	_, err = run("finalize")
 	var blocked *oops.ShareableError
@@ -116,4 +118,52 @@ func TestTailscaleOAuthMigrationMovesAnOrganizationToItsKey(t *testing.T) {
 	opened, err := credentials.Open(ctx, db, orgID, ingresscredentials.Stored(row))
 	require.NoError(t, err)
 	require.JSONEq(t, `{"client_id":"id","client_secret":"secret"}`, string(opened))
+}
+
+func TestTailscaleOAuthMigrationBackfillReportsVerificationFailures(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test", Name: "Staff Test"})
+	orgID := "org_" + uuid.NewString()
+	seedOrg(t, ctx, db, orgFixture{id: orgID, name: "tailscale-oauth-mismatch", slug: "tailscale-oauth-mismatch-" + uuid.NewString()[:8], accountType: "enterprise"})
+
+	fixture := orgencryptiontest.New(t, db)
+	platform := testenv.NewEncryptionClient(t)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	cipher := orgencryption.NewCipher(testenv.NewLogger(t), platform, fixture.Service, transitions)
+	svc.SetTailscaleOAuthMigration(&TailscaleOAuthMigration{
+		Transitions: transitions,
+		Runner:      orgencryption.NewRunner(testenv.NewLogger(t), db, cipher, testenv.NewMeterProvider(t)),
+		Store:       ingresscredentials.NewCopyStore(db),
+	})
+
+	ingressID := uuid.New()
+	names, err := k8s.NewNetworkIngressResourceNames(ingressID)
+	require.NoError(t, err)
+	resources, err := names.Marshal()
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(db).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
+		ID: ingressID, OrganizationID: orgID, Provider: "tailscale", Hostname: "speakeasy",
+		EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Enabled: true, IdentityRequired: false,
+		AttestorNamespace: names.Namespace, AttestorServiceAccount: names.AttestorServiceAccount, ProviderResources: resources,
+		Runtime: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	platformCopy, err := platform.Encrypt([]byte(`{"client_id":"id","client_secret":"secret"}`))
+	require.NoError(t, err)
+	_, err = networkingressrepo.New(db).SetNetworkIngressCredentialCopiesFixture(ctx, networkingressrepo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: pgtype.Text{String: platformCopy, Valid: true}, OrgCopy: pgtype.Text{String: "not an organization ciphertext", Valid: true},
+		ID: ingressID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.RunTailscaleOAuthMigrationStep(ctx, &gen.RunTailscaleOAuthMigrationStepPayload{OrganizationID: orgID, Step: "enroll"})
+	require.NoError(t, err)
+	status, err := svc.RunTailscaleOAuthMigrationStep(ctx, &gen.RunTailscaleOAuthMigrationStepPayload{OrganizationID: orgID, Step: "backfill"})
+	require.NoError(t, err, "a failed verification is not a failed step")
+	require.NotNil(t, status.VerificationFailures)
+	require.Equal(t, int64(1), *status.VerificationFailures)
+	require.Nil(t, status.LastVerifiedAt, "no clean verification is recorded")
 }
