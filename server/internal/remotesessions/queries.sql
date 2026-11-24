@@ -2533,12 +2533,12 @@ WHERE s.subject_urn = @subject_urn
   AND usi.id = @user_session_issuer_id
   AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (
-    c.project_id = @project_id::uuid
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text))
-    OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND EXISTS (
+    (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text))
+    OR EXISTS (
       SELECT 1 FROM projects AS client_project
       WHERE client_project.id = c.project_id AND client_project.organization_id = @organization_id::text
-    ))
+        AND (client_project.id = @project_id::uuid OR @project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid)
+    )
   )
   AND c.deleted IS FALSE
   AND EXISTS (

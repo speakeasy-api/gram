@@ -16674,12 +16674,12 @@ WHERE s.subject_urn = $2
   AND usi.id = $4
   AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
   AND (
-    c.project_id = $5::uuid
-    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text))
-    OR ($5::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND EXISTS (
+    (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text))
+    OR EXISTS (
       SELECT 1 FROM projects AS client_project
       WHERE client_project.id = c.project_id AND client_project.organization_id = $6::text
-    ))
+        AND (client_project.id = $5::uuid OR $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid)
+    )
   )
   AND c.deleted IS FALSE
   AND EXISTS (
