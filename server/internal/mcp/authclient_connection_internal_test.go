@@ -437,26 +437,28 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 	}
 }
 
-// With the connect-equivalent test permitter, a failed consent read can
-// affect only the authorization shadow.
-func TestAttachedConsentReadFailureSparesConnectEquivalentDecision(t *testing.T) {
+// Failure to read another user's attachment consent must refuse serving,
+// even when the organization is not enrolled in typed consent.
+func TestAttachedConsentReadFailureRefusesMandatoryServing(t *testing.T) {
 	t.Parallel()
 
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_consent_unenforced")
 	require.NoError(t, err)
 	personal := personalAuthGrant()
-	for _, shadow := range []bool{false, true} {
+	for _, tc := range []struct{ mandatory, shadow bool }{{true, false}, {true, true}, {false, false}, {false, true}} {
 		f := newAuthClientFixture(t, pool)
 		client := f.oauthClient(authClientTypeRemoteSession)
 		selector := f.choose(validUUID(client))
 		selector.userSessionIssuerID = uuid.New()
 		flags := new(feature.InMemory)
-		flags.SetFlag(feature.FlagMandatoryAuthzShadow, f.orgID, shadow)
+		flags.SetFlag(feature.FlagMandatoryAuthzShadow, f.orgID, tc.shadow)
 		f.service.features = flags
 		f.service.logger = testenv.NewLogger(t)
 		f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
 		f.service.mandatoryShadowLog = newOnceLog()
-		f.service.authClientPermitter = connectPermitter{}
+		if !tc.mandatory {
+			f.service.authClientPermitter = connectPermitter{}
+		}
 		reads := 0
 		f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
 			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
@@ -474,9 +476,14 @@ func TestAttachedConsentReadFailureSparesConnectEquivalentDecision(t *testing.T)
 		agentID := uuid.New()
 
 		res, err := f.service.resolveAuthClientForServing(admittedAgentContext(t, f.orgID, agentID), selector, f.serverID, f.projectID, urn.NewAgentSubject(agentID))
-		require.NoError(t, err, "shadow=%v", shadow)
-		require.Equal(t, authClientResolved, res.outcome, "shadow=%v", shadow)
-		if shadow {
+		if tc.mandatory {
+			require.ErrorContains(t, err, "database unavailable")
+			require.Equal(t, 1, reads, "serving must read the connection owner's consent")
+			continue
+		}
+		require.NoError(t, err, "shadow=%v", tc.shadow)
+		require.Equal(t, authClientResolved, res.outcome, "shadow=%v", tc.shadow)
+		if tc.shadow {
 			require.Equal(t, 1, reads, "the shadow reads consent")
 			continue
 		}
