@@ -99,7 +99,7 @@ it("links incomplete typed setup to the owning server's Sign-in settings", () =>
     <StepAuthentication
       servers={[{ ...server, connectUrl: "https://example.test/connect" }]}
       allServers={false}
-      onRemove={vi.fn()}
+      onRemove={vi.fn<(id: string) => void>()}
       connections={{
         byServer: new Map([[server.id, { status: "setup-required" }]]),
         refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -107,7 +107,11 @@ it("links incomplete typed setup to the owning server's Sign-in settings", () =>
     />,
     { wrapper: MemoryRouter },
   );
-  fireEvent.click(screen.getByRole("button", { name: /Example server/ }));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: /Example server.*Upstream setup required/,
+    }),
+  );
   expect(
     screen
       .getByRole("link", { name: "Open Sign-in settings" })
