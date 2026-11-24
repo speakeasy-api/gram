@@ -111,6 +111,20 @@ func TestOAuthErrHandleDoesNotRetryFailedBodyWrite(t *testing.T) {
 	require.Equal(t, 1, response.writes)
 }
 
+func TestOAuthErrorURIIsAnsweredButNotLogged(t *testing.T) {
+	t.Parallel()
+	logger, logs := captureLogger()
+	response := httptest.NewRecorder()
+	oops.OAuthErrHandle(logger, func(http.ResponseWriter, *http.Request) error {
+		return oops.NewOAuthError(http.StatusBadRequest, "setup_required", "open https://example.test/connect to connect", errors.New("not connected")).WithURI("https://example.test/connect")
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/token", nil))
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.JSONEq(t, `{"error":"setup_required","error_description":"open https://example.test/connect to connect","error_uri":"https://example.test/connect"}`, response.Body.String())
+	require.Contains(t, logs.String(), "setup_required: not connected")
+	require.NotContains(t, logs.String(), "example.test")
+}
+
 func TestOAuthErrorPreservesCause(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("revoked sign-in")

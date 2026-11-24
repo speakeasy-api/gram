@@ -983,8 +983,10 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 	if problem, ok := errors.AsType[headlessChoiceError](err); ok {
 		detail := mcpconnectionattempts.Detail(string(problem))
 		switch problem {
-		case errChoiceNotSetUp, errChoiceNotReady, errChoiceNoneReady:
+		case errChoiceNotSetUp, errChoiceChosenNotSetUp:
 			return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail
+		case errChoiceNotReady, errChoiceNoneReady:
+			return mcpconnectionattempts.CodeInvalidRemoteSession, detail
 		case errChoiceDenied, errChoiceNoneAllowed:
 			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
 		case errChoiceNotNamed:

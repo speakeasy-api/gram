@@ -724,6 +724,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true}, requested, enforced)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+			err = s.withConnectPage(ctx, logger, endpoint, canonicalResource, err)
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
 			code, detail := workloadGrantHappened(err)
 			t.Refuse(ctx, code, detail)

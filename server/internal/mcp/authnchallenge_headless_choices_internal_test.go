@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
@@ -178,4 +179,32 @@ func requireOAuthCode(t *testing.T, err error, code, msg string) {
 	oauthErr, ok := errors.AsType[*oops.OAuthError](err)
 	require.True(t, ok, "%s: expected an OAuth error, got %v", msg, err)
 	require.Equal(t, code, oauthErr.Response.Code, msg)
+}
+
+// Only a credential the person can connect is theirs to fix.
+func TestDecideHeadlessChoiceNamesWhoClearsAnUnreadyServer(t *testing.T) {
+	t.Parallel()
+
+	connect := consentAuthClientOption{ID: uuid.New(), Name: "Personal", Type: authz.AuthClientTypeRemoteSession, State: consentClientConnect, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	setup := consentAuthClientOption{ID: uuid.New(), Name: "Shared", Type: authz.AuthClientTypeServiceAccount, State: consentClientSetup, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	none := headlessChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	for name, tc := range map[string]struct {
+		options []consentAuthClientOption
+		choice  headlessChoice
+		named   bool
+		want    headlessChoiceError
+	}{
+		"one to connect":           {options: []consentAuthClientOption{setup, connect}, choice: none, named: false, want: errChoiceNoneReady},
+		"none to connect":          {options: []consentAuthClientOption{setup}, choice: none, named: false, want: errChoiceNotSetUp},
+		"named one to connect":     {options: []consentAuthClientOption{setup, connect}, choice: headlessChoice{clientID: uuid.NullUUID{UUID: connect.ID, Valid: true}}, named: true, want: errChoiceNotReady},
+		"named one not set up yet": {options: []consentAuthClientOption{setup, connect}, choice: headlessChoice{clientID: uuid.NullUUID{UUID: setup.ID, Valid: true}}, named: true, want: errChoiceChosenNotSetUp},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			auth := &consentServerAuth{ServerID: uuid.New(), Status: consentAuthChoose, Options: tc.options}
+			_, err := decideHeadlessChoice(consentAuthServer{id: auth.ServerID, projectID: uuid.New()}, auth, tc.choice, tc.named)
+			require.ErrorIs(t, err, tc.want)
+			require.True(t, awaitsConnection(err, tc.named), "a gateway still defers the server")
+		})
+	}
 }

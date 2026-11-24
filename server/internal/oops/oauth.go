@@ -34,11 +34,21 @@ func NewOAuthError(status int, code, description string, cause error) *OAuthErro
 	}
 }
 
+// WithURI sets "error_uri" (RFC 6749 §5.2); Error then keeps the person-facing description and URI out of logs.
+func (e *OAuthError) WithURI(uri string) *OAuthError {
+	e.Response.URI = uri
+	return e
+}
+
 func (e *OAuthError) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", e.Response.Error(), e.Cause)
+	logged := e.Response.Error()
+	if e.Response.URI != "" {
+		logged = e.Response.Code
 	}
-	return e.Response.Error()
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", logged, e.Cause)
+	}
+	return logged
 }
 
 func (e *OAuthError) Unwrap() error { return e.Cause }
