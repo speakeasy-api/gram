@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 
 	"github.com/google/uuid"
@@ -397,7 +398,7 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 	option, err := openrouter.WithTestBaseURL(server.URL)
 	require.NoError(t, err)
 	svc.openRouter = openrouter.New(
-		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	return ctx, svc, conn, upstream

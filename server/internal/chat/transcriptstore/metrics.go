@@ -39,8 +39,9 @@ const (
 var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1, 2.5, 5}
 
 // outcome classifies a Capture or LoadMany call for metrics and spans. Any
-// capture outcome other than success rolls back the caller's message write;
-// any read outcome other than success fails the caller's read.
+// capture outcome other than success rolls back the caller's message write.
+// On reads, success and plaintext_fallback both serve the message; every
+// other read outcome fails the caller's read.
 type outcome string
 
 const (

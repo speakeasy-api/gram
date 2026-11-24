@@ -67,7 +67,7 @@ type decisionObservation struct {
 // from starting.
 func scanCascade(ctx context.Context, key string, corpus []labeledCase, onCase func(int, caseOutcome)) error {
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
-	jev := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return key, nil })
+	jev := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return key, nil }, openrouter.OpenRouterBaseURL)
 	return scanCascadeWithClients(ctx, corpus, onCase, jev, newOpenRouterClient(key))
 }
 

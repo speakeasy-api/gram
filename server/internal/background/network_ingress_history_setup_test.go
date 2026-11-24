@@ -87,6 +87,7 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 		EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Enabled: true, IdentityRequired: false, CredentialsEncrypted: conv.ToPGText(ciphertext),
 		AttestorNamespace: names.Namespace, AttestorServiceAccount: names.AttestorServiceAccount, ProviderResources: resources,
+		Runtime: conv.ToPGText(networkingress.RuntimeGateway),
 	})
 	require.NoError(t, err)
 	logs := &ingressHistoryLogs{}
@@ -94,7 +95,7 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 	provider := &historyIngressProvider{credentialSeen: make(chan []byte, 10), failure: failing}
 	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, logger, k8s.NewNetworkIngressMetrics(logger, testenv.NewMeterProvider(t)))
 	require.NoError(t, err)
-	executor := networkingress.NewExecutor(db, enc, registry, networkingress.ExecutorOptions{Queue: string(env.Queue()), Image: "test-image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return nil }})
+	executor := networkingress.NewExecutor(db, enc, registry, networkingress.ExecutorOptions{Queue: string(env.Queue()), CanApply: func(context.Context) error { return nil }})
 	a := &networkIngressActivities{executor: executor, db: db, queue: string(env.Queue())}
 	var clientOptions client.Options
 	clientOptions.Namespace = string(env.Namespace())
