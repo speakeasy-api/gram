@@ -47,7 +47,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -140,7 +140,7 @@ func (s *Service) AttachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -427,7 +427,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -510,6 +510,14 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		McpServerID: serverID, RemoteSessionClientID: clientID, ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
+	}
+
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
+		// The presence of the old placement required credentials. Removing it
+		// must not also opt the server (including a gateway member) out.
+		if err := q.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "preserve hosted upstream authentication requirement").LogError(ctx, logger)
+		}
 	}
 
 	// The association is what the server's link to its typed auth client was

@@ -59,7 +59,7 @@ func (s *Service) SetSetupGuideCompleted(ctx context.Context, payload *gen.SetSe
 	}
 	// Authorization keys on the locked row, which is authoritative if the
 	// backing changed after the unlocked check.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(grantResourceID(existing.ID, existing.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 

@@ -27,8 +27,8 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	ctxFor := func(authorizer RepresentedUserPolicy) context.Context {
 		return admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, false, credential, credential, credential)
 	}
-	one := MCPCheck(ScopeMCPConnect, "server-one", project)
-	two := MCPCheck(ScopeMCPConnect, "server-two", project)
+	one := MCPServer(MCPServerIDFrom("server-one"), ProjectIDFrom(project)).Connect()
+	two := MCPServer(MCPServerIDFrom("server-two"), ProjectIDFrom(project)).Connect()
 	count := func() int { return strings.Count(logs.String(), authorizerWouldRefuseLog) }
 
 	same := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: credential})

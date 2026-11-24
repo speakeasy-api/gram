@@ -116,7 +116,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // requireOrgAccess enforces the RBAC scope and the customer-managed keys
 // entitlement, the same one that gates signing keys, and that organization
 // encryption is configured.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -124,7 +124,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -170,7 +170,7 @@ func domainError(ctx context.Context, logger *slog.Logger, err error) error {
 }
 
 func (s *Service) GetConfig(ctx context.Context, _ *gen.GetConfigPayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *Service) GetConfig(ctx context.Context, _ *gen.GetConfigPayload) (*gen.
 }
 
 func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.ListOrgEncryptionKeysResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.Li
 }
 
 func (s *Service) CreateGcpKey(ctx context.Context, payload *gen.CreateGcpKeyPayload) (*gen.OrgEncryptionKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (s *Service) CreateGcpKey(ctx context.Context, payload *gen.CreateGcpKeyPay
 }
 
 func (s *Service) VerifyKey(ctx context.Context, payload *gen.VerifyKeyPayload) (*gen.VerifyOrgEncryptionKeyResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func probeOutcome(reason gcpkms.VerifyReason) string {
 }
 
 func (s *Service) DeleteKey(ctx context.Context, payload *gen.DeleteKeyPayload) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -405,7 +405,7 @@ func (s *Service) DeleteKey(ctx context.Context, payload *gen.DeleteKeyPayload) 
 }
 
 func (s *Service) SwitchKey(ctx context.Context, payload *gen.SwitchKeyPayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func (s *Service) SwitchKey(ctx context.Context, payload *gen.SwitchKeyPayload) 
 }
 
 func (s *Service) CompleteSwitch(ctx context.Context, _ *gen.CompleteSwitchPayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func (s *Service) CompleteSwitch(ctx context.Context, _ *gen.CompleteSwitchPaylo
 }
 
 func (s *Service) RollbackSwitch(ctx context.Context, _ *gen.RollbackSwitchPayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (s *Service) RollbackSwitch(ctx context.Context, _ *gen.RollbackSwitchPaylo
 }
 
 func (s *Service) RotateDataKey(ctx context.Context, payload *gen.RotateDataKeyPayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func (s *Service) RotateDataKey(ctx context.Context, payload *gen.RotateDataKeyP
 }
 
 func (s *Service) Resume(ctx context.Context, _ *gen.ResumePayload) (*gen.OrgEncryptionConfig, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}

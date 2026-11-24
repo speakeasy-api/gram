@@ -84,7 +84,7 @@ describe("HeadersSection", () => {
       "Filled by the identity provider",
     );
     expect((value as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByLabelText("Managed by User Identity")).toBeTruthy();
+    expect(screen.getByLabelText("Managed by user identity")).toBeTruthy();
     expect(
       screen.getByText("No other upstream headers configured yet."),
     ).toBeTruthy();
@@ -111,7 +111,7 @@ describe("HeadersSection", () => {
       }),
     );
 
-    expect(screen.getByLabelText("Disabled by User Identity")).toBeTruthy();
+    expect(screen.getByLabelText("Disabled by user identity")).toBeTruthy();
     expect(
       screen.queryByPlaceholderText("Filled by the identity provider"),
     ).toBeNull();

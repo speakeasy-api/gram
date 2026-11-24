@@ -37,6 +37,7 @@ func (s *ServiceCore) executionTrigger(ctx context.Context, assistant assistantR
 // request by the live policies of the agent, its owner, and that user.
 // Identity rejections wrap ErrTurnIdentity.
 func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, identity turnIdentity) (string, error) {
+	s.repairManagedCeilings(ctx, assistant)
 	trigger, err := s.executionTrigger(ctx, assistant, event)
 	if err != nil {
 		return "", fmt.Errorf("resolve execution trigger: %w", err)

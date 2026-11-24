@@ -1,4 +1,4 @@
-h1:pKriWNrgWRYKHpgL/xSsYGwGJI5KcMfuY9ZnooftQrg=
+h1:FJCKrv7LfaKUlhzYIOKtSLaLrcQhwzPinvkoKvvl0Wk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -554,4 +554,7 @@ h1:pKriWNrgWRYKHpgL/xSsYGwGJI5KcMfuY9ZnooftQrg=
 20261119213323_hooks-rollout-pins.sql h1:o6dEowCV3VfOafRMpcFfKn+05EQmTIIq5ABzVuzG33o=
 20261120091826_access-requests.sql h1:kJoq0BRgG4F373YiEOLzJq21T8fhzYdNuS4loHAYJrI=
 20261120104601_api-keys-org-created-at-idx.sql h1:Uze1ghEhfbfQa7R98kZ+qm3C3vq5klLrAiK4xLO12lY=
-20261120230955_drop_principal_binding_issuer_client_fk.sql h1:cJFURYWq6gG3SGoFVlnBmSVT6GddFLf+IEW8EDlCj/s=
+20261120210548_chat_message_transcripts.sql h1:7A7K0e8VPfsebzS/VXpxaXrx4JWL33KFkBggLfkkMeY=
+20261120232024_plugin-github-connections-marketplace-token-hash.sql h1:LW8pTLoqphJSKCvDxctvF8Gtl3RuJXsyfp0wyAZ9vI0=
+20261123124931_ai-provider-keys-org-encrypted.sql h1:IFttysCYATsSX3mdNEIXj+LFmQ1FLl/0W4Fo3FPTTv0=
+20261124143931_drop_principal_binding_issuer_client_fk.sql h1:XQ99PJixqLcXcJMpenPNIeZycTkGtBHvcLToN4oDWb8=

@@ -133,7 +133,6 @@ func (m connectionCatalogMember) approvedHash(typed bool) string {
 type connectionCatalogAuth struct {
 	ClientID       uuid.UUID     `json:"client_id"`
 	RegistrationID uuid.NullUUID `json:"registration_id"`
-	ExplicitPick   bool          `json:"explicit_pick,omitempty"`
 }
 
 // connectionCatalog freezes discovery for one approved OAuth connection.
@@ -247,7 +246,9 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessions
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
 		if member.Auth != nil {
 			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
-			picks.PickedExplicit = append(picks.PickedExplicit, member.Auth.ExplicitPick)
+			// The approved catalog binds the exact client used for the tool
+			// preview, whether preselected or named in the picker.
+			picks.PickedExplicit = append(picks.PickedExplicit, true)
 			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
 			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
 		}
@@ -456,7 +457,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
 			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
 	}
 	if len(checks) > 0 {
@@ -721,7 +722,7 @@ func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger,
 // refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
 func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
 	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
-	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	s.recordMemberFailure(ctx, gate, member, uuid.Nil, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
 	return message, remedy
 }
 

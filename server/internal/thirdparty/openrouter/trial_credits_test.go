@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -123,7 +124,7 @@ func newTrialCapFixture(t *testing.T) *trialCapFixture {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t))
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
 	provisioner.baseURL = upstream.URL
 
 	return &trialCapFixture{
@@ -294,7 +295,7 @@ func TestGetCreditsUsed_ZeroKeyLimitReportsUncapped(t *testing.T) {
 	ctx := t.Context()
 	fixture := newTrialCapFixture(t)
 
-	ciphertext, err := fixture.provisioner.enc.Encrypt([]byte("sk-or-legacy-zero"))
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("sk-or-legacy-zero"))
 	require.NoError(t, err)
 	_, err = repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: fixture.orgID,
@@ -319,7 +320,7 @@ func TestGetCreditsUsed_DisabledKeyReadsThroughProvisioningKey(t *testing.T) {
 	ctx := t.Context()
 	fixture := newTrialCapFixture(t)
 
-	ciphertext, err := fixture.provisioner.enc.Encrypt([]byte("sk-or-disabled"))
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("sk-or-disabled"))
 	require.NoError(t, err)
 	_, err = repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: fixture.orgID,

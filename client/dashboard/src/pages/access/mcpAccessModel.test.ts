@@ -7,6 +7,7 @@ import {
   fuzzyMatch,
   toggleDisposition,
   dispositionCopy,
+  toolDispositionAnnotations,
 } from "./mcpAccessModel";
 import type { ServerTool } from "./serverMerge";
 
@@ -77,4 +78,31 @@ describe("unknown tool annotations", () => {
       );
     },
   );
+});
+
+describe("toolDispositionAnnotations", () => {
+  it("counts a tool under its one disposition only", () => {
+    // The server classifies a read-only and idempotent tool as read-only, so
+    // an idempotent rule does not cover it.
+    expect(
+      toolDispositionAnnotations({
+        annotations: { readOnlyHint: true, idempotentHint: true },
+      }),
+    ).toEqual(["read_only"]);
+    expect(
+      toolDispositionAnnotations({
+        annotations: { readOnlyHint: true, destructiveHint: true },
+      }),
+    ).toEqual(["destructive"]);
+    expect(
+      toolDispositionAnnotations({
+        annotations: { idempotentHint: true, openWorldHint: true },
+      }),
+    ).toEqual(["idempotent"]);
+  });
+
+  it("gives an unannotated tool none of the four annotations", () => {
+    expect(toolDispositionAnnotations({ annotations: {} })).toEqual([]);
+    expect(toolDispositionAnnotations({})).toEqual([]);
+  });
 });

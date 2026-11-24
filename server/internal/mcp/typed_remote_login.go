@@ -90,7 +90,7 @@ func (s *Service) authorizeRemoteLoginServer(ctx context.Context, state remotese
 	if err != nil {
 		return ctx, fmt.Errorf("load remote login permissions: %w", err)
 	}
-	decision, err := authorization.DecideServerAdmission(state.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPCheck(authz.ScopeMCPConnect, server.ID.String(), server.ProjectID.String()))
+	decision, err := authorization.DecideServerAdmission(state.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Connect())
 	if err != nil {
 		return ctx, fmt.Errorf("authorize remote login server: %w", err)
 	}

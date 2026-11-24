@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"go/format"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -31,43 +32,117 @@ func tables(r registry.Registry) []table {
 		declaredKinds[string(t.Kind)] = true
 	}
 	return []table{
-		{"scopeExpansions", `scopeExpansions maps a checked scope to the other scopes that also satisfy
+		{
+			name:   "scopeExpansions",
+			goType: "map[Scope][]Scope",
+			value:  r.DeriveScopeExpansions(),
+			doc: `scopeExpansions maps a checked scope to the other scopes that also satisfy
 it. For allow scopes, these are higher-privilege scopes. For blocklist
 scopes, these are broader blocklist scopes. Expansion is non-transitive: the
 table lists every satisfying scope directly, since Check.expand only walks
 scopeExpansions[c.Scope] one step. Built from Implies and Exclusions; the
 comments on each resource type in the registry say why its permissions
-relate the way they do.`, "map[Scope][]Scope", r.DeriveScopeExpansions()},
-		{"scopeExclusions", `scopeExclusions maps a checked base scope to the direct blocklist scope that
+relate the way they do.`,
+		},
+		{
+			name:   "scopeExclusions",
+			goType: "map[Scope]Scope",
+			value:  r.DeriveScopeExclusions(),
+			doc: `scopeExclusions maps a checked base scope to the direct blocklist scope that
 stores exception grants for it, or "" when it has none. Broader blocklist
-scopes are handled by scopeExpansions on the blocklist scope itself.`, "map[Scope]Scope", r.DeriveScopeExclusions()},
-		{"scopeGrantSource", `scopeGrantSource maps every scope to where its grants are set. A block
-is set where its permission is.`, "map[Scope]GrantSource", r.DeriveGrantSource()},
-		{"scopeResourceKinds", `scopeResourceKinds maps every scope the registry declares to the resource
-kind its checks and grant selectors name.`, "map[Scope]string", r.DeriveResourceKinds()},
-		{"declaredResourceKinds", `declaredResourceKinds is the set of resource kinds the registry declares.`, "map[string]bool", declaredKinds},
-		{"requiredCheckDimensions", `requiredCheckDimensions lists, per resource kind, the dimensions every check
+scopes are handled by scopeExpansions on the blocklist scope itself.`,
+		},
+		{
+			name:   "scopeGrantSource",
+			goType: "map[Scope]GrantSource",
+			value:  r.DeriveGrantSource(),
+			doc: `scopeGrantSource maps every scope to where its grants are set. A block
+is set where its permission is.`,
+		},
+		{
+			name:   "scopeResourceKinds",
+			goType: "map[Scope]string",
+			value:  r.DeriveResourceKinds(),
+			doc: `scopeResourceKinds maps every scope the registry declares to the resource
+kind its checks and grant selectors name.`,
+		},
+		{
+			name:   "declaredResourceKinds",
+			goType: "map[string]bool",
+			value:  declaredKinds,
+			doc:    `declaredResourceKinds is the set of resource kinds the registry declares.`,
+		},
+		{
+			name:   "requiredCheckDimensions",
+			goType: "map[string][]string",
+			value:  r.DeriveRequiredCheckDimensions(),
+			doc: `requiredCheckDimensions lists, per resource kind, the dimensions every check
 of that kind must carry: the Required dimensions in the registry. Selector
 matching skips grant keys a check omits, so a check without a dimension that
 grants of its kind can be bounded by would pass such a grant whatever value
 the grant names. Grants on a type inside a project can be bounded to one
 ({"resource_id":"*","project_id":P}), so every check on such a type must
-name the project of the resource it targets.`, "map[string][]string", r.DeriveRequiredCheckDimensions()},
-		{"allowedSelectorKeys", `allowedSelectorKeys defines which extra keys (beyond resource_kind and
+name the project of the resource it targets.`,
+		},
+		{
+			name:   "allowedSelectorKeys",
+			goType: "map[string]map[string]bool",
+			value:  r.DeriveAllowedSelectorKeys(),
+			doc: `allowedSelectorKeys defines which extra keys (beyond resource_kind and
 resource_id) are valid for each resource kind: the Dimensions each type
 declares. Kinds not listed here allow no extra keys, except where
-scopeAllowsSelectorKey admits one for a single scope.`, "map[string]map[string]bool", r.DeriveAllowedSelectorKeys()},
-		{"scopeSelectorKeys", `scopeSelectorKeys holds the keys single permissions declare beyond their
-type's.`, "map[Scope]map[string]bool", r.DeriveScopeSelectorKeys()},
-		{"validAuthClientTypes", `validAuthClientTypes is the closed value set of client_type.`, "map[string]bool", r.DeriveDimensionValues("mcp_auth_client", registry.SelectorKeyClientType)},
-		{"validDispositions", `validDispositions is the closed value set of disposition.`, "map[string]bool", r.DeriveDimensionValues("mcp", registry.SelectorKeyDisposition)},
-		{"systemRoleScopes", `systemRoleScopes lists the scopes each built-in role is seeded with.`, "map[string][]Scope", r.SystemRoles},
-		{"agentEligibilityByScope", `agentEligibilityByScope is the agent eligibility of every scope the registry
-knows, retired tombstones included.`, "map[Scope]DerivedAgentEligibility", r.DeriveAgentEligibility()},
-		{"scopeCatalog", `scopeCatalog lists every scope a role can hold, in the order the catalogue
+scopeAllowsSelectorKey admits one for a single scope.`,
+		},
+		{
+			name:   "scopeSelectorKeys",
+			goType: "map[Scope]map[string]bool",
+			value:  r.DeriveScopeSelectorKeys(),
+			doc: `scopeSelectorKeys holds the keys single permissions declare beyond their
+type's.`,
+		},
+		{
+			name:   "scopeOpenKeys",
+			goType: "map[Scope]openKeys",
+			value:  r.DeriveOpenKeys(),
+			doc: `scopeOpenKeys lists, per scope, the grant keys a probe, a connection or a
+risk policy audience question may leave out and still match a grant limited
+on them: the Open keys each permission declares. Every other check, and
+every block or exemption, must carry each key a grant names.`,
+		},
+		{
+			name:   "validAuthClientTypes",
+			goType: "map[string]bool",
+			value:  r.DeriveDimensionValues("mcp_auth_client", registry.SelectorKeyClientType),
+			doc:    `validAuthClientTypes is the closed value set of client_type.`,
+		},
+		{
+			name:   "validDispositions",
+			goType: "map[string]bool",
+			value:  r.DeriveDimensionValues("mcp", registry.SelectorKeyDisposition),
+			doc:    `validDispositions is the closed value set of disposition.`,
+		},
+		{
+			name:   "systemRoleScopes",
+			goType: "map[string][]Scope",
+			value:  r.SystemRoles,
+			doc:    `systemRoleScopes lists the scopes each built-in role is seeded with.`,
+		},
+		{
+			name:   "agentEligibilityByScope",
+			goType: "map[Scope]DerivedAgentEligibility",
+			value:  r.DeriveAgentEligibility(),
+			doc: `agentEligibilityByScope is the agent eligibility of every scope the registry
+knows, retired tombstones included.`,
+		},
+		{
+			name:   "scopeCatalog",
+			goType: "[]ScopeEntry",
+			value:  r.DeriveCatalog(),
+			doc: `scopeCatalog lists every scope a role can hold, in the order the catalogue
 presents them: by category, then as declared, each block after its
 permission. ScopeRoot is deliberately absent: it is the engine's own bypass,
-never a grant a person reads about.`, "[]ScopeEntry", r.DeriveCatalog()},
+never a grant a person reads about.`,
+		},
 	}
 }
 
@@ -97,7 +172,7 @@ first-class permission or only used internally for storage and evaluation:
 declared permissions are user-visible, generated blocks and root are internal.`)
 	b.WriteString("var scopeVisibilityByScope = map[Scope]scopeVisibility{\n")
 	visibility := r.DeriveScopeVisibility()
-	for _, scope := range sortedKeys(visibility) {
+	for _, scope := range slices.Sorted(maps.Keys(visibility)) {
 		ident, ok := visibilityIdentifiers[visibility[scope]]
 		if !ok {
 			return nil, fmt.Errorf("scope %q has unknown visibility %d", scope, visibility[scope])
@@ -117,15 +192,6 @@ func writeDoc(b *strings.Builder, doc string) {
 	for line := range strings.SplitSeq(doc, "\n") {
 		b.WriteString("// " + line + "\n")
 	}
-}
-
-func sortedKeys[K ~string, V any](m map[K]V) []K {
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
 }
 
 // basic reports whether values of t print on one line.
@@ -223,7 +289,14 @@ func writeLiteral(b *strings.Builder, v reflect.Value, indent string, goType str
 				b.WriteString(", ")
 			}
 			b.WriteString(f.Name + ": ")
-			if err := writeLiteral(b, v.Field(i), indent, ""); err != nil {
+			// A field's composite literal cannot elide its type. Only
+			// unnamed collections of basic values are written this way, so
+			// their Go spelling is the same in package authz.
+			fieldType := ""
+			if k := f.Type.Kind(); (k == reflect.Slice || k == reflect.Map) && f.Type.Name() == "" && basic(f.Type.Elem()) {
+				fieldType = f.Type.String()
+			}
+			if err := writeLiteral(b, v.Field(i), indent, fieldType); err != nil {
 				return err
 			}
 		}

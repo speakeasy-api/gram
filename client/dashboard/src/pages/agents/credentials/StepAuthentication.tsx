@@ -20,6 +20,7 @@ import {
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
 import {
+  assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
   serversNeedingConnection,
@@ -52,6 +53,8 @@ export function StepAuthentication({
   allServers,
   onRemove,
   onConnected,
+  onAssign,
+  assigning,
   listAction,
   credentialChoice,
   showHeader = true,
@@ -61,10 +64,18 @@ export function StepAuthentication({
   allServers: boolean;
   onRemove: (id: string) => void;
   /**
-   * Called once the reader's own connection to a server they just signed in
-   * to is ready, for a page that saves each change as it is made.
+   * Called with the server once the reader's own connection to it, just
+   * signed in to, is ready, for a page that assigns it as it is made.
    */
-  onConnected?: () => void;
+  onConnected?: (serverId: string) => void;
+  /**
+   * Gives an existing agent the reader's own working connection to a server
+   * it has none for. Only offered where this is set: nothing assigns the
+   * reader's connection to an agent unless they ask.
+   */
+  onAssign?: (serverId: string) => void;
+  /** The servers whose assignment is being saved. */
+  assigning?: ReadonlySet<string>;
   /** Shown at the top right of the server list. */
   listAction?: ReactNode;
   /**
@@ -100,12 +111,11 @@ export function StepAuthentication({
   useEffect(() => {
     if (reading === null || readStatus === "checking") return;
     setReading(null);
-    if (readStatus === "ready") onConnected?.();
+    if (readStatus === "ready") onConnected?.(reading);
   }, [reading, readStatus, onConnected]);
   const [openRows, setOpenRows] = useState<string[]>([]);
-  // Editing shows the agent's assigned connection, unless it no longer works
-  // and the editor has a usable one: saving assigns that in its place,
-  // exactly as creating does.
+  // Editing shows only the existing agent assignment; an available personal
+  // connection is a candidate until the editor chooses to assign it.
   const displayed = displayedConnections(connections);
   const missing = serversNeedingConnection(servers, displayed);
   return (
@@ -161,6 +171,17 @@ export function StepAuthentication({
               : [];
           const session = sessions[0];
           const mine = session?.subjectUrn === `user:${user.id}`;
+          const owner =
+            session?.subjectDisplayName ||
+            session?.subjectEmail ||
+            "Another member";
+          // The agent has no working connection here, and the reader has one
+          // they could give it.
+          const assignable =
+            !!onAssign &&
+            !shared &&
+            !sharedChosen &&
+            assignableOwnConnection(connections, server.id);
           const label =
             shared || sharedChosen
               ? "Shared credential"
@@ -169,14 +190,16 @@ export function StepAuthentication({
                 : connection?.status === "ready"
                   ? mine
                     ? "Your connection"
-                    : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
+                    : `${owner}'s connection`
                   : connection?.status === "checking" || !connection
                     ? "Checking connection…"
                     : connection.status === "error"
                       ? "Could not check connection"
                       : connection.status === "setup-required"
                         ? "Upstream setup required"
-                        : "Requires connection";
+                        : connection.status === "forbidden"
+                          ? "Connection not visible to you"
+                          : "Requires connection";
           const missingSignIns = sharedChosen
             ? null
             : missingSignInsSentence(server, connection);
@@ -276,10 +299,12 @@ export function StepAuthentication({
                         (connection?.status === "missing" ||
                           connection?.status === "ready" ||
                           connection?.status === "ended" ||
-                          // A read that failed and is being retried keeps a
-                          // personal connection already picked, rather than
-                          // clearing it as no longer offered.
-                          (connection?.status === "error" &&
+                          // A read that failed and is being retried, or one
+                          // the viewer may not make, keeps a personal
+                          // connection already picked, rather than clearing
+                          // it as no longer offered.
+                          ((connection?.status === "error" ||
+                            connection?.status === "forbidden") &&
                             choice === ACCOUNT_CHOICE))
                       }
                       pickSole
@@ -290,7 +315,13 @@ export function StepAuthentication({
                       }
                     />
                   )}
-                {shared || sharedChosen ? (
+                {connection?.status === "forbidden" && !sharedChosen ? (
+                  <Text small muted className="py-1">
+                    You don't have permission to see which connection this agent
+                    uses for {server.name}. Ask someone who manages the agent to
+                    check it.
+                  </Text>
+                ) : shared || sharedChosen ? (
                   <Text small muted>
                     {sharedChosen
                       ? "The agent's keys use the shared credential chosen above. No personal connection is needed."
@@ -300,7 +331,11 @@ export function StepAuthentication({
                   <div className="flex flex-wrap items-center gap-3 py-1">
                     <div className="min-w-0 flex-1">
                       <Text small warning={expired} className="text-sm">
-                        {expired ? "Your connection has expired" : label}
+                        {expired
+                          ? mine
+                            ? "Your connection has expired"
+                            : `${owner}'s connection has expired`
+                          : label}
                       </Text>
                       {session && (
                         <Text small muted className="mt-1 text-xs">
@@ -312,7 +347,25 @@ export function StepAuthentication({
                           {missingSignIns}
                         </Text>
                       )}
+                      {assignable && (
+                        <Text small muted className="mt-1 text-xs">
+                          You have a working connection to {server.name}. The
+                          agent can use it only once you assign it.
+                        </Text>
+                      )}
                     </div>
+                    {assignable && (
+                      <Button
+                        size="xs"
+                        variant="primary"
+                        disabled={assigning?.has(server.id)}
+                        onClick={() => onAssign?.(server.id)}
+                      >
+                        {assigning?.has(server.id)
+                          ? "Assigning…"
+                          : "Use your connection"}
+                      </Button>
+                    )}
                     {connection?.status === "setup-required" && (
                       <Text small muted>
                         Finish configuring this server’s upstream credentials.{" "}
@@ -323,6 +376,7 @@ export function StepAuthentication({
                       connection?.status !== "error" &&
                       connection?.status !== "checking" &&
                       connection &&
+                      !assignable &&
                       server.connectUrl && (
                         <Button
                           size="xs"
@@ -346,7 +400,8 @@ export function StepAuthentication({
                       )}
                     {connection?.status !== "setup-required" &&
                       !server.connectUrl &&
-                      !session && (
+                      !session &&
+                      !assignable && (
                         <Text small muted>
                           Connection setup is unavailable for this server.
                         </Text>

@@ -100,7 +100,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 func shadowMCPOfficialServerDetail(official shadowmcp.OfficialServer, fullURL string) string {
 	how := "chosen by an administrator"
 	if official.Automatic {
-		how = "linked automatically because it proxies to this URL"
+		how = "chosen automatically because it proxies to this URL"
 	}
 	return fmt.Sprintf("MCP server has an official version %q, %s; direct use is blocked (URL: %s)", official.Name, how, fullURL)
 }

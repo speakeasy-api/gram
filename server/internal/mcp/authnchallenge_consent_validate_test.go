@@ -1335,9 +1335,8 @@ func introspectionServer(t *testing.T, body *atomic.Pointer[string]) string {
 	return srv.URL
 }
 
-func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing.T) {
-	t.Parallel()
-	const prefix = "hosted-verify"
+func seedHostedGatewayValidationFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
+	t.Helper()
 	ctx, fx := seedMetaValidationFixture(t, prefix)
 	projectID, orgID := consentTestTenant(t, ctx)
 	hosted := seedHostedMetaMember(t, ctx, fx.ti, fx.endpoint.MetaMcpServerID.UUID, "Hosted verify", 1, mcpservers.VisibilityPublic)
@@ -1356,12 +1355,18 @@ func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, assigned, fx.subject, "assigned-token", "")
 	fx.clientID = assigned
 	fx.server = hosted.slug
+	return ctx, fx
+}
+
+func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-verify")
 	rec := recordValidationAttempts(t, ctx, fx)
 	requireValidated(t, fx)
 	require.Empty(t, fx.member.drain(), "hosted Verify must not send its grant to the proxied member")
 	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRejected)
-	require.Equal(t, assigned.String(), row.RemoteSessionClientID)
+	require.Equal(t, fx.clientID.String(), row.RemoteSessionClientID)
 }
 
 // Only introspection can tell a member's rejection from a token the provider no longer honours.

@@ -19,6 +19,8 @@ export type ServerConnection =
   | { status: "checking" }
   | { status: "error" }
   | { status: "setup-required" }
+  /** The viewer cannot read the agent's assigned connection. */
+  | { status: "forbidden" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
   /**

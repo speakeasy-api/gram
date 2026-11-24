@@ -8,6 +8,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -582,24 +583,28 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		}
 		var clients []remotesessions.Client
 		seen := make(map[uuid.UUID]bool)
+		byProject := make(map[uuid.UUID][]uuid.UUID)
 		for _, member := range members {
 			if member.backend != metaMemberBackendHosted {
 				continue
 			}
 			for registration := range member.associatedClients {
-				if seen[registration] {
-					continue
-				}
-				assigned, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, endpoint.OrganizationID, []uuid.UUID{registration})
-				if err != nil {
-					return nil, fmt.Errorf("read hosted gateway registration: %w", err)
-				}
-				if len(assigned) == 1 {
-					seen[registration] = true
-					clients = append(clients, assigned[0])
+				byProject[member.projectID] = append(byProject[member.projectID], registration)
+			}
+		}
+		for project, ids := range byProject {
+			assigned, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, project, endpoint.OrganizationID, ids)
+			if err != nil {
+				return nil, fmt.Errorf("read hosted gateway registrations: %w", err)
+			}
+			for _, client := range assigned {
+				if !seen[client.ID] {
+					seen[client.ID] = true
+					clients = append(clients, client)
 				}
 			}
 		}
+		slices.SortFunc(clients, func(a, b remotesessions.Client) int { return bytes.Compare(a.ID[:], b.ID[:]) })
 		if usesTypedConsentInventory(ctx) {
 			return clients, nil
 		}
@@ -636,8 +641,8 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	}
 	// The issuer may bind clients for other servers sharing it. Consent offers
 	// a proxied server only the clients configured for it, and a gateway only
-	// those of the members the subject reaches. A hosted server keeps serving
-	// from every client its issuer binds.
+	// those of the members the subject reaches. Hosted placements are handled
+	// separately above.
 	if directProxiedConsent(endpoint) && !usesTypedConsentInventory(ctx) {
 		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
 		if err != nil {

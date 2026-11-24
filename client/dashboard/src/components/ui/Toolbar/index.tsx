@@ -294,6 +294,16 @@ interface ToolbarFiltersProps {
    */
   extraChips?: ReactNode;
   projectSlug?: string;
+  /** Off: no count on "More filters" (the set filters already show as chips). */
+  showSheetCount?: boolean;
+  /** Off: the page places its own reset control. */
+  showClearAll?: boolean;
+  /** Replaces the standard filter sheet. */
+  renderSheet?: (sheet: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    accents: Record<string, string>;
+  }) => ReactNode;
 }
 
 function ToolbarFilters({
@@ -309,6 +319,9 @@ function ToolbarFilters({
   customBuilder,
   extraChips,
   projectSlug,
+  showSheetCount = true,
+  showClearAll = true,
+  renderSheet,
 }: ToolbarFiltersProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -411,7 +424,7 @@ function ToolbarFilters({
         >
           <SlidersHorizontal className="size-4" />
           <span className="text-eyebrow">More filters</span>
-          {sheetCount > 0 && (
+          {showSheetCount && sheetCount > 0 && (
             <Badge variant="neutral" className="ml-1 px-1.5">
               {sheetCount}
             </Badge>
@@ -419,7 +432,7 @@ function ToolbarFilters({
         </Button>
       )}
 
-      {hasClearable && (
+      {showClearAll && hasClearable && (
         <Button
           variant="tertiary"
           onClick={onClearAll}
@@ -430,21 +443,25 @@ function ToolbarFilters({
         </Button>
       )}
 
-      <FilterSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        schema={schema}
-        values={values}
-        optionsById={optionsById}
-        onChange={onChange}
-        onClearAll={onClearAll}
-        accents={accents}
-        projectSlug={projectSlug}
-        customFilters={customFilters}
-        onEditCustomFilter={onEditCustomFilter}
-        onRemoveCustomFilter={onRemoveCustomFilter}
-        customBuilder={customBuilder}
-      />
+      {renderSheet ? (
+        renderSheet({ open: sheetOpen, onOpenChange: setSheetOpen, accents })
+      ) : (
+        <FilterSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          schema={schema}
+          values={values}
+          optionsById={optionsById}
+          onChange={onChange}
+          onClearAll={onClearAll}
+          accents={accents}
+          projectSlug={projectSlug}
+          customFilters={customFilters}
+          onEditCustomFilter={onEditCustomFilter}
+          onRemoveCustomFilter={onRemoveCustomFilter}
+          customBuilder={customBuilder}
+        />
+      )}
     </div>
   );
 }

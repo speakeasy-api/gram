@@ -85,7 +85,7 @@ func TestUpdateToolsetPlatformContentRemovesOnlyAutomaticDelivery(t *testing.T) 
 	require.NoError(t, err)
 	grants, err := authz.LoadGrants(ctx, ti.conn, ac.ActiveOrganizationID, []urn.Principal{principal})
 	require.NoError(t, err)
-	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), ac.ProjectID.String()))
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(*ac.ProjectID)).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed, "the same role must still be able to connect to the toolset")
 }
