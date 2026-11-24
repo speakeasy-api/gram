@@ -209,7 +209,7 @@ export async function configureCreatedRemoteMcpIdentity({
       identityMode,
       isForbiddenError(error)
         ? "This server shares its sign-in client with other projects. Ask an organization admin to open Settings > Identity and select Add credential."
-        : "Personal sign-in could not be configured. Open Settings > Identity and select Add credential.",
+        : "Personal sign-in could not be configured. An organization admin can open Settings > Identity and select Add credential.",
     );
   }
 
@@ -229,7 +229,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The authorization server requires manual client registration. In Settings > Identity, select Add credential to set up personal sign-in.",
+      "The authorization server requires manual client registration. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
       result,
     );
   }
@@ -252,17 +252,17 @@ export async function configureCreatedRemoteMcpIdentity({
 
 const DETECTION_FAILURE_MESSAGE: Record<DetectionFailure, string> = {
   no_metadata:
-    "OAuth metadata could not be discovered. Open Settings > Identity and select Add credential to set up personal sign-in.",
+    "OAuth metadata could not be discovered. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
   lookup_failed:
-    "Existing authorization servers could not be checked. Open Settings > Identity and select Add credential to set up personal sign-in.",
+    "Existing authorization servers could not be checked. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
   existing_incomplete:
     "The matching authorization server is missing OAuth endpoints. Update it in Authorization Servers.",
   metadata_failed:
-    "The authorization server metadata could not be discovered. Open Settings > Identity and select Add credential to set up personal sign-in.",
+    "The authorization server metadata could not be discovered. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
   issuer_mismatch:
-    "The authorization server metadata identified a different issuer. Open Settings > Identity and select Add credential to set up personal sign-in.",
+    "The authorization server metadata identified a different issuer. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
   missing_endpoints:
-    "OAuth metadata is missing required endpoints. Open Settings > Identity and select Add credential to set up personal sign-in.",
+    "OAuth metadata is missing required endpoints. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.",
 };
 
 function commitFailureMessage(
@@ -273,9 +273,9 @@ function commitFailureMessage(
       result.failure.outcome === "unreachable"
         ? "The authorization server was unreachable"
         : "The authorization server refused registration";
-    return `${outcome}. Open Settings > Identity and select Add credential to set up personal sign-in.`;
+    return `${outcome}. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.`;
   }
-  return "Automatic client registration is unavailable. Open Settings > Identity and select Add credential to set up personal sign-in.";
+  return "Automatic client registration is unavailable. An organization admin can open Settings > Identity and select Add credential to set up personal sign-in.";
 }
 
 async function setMcpServerVisibility(

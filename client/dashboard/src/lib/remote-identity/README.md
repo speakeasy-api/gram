@@ -146,9 +146,9 @@ changes:
    `useIdentityDraft` compared values instead of recording an interaction, and
    `useCredentialDraft` stopped reading validity as dirtiness.
 4. `components/`, one at a time, each a pure move with its tests.
-5. `ManagedHeader`, then one Save: identity and header rows now commit
-   together, and the Custom Headers disclosure no longer carries its own
-   button.
+5. Proxied servers moved to typed credential offers. The typed credential
+   editor saves headers on the credential itself, not as source headers in a
+   combined Identity form.
 
 Still deferred: `Secret` reaching the wire, and the provider CRUD pages under
 `pages/remote-identity-providers/`.
