@@ -2,10 +2,12 @@ package remotemcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -106,7 +108,18 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 
 func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call *proxy.ToolsCallRequest) (string, error) {
 	if i.catalog != nil {
-		return i.catalog.callDisposition(ctx, call)
+		disposition, err := i.catalog.callDisposition(ctx, call)
+		if errors.Is(err, errToolNotOnUpstream) {
+			// The refusal names no tool, so record which one was asked for and
+			// under which project the catalog was read. The name is caller
+			// supplied, so cap its length.
+			i.logger.WarnContext(ctx, "tools/call refused: tool unavailable on this MCP server",
+				attr.SlogToolName(truncateRefusedToolName(call.Params.Name)),
+				attr.SlogMcpServerID(i.mcpServerID),
+				attr.SlogProjectID(i.projectID),
+			)
+		}
+		return disposition, err
 	}
 
 	dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
@@ -114,4 +127,18 @@ func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call
 		return "", fmt.Errorf("list dispositions: %w", err)
 	}
 	return dispositions[strings.TrimSpace(call.Params.Name)], nil
+}
+
+// maxRefusedToolNameLogLength bounds a caller-supplied tool name in logs.
+const maxRefusedToolNameLogLength = 128
+
+func truncateRefusedToolName(name string) string {
+	count := 0
+	for i := range name {
+		if count == maxRefusedToolNameLogLength {
+			return name[:i]
+		}
+		count++
+	}
+	return name
 }
