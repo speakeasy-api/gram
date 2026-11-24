@@ -970,9 +970,9 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-session-client:delete":
       return "deleted remote session client";
     case "remote-session-client:attach-user-session-issuer":
-      return "attached a user session issuer to";
+      return "attached an MCP sign-in to";
     case "remote-session-client:detach-user-session-issuer":
-      return "detached a user session issuer from";
+      return "detached an MCP sign-in from";
     case "remote-session-client:attach-json-web-key-set":
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
@@ -1192,13 +1192,13 @@ export function staticActionPhrase(action: AuditAction): string {
     case "user-session-consent:revoke":
       return "revoked consent for";
     case "user-session-issuer:create":
-      return "created user session issuer";
+      return "created MCP sign-in";
     case "user-session-issuer:update":
-      return "updated user session issuer";
+      return "updated MCP sign-in";
     case "user-session-issuer:delete":
-      return "deleted user session issuer";
+      return "deleted MCP sign-in";
     case "user-session-issuer:migrate":
-      return "migrated user session issuer";
+      return "migrated MCP sign-in";
     case "user-session-issuer-cimd-client:add":
       return "added a CIMD client to";
     case "user-session-issuer-cimd-client:remove":

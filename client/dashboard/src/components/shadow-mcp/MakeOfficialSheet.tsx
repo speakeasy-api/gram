@@ -257,7 +257,7 @@ export function MakeOfficialSheet({
                   />
                   <Stack gap={1}>
                     <label className="text-sm leading-none font-medium">
-                      User session issuer
+                      MCP sign-in
                     </label>
                     <UserSessionIssuerSelect
                       issuers={issuerQuery.organizationIssuers}
@@ -268,7 +268,8 @@ export function MakeOfficialSheet({
                     />
                     <Text muted small>
                       Where people sign in to Speakeasy before they reach this
-                      server. The organization&apos;s issuer suits most setups.
+                      server. The organization&apos;s MCP sign-in suits most
+                      setups.
                     </Text>
                   </Stack>
                 </CollapsibleContent>

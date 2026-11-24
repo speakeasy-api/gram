@@ -278,6 +278,7 @@ const SUBJECT_TYPE_LABELS: Record<string, string> = {
   chat_session: "Chat session",
   channels_settings: "Organization",
   channels_access: "Member",
+  user_session_issuer: "MCP sign-in",
 };
 
 function subjectTypeLabel(subjectType: string): string {
@@ -347,7 +348,19 @@ export function renderVerb(log: AuditLog): string {
       );
   }
 
-  return isAuditAction(log.action)
+  const phrase = isAuditAction(log.action)
     ? staticActionPhrase(log.action)
     : describeUnknownAction(log.action);
+  return dropNounNamedBySubject(phrase, log);
+}
+
+// An id-only subject renders as "MCP sign-in 01900000", so a phrase ending in
+// the same noun would read "created MCP sign-in MCP sign-in 01900000".
+function dropNounNamedBySubject(phrase: string, log: AuditLog): string {
+  const raw = log.subjectDisplayName || log.subjectSlug || log.subjectId;
+  if (!UUID.test(raw)) return phrase;
+  const noun = ` ${subjectTypeLabel(log.subjectType).toLowerCase()}`;
+  return phrase.toLowerCase().endsWith(noun)
+    ? phrase.slice(0, -noun.length)
+    : phrase;
 }

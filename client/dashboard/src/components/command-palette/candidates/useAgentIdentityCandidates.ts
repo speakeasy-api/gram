@@ -165,13 +165,15 @@ export function useAgentIdentityCandidates({
         if (!agent.permissions?.write) return [identity, signIn];
         // Where its servers are changed and an expired connection is fixed,
         // so "reconnect Linear for the release bot" lands on the tab for it.
+        // Found by the old tab name too.
         const mcpSignIn: LauncherCandidate = {
           ...identity,
           id: `agent-mcp-sign-in:${agent.id}`,
-          title: `${agent.name} · MCP sign-in`,
+          title: `${agent.name} · Server sign-in`,
           detail: "Change MCP servers · reconnect expired sign-ins",
           keywords: [
             ...identity.keywords,
+            "mcp sign-in",
             "mcp",
             "servers",
             "sign-in",
