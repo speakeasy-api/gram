@@ -97,7 +97,12 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 		require.NoError(t, err)
 	} else {
 		priorLease = requireAttachmentRecheckReach(t, ctx, q, recheck, session, org, true)
-		cleared, err := q.ClearRemoteSessionRecheckLease(ctx, priorLease)
+		foreignLease := priorLease
+		foreignLease.OrganizationIds = []string{"org_unrelated"}
+		cleared, err := q.ClearRemoteSessionRecheckLease(ctx, foreignLease)
+		require.NoError(t, err)
+		require.Zero(t, cleared, "a valid attachment cannot clear a lease from a different tenant scope")
+		cleared, err = q.ClearRemoteSessionRecheckLease(ctx, priorLease)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, cleared)
 		// Acquire a second lease so the post-mutation clear tests reach,
