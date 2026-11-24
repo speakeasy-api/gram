@@ -699,14 +699,24 @@ WHERE df.deployment_id = @deployment_id
   AND fm.function_id IS NULL;
 
 -- name: CreateDeploymentFunctionsAccess :one
+-- organization_id is the project's organization. The lookup joins
+-- organization_metadata, which the column references, so a project whose
+-- organization has no metadata row stores NULL instead of failing the deploy.
 INSERT INTO functions_access (
     project_id
+  , organization_id
   , deployment_id
   , function_id
   , encryption_key
   , bearer_format
 ) VALUES (
     @project_id
+  , (
+      SELECT p.organization_id
+      FROM projects AS p
+      JOIN organization_metadata AS om ON om.id = p.organization_id
+      WHERE p.id = @project_id
+    )
   , @deployment_id
   , @function_id
   , @encryption_key

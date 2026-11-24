@@ -153,6 +153,17 @@ func (q *Queries) ClearDelegationGenerationFixture(ctx context.Context, id uuid.
 	return err
 }
 
+const clearFunctionsAccessOrganizationFixture = `-- name: ClearFunctionsAccessOrganizationFixture :exec
+UPDATE functions_access SET organization_id = NULL WHERE id = $1
+`
+
+// Test-only fixture: reproduces a function runner key written before
+// functions_access had an organization_id.
+func (q *Queries) ClearFunctionsAccessOrganizationFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearFunctionsAccessOrganizationFixture, id)
+	return err
+}
+
 const clearMCPServerRemoteSessionClientsFixture = `-- name: ClearMCPServerRemoteSessionClientsFixture :exec
 DELETE FROM mcp_server_remote_session_clients WHERE mcp_server_id = $1
 `
@@ -2532,6 +2543,24 @@ func (q *Queries) GetEnvironmentEntryFixture(ctx context.Context, arg GetEnviron
 	row := q.db.QueryRow(ctx, getEnvironmentEntryFixture, arg.EnvironmentID, arg.Name)
 	var i GetEnvironmentEntryFixtureRow
 	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
+const getFunctionsAccessOrganizationFixture = `-- name: GetFunctionsAccessOrganizationFixture :one
+SELECT organization_id, updated_at FROM functions_access WHERE id = $1
+`
+
+type GetFunctionsAccessOrganizationFixtureRow struct {
+	OrganizationID pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture: reads a function runner key's organization, soft-deleted
+// or not.
+func (q *Queries) GetFunctionsAccessOrganizationFixture(ctx context.Context, id uuid.UUID) (GetFunctionsAccessOrganizationFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getFunctionsAccessOrganizationFixture, id)
+	var i GetFunctionsAccessOrganizationFixtureRow
+	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
 	return i, err
 }
 
@@ -8462,6 +8491,16 @@ type SoftDeleteExternalCredentialFixtureParams struct {
 // organization_id names the platform tier.
 func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, arg SoftDeleteExternalCredentialFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteExternalCredentialFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const softDeleteFunctionsAccessFixture = `-- name: SoftDeleteFunctionsAccessFixture :exec
+UPDATE functions_access SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+// Test-only fixture: soft-deletes a function runner key.
+func (q *Queries) SoftDeleteFunctionsAccessFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteFunctionsAccessFixture, id)
 	return err
 }
 
