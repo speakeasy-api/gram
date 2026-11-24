@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -92,6 +93,14 @@ type Service struct {
 	// credit balance gate never blocks.
 	staffOrg     staff.Organization
 	riskFindings *chatfindings.Reader
+
+	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
+	// unless some project reads through shadows.
+	transcriptShadow *transcriptstore.Store
+
+	// transcriptShadowReadProjects are the projects whose chat reads open
+	// shadows instead of plaintext.
+	transcriptShadowReadProjects map[uuid.UUID]struct{}
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -140,6 +149,18 @@ func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge 
 	return s
 }
 
+// WithTranscriptShadowReads makes chat reads for the listed projects open
+// message bodies from encrypted shadows instead of plaintext. An empty list or
+// a nil store leaves every project on plaintext.
+func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projectIDs ...uuid.UUID) *Service {
+	s.transcriptShadow = store
+	s.transcriptShadowReadProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
+	for _, projectID := range projectIDs {
+		s.transcriptShadowReadProjects[projectID] = struct{}{}
+	}
+	return s
+}
+
 // WithRiskFindings sets the ClickHouse reader behind chat risk counts, filters and highlights.
 func (s *Service) WithRiskFindings(findings *chatfindings.Reader) *Service {
 	s.riskFindings = findings
@@ -181,29 +202,31 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		db:               db,
-		sessions:         sessions,
-		chatSessions:     chatSessions,
-		assistantTokens:  assistantTokens,
-		logger:           logger,
-		repo:             repo.New(db),
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:       openRouter,
-		completionClient: completionClient,
-		contextWindow:    contextWindow,
-		assetStorage:     assetStorage,
-		posthog:          posthog,
-		telemetryService: telemetryService,
-		billingRepo:      billingRepo,
-		audit:            auditLogger,
-		staffOrg:         staffOrg,
-		riskFindings:     nil,
-		access:           NewSessionAccess(logger, db, authzEngine),
-		turnStream:       nil, // opt in via WithTurnStream
-		streamMetrics:    nil, // opt in via WithStreamRotation
-		streamMaxAge:     0,   // opt in via WithStreamRotation
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		db:                           db,
+		sessions:                     sessions,
+		chatSessions:                 chatSessions,
+		assistantTokens:              assistantTokens,
+		logger:                       logger,
+		repo:                         repo.New(db),
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:                   openRouter,
+		completionClient:             completionClient,
+		contextWindow:                contextWindow,
+		assetStorage:                 assetStorage,
+		posthog:                      posthog,
+		telemetryService:             telemetryService,
+		billingRepo:                  billingRepo,
+		audit:                        auditLogger,
+		staffOrg:                     staffOrg,
+		riskFindings:                 nil,
+		transcriptShadow:             nil,
+		transcriptShadowReadProjects: nil,
+		access:                       NewSessionAccess(logger, db, authzEngine),
+		turnStream:                   nil, // opt in via WithTurnStream
+		streamMetrics:                nil, // opt in via WithStreamRotation
+		streamMaxAge:                 0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
 
@@ -1377,6 +1400,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1426,6 +1452,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1473,6 +1502,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	case payload.FromStart && payload.BeforeSeq == nil:
@@ -1499,6 +1531,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// carries source inference + ClickHouse enrichment like the newest page.
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
@@ -1529,6 +1564,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreAfter = payload.BeforeSeq != nil
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 	}

@@ -7,8 +7,9 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Ordinary transcript readers still use legacy data. Plaintext and existing assets
-are not removed.** The `chat-transcripts` use case has an independent DEK per
+**Only the dashboard chat load (`chat.load`) can read through shadows, and only
+for projects on the read allowlist. Every other reader still uses legacy data.
+Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
 
 The ticket requires per-customer encryption of `content`, `content_raw`,
@@ -96,6 +97,38 @@ are fingerprint hints, not ciphertext-authentication or cutover evidence.
 Direct SQL updates outside the shared writer can make a shadow stale. Verified
 reads reject it, and a subsequent backfill refreshes it. Before encrypted-only
 rollout, migrate those writes too and establish a fenced plaintext-removal protocol.
+
+## Shadow reads
+
+`--chat-transcript-shadow-read-project-ids`
+(`GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS`) is a second, server-only
+allowlist. Every project on it must also be on the capture allowlist, or the
+server refuses to start. For these projects `chat.load` opens each page's message
+bodies with `Store.LoadMany` and serves the opened `content`, `content_raw` and
+`tool_calls` in place of the plaintext columns.
+
+`LoadMany` applies `Load`'s checks to every message on the page and fails the
+whole page when any message has no current, authentic shadow. The read returns
+an unexpected error rather than plaintext, because serving plaintext would hide
+a broken capture or an unfinished backfill. Its codec uses the process's
+committed data key cache, so a warm page makes no KMS call.
+
+Before adding a project to the read allowlist, seal its existing messages from
+a server pod and confirm `waiting=0`:
+
+```sh
+gram transcript-shadow-backfill --project-id <PROJECT_ID>
+gram transcript-shadow-backfill --project-id <PROJECT_ID> --apply --confirm-environment "$GRAM_ENVIRONMENT"
+```
+
+The first command only reports coverage. The second seals pages of up to 500
+messages, one transaction each, and prints a `--after` cursor to resume from.
+Messages written after a sweep are covered by capture; start another sweep from
+the zero cursor to cover messages inserted below a prior cursor.
+
+Capture and reads emit `chat.transcript_shadow.capture.*` and
+`chat.transcript_shadow.read.*` (duration and message count, by project and
+outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 
 ## Scope that still needs implementation
 

@@ -23,74 +23,112 @@ const (
 	// meterCaptureMessages counts the messages each Capture call was asked to
 	// seal, by outcome.
 	meterCaptureMessages = "chat.transcript_shadow.capture.messages"
+
+	// meterReadDuration is the time one LoadMany call spends loading, opening
+	// and verifying the shadows for a page of messages.
+	meterReadDuration = "chat.transcript_shadow.read.duration"
+
+	// meterReadMessages counts the messages each LoadMany call was asked to
+	// open, by outcome.
+	meterReadMessages = "chat.transcript_shadow.read.messages"
 )
 
-// captureDurationBuckets are in seconds. A KMS unwrap takes about 150 to 250
-// ms in prod, so the buckets split that range into 50 ms steps and stretch to
-// the slow tail that would hold a message transaction open.
-var captureDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1, 2.5, 5}
+// durationBuckets are in seconds. A KMS unwrap takes about 150 to 250 ms in
+// prod, so the buckets split that range into 50 ms steps and stretch to the
+// slow tail that would hold a message transaction or a chat page open.
+var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 1, 2.5, 5}
 
-// captureOutcome classifies a Capture call for metrics and spans. Any outcome
-// other than success rolls back the caller's message write. Invalid arguments
-// return ErrInvalid before telemetry starts, so they have no outcome.
-type captureOutcome string
+// outcome classifies a Capture or LoadMany call for metrics and spans. Any
+// capture outcome other than success rolls back the caller's message write;
+// any read outcome other than success fails the caller's read.
+type outcome string
 
 const (
-	captureOutcomeSuccess  captureOutcome = "success"
-	captureOutcomeNotFound captureOutcome = "not_found"
-	captureOutcomeChanged  captureOutcome = "changed"
-	captureOutcomeError    captureOutcome = "error"
+	outcomeSuccess  outcome = "success"
+	outcomeNotFound outcome = "not_found"
+	outcomeStale    outcome = "stale"
+	outcomeChanged  outcome = "changed"
+	outcomeInvalid  outcome = "invalid"
+	outcomeError    outcome = "error"
 )
 
-func classifyCapture(err error) captureOutcome {
+func classify(err error) outcome {
 	switch {
 	case err == nil:
-		return captureOutcomeSuccess
+		return outcomeSuccess
 	case errors.Is(err, ErrNotFound):
-		return captureOutcomeNotFound
+		return outcomeNotFound
+	case errors.Is(err, ErrStale):
+		return outcomeStale
 	case errors.Is(err, ErrChanged):
-		return captureOutcomeChanged
+		return outcomeChanged
+	case errors.Is(err, ErrInvalid):
+		return outcomeInvalid
 	default:
-		return captureOutcomeError
+		return outcomeError
 	}
 }
 
-type captureMetrics struct {
+type storeMetrics struct {
+	capture operationMetrics
+	read    operationMetrics
+}
+
+type operationMetrics struct {
 	duration metric.Float64Histogram
 	messages metric.Int64Counter
 }
 
-func newCaptureMetrics(meterProvider metric.MeterProvider) (*captureMetrics, error) {
+func newStoreMetrics(meterProvider metric.MeterProvider) (*storeMetrics, error) {
 	meter := meterProvider.Meter(instrumentationName)
 
+	capture, err := newOperationMetrics(meter, meterCaptureDuration, meterCaptureMessages,
+		"Time to seal and store encrypted transcript shadows for one message write",
+		"Chat messages submitted for encrypted transcript shadow capture")
+	if err != nil {
+		return nil, err
+	}
+
+	read, err := newOperationMetrics(meter, meterReadDuration, meterReadMessages,
+		"Time to load, open and verify encrypted transcript shadows for one page of messages",
+		"Chat messages requested from encrypted transcript shadows")
+	if err != nil {
+		return nil, err
+	}
+
+	return &storeMetrics{capture: capture, read: read}, nil
+}
+
+func newOperationMetrics(meter metric.Meter, durationName, messagesName, durationDescription, messagesDescription string) (operationMetrics, error) {
+
 	duration, err := meter.Float64Histogram(
-		meterCaptureDuration,
-		metric.WithDescription("Time to seal and store encrypted transcript shadows for one message write"),
+		durationName,
+		metric.WithDescription(durationDescription),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(captureDurationBuckets...),
+		metric.WithExplicitBucketBoundaries(durationBuckets...),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create %s: %w", meterCaptureDuration, err)
+		return operationMetrics{}, fmt.Errorf("create %s: %w", durationName, err)
 	}
 
 	messages, err := meter.Int64Counter(
-		meterCaptureMessages,
-		metric.WithDescription("Chat messages submitted for encrypted transcript shadow capture"),
+		messagesName,
+		metric.WithDescription(messagesDescription),
 		metric.WithUnit("{message}"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create %s: %w", meterCaptureMessages, err)
+		return operationMetrics{}, fmt.Errorf("create %s: %w", messagesName, err)
 	}
 
-	return &captureMetrics{duration: duration, messages: messages}, nil
+	return operationMetrics{duration: duration, messages: messages}, nil
 }
 
-// record is keyed by project because capture only runs for an explicit,
+// record is keyed by project because shadows only exist for an explicit,
 // short project allowlist, so the series count stays small.
-func (m *captureMetrics) record(ctx context.Context, projectID uuid.UUID, messages int, elapsed time.Duration, outcome captureOutcome) {
+func (m operationMetrics) record(ctx context.Context, projectID uuid.UUID, messages int, elapsed time.Duration, result outcome) {
 	opts := metric.WithAttributes(
 		attr.ProjectID(projectID.String()),
-		attr.Outcome(outcome),
+		attr.Outcome(result),
 	)
 	m.duration.Record(ctx, elapsed.Seconds(), opts)
 	m.messages.Add(ctx, int64(messages), opts)

@@ -21,6 +21,7 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 	c := newOrgEncryptionCLIContext(t, nil)
 	set := flag.NewFlagSet("transcript-shadow", flag.ContinueOnError)
 	require.NoError(t, transcriptShadowFlag().Apply(set))
+	require.NoError(t, transcriptShadowReadFlag().Apply(set))
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))
 	}
@@ -32,7 +33,39 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-	require.NoError(t, configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)))
+	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.Nil(t, shadow.Store)
+	require.Empty(t, shadow.ReadProjectIDs)
+}
+
+func TestTranscriptShadowReadProjectsMustCapture(t *testing.T) {
+	t.Parallel()
+	first := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	second := uuid.MustParse("10000000-0000-4000-8000-000000000002")
+
+	ids, err := transcriptShadowReadProjects([]uuid.UUID{first, second}, []string{second.String(), second.String()})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{second}, ids)
+
+	ids, err = transcriptShadowReadProjects([]uuid.UUID{first}, nil)
+	require.NoError(t, err)
+	require.Empty(t, ids)
+
+	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{second.String()})
+	require.EqualError(t, err, "chat transcript shadow read project at position 1 does not capture shadows")
+	require.NotContains(t, err.Error(), second.String())
+
+	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{"not-a-uuid"})
+	require.Error(t, err)
+}
+
+func TestTranscriptShadowRejectsReadsWithoutCapture(t *testing.T) {
+	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
+	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
+	c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowReadProjectsFlag: "10000000-0000-4000-8000-000000000001"})
+	_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	require.EqualError(t, err, "chat transcript shadow reads require the same projects to capture shadows")
 }
 
 func TestTranscriptShadowProjectIDs(t *testing.T) {
@@ -61,7 +94,8 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
-			require.Error(t, configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)))
+			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+			require.Error(t, err)
 		})
 	}
 }
@@ -78,6 +112,13 @@ func TestTranscriptShadowFlags(t *testing.T) {
 	}
 	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand()} {
 		requireFlag(t, command.Flags, chatTranscriptShadowProjectIDsFlag)
+	}
+	// Only the server serves chat reads.
+	requireFlag(t, newStartCommand().Flags, chatTranscriptShadowReadProjectsFlag)
+	for _, command := range []*cli.Command{newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand(), newAdminCommand()} {
+		for _, item := range command.Flags {
+			require.NotContains(t, item.Names(), chatTranscriptShadowReadProjectsFlag, command.Name)
+		}
 	}
 }
 
@@ -165,9 +206,10 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 				// Empty dependencies would panic if provisioning or activation were
 				// attempted. A nonexistent project also proves schema runs first.
 				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
-				require.EqualError(t, configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
+				_, err := configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
-				}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)), "chat transcript shadow schema is unavailable or incompatible")
+				}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
 			}
 		})
 	}

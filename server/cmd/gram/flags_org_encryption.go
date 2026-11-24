@@ -7,14 +7,15 @@ import (
 )
 
 const (
-	chatTranscriptShadowProjectIDsFlag  = "chat-transcript-shadow-project-ids"
-	orgEncryptionKMSKeyRingFlag         = "org-encryption-kms-key-ring"
-	orgEncryptionCredentialIDFlag       = "org-encryption-credential-id"
-	orgEncryptionServiceAccountFlag     = "org-encryption-service-account"
-	orgEncryptionSwitchGracePeriodFlag  = "org-encryption-switch-grace-period"
-	orgEncryptionManagedKeyRetention    = "org-encryption-managed-key-retention"
-	orgEncryptionDisabledFlag           = "org-encryption-disabled"
-	orgEncryptionKMSKeyRingLocalDefault = "projects/gram-local/locations/global/keyRings/org-encryption"
+	chatTranscriptShadowProjectIDsFlag   = "chat-transcript-shadow-project-ids"
+	chatTranscriptShadowReadProjectsFlag = "chat-transcript-shadow-read-project-ids"
+	orgEncryptionKMSKeyRingFlag          = "org-encryption-kms-key-ring"
+	orgEncryptionCredentialIDFlag        = "org-encryption-credential-id"
+	orgEncryptionServiceAccountFlag      = "org-encryption-service-account"
+	orgEncryptionSwitchGracePeriodFlag   = "org-encryption-switch-grace-period"
+	orgEncryptionManagedKeyRetention     = "org-encryption-managed-key-retention"
+	orgEncryptionDisabledFlag            = "org-encryption-disabled"
+	orgEncryptionKMSKeyRingLocalDefault  = "projects/gram-local/locations/global/keyRings/org-encryption"
 )
 
 // orgEncryptionFlags configures organization encryption for processes that
@@ -69,5 +70,15 @@ func transcriptShadowFlag() cli.Flag {
 		Name:    chatTranscriptShadowProjectIDsFlag,
 		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for; retains plaintext and does not backfill existing messages. Disabled by default.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
+	}
+}
+
+// transcriptShadowReadFlag routes chat reads through encrypted shadows. Only the
+// server command serves chat reads, so only it registers this flag.
+func transcriptShadowReadFlag() cli.Flag {
+	return &cli.StringSliceFlag{
+		Name:    chatTranscriptShadowReadProjectsFlag,
+		Usage:   "Explicit project UUIDs whose chat reads open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ", and its existing messages must be backfilled first: a read fails when a message has no current shadow. Disabled by default.",
+		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"},
 	}
 }
