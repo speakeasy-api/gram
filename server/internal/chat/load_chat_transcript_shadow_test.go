@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
@@ -61,24 +62,54 @@ func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
 	}, contents)
 }
 
-func TestLoadChat_ReadEnabledProjectFailsWithoutAShadow(t *testing.T) {
+func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoShadowExists(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "unfinished backfill")
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "partly captured")
 	captured := seedMessageContent(t, ctx, ti, chatID, "captured message")
-	seedMessageContent(t, ctx, ti, chatID, "message written before capture began")
+	uncaptured := seedMessageContent(t, ctx, ti, chatID, "message written before capture began")
 
 	store := newTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, captured)
 	ti.service.WithTranscriptShadowReads(store, ti.projectID)
 
-	_, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
-	require.ErrorIs(t, err, transcriptstore.ErrNotFound)
-	// The failure must not fall back to, or echo, the plaintext body.
-	require.NotContains(t, err.Error(), "message written before capture began")
+	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	contents := make(map[string]string, len(result.Messages))
+	for _, m := range result.Messages {
+		var text string
+		require.NoError(t, json.Unmarshal(m.Content, &text))
+		contents[m.ID] = text
+	}
+	require.Equal(t, map[string]string{
+		captured.String():   "captured message",
+		uncaptured.String(): "message written before capture began",
+	}, contents)
+}
+
+func TestLoadChat_ReadEnabledProjectFailsOnAStaleShadow(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "stale shadow")
+	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
+
+	store := newTranscriptShadowStore(t, ti)
+	captureTranscriptShadows(t, ti, store, edited)
+	// A write that skips capture leaves the shadow behind the plaintext.
+	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
+	require.NoError(t, err)
+	ti.service.WithTranscriptShadowReads(store, ti.projectID)
+
+	_, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.ErrorIs(t, err, transcriptstore.ErrStale)
+	// An existing shadow that fails verification never falls back to plaintext.
+	require.NotContains(t, err.Error(), "changed")
 }
 
 func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {

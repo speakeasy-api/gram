@@ -44,7 +44,13 @@ var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 
 type outcome string
 
 const (
-	outcomeSuccess  outcome = "success"
+	outcomeSuccess outcome = "success"
+
+	// outcomePlaintextFallback counts read messages that have no shadow at
+	// all, which the caller serves from plaintext. It is a per-message
+	// outcome; the LoadMany call itself still succeeds.
+	outcomePlaintextFallback outcome = "plaintext_fallback"
+
 	outcomeNotFound outcome = "not_found"
 	outcomeStale    outcome = "stale"
 	outcomeChanged  outcome = "changed"
@@ -132,4 +138,24 @@ func (m operationMetrics) record(ctx context.Context, projectID uuid.UUID, messa
 	)
 	m.duration.Record(ctx, elapsed.Seconds(), opts)
 	m.messages.Add(ctx, int64(messages), opts)
+}
+
+// recordMessages adds a message count for one outcome without a duration, for
+// the per-message split of a call whose duration is already recorded.
+func (m operationMetrics) recordMessages(ctx context.Context, projectID uuid.UUID, messages int, result outcome) {
+	if messages == 0 {
+		return
+	}
+	m.messages.Add(ctx, int64(messages), metric.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.Outcome(result),
+	))
+}
+
+// recordDuration records one call's duration by outcome.
+func (m operationMetrics) recordDuration(ctx context.Context, projectID uuid.UUID, elapsed time.Duration, result outcome) {
+	m.duration.Record(ctx, elapsed.Seconds(), metric.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.Outcome(result),
+	))
 }

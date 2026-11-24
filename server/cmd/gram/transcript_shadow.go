@@ -119,8 +119,9 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 }
 
 // transcriptShadowReadProjects parses the read allowlist and requires it to be
-// a subset of the capture allowlist: a project that stopped capturing would
-// fail every read of a newer message. Errors omit the supplied values.
+// a subset of the capture allowlist: in a project that stopped capturing, every
+// edit leaves the message's shadow stale and its reads fail. Errors omit the
+// supplied values.
 func transcriptShadowReadProjects(captureProjectIDs []uuid.UUID, values []string) ([]uuid.UUID, error) {
 	if len(values) == 0 {
 		return nil, nil

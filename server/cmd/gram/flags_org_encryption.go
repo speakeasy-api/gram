@@ -78,7 +78,7 @@ func transcriptShadowFlag() cli.Flag {
 func transcriptShadowReadFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowReadProjectsFlag,
-		Usage:   "Explicit project UUIDs whose chat reads open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ", and its existing messages must be backfilled first: a read fails when a message has no current shadow. Disabled by default.",
+		Usage:   "Explicit project UUIDs whose chat reads open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ". Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"},
 	}
 }

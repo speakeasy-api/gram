@@ -93,7 +93,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 3}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyFailsThePageWhenAShadowIsMissing(t *testing.T) {
+func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	captured, uncaptured := uuid.New(), uuid.New()
@@ -106,12 +106,17 @@ func TestLoadManyFailsThePageWhenAShadowIsMissing(t *testing.T) {
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{captured, uncaptured})
-	require.ErrorIs(t, err, ErrNotFound)
-	require.Nil(t, opened)
+	require.NoError(t, err)
+	require.Len(t, opened, 1)
+	require.Contains(t, opened, captured)
+
+	none, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{uncaptured})
+	require.NoError(t, err)
+	require.Empty(t, none)
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &collected))
-	require.Equal(t, map[string]int64{"not_found": 2}, countsByOutcome(t, collected, meterReadMessages))
+	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, countsByOutcome(t, collected, meterReadMessages))
 }
 
 func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
@@ -141,10 +146,13 @@ func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
 	f.add(t, id)
 	f.capture(t, id)
 
-	_, err := f.store.LoadMany(t.Context(), "org_other", f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrNotFound)
-	_, err = f.store.LoadMany(t.Context(), f.org, uuid.New(), []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrNotFound)
+	// Another tenant's scope sees no shadow, so it opens nothing.
+	opened, err := f.store.LoadMany(t.Context(), "org_other", f.project, []uuid.UUID{id})
+	require.NoError(t, err)
+	require.Empty(t, opened)
+	opened, err = f.store.LoadMany(t.Context(), f.org, uuid.New(), []uuid.UUID{id})
+	require.NoError(t, err)
+	require.Empty(t, opened)
 	_, err = f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{uuid.Nil})
 	require.ErrorIs(t, err, ErrInvalid)
 }

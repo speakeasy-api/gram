@@ -55,7 +55,6 @@ func newApp() *cli.App {
 			newDemoSeedCommand(),
 			newAppSeedCommand(),
 			newReplaySessionObservationsCommand(),
-			newTranscriptShadowBackfillCommand(),
 			newAdminSeedCommand(),
 			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),

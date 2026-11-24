@@ -179,10 +179,11 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 
 // LoadMany opens the shadows of a page of messages with one codec backed by the
 // process's committed data key cache: a warm cache needs no KMS call, and a
-// cold one unwraps the organization's key once for the page. It applies Load's
-// checks to every message and fails the whole page if any message has no
-// current, authentic shadow: it never returns plaintext in place of a shadow.
-// Duplicate IDs are opened once.
+// cold one unwraps the organization's key once for the page. A message with no
+// shadow at all is left out of the result, and the caller serves its plaintext.
+// Every shadow that does exist gets Load's checks, and one that is stale or not
+// authentic fails the whole page: an existing shadow is never skipped in favour
+// of plaintext. Duplicate IDs are opened once.
 func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
 	if len(messageIDs) == 0 {
 		return map[uuid.UUID]transcriptcrypto.Message{}, nil
@@ -198,14 +199,25 @@ func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID u
 	start := time.Now()
 	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs)
 	result := classify(err)
-	s.metrics.read.record(ctx, projectID, len(messageIDs), time.Since(start), result)
+	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
 
 	span.SetAttributes(attr.Outcome(result))
 	if err != nil {
+		s.metrics.read.recordMessages(ctx, projectID, len(messageIDs), result)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, string(result))
 		return nil, err
 	}
+
+	missing := 0
+	for _, id := range messageIDs {
+		if _, ok := opened[id]; !ok {
+			missing++
+		}
+	}
+	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing, outcomeSuccess)
+	s.metrics.read.recordMessages(ctx, projectID, missing, outcomePlaintextFallback)
+	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(missing))
 	return opened, nil
 }
 
@@ -229,8 +241,8 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	if err != nil {
 		return nil, safe(err)
 	}
-	if len(rows) != len(ids) {
-		return nil, ErrNotFound
+	if len(rows) == 0 {
+		return map[uuid.UUID]transcriptcrypto.Message{}, nil
 	}
 
 	codec, err := transcriptcrypto.New(s.service, organizationID)

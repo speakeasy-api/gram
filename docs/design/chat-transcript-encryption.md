@@ -8,7 +8,8 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
 **Only the dashboard chat load (`chat.load`) can read through shadows, and only
-for projects on the read allowlist. Every other reader still uses legacy data.
+for projects on the read allowlist; messages without a shadow fall back to
+plaintext. Every other reader still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
 
@@ -107,27 +108,18 @@ server refuses to start. For these projects `chat.load` opens each page's messag
 bodies with `Store.LoadMany` and serves the opened `content`, `content_raw` and
 `tool_calls` in place of the plaintext columns.
 
-`LoadMany` applies `Load`'s checks to every message on the page and fails the
-whole page when any message has no current, authentic shadow. The read returns
-an unexpected error rather than plaintext, because serving plaintext would hide
-a broken capture or an unfinished backfill. Its codec uses the process's
-committed data key cache, so a warm page makes no KMS call.
+`LoadMany` leaves out any message that has no shadow at all, and `chat.load`
+serves that message's plaintext body. Messages written before capture began, or
+by writers that do not seal yet, still load. The read metric counts them under
+the `plaintext_fallback` outcome, so coverage gaps stay visible. A shadow that
+exists but is stale or fails authentication fails the whole page with an
+unexpected error: it means capture or the data is broken, and plaintext must not
+hide that. Its codec uses the process's committed data key cache, so a warm page
+makes no KMS call, and a page with no shadows makes no key lookup at all.
 
-Before adding a project to the read allowlist, seal its existing messages from
-a server pod and confirm `waiting=0`:
-
-```sh
-gram transcript-shadow-backfill --project-id <PROJECT_ID>
-gram transcript-shadow-backfill --project-id <PROJECT_ID> --apply --confirm-environment "$GRAM_ENVIRONMENT"
-```
-
-The first command only reports coverage. The second seals pages of up to 500
-messages, one transaction each, and prints a `--after` cursor to resume from.
-Messages written after a sweep are covered by capture only when they go through
-the shared `ChatMessageWriter` paths. Direct SQL writers (see the scope table
-below) do not seal yet, so a message they write has no current shadow and fails
-the read until another sweep covers it. Start another sweep from the zero
-cursor to cover messages inserted below a prior cursor.
+Direct SQL writers (see the scope table below) do not seal yet. If one edits a
+message that already has a shadow, that shadow goes stale and the read fails
+until the message is captured again.
 
 Messages whose body exceeds the inline limit keep it in a raw content asset.
 The shadow covers only the inline columns, so `chat.load` still reads those

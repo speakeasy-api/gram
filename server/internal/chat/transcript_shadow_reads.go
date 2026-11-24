@@ -33,9 +33,10 @@ func searchWindowedMessageBody(m *repo.ListSearchWindowedMessagesRow) messageBod
 
 // openShadowRows replaces the body fields of a page of rows with their
 // encrypted shadows when the caller's project reads through shadows, and leaves
-// them untouched for every other project. A missing, stale or unopenable
-// shadow fails the read: serving plaintext instead would hide a broken capture
-// or an unfinished backfill.
+// them untouched for every other project. A row with no shadow at all keeps its
+// plaintext body, so messages written before capture began still load. A stale
+// or unopenable shadow fails the read: it means capture or the data is broken,
+// and plaintext must not paper over that.
 func openShadowRows[T any](ctx context.Context, s *Service, authCtx *contextvalues.AuthContext, rows []T, body func(*T) messageBody) error {
 	if s.transcriptShadow == nil || authCtx == nil || authCtx.ProjectID == nil || len(rows) == 0 {
 		return nil
@@ -56,7 +57,10 @@ func openShadowRows[T any](ctx context.Context, s *Service, authCtx *contextvalu
 		return fmt.Errorf("open encrypted chat transcript: %w", err)
 	}
 	for _, b := range bodies {
-		message := opened[b.id]
+		message, ok := opened[b.id]
+		if !ok {
+			continue
+		}
 		*b.content = message.Content
 		*b.contentRaw = message.ContentRaw
 		*b.toolCalls = message.ToolCalls
