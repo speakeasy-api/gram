@@ -769,6 +769,7 @@ SELECT
     bm.stripe_customer_id,
     bm.stripe_subscription_id,
     om.whitelisted,
+    om.internal,
     om.disabled_at,
     -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
@@ -816,6 +817,7 @@ type AdminGetOrganizationRow struct {
 	StripeCustomerID     pgtype.Text
 	StripeSubscriptionID pgtype.Text
 	Whitelisted          bool
+	Internal             bool
 	DisabledAt           pgtype.Timestamptz
 	TrialState           string
 	TrialTier            pgtype.Text
@@ -850,6 +852,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
 		&i.Whitelisted,
+		&i.Internal,
 		&i.DisabledAt,
 		&i.TrialState,
 		&i.TrialTier,
@@ -2514,6 +2517,7 @@ filtered AS (
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
         om.whitelisted,
+        om.internal,
         om.disabled_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
@@ -2584,7 +2588,7 @@ filtered AS (
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, internal, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($12::text[]), 0) = 0 OR trial_state = ANY($12::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
@@ -2610,7 +2614,7 @@ OFFSET $13::bigint
 )
 SELECT
     id, name, slug, account_type, workos_id, stripe_customer_id,
-    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    stripe_subscription_id, whitelisted, internal, disabled_at, trial_state,
     trial_ends_at, created_at, updated_at,
     coalesce(member_count, (
         SELECT count(*)
@@ -2666,6 +2670,7 @@ type AdminListOrganizationsRow struct {
 	StripeCustomerID     pgtype.Text
 	StripeSubscriptionID pgtype.Text
 	Whitelisted          bool
+	Internal             bool
 	DisabledAt           pgtype.Timestamptz
 	TrialState           string
 	TrialEndsAt          pgtype.Timestamptz
@@ -2718,6 +2723,7 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.StripeCustomerID,
 			&i.StripeSubscriptionID,
 			&i.Whitelisted,
+			&i.Internal,
 			&i.DisabledAt,
 			&i.TrialState,
 			&i.TrialEndsAt,
@@ -3701,6 +3707,29 @@ func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, 
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const adminSetOrganizationInternal = `-- name: AdminSetOrganizationInternal :one
+UPDATE organization_metadata
+SET
+    internal = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING slug
+`
+
+type AdminSetOrganizationInternalParams struct {
+	Internal bool
+	ID       string
+}
+
+// Keyed on id alone, like every other admin write. Returns the slug because
+// the PostHog organization group is keyed by it.
+func (q *Queries) AdminSetOrganizationInternal(ctx context.Context, arg AdminSetOrganizationInternalParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationInternal, arg.Internal, arg.ID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
 }
 
 const adminSetStripeCustomer = `-- name: AdminSetStripeCustomer :one

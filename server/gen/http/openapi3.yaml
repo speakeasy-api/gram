@@ -5990,7 +5990,7 @@ paths:
             tags:
                 - admin
             summary: updateOrganization admin
-            description: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+            description: Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.
             operationId: adminUpdateOrganization
             requestBody:
                 required: true
@@ -105347,6 +105347,9 @@ components:
                 id:
                     type: string
                     description: The ID of the organization
+                internal:
+                    type: boolean
+                    description: 'Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.'
                 member_count:
                     type: integer
                     description: Number of active members in the organization.
@@ -105417,6 +105420,7 @@ components:
                 - slug
                 - account_type
                 - whitelisted
+                - internal
                 - member_count
                 - created_at
                 - updated_at
@@ -146177,6 +146181,9 @@ components:
                 id:
                     type: string
                     description: Organization ID.
+                internal:
+                    type: boolean
+                    description: New internal flag. Cannot be combined with account_type or whitelisted.
                 whitelisted:
                     type: boolean
                     description: New whitelisted flag.

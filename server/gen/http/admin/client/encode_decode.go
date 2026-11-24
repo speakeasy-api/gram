@@ -34261,6 +34261,7 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		StripeCustomerDashboardURL:     v.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: v.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *v.Whitelisted,
+		Internal:                       *v.Internal,
 		DisabledAt:                     v.DisabledAt,
 		TrialState:                     v.TrialState,
 		TrialTier:                      v.TrialTier,

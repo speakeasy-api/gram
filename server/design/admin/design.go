@@ -58,7 +58,7 @@ var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", 
 
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
-	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
+	Required("id", "name", "slug", "account_type", "whitelisted", "internal", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
@@ -80,6 +80,7 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Format(FormatURI)
 	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
+	Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
@@ -655,7 +656,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("updateOrganization", func() {
-		Description("Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.")
+		Description("Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -666,6 +667,7 @@ var _ = Service("admin", func() {
 				Enum(accountTypes...)
 			})
 			Attribute("whitelisted", Boolean, "New whitelisted flag.")
+			Attribute("internal", Boolean, "New internal flag. Cannot be combined with account_type or whitelisted.")
 		})
 
 		Result(AdminOrganization)

@@ -306,7 +306,7 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 	{
 		err = json.Unmarshal([]byte(adminUpdateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"internal\": false,\n      \"whitelisted\": false\n   }'")
 		}
 		if body.AccountType != nil {
 			if !(*body.AccountType == "free" || *body.AccountType == "pro" || *body.AccountType == "payg" || *body.AccountType == "enterprise") {
@@ -327,6 +327,7 @@ func BuildUpdateOrganizationPayload(adminUpdateOrganizationBody string, adminUpd
 		ID:          body.ID,
 		AccountType: body.AccountType,
 		Whitelisted: body.Whitelisted,
+		Internal:    body.Internal,
 	}
 	v.AdminSessionToken = adminSessionToken
 

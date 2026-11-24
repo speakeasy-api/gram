@@ -1308,8 +1308,19 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (
 }
 
 func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrganizationPayload) (*gen.AdminOrganization, error) {
-	if payload.AccountType == nil && payload.Whitelisted == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
+	if payload.AccountType == nil && payload.Whitelisted == nil && payload.Internal == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type, whitelisted or internal must be supplied")
+	}
+	if payload.Internal != nil {
+		// Sent alone so a write is never half-applied: the label has its own
+		// statement, outside the account type and whitelist transaction.
+		if payload.AccountType != nil || payload.Whitelisted != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "internal cannot be combined with account_type or whitelisted")
+		}
+		if _, err := s.setOrganizationInternal(ctx, payload.ID, *payload.Internal); err != nil {
+			return nil, err
+		}
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after internal change")
 	}
 	if payload.AccountType == nil {
 		tx, err := s.db.Begin(ctx)
@@ -2149,6 +2160,7 @@ func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) 
 		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
 		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
 		Whitelisted:                    row.Whitelisted,
+		Internal:                       row.Internal,
 		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
 		TrialState:                     &row.TrialState,
 		TrialTier:                      conv.FromPGText[string](row.TrialTier),
@@ -2176,6 +2188,7 @@ func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *
 		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
 		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
 		Whitelisted:                    row.Whitelisted,
+		Internal:                       row.Internal,
 		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
 		TrialState:                     &row.TrialState,
 		TrialTier:                      nil,

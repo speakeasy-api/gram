@@ -30704,6 +30704,7 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		StripeCustomerDashboardURL:     v.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: v.StripeSubscriptionDashboardURL,
 		Whitelisted:                    v.Whitelisted,
+		Internal:                       v.Internal,
 		DisabledAt:                     v.DisabledAt,
 		TrialState:                     v.TrialState,
 		TrialTier:                      v.TrialTier,
