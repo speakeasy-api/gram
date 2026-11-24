@@ -823,8 +823,8 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 
 // serveAuthClient applies a resolution to a direct proxied endpoint's
 // request: the client's own material, none, or the registration or server
-// headers of a compatibility path. A gap writes the reconnect challenge and a
-// refused client a request-access error.
+// headers of a compatibility path. A gap asks for setup or reconnect; a
+// refused client returns a request-access error.
 func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, res authClientResolution) (upstreamChoice, error) {
 	var none upstreamChoice
 	// The connection the permit was decided for binds every token path,
@@ -848,6 +848,18 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
+		endpoint := authentication.endpoint
+		// Reconnecting cannot repair a missing typed offer. The consent
+		// rollout may still see legacy associations, but serving cannot use
+		// them or tell the client to keep replacing a valid session.
+		offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
+		}
+		if offer, known := offers[endpoint.McpServerID.UUID]; known && len(offer.clients) == 0 &&
+			(offer.pending || res.clientID != uuid.Nil || res.reason == authClientReasonUnmapped) {
+			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
+		}
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
@@ -941,6 +953,3 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 	}
 	return reconnect, none, true, nil
 }
-
-// legacyChoiceOutcome names the upstream client choice's outcome in the
-// resolver's terms, for shadow comparison.

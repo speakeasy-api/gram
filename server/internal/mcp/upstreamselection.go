@@ -665,15 +665,14 @@ func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject u
 // resolveChosenMemberTokens resolves one gateway member's credential from its
 // chosen client for subject.
 func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	// Under enforcement the connection a member's permit was decided
-	// for binds its tokens, typed or handed back to the upstream
-	// client choice. Without its token the member fails: an empty
+	// The connection a member's permit was decided for binds its tokens,
+	// including named compatibility registrations. Without its token the member fails: an empty
 	// resolution would dial anonymously or chain another identity.
 	pinned, authorizerOwner := uuid.Nil, ""
 	if member.authClient != nil {
 		pinned, authorizerOwner = member.authClient.attachedSession, member.authClient.authorizerOwner
 	}
-	// Under enforcement the resolver checked every chosen registration
+	// The resolver checked every chosen registration
 	// against the member, which authorizes it without a sign-in link.
 	tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 		ProjectID:           member.projectID,
