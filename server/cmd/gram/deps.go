@@ -981,6 +981,7 @@ func newAdminOpenRouter(
 		guardianPolicy,
 		db,
 		env,
+		PullPartition(ctx),
 		provisioningKey,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
