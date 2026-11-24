@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type RemoteSession = {
   /**
-   * Upstream access-token expiry. Independent of refresh_expires_at. Null when the upstream issued a non-expiring token.
+   * Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.
    */
   accessExpiresAt?: Date | undefined;
   /**

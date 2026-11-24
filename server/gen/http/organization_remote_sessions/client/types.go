@@ -51,8 +51,8 @@ type RefreshSessionResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
-	// the upstream issued a non-expiring token.
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
@@ -868,8 +868,8 @@ type RemoteSessionResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
-	// the upstream issued a non-expiring token.
+	// Upstream access-token expiry. Independent of refresh_expires_at. Omitted
+	// when the upstream reported no expiry, which readers treat as non-expiring.
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`

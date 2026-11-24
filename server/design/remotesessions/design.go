@@ -578,7 +578,7 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("remote_session_client_id", String, "The remote_session_client this session was minted against.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("access_expires_at", String, "Upstream access-token expiry. Independent of refresh_expires_at. Null when the upstream issued a non-expiring token.", func() {
+	Attribute("access_expires_at", String, "Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {

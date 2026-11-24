@@ -14,9 +14,9 @@ import (
 // subject is a Speakeasy user; pass nil for apikey/anonymous subjects or when the
 // user could not be resolved.
 func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectEmail *string) *types.RemoteSession {
-	// A NULL access expiry means the upstream issued a non-expiring token.
-	// Formatting the zero time would send year 0001 instead, which reads as a
-	// connection that ended two thousand years ago.
+	// A NULL access expiry means the upstream reported none, which readers
+	// treat as non-expiring. Formatting the zero time would send year 0001
+	// instead, which reads as a connection that ended two thousand years ago.
 	var accessExpiresAt, refreshExpiresAt *string
 	if row.AccessExpiresAt.Valid {
 		accessExpiresAt = new(row.AccessExpiresAt.Time.Format(time.RFC3339))
