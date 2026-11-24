@@ -876,7 +876,8 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 
 	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
 	attempted := sess
-	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted)
+	var pacing refreshPacing
+	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, refreshGate{kind: kind, honorCooldown: trigger != remotesessionmetrics.RefreshTriggerManual}, &attempted, &pacing)
 	if postLockClient != nil {
 		client = *postLockClient
 	}
@@ -893,9 +894,11 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		switch {
 		case refreshOutagePaced(outcome, err):
 			outageCause = kind
-			var recorded bool
-			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, guardian.AddressFailureOf(err, client.TunneledMcpServerID.Valid), err)
-			if recorded {
+			if !pacing.started {
+				pacing.wait, pacing.recorded = s.startRefreshCooldown(ctx, attempted, kind, guardian.AddressFailureOf(err, client.TunneledMcpServerID.Valid), err)
+			}
+			retryAfter = pacing.wait
+			if pacing.recorded {
 				visibleOutage = kind
 			}
 		case errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable):
@@ -990,21 +993,40 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 	}
 }
 
+// refreshGate is how a refresh treats an outage on its grant.
+type refreshGate struct {
+	// kind names the outage a paced failure records.
+	kind RefreshOutageKind
+
+	// honorCooldown defers instead of POSTing while the grant's outage is paced; a manual refresh skips it.
+	honorCooldown bool
+}
+
+// refreshPacing is the cooldown a paced failure started while its lease was still held.
+type refreshPacing struct {
+	started  bool
+	wait     time.Duration
+	recorded bool
+}
+
 // refresh is RefreshNow's body: the single-flight lock, the re-reads either
 // side of the upstream POST, and the invalid_grant clearing. RefreshNow wraps
 // it so the metric sample and the RefreshError are produced in exactly one
 // place regardless of which of the many return paths below is taken.
 //
-// The string is the issuer URL of the client row re-read after the lock,
-// the one the POST was sent to; it is empty on every return that happens
-// before that read, and RefreshNow falls back to its pre-lock label there.
+// The client row is the one re-read after the lock, the one the POST was sent
+// to; it is nil on every return that happens before that read, and RefreshNow
+// falls back to its pre-lock row there. A paced failure starts its cooldown
+// before the lease is released and reports it in pacing.
 func (s *RefreshService) refresh(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
+	gate refreshGate,
 	attempted *remotesessions_repo.RemoteSession,
-) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
+	pacing *refreshPacing,
+) (_ RefreshResult, postLockClient *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, _ *identityRestatement, failure error) {
 	var zero RefreshResult
 
 	// An unreadable refresh token can't be sent, so it never takes the lease;
@@ -1099,6 +1121,24 @@ func (s *RefreshService) refresh(
 		})
 	}
 
+	// Deferred after the release, so it runs first: the next request to take
+	// the lease must already see the cooldown, or it presents the same refresh
+	// token to a provider that is still down.
+	defer func(callerCtx context.Context) {
+		if failure == nil {
+			return
+		}
+		if !refreshOutagePaced(refreshOutcomeForError(callerCtx, failure), failure) {
+			return
+		}
+		tunneled := gate.kind == RefreshOutageTunnel
+		if postLockClient != nil {
+			tunneled = postLockClient.TunneledMcpServerID.Valid
+		}
+		pacing.wait, pacing.recorded = s.startRefreshCooldown(callerCtx, *attempted, gate.kind, guardian.AddressFailureOf(failure, tunneled), failure)
+		pacing.started = true
+	}(ctx)
+
 	// sess predates the lock, so a holder that finished while we were acquiring
 	// has already consumed its refresh token. Replaying one makes providers with
 	// reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) revoke the whole family,
@@ -1112,6 +1152,14 @@ func (s *RefreshService) refresh(
 	}
 	sess = current
 	*attempted = current
+
+	// The cooldown check before the lock can predate a holder's outage that
+	// ended while this request was acquiring; that grant is paced now.
+	if gate.honorCooldown {
+		if wait := s.refreshCooldownRemaining(ctx, current); wait > 0 {
+			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown, address: s.recordedAddress(ctx, current)}
+		}
+	}
 
 	if !hasRefreshToken(current) {
 		return zero, nil, nil, ErrNoValidToken

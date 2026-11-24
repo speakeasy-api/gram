@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -762,4 +763,106 @@ func TestResolveAccessTokens_WaiterDuringOutageDoesNotPost(t *testing.T) {
 	require.ErrorIs(t, <-holder, remotesessions.ErrRemoteSessionUnavailable)
 	require.ErrorIs(t, <-waiter, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 1, refreshAttempts.Load())
+}
+
+// refreshLeaseSpy hooks the taking and the release of one grant's refresh lease.
+type refreshLeaseSpy struct {
+	*cache.RedisCacheAdapter
+	lockKey   string
+	onAcquire func(ctx context.Context)
+	onRelease func(ctx context.Context)
+}
+
+func (c refreshLeaseSpy) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	if key == c.lockKey && c.onAcquire != nil {
+		c.onAcquire(ctx)
+	}
+	held, err := c.RedisCacheAdapter.AcquireLease(ctx, key, owner, ttl)
+	if err != nil {
+		return false, fmt.Errorf("acquire lease: %w", err)
+	}
+	return held, nil
+}
+
+func (c refreshLeaseSpy) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
+	if key == c.lockKey && c.onRelease != nil {
+		c.onRelease(ctx)
+	}
+	released, err := c.RedisCacheAdapter.ReleaseLeaseIfOwner(ctx, key, owner)
+	if err != nil {
+		return false, fmt.Errorf("release lease: %w", err)
+	}
+	return released, nil
+}
+
+// The holder paces the grant before letting go of the lease, so the next
+// request to take it finds the outage instead of presenting the same token.
+func TestRefreshNow_OutageCooldownStoredBeforeLeaseRelease(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-before-release", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	locks := cache.NewRedisCacheAdapter(redisClient)
+
+	pacedAtRelease := make(chan bool, 1)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), refreshLeaseSpy{
+		RedisCacheAdapter: locks,
+		lockKey:           remotesessions.RefreshLockKey(session.SubjectUrn, session.RemoteSessionClientID),
+		onRelease: func(ctx context.Context) {
+			var until time.Time
+			pacedAtRelease <- locks.Get(ctx, remotesessions.RefreshCooldownKey(session), &until) == nil
+		},
+	})
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Positive(t, remotesessions.RetryAfter(err))
+	select {
+	case paced := <-pacedAtRelease:
+		require.True(t, paced, "the cooldown must be stored while the lease is still held")
+	default:
+		t.Fatal("the refresh never released its lease")
+	}
+}
+
+// A request that passed the cooldown check before a holder's outage, and takes
+// the lease after it, defers instead of POSTing. A manual refresh still goes.
+func TestRefreshNow_LeaseWinnerHonorsCooldownStartedWhileAcquiring(t *testing.T) {
+	t.Parallel()
+
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-while-acquiring", func(w http.ResponseWriter, _ *http.Request) {
+		refreshAttempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	locks := cache.NewRedisCacheAdapter(redisClient)
+
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), refreshLeaseSpy{
+		RedisCacheAdapter: locks,
+		lockKey:           remotesessions.RefreshLockKey(session.SubjectUrn, session.RemoteSessionClientID),
+		onAcquire: func(ctx context.Context) {
+			// A holder that hit an outage paced the grant and let go just before this request takes the lease.
+			if err := locks.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute); err != nil {
+				t.Errorf("pace the grant: %v", err)
+			}
+		},
+	})
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Positive(t, remotesessions.RetryAfter(err))
+	require.Zero(t, refreshAttempts.Load(), "the lease winner must not present a token the holder just failed with")
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.EqualValues(t, 1, refreshAttempts.Load(), "a person asking for a refresh gets one")
 }
