@@ -214,6 +214,10 @@ func TestValidatePattern_RejectsMalformed(t *testing.T) {
 	require.ErrorIs(t, validatePattern("ftp://chatgpt.com/x"), errPatternUnparseable)
 	require.ErrorIs(t, validatePattern("https:///x"), errPatternUnparseable)
 	require.ErrorIs(t, validatePattern("https://:443/*"), errPatternUnparseable)
+	require.ErrorIs(t, validatePattern("https://chatgpt.com@evil.example.com/oauth/*/c"), errPatternUserinfo)
+	require.ErrorIs(t, validatePattern("https://user:pw@chatgpt.com/oauth/*/c"), errPatternUserinfo)
+	require.ErrorIs(t, validatePattern("https://chatgpt.com/a/../*/c"), errPatternDotSegment)
+	require.ErrorIs(t, validatePattern("https://chatgpt.com/./*/c"), errPatternDotSegment)
 }
 
 func TestValidatePattern_RequiresWildcard(t *testing.T) {

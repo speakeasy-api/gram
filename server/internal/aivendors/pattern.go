@@ -48,6 +48,8 @@ var (
 	errPatternEmptySegment    = errors.New("pattern has an empty path segment")
 	errPatternNoPathComponent = errors.New("pattern has no path component")
 	errPatternNoWildcard      = errors.New("pattern has no wildcard segment")
+	errPatternUserinfo        = errors.New("pattern carries userinfo")
+	errPatternDotSegment      = errors.New("pattern has a dot path segment")
 )
 
 // validatePattern enforces the structural rules above. Returns nil for a
@@ -76,6 +78,10 @@ func validatePattern(pattern string) error {
 	if err != nil || parsed.Hostname() == "" {
 		return errPatternUnparseable
 	}
+	// The client_id rules refuse userinfo and dot segments, so such a pattern could never match.
+	if parsed.User != nil {
+		return errPatternUserinfo
+	}
 	if rest == "" {
 		return errPatternNoPathComponent
 	}
@@ -92,6 +98,9 @@ func validatePattern(pattern string) error {
 	for segment := range strings.SplitSeq(path, "/") {
 		if segment == "" {
 			return errPatternEmptySegment
+		}
+		if segment == "." || segment == ".." {
+			return errPatternDotSegment
 		}
 		if strings.Contains(segment, "*") && segment != "*" {
 			return errPatternPartialSegment

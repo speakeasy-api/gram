@@ -70,12 +70,9 @@ func NewSnapshot(products []Product) *Snapshot {
 				Pattern:     d.Pattern,
 			}
 			s.presets = append(s.presets, entry)
-			if !entry.Enabled {
-				continue
-			}
 			if entry.Pattern {
 				s.patterns = append(s.patterns, entry)
-			} else {
+			} else if current, ok := s.exact[entry.URL]; !ok || !current.Enabled {
 				s.exact[entry.URL] = entry
 			}
 		}
@@ -83,6 +80,12 @@ func NewSnapshot(products []Product) *Snapshot {
 	slices.SortStableFunc(s.patterns, func(a, b Preset) int {
 		if c := cmp.Compare(patternSpecificity(b.URL), patternSpecificity(a.URL)); c != 0 {
 			return c
+		}
+		if a.Enabled != b.Enabled {
+			if a.Enabled {
+				return -1
+			}
+			return 1
 		}
 		if c := strings.Compare(a.URL, b.URL); c != 0 {
 			return c
@@ -177,14 +180,23 @@ func (s *Snapshot) Products() []Product {
 func (s *Snapshot) Catalog() []Preset { return slices.Clone(s.presets) }
 
 // CatalogPreset resolves exact URLs before patterns, then the pattern with the
-// most literal path segments. Ties go to the lower URL, then product ID, so
-// input order never decides attribution.
+// most literal path segments. Ties go to an enabled document, then the lower
+// URL, then product ID, so input order never decides attribution. A disabled
+// document still wins its match: its client is unknown, not a broader
+// pattern's product.
 func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
+	none := Preset{ProductID: "", VendorKey: "", DisplayName: "", URL: "", Enabled: false, Pattern: false}
 	if p, ok := s.exact[clientID]; ok {
+		if !p.Enabled {
+			return none, false
+		}
 		return p, true
 	}
 	for _, p := range s.patterns {
 		if matchesPattern(p.URL, clientID) {
+			if !p.Enabled {
+				return none, false
+			}
 			return p, true
 		}
 	}
