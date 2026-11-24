@@ -4458,7 +4458,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -36385,6 +36385,636 @@ paths:
       x-speakeasy-name-override: startResearch
       x-speakeasy-react-hook:
         name: StartMcpResearch
+  /rpc/mcpConnectionHealth.getAttempt:
+    post:
+      description: Get one connection attempt by its reference.
+      operationId: getMcpConnectionAttempt
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetAttemptRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetConnectionAttemptResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getAttempt mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getAttempt
+      x-speakeasy-react-hook:
+        name: McpConnectionAttempt
+  /rpc/mcpConnectionHealth.getAttemptCounts:
+    post:
+      description: 'Count connection attempts for a provider: the total and the count for each filter value.'
+      operationId: getMcpConnectionAttemptCounts
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionAttemptQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionAttemptCountsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getAttemptCounts mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getAttemptCounts
+      x-speakeasy-react-hook:
+        name: McpConnectionAttemptCounts
+  /rpc/mcpConnectionHealth.getSessionActivity:
+    post:
+      description: Count a provider's active sessions per day and report the average session length.
+      operationId: getMcpSessionActivity
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetSessionActivityRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionSessionActivityResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSessionActivity mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getSessionActivity
+      x-speakeasy-react-hook:
+        name: McpSessionActivity
+  /rpc/mcpConnectionHealth.getSignInSummary:
+    post:
+      description: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.
+      operationId: getMcpSignInSummary
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetSignInSummaryRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionSignInSummaryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSignInSummary mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getSignInSummary
+      x-speakeasy-react-hook:
+        name: McpSignInSummary
+  /rpc/mcpConnectionHealth.listAttempts:
+    post:
+      description: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.
+      operationId: listMcpConnectionAttempts
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListAttemptsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListConnectionAttemptsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listAttempts mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: listAttempts
+      x-speakeasy-react-hook:
+        name: McpConnectionAttempts
+  /rpc/mcpConnectionHealth.listDeniedClients:
+    post:
+      description: List apps refused at sign-in through a provider, with the reason and the last time.
+      operationId: listMcpDeniedClients
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionHealthRangeQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionDeniedClientsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listDeniedClients mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: listDeniedClients
+      x-speakeasy-react-hook:
+        name: McpDeniedClients
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -59464,7 +60094,7 @@ paths:
       x-speakeasy-name-override: attachBinding
   /rpc/remoteSessions.attachServerClientAssociation:
     post:
-      description: Associate one MCP server with an upstream OAuth client, naming the client the server signs in through. The client must already be bound to the server's own user session issuer, or, for a server with none, to an issuer of a gateway fronting it. The client is also bound to the issuer of each gateway fronting the server, so its consent can offer the client. Refused when the server has another client, when another client of the provider holds a fronting gateway's issuer, or when the organization's organization-level issuer lacks the client. A per-user client is also refused when another proxied server uses it at a different upstream address, or would pick it up from a gateway's issuer. On a proxied server, a first association makes earlier no-auth choices unusable, so those people must reconnect, and other servers on the issuer stop falling back to the client. Attaching a client the server is already associated with refuses none of this and only completes the gateway bindings it can. Where upstream auth is enforced, attaching also restores the server's auth client link that detaching its own sign-in retired. Requires mcp:write on the server and on each gateway whose issuer gains the client.
+      description: Associate one MCP server with an upstream OAuth client. The server must not already have a different upstream client. A per-user client cannot be shared by proxied servers at different upstream addresses. When upstream auth is enforced, attach also restores a previously detached backfill-derived auth client link. Attach does not bind the client to any user session issuer. Requires mcp:write on the server.
       operationId: attachServerClientAssociation
       parameters:
         - allowEmptyValue: true
@@ -59663,7 +60293,7 @@ paths:
       x-speakeasy-name-override: beginBindingRefresh
   /rpc/remoteSessions.commitServerIdentityConfiguration:
     post:
-      description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+      description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and offers an existing client, creates a manual client, or automatically prefers CIMD over DCR. Requires mcp:write on the target and any servers explicitly named for replacement. Creating a provider or client also requires project:write. The commit changes server offers, not issuer-client bindings. Unsupported automatic registration returns manual_setup_required without changing local state.
       operationId: commitServerIdentityConfiguration
       parameters:
         - allowEmptyValue: true
@@ -60060,7 +60690,7 @@ paths:
       x-speakeasy-name-override: detachBinding
   /rpc/remoteSessions.detachServerClientAssociation:
     post:
-      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server''s issuer) and synchronizes the backfill-derived typed links. Removing an association also releases the client from a project-level issuer of a fronting gateway when the client stays bound to the server''s own issuer and nothing else on that gateway issuer signs in through it. Administrator-owned typed links are untouched. Requires mcp:write on the server.'
+      description: Remove one MCP server's association with an upstream OAuth client and retire its backfill-derived auth client link. The client, issuer-client bindings, associations with other servers, and independent administrator-owned typed links are unchanged. Returns not found (404) if the association does not exist. Requires mcp:write on the server.
       operationId: detachServerClientAssociation
       parameters:
         - allowEmptyValue: true
@@ -90662,6 +91292,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
@@ -92430,11 +93061,13 @@ components:
         association:
           $ref: '#/components/schemas/ServerClientAssociation'
         bound_user_session_issuer_ids:
-          type: array
+          description: 'Deprecated: always empty. This field is retained for compatibility; attach no longer binds the client to user session issuers.'
           items:
-            type: string
             format: uuid
-          description: The issuers of gateways fronting the server that this attach bound the client to. Empty when they already held it.
+            type: string
+          type: array
+          x-speakeasy-deprecation-message: Always empty; attach does not bind the client to user session issuers
+          deprecated: true
       required:
         - association
         - bound_user_session_issuer_ids
@@ -92894,6 +93527,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
@@ -93448,6 +94082,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
@@ -94672,7 +95307,7 @@ components:
           description: With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.
         target_server_only:
           type: boolean
-          description: Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
+          description: Refuse a save if the user session issuer also serves another MCP server. Set this to require a dedicated user session issuer for the target server. Explicitly assign a dedicated issuer before retrying.
       description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
       required:
         - mcp_server_id
@@ -94763,6 +95398,679 @@ components:
           description: The confirmed servers with their new state.
       required:
         - servers
+    ConnectionApp:
+      type: object
+      properties:
+        app_key:
+          type: string
+          description: Catalog host or kind of app.
+        family:
+          type: string
+          description: Client family, empty when the app is not on the list.
+        name:
+          type: string
+          description: Display name, Unlisted app when the family is unknown.
+        version:
+          type: string
+      required:
+        - family
+        - name
+    ConnectionAttemptContext:
+      type: object
+      properties:
+        grant_type:
+          type: string
+        retries:
+          type: integer
+          format: int64
+        sub_reason:
+          type: string
+      required:
+        - retries
+    ConnectionAttemptCountsResult:
+      type: object
+      properties:
+        facets:
+          $ref: '#/components/schemas/ConnectionAttemptFacets'
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        total_attempts:
+          type: integer
+          format: int64
+        truncated:
+          type: boolean
+          description: True when counts were cut at the server's cap.
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
+    ConnectionAttemptDetail:
+      type: object
+      properties:
+        app:
+          $ref: '#/components/schemas/ConnectionApp'
+        context:
+          $ref: '#/components/schemas/ConnectionAttemptContext'
+        count:
+          type: integer
+          description: Attempts this row stands for.
+          format: int64
+        first_started_at:
+          type: string
+          description: Earliest attempt start in the row.
+          format: date-time
+        id:
+          type: string
+          description: Reference of the newest attempt in the row.
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        network:
+          $ref: '#/components/schemas/ConnectionNetwork'
+        outcome:
+          description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+          enum:
+            - connected
+            - failed
+            - blocked
+            - declined
+            - didnt_finish
+            - in_progress
+          type: string
+          x-speakeasy-name-override: ConnectionOutcome
+        person:
+          $ref: '#/components/schemas/ConnectionPerson'
+        reason:
+          type: string
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+        service:
+          type: string
+        source:
+          description: The party that returned a failure.
+          enum:
+            - service
+            - server
+            - app
+            - identity_provider
+            - speakeasy_setting
+            - speakeasy
+          type: string
+          x-speakeasy-name-override: ConnectionFailureSource
+        started_at:
+          type: string
+          format: date-time
+        step:
+          description: The plain step an attempt ended or stopped at.
+          enum:
+            - connect
+            - sign_in
+            - service_sign_in
+            - sign_in_renewal
+            - service_renewal
+            - listing_tools
+            - request
+            - other
+          type: string
+          x-speakeasy-name-override: ConnectionStepGroup
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionAttemptStep'
+        technical_message:
+          type: string
+          description: A precise technical fact about the reason, when every cause of it shares one.
+        time:
+          type: string
+          description: When the newest attempt ended or last moved.
+          format: date-time
+        trace_id:
+          type: string
+        user_session_issuer_id:
+          type: string
+      required:
+        - started_at
+        - steps
+        - context
+        - id
+        - time
+        - first_started_at
+        - count
+        - outcome
+        - step
+        - app
+    ConnectionAttemptFacets:
+      type: object
+      properties:
+        app_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        apps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        networks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        outcomes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionFacetValue'
+      required:
+        - outcomes
+        - steps
+        - servers
+        - members
+        - people
+        - networks
+        - apps
+        - app_versions
+        - reasons
+        - services
+    ConnectionAttemptFilters:
+      type: object
+      properties:
+        app_versions:
+          type: array
+          items:
+            type: string
+          description: App family and version as family@version.
+          maxItems: 50
+        apps:
+          type: array
+          items:
+            type: string
+          description: App families. An empty string selects apps that are not on the list.
+          maxItems: 50
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: Gateway member ids on the step that ended the attempt.
+          maxItems: 50
+        networks:
+          type: array
+          items:
+            type: string
+          description: Network keys.
+          maxItems: 50
+        outcomes:
+          type: array
+          items:
+            description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+            enum:
+              - connected
+              - failed
+              - blocked
+              - declined
+              - didnt_finish
+              - in_progress
+            type: string
+            x-speakeasy-name-override: ConnectionOutcome
+          maxItems: 50
+        people:
+          type: array
+          items:
+            type: string
+          description: Subject URNs.
+          maxItems: 50
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Reason codes.
+          maxItems: 50
+        server_ids:
+          type: array
+          items:
+            type: string
+          description: Server, gateway or toolset ids.
+          maxItems: 50
+        services:
+          type: array
+          items:
+            type: string
+          description: Service hosts.
+          maxItems: 50
+        steps:
+          type: array
+          items:
+            description: The plain step an attempt ended or stopped at.
+            enum:
+              - connect
+              - sign_in
+              - service_sign_in
+              - sign_in_renewal
+              - service_renewal
+              - listing_tools
+              - request
+              - other
+            type: string
+            x-speakeasy-name-override: ConnectionStepGroup
+          maxItems: 50
+      description: Values within one filter are alternatives. Filters combine.
+    ConnectionAttemptQuery:
+      type: object
+      properties:
+        filters:
+          $ref: '#/components/schemas/ConnectionAttemptFilters'
+        from:
+          type: string
+          description: Inclusive start of attempt start times, at most 30 days ago.
+          format: date-time
+        server_id:
+          type: string
+          description: Limit to one server, gateway or toolset.
+          format: uuid
+        to:
+          type: string
+          description: Exclusive end of attempt start times.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - from
+        - to
+    ConnectionAttemptRow:
+      type: object
+      properties:
+        app:
+          $ref: '#/components/schemas/ConnectionApp'
+        count:
+          type: integer
+          description: Attempts this row stands for.
+          format: int64
+        first_started_at:
+          type: string
+          description: Earliest attempt start in the row.
+          format: date-time
+        id:
+          type: string
+          description: Reference of the newest attempt in the row.
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        network:
+          $ref: '#/components/schemas/ConnectionNetwork'
+        outcome:
+          description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+          enum:
+            - connected
+            - failed
+            - blocked
+            - declined
+            - didnt_finish
+            - in_progress
+          type: string
+          x-speakeasy-name-override: ConnectionOutcome
+        person:
+          $ref: '#/components/schemas/ConnectionPerson'
+        reason:
+          type: string
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+        service:
+          type: string
+        source:
+          description: The party that returned a failure.
+          enum:
+            - service
+            - server
+            - app
+            - identity_provider
+            - speakeasy_setting
+            - speakeasy
+          type: string
+          x-speakeasy-name-override: ConnectionFailureSource
+        step:
+          description: The plain step an attempt ended or stopped at.
+          enum:
+            - connect
+            - sign_in
+            - service_sign_in
+            - sign_in_renewal
+            - service_renewal
+            - listing_tools
+            - request
+            - other
+          type: string
+          x-speakeasy-name-override: ConnectionStepGroup
+        technical_message:
+          type: string
+          description: A precise technical fact about the reason, when every cause of it shares one.
+        time:
+          type: string
+          description: When the newest attempt ended or last moved.
+          format: date-time
+      required:
+        - id
+        - time
+        - first_started_at
+        - count
+        - outcome
+        - step
+        - app
+    ConnectionAttemptStep:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        final:
+          type: boolean
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        reason:
+          type: string
+        result:
+          type: string
+        service:
+          type: string
+        step:
+          description: The plain step an attempt ended or stopped at.
+          enum:
+            - connect
+            - sign_in
+            - service_sign_in
+            - sign_in_renewal
+            - service_renewal
+            - listing_tools
+            - request
+            - other
+          type: string
+          x-speakeasy-name-override: ConnectionStepGroup
+        stored_step:
+          type: string
+        technical_message:
+          type: string
+          description: A precise technical fact about the reason, when every cause of it shares one.
+      required:
+        - at
+        - step
+        - stored_step
+        - result
+        - final
+    ConnectionDeniedClient:
+      type: object
+      properties:
+        app:
+          $ref: '#/components/schemas/ConnectionApp'
+        attempts:
+          type: integer
+          format: int64
+        last_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        networks:
+          type: integer
+          format: int64
+        people:
+          type: integer
+          format: int64
+        reason:
+          type: string
+        technical_message:
+          type: string
+          description: A precise technical fact about the reason, when every cause of it shares one.
+      required:
+        - app
+        - reason
+        - message
+        - attempts
+        - people
+        - networks
+        - last_at
+    ConnectionDeniedClientsResult:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionDeniedClient'
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
+    ConnectionFacetValue:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          format: int64
+        label:
+          type: string
+        value:
+          type: string
+      required:
+        - value
+        - attempts
+    ConnectionHealthRangeQuery:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive start of attempt start times, at most 30 days ago.
+          format: date-time
+        server_id:
+          type: string
+          description: Limit to one server, gateway or toolset.
+          format: uuid
+        to:
+          type: string
+          description: Exclusive end of attempt start times.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - from
+        - to
+    ConnectionNetwork:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Opaque per-organization network key, the filter value.
+        label:
+          type: string
+          description: Short label for display.
+      required:
+        - key
+        - label
+    ConnectionPerson:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Only on getAttempt.
+        kind:
+          type: string
+          enum:
+            - user
+            - agent
+            - apikey
+            - workload
+            - anonymous
+            - other
+        name:
+          type: string
+        subject_urn:
+          type: string
+        user_id:
+          type: string
+      required:
+        - subject_urn
+        - kind
+    ConnectionServer:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - mcp
+            - gateway
+            - toolset
+            - authorization_server
+            - none
+        name:
+          type: string
+      required:
+        - id
+        - kind
+    ConnectionSessionActivityResult:
+      type: object
+      properties:
+        active_now:
+          type: integer
+          format: int64
+        average_session_seconds:
+          type: integer
+          description: Mean length of sessions that ended in the average window.
+          format: int64
+        average_window_from:
+          type: string
+          description: 'Start of the window the average covers: 30 days before now.'
+          format: date-time
+        average_window_to:
+          type: string
+          description: 'End of the window the average covers: now.'
+          format: date-time
+        configured_session_seconds:
+          type: integer
+          format: int64
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionSessionDay'
+      required:
+        - days
+        - active_now
+        - configured_session_seconds
+        - average_window_from
+        - average_window_to
+    ConnectionSessionDay:
+      type: object
+      properties:
+        active_sessions:
+          type: integer
+          format: int64
+        day:
+          type: string
+          description: UTC day, YYYY-MM-DD.
+      required:
+        - day
+        - active_sessions
+    ConnectionSignInBucket:
+      type: object
+      properties:
+        renewals:
+          $ref: '#/components/schemas/ConnectionSignInCounts'
+        sign_ins:
+          $ref: '#/components/schemas/ConnectionSignInCounts'
+        start:
+          type: string
+          format: date-time
+      required:
+        - start
+        - sign_ins
+        - renewals
+    ConnectionSignInCounts:
+      type: object
+      properties:
+        did_not:
+          type: integer
+          format: int64
+        succeeded:
+          type: integer
+          format: int64
+      required:
+        - succeeded
+        - did_not
+    ConnectionSignInSummaryResult:
+      type: object
+      properties:
+        bucket:
+          type: string
+          enum:
+            - hour
+            - six_hours
+            - day
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionSignInBucket'
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
     CountChatsByUserResult:
       type: object
       properties:
@@ -99383,6 +100691,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         effect:
           type: string
@@ -100601,6 +101910,34 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    GetAttemptRequestBody:
+      type: object
+      properties:
+        reference:
+          type: string
+          description: The attempt reference a person was shown, or a row id from listAttempts. Any string; one that matches nothing is not found.
+      required:
+        - reference
+    GetConnectionAttemptResult:
+      type: object
+      properties:
+        attempt:
+          $ref: '#/components/schemas/ConnectionAttemptDetail'
+        found:
+          type: boolean
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
     GetDeploymentEvaluationResult:
       type: object
       properties:
@@ -101405,6 +102742,25 @@ components:
       required:
         - message
         - acknowledged
+    GetSessionActivityRequestBody:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive start.
+          format: date-time
+        to:
+          type: string
+          description: Exclusive end.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - from
+        - to
     GetSessionMetaResult:
       type: object
       properties:
@@ -101425,6 +102781,51 @@ components:
           description: Matching setup guides, most specific match first. Empty when no guide has been published for the server.
       required:
         - guides
+    GetSignInSummaryRequestBody:
+      type: object
+      properties:
+        bucket:
+          type: string
+          description: Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
+          enum:
+            - hour
+            - six_hours
+            - day
+        from:
+          type: string
+          description: Inclusive start of attempt start times, at most 30 days ago.
+          format: date-time
+        server_id:
+          type: string
+          description: Limit to one server, gateway or toolset.
+          format: uuid
+        steps:
+          type: array
+          items:
+            type: string
+            enum:
+              - connect
+              - sign_in
+              - service_sign_in
+              - sign_in_renewal
+              - service_renewal
+              - listing_tools
+              - request
+              - other
+          description: 'Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal. Steps outside these four count nothing. In-progress attempts are never counted.'
+          maxItems: 50
+        to:
+          type: string
+          description: Exclusive end of attempt start times.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - from
+        - to
     GetSignedAssetURLForm:
       type: object
       properties:
@@ -104473,6 +105874,40 @@ components:
           description: Assistants for the current project.
       required:
         - assistants
+    ListAttemptsRequestBody:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Opaque cursor from next_cursor.
+        filters:
+          $ref: '#/components/schemas/ConnectionAttemptFilters'
+        from:
+          type: string
+          description: Inclusive start of attempt start times, at most 30 days ago.
+          format: date-time
+        limit:
+          type: integer
+          description: Page size, default 50, at most 100.
+          format: int64
+          minimum: 1
+          maximum: 100
+        server_id:
+          type: string
+          description: Limit to one server, gateway or toolset.
+          format: uuid
+        to:
+          type: string
+          description: Exclusive end of attempt start times.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - from
+        - to
     ListAttributeKeysResult:
       type: object
       properties:
@@ -104667,6 +106102,28 @@ components:
       description: Result type for listing the CIMD preset catalog.
       required:
         - items
+    ListConnectionAttemptsResult:
+      type: object
+      properties:
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionAttemptRow'
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        next_cursor:
+          type: string
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
     ListCustomDetectionRulesResult:
       type: object
       properties:
@@ -109962,7 +111419,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target''s client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.'
+          description: Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. Client ids listed in merged_client_ids are not listed here.
         consent_count:
           type: integer
           description: User-session consents that would move.
@@ -109979,6 +111436,11 @@ components:
         impact_previewed:
           type: boolean
           description: True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.
+        merged_client_ids:
+          type: array
+          items:
+            type: string
+          description: Active OAuth client ids present on both issuers whose source client would merge onto the target's client for the same id. A client resolved from the same Client ID Metadata Document on both issuers merges, keeping its sessions and consents. A client registered through dynamic client registration on both issuers merges only when nothing uses the source copy (it has no session that has not been revoked, even an expired one, and no consent) and neither copy has an assistant binding. The target copy survives, so its own sessions and consents do not block. Neither merges when an issuance selection profile pins the source client to the source issuer; it is listed in conflicting_client_ids instead.
         newly_reachable_server_count:
           type: integer
           description: Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.
@@ -110023,6 +111485,7 @@ components:
         - cimd_client_count
         - remote_session_count
         - conflicting_client_ids
+        - merged_client_ids
         - principal_binding_conflict_count
         - ema_binding_conflict_count
         - platform_owned
@@ -112630,7 +114093,7 @@ components:
       properties:
         access_expires_at:
           type: string
-          description: Upstream access-token expiry. Independent of refresh_expires_at.
+          description: Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.
           format: date-time
         authorization_expires_at:
           type: string
@@ -112694,7 +114157,6 @@ components:
         - subject_urn
         - user_session_issuer_id
         - remote_session_client_id
-        - access_expires_at
         - has_refresh_token
         - scopes
         - created_at
@@ -113763,6 +115225,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         kind:
           type: string
@@ -116718,6 +118181,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
@@ -117753,6 +119217,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
         level:
           type: string
@@ -117867,10 +119332,10 @@ components:
       properties:
         keep_shadow:
           type: boolean
-          description: 'Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.'
+          description: 'Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.'
         mcp_server_id:
           type: string
-          description: The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
+          description: The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.
           format: uuid
         project_id:
           type: string
@@ -118269,7 +119734,7 @@ components:
           $ref: '#/components/schemas/ShadowMCPOfficialServer'
         official_server_declined:
           type: boolean
-          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
+          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.
         request_count:
           type: integer
           format: int64
@@ -118394,10 +119859,10 @@ components:
       properties:
         automatic:
           type: boolean
-          description: True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
+          description: True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
         direct_access_allowed:
           type: boolean
-          description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
+          description: 'Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
         gateway_name:
           type: string
           description: The gateway that serves the official server, when url is a gateway's address.
@@ -118429,7 +119894,7 @@ components:
         slug:
           type: string
           description: The server's slug, when it has one.
-      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
       required:
         - mcp_server_id
         - name
@@ -127823,6 +129288,8 @@ tags:
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
+  - name: mcpConnectionHealth
+    description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata

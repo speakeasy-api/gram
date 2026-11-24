@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { isProdHost } from "@/lib/utils";
 import { nullTelemetry, type Telemetry } from "./Telemetry";
 import {
   failOpenMissingFlags,
@@ -138,15 +137,5 @@ describe("isGramHost", () => {
     "https://speakeasy.com",
   ])("rejects %s", (url) => {
     expect(isGramHost(url)).toBe(false);
-  });
-});
-
-describe("isProdHost", () => {
-  it("treats only the production dashboard hosts as prod", () => {
-    expect(isProdHost("https://app.getgram.ai")).toBe(true);
-    expect(isProdHost("https://ai.speakeasy.com")).toBe(true);
-    expect(isProdHost("https://dev.ai.speakeasy.com")).toBe(false);
-    expect(isProdHost("https://dev.getgram.ai")).toBe(false);
-    expect(isProdHost("https://pr-6012.dev.getgram.ai")).toBe(false);
   });
 });

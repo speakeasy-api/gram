@@ -22,7 +22,7 @@ func TestShadowPublicServerAdmission(t *testing.T) {
 			t.Parallel()
 			h := newShadowHarness(t, true)
 			ctx := t.Context()
-			connect := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+			connect := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 			shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 			shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
@@ -39,7 +39,7 @@ func TestShadowPublicHostedAdmissionUsesVisibility(t *testing.T) {
 	h := newShadowHarness(t, true)
 	project, server := uuid.New(), uuid.New()
 	toolset := &toolsetsrepo.Toolset{ID: server, ProjectID: project, OrganizationID: shadowOrg}
-	_, authenticated, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: true}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
+	_, authenticated, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: true}, authz.MCPServer(authz.MCPServerIDOf(server), authz.ProjectIDOf(project)).Connect())
 	require.NoError(t, err)
 	require.False(t, authenticated)
 	require.Equal(t, map[attribute.Set]int64{shadowKey(mandatorySurfaceHostedConnect, mandatoryCallerAnonymous, "anonymous", true, "allow", "visibility", "none"): 1}, h.points(t))
@@ -56,7 +56,7 @@ func TestShadowPublicProxyAdmissionUsesVisibility(t *testing.T) {
 
 func TestShadowServerAdmissionNoDecisionOnDisabledOrCanceled(t *testing.T) {
 	t.Parallel()
-	check := authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1")
+	check := authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect()
 	off := newShadowHarness(t, false)
 	off.service.newMandatoryShadow(t.Context(), shadowOrg).recordServer(t.Context(), mandatorySurfaceHostedConnect, true, authz.MandatoryServerPublic, check)
 	require.Empty(t, off.points(t))
@@ -73,7 +73,7 @@ func TestShadowPrivateHostedAdmissionStillDeniesAnonymous(t *testing.T) {
 	h := newShadowHarness(t, true)
 	project, server := uuid.New(), uuid.New()
 	toolset := &toolsetsrepo.Toolset{ID: server, ProjectID: project, OrganizationID: shadowOrg}
-	_, _, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: false}, authz.MCPCheck(authz.ScopeMCPConnect, server.String(), project.String()))
+	_, _, err := h.service.admitHostedRequest(t.Context(), nil, toolset, &hostedServing{isPublic: false}, authz.MCPServer(authz.MCPServerIDOf(server), authz.ProjectIDOf(project)).Connect())
 	require.Error(t, err)
 	require.Equal(t, map[attribute.Set]int64{shadowKey(mandatorySurfaceHostedConnect, mandatoryCallerAnonymous, "anonymous", false, "deny", "none", "unauthenticated"): 1}, h.points(t))
 }
@@ -84,7 +84,7 @@ func TestShadowPublicPreparationErrorNeverAllows(t *testing.T) {
 	h.service.prepareMandatory = func(context.Context) (authz.MandatoryAuthorization, error) {
 		return authz.MandatoryAuthorization{}, errors.New("admission failed")
 	}
-	h.service.newMandatoryShadow(t.Context(), shadowOrg).recordServer(t.Context(), mandatorySurfaceHostedConnect, true, authz.MandatoryServerPublic, authz.MCPCheck(authz.ScopeMCPConnect, "server_1", "project_1"))
+	h.service.newMandatoryShadow(t.Context(), shadowOrg).recordServer(t.Context(), mandatorySurfaceHostedConnect, true, authz.MandatoryServerPublic, authz.MCPServer(authz.MCPServerIDFrom("server_1"), authz.ProjectIDFrom("project_1")).Connect())
 	for tags := range h.points(t) {
 		outcome, ok := tags.Value("gram.authz.mandatory.outcome")
 		require.True(t, ok)

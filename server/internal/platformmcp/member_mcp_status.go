@@ -356,11 +356,11 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("get member MCP status target: %w", err)
 	}
-	canRead, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String()))
+	canRead, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Read())
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("evaluate MCP read access: %w", err)
 	}
-	canConnect, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String()))
+	canConnect, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Connect())
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("evaluate MCP connection access: %w", err)
 	}

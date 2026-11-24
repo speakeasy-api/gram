@@ -108,12 +108,18 @@ func TestNewClientWithoutNextIsAnOrdinaryClient(t *testing.T) {
 	require.Equal(t, 3, client.Options().MaxRetries, "an unarmed client keeps the default retries")
 }
 
-func TestNewClientRejectsNextEqualToCurrent(t *testing.T) {
+func TestNewClientWithNextEqualToCurrentIsAnOrdinaryClient(t *testing.T) {
 	t.Parallel()
 
+	// No state key: an armed client would refuse to start.
 	server := miniredis.RunT(t)
-	_, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: server.Addr()}, DefaultRole, Target{Addr: server.Addr(), Password: ""})
-	require.Error(t, err)
+	client, err := NewClient(t.Context(), slog.New(slog.DiscardHandler), &redis.Options{Addr: server.Addr()}, DefaultRole, Target{Addr: server.Addr(), Password: ""})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	require.NoError(t, client.Set(t.Context(), "k", "v", 0).Err())
+	require.True(t, server.Exists("k"))
+	require.Equal(t, 3, client.Options().MaxRetries, "an unarmed client keeps the default retries")
 }
 
 func TestStartRefusesAnUnarmedInstance(t *testing.T) {

@@ -20,15 +20,15 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
   AuthenticationSection: ({ mcpServer }: { mcpServer: McpServer }) =>
     mcpServer.remoteMcpServerId ? (
-      <h2 data-testid="legacy-identity-section">Identity</h2>
+      <h2 data-testid="legacy-identity-section">Sign-in method</h2>
     ) : (
-      <h2>Authentication</h2>
+      <h2>Sign-in method</h2>
     ),
 }));
 vi.mock("./sections/authentication/UpstreamCredentialsSection", () => ({
   UPSTREAM_CREDENTIALS_SECTION_ID: "upstream-credentials",
   UpstreamCredentialsSection: () => (
-    <h2 data-testid="upstream-credentials-section">Identity</h2>
+    <h2 data-testid="upstream-credentials-section">Upstream credentials</h2>
   ),
 }));
 
@@ -49,15 +49,16 @@ vi.mock("./sections/DangerZoneSection", () => ({
 vi.mock("./sections/RestartSetupSection", () => ({
   RestartSetupSection: () => <h2>Guided setup</h2>,
 }));
-vi.mock("./sections/HeadersSection", () => ({
-  HeadersSection: () => <h2>Custom Headers</h2>,
-}));
 vi.mock("./sections/PublicRateLimitsSection", () => ({
   PublicRateLimitsSection: () => <h2>Public Rate Limits</h2>,
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
   RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
+}));
+vi.mock("./sections/UpstreamUrlSection", () => ({
+  MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
+  UpstreamUrlSection: () => <h2>Remote URL</h2>,
 }));
 vi.mock("./sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "server-url",
@@ -231,10 +232,8 @@ describe("SettingsTab", () => {
       // server has no Access area.
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      // Upstream headers are the Identity panel's Custom Headers disclosure,
-      // not a section of their own.
-      "Sign-in and identity": ["Identity", "Identity chaining"],
-      Connection: ["Server URL", "Network Access", "Sessions"],
+      "Sign-in": ["Upstream credentials", "Sessions", "Identity chaining"],
+      Connection: ["Server URL", "Remote URL", "Network Access"],
       Tools: ["Tool Filtering"],
       "Danger zone": ["Danger Zone"],
     });
@@ -248,9 +247,9 @@ describe("SettingsTab", () => {
       General: ["Availability", "General"],
       Access: ["Visibility", "Public Rate Limits"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": [
-        "Authentication",
-        "Identity",
+      "Sign-in": [
+        "Sign-in method",
+        "Upstream credentials",
         "Resource Identifier",
         "Caller Identity",
       ],
@@ -271,7 +270,7 @@ describe("SettingsTab", () => {
     ).toEqual({
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": ["Authentication"],
+      "Sign-in": ["Sign-in method"],
       "Danger zone": ["Danger Zone"],
     });
   });
@@ -294,7 +293,7 @@ describe("SettingsTab", () => {
     ).toEqual([
       ["General", "#settings-general"],
       ["Plugins", "#publishing"],
-      ["Sign-in and identity", "#settings-sign-in"],
+      ["Sign-in", "#settings-sign-in"],
       ["Danger zone", "#settings-danger-zone"],
     ]);
   });
@@ -307,16 +306,17 @@ const remoteServer = () =>
   });
 
 describe("SettingsTab typed upstream identity", () => {
-  it("shows only the credentials as Identity on a remote server", () => {
+  it("shows typed credentials and keeps sessions on a proxied server", () => {
     expect(renderSettings(remoteServer())).toEqual([
       "Availability",
       "General",
       "Plugins",
-      "Identity",
+      "Upstream credentials",
+      "Sessions",
       "Identity chaining",
       "Server URL",
+      "Remote URL",
       "Network Access",
-      "Sessions",
       "Tool Filtering",
       "Danger Zone",
     ]);
@@ -330,7 +330,7 @@ describe("SettingsTab typed upstream identity", () => {
     ).toBeTruthy();
   });
 
-  it("keeps tunneled caller authentication and adds credentials as Identity", () => {
+  it("keeps tunneled caller authentication alongside upstream credentials", () => {
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
@@ -340,8 +340,8 @@ describe("SettingsTab typed upstream identity", () => {
       "Visibility",
       "Public Rate Limits",
       "Plugins",
-      "Authentication",
-      "Identity",
+      "Sign-in method",
+      "Upstream credentials",
     ]);
     expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
   });
@@ -353,7 +353,7 @@ describe("SettingsTab typed upstream identity", () => {
       "Availability",
       "General",
       "Plugins",
-      "Authentication",
+      "Sign-in method",
       "Danger Zone",
     ]);
     cleanup();
@@ -364,6 +364,6 @@ describe("SettingsTab typed upstream identity", () => {
           toolsetId: "toolset-1",
         }),
       ),
-    ).not.toContain("Identity");
+    ).not.toContain("Upstream credentials");
   });
 });

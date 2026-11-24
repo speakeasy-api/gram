@@ -343,7 +343,7 @@ export function CatalogOfficialSheet({
                   : canManageCredentials
                     ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
                     : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
-                : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
+                : `Speakeasy adds the catalog version of ${entryTitle} and makes it the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -360,7 +360,7 @@ export function CatalogOfficialSheet({
               {!rbacLoading && !canManageCredentials && (
                 <Alert variant="warning" dismissible={false}>
                   Ask an organization admin to open this server’s Settings and
-                  finish setup under Identity.
+                  finish setup under Sign-in.
                 </Alert>
               )}
               <SignInSetup mcpServerId={stage.mcpServerId} />
@@ -506,6 +506,7 @@ export function CatalogOfficialSheet({
           {stage.kind === "sign-in" ? (
             <TurnOnAndLink
               mcpServerId={stage.mcpServerId}
+              canManageCredentials={!rbacLoading && canManageCredentials}
               onLinked={(mcpServer) =>
                 void finish(
                   mcpServer.id,
@@ -542,7 +543,9 @@ export function CatalogOfficialSheet({
                     <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 ) : null}
-                <Button.Text>{busy ? "Adding" : "Add and link"}</Button.Text>
+                <Button.Text>
+                  {busy ? "Adding" : "Add and make official"}
+                </Button.Text>
               </Button>
             </>
           ) : null}
@@ -584,13 +587,15 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
 
 /**
  * Turns the new server on, then links it. A server people cannot sign in to
- * would fail every call, so the admin saves the client above first.
+ * would fail every call, so an admin sets up an upstream credential first.
  */
 function TurnOnAndLink({
   mcpServerId,
+  canManageCredentials,
   onLinked,
 }: {
   mcpServerId: string;
+  canManageCredentials: boolean;
   onLinked: (mcpServer: McpServer) => void;
 }) {
   const client = useSdkClient();
@@ -645,8 +650,8 @@ function TurnOnAndLink({
         {failed ??
           (unavailable
             ? "Could not verify upstream sign-in."
-            : signInOpen && !checking
-              ? "Save the sign-in settings above to turn it on."
+            : signInOpen && !checking && canManageCredentials
+              ? "Add or turn on an upstream credential above to enable this server."
               : "")}
       </Text>
       <Button
@@ -659,7 +664,9 @@ function TurnOnAndLink({
             <Spinner className="mr-0 size-4" />
           </Button.LeftIcon>
         ) : null}
-        <Button.Text>{pending ? "Turning on" : "Turn on and link"}</Button.Text>
+        <Button.Text>
+          {pending ? "Turning on" : "Turn on and make official"}
+        </Button.Text>
       </Button>
     </div>
   );

@@ -133,7 +133,7 @@ func (s *ServiceCore) EnableManagedAssistant(
 			// Repair any bound agent, including a suspended or revoked one, so
 			// the ceiling is in place when it becomes active again.
 			if provisionIdentity && existing.IdentityState != string(assistantidentity.NeverConfigured) {
-				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, createdByUserID); err != nil {
+				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, urn.NewPrincipal(urn.PrincipalTypeUser, createdByUserID)); err != nil {
 					return err
 				}
 			}
@@ -350,7 +350,7 @@ func (s *ServiceCore) createManagedAssistant(
 		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
 		}
-		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, createdByUserID); err != nil {
+		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, urn.NewPrincipal(urn.PrincipalTypeUser, createdByUserID)); err != nil {
 			return assistantRecord{}, err
 		}
 	}

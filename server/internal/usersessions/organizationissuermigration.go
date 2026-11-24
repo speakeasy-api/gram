@@ -153,7 +153,7 @@ func userSessionIssuerSlugConflict(err error) bool {
 // whose tenancy is owned by the issuer is normalized in the same transaction;
 // project-scoped consumers remain in their own projects.
 func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +297,14 @@ type userSessionMigrationPreflight struct {
 	principalBindingConflictCount, emaBindingConflictCount                       int32
 	platformOwned                                                                bool
 	warnings                                                                     []*orggen.UserSessionIssuerFieldMismatch
+
+	// mergeablePairs are the source clients that merge onto the target's
+	// client for the same client_id, read under the consolidation's locks. The
+	// run merges exactly these, so the preflight and the run cannot disagree.
+	mergeablePairs []repo.ListMergeableClientPairsRow
+
+	// mergedClientIDs are the client_ids of mergeablePairs, ordered.
+	mergedClientIDs []string
 }
 
 func (p userSessionMigrationPreflight) canMigrate() bool {
@@ -356,10 +364,15 @@ func (s *Service) buildUserSessionMigrationPreflight(ctx context.Context, q *rep
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("count remote sessions: %w", err)
 	}
-	conflicts, err := q.ListUserSessionIssuerClientIDConflicts(ctx, repo.ListUserSessionIssuerClientIDConflictsParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
+	duplicates, err := q.ListUserSessionIssuerDuplicateClients(ctx, repo.ListUserSessionIssuerDuplicateClientsParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
-		return userSessionMigrationPreflight{}, fmt.Errorf("list client id conflicts: %w", err)
+		return userSessionMigrationPreflight{}, fmt.Errorf("list duplicate clients: %w", err)
 	}
+	mergeable, err := q.ListMergeableClientPairs(ctx, repo.ListMergeableClientPairsParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
+	if err != nil {
+		return userSessionMigrationPreflight{}, fmt.Errorf("list mergeable clients: %w", err)
+	}
+	conflicts, merged := classifyDuplicateClients(duplicates, mergeable)
 	principalConflicts, err := q.CountUserSessionIssuerPrincipalBindingConflicts(ctx, repo.CountUserSessionIssuerPrincipalBindingConflictsParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("count principal binding conflicts: %w", err)
@@ -381,14 +394,37 @@ func (s *Service) buildUserSessionMigrationPreflight(ctx context.Context, q *rep
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
 		platformOwned: sourceOwned || targetOwned, warnings: warnings,
+		mergeablePairs: mergeable, mergedClientIDs: merged,
 	}, nil
+}
+
+// classifyDuplicateClients splits the source clients whose client_id the
+// target also holds into the client_ids that block consolidation and those
+// that merge onto the target's client. Both lists keep the duplicates' order
+// and are never nil, so the audit event records an empty list rather than
+// null.
+func classifyDuplicateClients(duplicates []repo.ListUserSessionIssuerDuplicateClientsRow, mergeable []repo.ListMergeableClientPairsRow) (conflicting, merged []string) {
+	mergeableSources := make(map[uuid.UUID]bool, len(mergeable))
+	for _, pair := range mergeable {
+		mergeableSources[pair.SourceClientID] = true
+	}
+
+	conflicting, merged = make([]string, 0, len(duplicates)), make([]string, 0, len(mergeable))
+	for _, duplicate := range duplicates {
+		if mergeableSources[duplicate.SourceClientID] {
+			merged = append(merged, duplicate.ClientID)
+		} else {
+			conflicting = append(conflicting, duplicate.ClientID)
+		}
+	}
+	return conflicting, merged
 }
 
 func userSessionMigrationPreflightView(run issuerMigrationRun) *orggen.OrganizationUserSessionIssuerMigratePreflight {
 	preflight := run.preflight
 	return &orggen.OrganizationUserSessionIssuerMigratePreflight{
 		ClientCount: int(preflight.clientCount), SessionCount: int(preflight.sessionCount), ConsentCount: int(preflight.consentCount), CimdClientCount: int(preflight.cimdClientCount), RemoteSessionCount: int(preflight.remoteSessionCount),
-		ConflictingClientIds: preflight.conflictingClientIDs, PrincipalBindingConflictCount: int(preflight.principalBindingConflictCount), EmaBindingConflictCount: int(preflight.emaBindingConflictCount), PlatformOwned: preflight.platformOwned,
+		ConflictingClientIds: preflight.conflictingClientIDs, MergedClientIds: preflight.mergedClientIDs, PrincipalBindingConflictCount: int(preflight.principalBindingConflictCount), EmaBindingConflictCount: int(preflight.emaBindingConflictCount), PlatformOwned: preflight.platformOwned,
 		Warnings: preflight.warnings, WarningsFingerprint: run.fingerprint, CanMigrate: run.canMigrate(),
 		ImpactPreviewed:           run.ran,
 		ServerImpacts:             serverImpactViews(run.impacts),
@@ -405,7 +441,7 @@ func userSessionMigrationPreflightView(run issuerMigrationRun) *orggen.Organizat
 // reconciling the affected projects writes. It takes the consolidation's
 // locks, bounded by a lock timeout, which is why it needs org:admin.
 func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen.GetIssuerMigratePreflightPayload) (*orggen.OrganizationUserSessionIssuerMigratePreflight, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -435,11 +471,11 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen
 	return userSessionMigrationPreflightView(run), nil
 }
 
-// mergedCimdClients counts the source rows folded into the target issuer's
-// rows by mergeDuplicateCimdClients.
-type mergedCimdClients struct {
-	// clients is the number of source CIMD clients retired in favor of the
-	// target's row for the same metadata document URL.
+// mergedClients counts the source rows folded into the target issuer's rows
+// by mergeDuplicateClients.
+type mergedClients struct {
+	// clients is the number of source clients retired in favor of the
+	// target's row for the same client_id.
 	clients int64
 
 	// consents is the number of source consents repointed to a target client
@@ -447,47 +483,44 @@ type mergedCimdClients struct {
 	consents int64
 }
 
-// mergeDuplicateCimdClients folds each source client resolved from a Client
-// ID Metadata Document into the target issuer's client for the same document
-// URL. Both rows describe one client, so the target row survives: its consents
-// win where the same subject approved the same upstream set on both issuers,
-// and every other consent and session moves to it. Each pair's steps run in
-// order, each seeing the previous step's writes.
-func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, organizationID string, sourceIssuerID, targetIssuerID uuid.UUID) (mergedCimdClients, error) {
-	pairs, err := q.ListMergeableCimdClientPairs(ctx, repo.ListMergeableCimdClientPairsParams{TargetIssuerID: targetIssuerID, SourceIssuerID: sourceIssuerID, OrganizationID: organizationID})
-	if err != nil {
-		return mergedCimdClients{}, fmt.Errorf("list mergeable clients: %w", err)
-	}
-
-	merged := mergedCimdClients{clients: 0, consents: 0}
+// mergeDuplicateClients folds each source client in pairs into the target
+// issuer's client for the same client_id. Both rows describe one client, so
+// the target row survives: its consents win where the same subject approved
+// the same upstream set on both issuers, and every other consent and session
+// moves to it. A source registered through dynamic client registration is
+// only paired while it has no live session or consent, so for it only the
+// retirement writes anything. Each pair's steps run in order, each seeing the
+// previous step's writes.
+func mergeDuplicateClients(ctx context.Context, q *repo.Queries, pairs []repo.ListMergeableClientPairsRow) (mergedClients, error) {
+	merged := mergedClients{clients: 0, consents: 0}
 	for _, pair := range pairs {
 		source, target := pair.SourceClientID, pair.TargetClientID
 
 		if _, err := q.MoveDuplicateConsentResourcesToClient(ctx, repo.MoveDuplicateConsentResourcesToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
-			return mergedCimdClients{}, fmt.Errorf("move consent resources of client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("move consent resources of client %s: %w", source, err)
 		}
 
 		if _, err := q.RetireDuplicateConsentResources(ctx, repo.RetireDuplicateConsentResourcesParams{SourceClientID: source, TargetClientID: target}); err != nil {
-			return mergedCimdClients{}, fmt.Errorf("retire duplicate consent resources of client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("retire duplicate consent resources of client %s: %w", source, err)
 		}
 
 		retired, err := q.RetireDuplicateConsents(ctx, repo.RetireDuplicateConsentsParams{SourceClientID: source, TargetClientID: target})
 		if err != nil {
-			return mergedCimdClients{}, fmt.Errorf("retire duplicate consents of client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("retire duplicate consents of client %s: %w", source, err)
 		}
 
 		repointed, err := q.RepointConsentsToClient(ctx, repo.RepointConsentsToClientParams{SourceClientID: source, TargetClientID: target})
 		if err != nil {
-			return mergedCimdClients{}, fmt.Errorf("repoint consents of client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("repoint consents of client %s: %w", source, err)
 		}
 
 		if _, err := q.RepointSessionsToClient(ctx, repo.RepointSessionsToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
-			return mergedCimdClients{}, fmt.Errorf("repoint sessions of client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("repoint sessions of client %s: %w", source, err)
 		}
 
 		clients, err := q.RetireMergedUserSessionClient(ctx, source)
 		if err != nil {
-			return mergedCimdClients{}, fmt.Errorf("retire client %s: %w", source, err)
+			return mergedClients{}, fmt.Errorf("retire client %s: %w", source, err)
 		}
 
 		merged.clients += clients
@@ -733,11 +766,13 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeConflict, err, "issuer scope changed while migration was normalized; retry").LogError(ctx, logger)
 	}
+	// A sign-in or consent recorded on a source client must wait, so a client
+	// the preflight finds unused stays unused until the merge retires it.
 	if err := q.LockUserSessionIssuerClientsForMigration(ctx, source.ID); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "lock source user session clients").LogError(ctx, logger)
 	}
-	// Merged CIMD clients take their consents onto the target's rows, so a
-	// consent recorded on a target client mid-migration must wait.
+	// Merged clients take their consents onto the target's rows, so a consent
+	// recorded on a target client mid-migration must wait.
 	if err := q.LockUserSessionIssuerClientsForMigration(ctx, target.ID); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "lock target user session clients").LogError(ctx, logger)
 	}
@@ -784,9 +819,9 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 		return run, oops.E(oops.CodeUnexpected, err, "record issuer migration credential choices").LogError(ctx, logger)
 	}
 
-	merged, err := mergeDuplicateCimdClients(ctx, q, organizationID, source.ID, target.ID)
+	merged, err := mergeDuplicateClients(ctx, q, preflight.mergeablePairs)
 	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD user session clients").LogError(ctx, logger)
+		return run, oops.E(oops.CodeUnexpected, err, "merge duplicate user session clients").LogError(ctx, logger)
 	}
 
 	targetProjectID := target.ProjectID
@@ -813,14 +848,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	run.cimdClientsMigrated, err = q.UpdateUserSessionIssuerCimdClientsToIssuer(ctx, repo.UpdateUserSessionIssuerCimdClientsToIssuerParams{TargetIssuerID: target.ID, TargetProjectID: targetProjectID, OrganizationID: organizationID, SourceIssuerID: source.ID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate CIMD clients").LogError(ctx, logger)
-	}
-	// Read before the source's bindings join the target's: only these were
-	// configured for sign-in through the target.
-	targetRegistrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
-		IssuerIds: []uuid.UUID{target.ID}, OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "list target remote-session client links").LogError(ctx, logger)
 	}
 	// Carry only the bindings something still signs in through. The rest
 	// leave with the source; users' grants for them still move below, so
@@ -875,15 +902,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if _, err := q.UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionEMABindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate EMA bindings").LogError(ctx, logger)
 	}
-	mcpServerProjectIDs, err := q.ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx, repo.ListMCPServerProjectIDsForUserSessionIssuerMigrationParams{
-		SourceIssuerID: conv.ToNullUUID(source.ID),
-		TargetIssuerID: conv.ToNullUUID(target.ID),
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
-	}
-	movedServerProjects := map[uuid.UUID]bool{}
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
@@ -895,9 +913,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			}
 			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
 				return 0, err
-			}
-			for _, server := range moved {
-				movedServerProjects[server.ProjectID] = true
 			}
 			return int64(len(moved)), nil
 		}},
@@ -913,18 +928,8 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			return run, oops.E(oops.CodeUnexpected, err, "migrate user session issuer %s", operation.name).LogError(ctx, logger)
 		}
 	}
-	for _, projectID := range mcpServerProjectIDs {
-		// The migration moves the servers onto the target, which configures
-		// their sign-in there, so a moved server that is the target's only
-		// consumer offers the clients the target bound. A server already on
-		// the target was not configured by this move, and a binding that only
-		// the source held was configured for neither.
-		if movedServerProjects[projectID] {
-			if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, organizationID, projectID, []uuid.UUID{target.ID}, slices.Concat([]uuid.UUID{}, targetRegistrations)); err != nil {
-				return run, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
-			}
-		}
-	}
+	// A downstream sign-in move does not configure new upstream offers. In
+	// particular, target links can exist solely as attachment FK parents.
 	// Retire the source before reconciling: prune and the organization
 	// gateway decide from how many organization-level issuers are live, which
 	// the commit changes when the source is one of them.
@@ -959,7 +964,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 }
 
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -998,7 +1003,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		SourceUserSessionIssuerURN: urn.NewUserSessionIssuer(source.ID), SourceSlug: source.Slug,
 		TargetUserSessionIssuerURN: urn.NewUserSessionIssuer(target.ID), TargetSlug: target.Slug,
 		ClientsMigrated: run.clientsMigrated, SessionsMigrated: run.sessionsMigrated, ConsentsMigrated: run.consentsMigrated, CimdClientsMigrated: run.cimdClientsMigrated, RemoteSessionsMigrated: run.remoteSessionsMigrated,
-		PinnedAssociations: auditPins(run.pins), DroppedClientLinks: dropped, ServerImpacts: auditServerImpacts(run.impacts),
+		PinnedAssociations: auditPins(run.pins), DroppedClientLinks: dropped, MergedClientIDs: run.preflight.mergedClientIDs, ServerImpacts: auditServerImpacts(run.impacts),
 		UserSessionIssuerSnapshotBefore: UserSessionIssuerView(source), UserSessionIssuerSnapshotAfter: targetView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer migration").LogError(ctx, logger)

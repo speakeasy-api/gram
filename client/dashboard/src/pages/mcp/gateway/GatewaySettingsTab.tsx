@@ -32,6 +32,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
 import { RequireScope } from "@/components/require-scope";
+import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { Textarea } from "@/components/moon/textarea";
 import codeInstructions from "./builtin-gateway-code-instructions.txt?raw";
@@ -199,9 +200,6 @@ function GatewayNameSection({
           />
         </SettingsSection.Body>
         <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            {`Please use no more than ${NAME_MAX_LENGTH} characters.`}
-          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
               <FooterSaveButton
@@ -437,7 +435,7 @@ function GatewayAuthenticationSection({
   return (
     <SettingsSection id={GATEWAY_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
           Who may connect to this gateway and how they sign in. Changes take
           effect on new connections. Without an identity provider it serves
@@ -457,6 +455,9 @@ function GatewayDangerZoneSection({
   endpoints: McpEndpoint[];
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Typed to confirm, like every other MCP server delete.
+  const [typedName, setTypedName] = useState("");
+  const nameMatches = typedName.trim() === metaMcpServer.name.trim();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const routes = useRoutes();
@@ -512,7 +513,13 @@ function GatewayDangerZoneSection({
         </SettingsSection.Body>
       </SettingsSection.Panel>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          setConfirmOpen(open);
+          if (!open) setTypedName("");
+        }}
+      >
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>Delete this gateway?</Dialog.Title>
@@ -526,17 +533,35 @@ function GatewayDangerZoneSection({
               } and member list are removed. Member MCP servers keep serving their own endpoints.`}
             </Dialog.Description>
           </Dialog.Header>
+          <div className="grid gap-2">
+            <Text small>
+              To confirm, type the gateway name:{" "}
+              <strong className="break-all">{metaMcpServer.name}</strong>
+            </Text>
+            <Input
+              value={typedName}
+              onChange={setTypedName}
+              placeholder={metaMcpServer.name}
+              mutedPlaceholder
+              disabled={remove.isPending}
+              aria-label="Type the gateway name to confirm"
+              autoComplete="off"
+            />
+          </div>
           <Dialog.Footer>
             <Button
               variant="secondary"
               disabled={remove.isPending}
-              onClick={() => setConfirmOpen(false)}
+              onClick={() => {
+                setConfirmOpen(false);
+                setTypedName("");
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={remove.isPending}
+              disabled={remove.isPending || !nameMatches}
               onClick={() =>
                 remove.mutate({ request: { id: metaMcpServer.id } })
               }

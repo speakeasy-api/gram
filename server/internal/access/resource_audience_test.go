@@ -227,11 +227,11 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "")),
 		"a named tool is allowed")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("delete_everything", "")),
 		"a tool the rule does not name is not")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(otherServerID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: otherServerProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(otherServerID), authz.ProjectIDFrom(otherServerProject)).ToolCall("search", "")),
 		"and neither is the same tool on another server")
 
 	// Widened to the whole server.
@@ -247,7 +247,7 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "delete_everything", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("delete_everything", "")),
 		"an unnarrowed rule covers every tool")
 
 	// Narrowed by annotation instead: read-only tools only.
@@ -263,9 +263,9 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", Disposition: "read_only", ProjectID: serverProject})),
+	require.True(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "read_only")),
 		"a read-only tool is allowed")
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "purge", Disposition: "destructive", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("purge", "destructive")),
 		"a destructive one is not")
 
 	// Removed entirely.
@@ -279,7 +279,7 @@ func TestService_SetResourceAudience_EnforcesWhatItWrites(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.False(t, authorizes(t, authz.MCPToolCallCheck(serverID, authz.MCPToolCallDimensions{Tool: "search", ProjectID: serverProject})),
+	require.False(t, authorizes(t, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(serverProject)).ToolCall("search", "")),
 		"removing the rule removes the access")
 }
 
@@ -757,30 +757,46 @@ func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingOwn(
 	require.NoError(t, err)
 }
 
-// A narrowed view rule still satisfies the page's server-level read, so it
-// keeps the caller in as well as an unnarrowed one.
-func TestService_SetResourceAudience_AllowsBlockingEveryonesViewWhileKeepingNarrowedOwn(t *testing.T) {
+// Tools and annotations limit the use of a server. A view or manage rule is
+// about the server as a whole, so one that names a tool is refused.
+func TestService_SetResourceAudience_RefusesToolLimitsOnViewAndManage(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestAccessService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	for _, level := range []string{"view", "manage", "blocked_view", "blocked_manage"} {
+		for _, limit := range []string{"tools", "annotations"} {
+			t.Run(level+" limited by "+limit, func(t *testing.T) {
+				t.Parallel()
 
-	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
-	callerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+				ctx, ti := newTestAccessService(t)
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				require.True(t, ok)
 
-	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
-		ResourceKind: "mcp",
-		ResourceID:   serverID,
-		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: "*", Level: "blocked_view"},
-			{PrincipalUrn: callerPrincipal.String(), Level: "view", Tools: []string{"search"}},
-		},
-		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
-		SessionToken:    nil,
-		ApikeyToken:     nil,
-	})
-	require.NoError(t, err)
+				serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+				entry := &gen.SetResourceAudienceEntry{
+					PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
+					Level:        level,
+					Tools:        nil,
+					Dispositions: nil,
+				}
+				if limit == "tools" {
+					entry.Tools = []string{"search"}
+				} else {
+					entry.Dispositions = []string{"read_only"}
+				}
+
+				_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+					ResourceKind:    "mcp",
+					ResourceID:      serverID,
+					Entries:         []*gen.SetResourceAudienceEntry{entry},
+					ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+					SessionToken:    nil,
+					ApikeyToken:     nil,
+				})
+				requireOopsCode(t, err, oops.CodeInvalid)
+				require.ErrorContains(t, err, "can only limit use of a server")
+			})
+		}
+	}
 }
 
 // A role block outranks every grant except one made to a person by name for
@@ -1306,10 +1322,10 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	require.NoError(t, err)
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, ti.conn, authCtx.ActiveOrganizationID, principal)
 	require.NoError(t, err)
-	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, serverID, mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID)))
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(serverID), authz.ProjectIDFrom(mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, serverID))).Connect())
 	require.NoError(t, err)
 	require.False(t, allowed)
-	allowed, err = authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, otherServerID, mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServerID)))
+	allowed, err = authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(otherServerID), authz.ProjectIDFrom(mcpServerProjectID(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServerID))).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed)
 	// Server-local policy removal leaves shared upstream authority intact.
