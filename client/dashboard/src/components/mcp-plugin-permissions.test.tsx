@@ -467,7 +467,7 @@ describe("MCP server readiness", () => {
     render(<DetailChrome />, { wrapper: MemoryRouter });
     for (const label of [
       "Server URL",
-      "Authentication",
+      "Sign-in",
       "Source",
       "Included in a plugin",
     ]) {
@@ -511,7 +511,7 @@ describe("remote MCP server readiness from typed offers", () => {
   });
 
   function authenticationCheck(): HTMLElement {
-    return screen.getByText("Authentication");
+    return screen.getByText("Sign-in");
   }
 
   it.each([

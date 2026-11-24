@@ -110,7 +110,7 @@ func (v authzChatListVisibility) resolve(ctx context.Context, principal Principa
 		return chatListScope{}, fmt.Errorf("resolve chat list visibility: %w", err)
 	}
 	if enforce {
-		allowed, err := v.engine.Evaluate(ctx, authz.ChatReadCheck(projectID.String()))
+		allowed, err := v.engine.Evaluate(ctx, authz.Chats(authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return chatListScope{}, fmt.Errorf("evaluate chat list visibility: %w", err)
 		}

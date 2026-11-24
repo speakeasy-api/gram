@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -69,6 +71,7 @@ func TestOrganizationUserSessionIssuerMigrateMergesDuplicateCimdClients(t *testi
 	require.NoError(t, err)
 	require.True(t, preflight.CanMigrate)
 	require.Empty(t, preflight.ConflictingClientIds)
+	require.Equal(t, []string{documentURL}, preflight.MergedClientIds)
 
 	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 	require.NoError(t, err)
@@ -98,6 +101,12 @@ func TestOrganizationUserSessionIssuerMigrateMergesDuplicateCimdClients(t *testi
 	require.Equal(t, targetID, sourceOnlyAfter.UserSessionIssuerID)
 	require.False(t, sourceOnlyAfter.ProjectID.Valid)
 	requireOrganizationID(t, ctx, sourceOnlyAfter.OrganizationID)
+
+	migrateAudit, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerMigrate)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(migrateAudit.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{documentURL}, metadata["merged_client_ids"])
 
 	sessionAfter, err := repo.GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: session.ID, ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
@@ -141,6 +150,7 @@ func TestOrganizationUserSessionIssuerMigratePreflightBlocksCimdClientPinnedByIs
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
 	require.Equal(t, []string{documentURL}, preflight.ConflictingClientIds)
+	require.Empty(t, preflight.MergedClientIds)
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 	requireOopsCode(t, err, oops.CodeConflict)

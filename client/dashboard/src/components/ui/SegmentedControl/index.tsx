@@ -11,6 +11,8 @@ export const SEGMENT_BASE =
 export const SEGMENT_INACTIVE =
   "text-muted-foreground hover:text-foreground bg-transparent";
 const SEGMENT_ACTIVE = "bg-primary text-primary-foreground";
+const SEGMENT_VIEW =
+  "flex h-full items-center px-3 text-base transition-colors";
 
 /**
  * A two-or-more option segmented toggle: a bordered track of mono uppercase
@@ -28,6 +30,7 @@ export function SegmentedControl<T extends string>({
   ariaLabel,
   busy,
   trailing,
+  variant = "default",
 }: {
   /** The active segment; null leaves every segment inactive, for a choice
    *  that has not been made yet. */
@@ -51,14 +54,18 @@ export function SegmentedControl<T extends string>({
   // long to segment, where the tail lives behind an overflow menu. Style it with
   // SEGMENT_BASE + SEGMENT_INACTIVE so it reads as one of the segments.
   trailing?: ReactNode;
+  /** "view": a framed switch between whole views, in sentence case. */
+  variant?: "default" | "view";
 }): JSX.Element {
+  const view = variant === "view";
   return (
     <div
       role={ariaLabel ? "group" : undefined}
       aria-label={ariaLabel}
       aria-busy={busy || undefined}
       className={cn(
-        "border-border bg-card divide-border inline-flex h-10 shrink-0 items-center divide-x border",
+        "border-border bg-card inline-flex shrink-0 items-center border",
+        view ? "h-10 gap-1 p-1" : "divide-border h-10 divide-x",
         disabled && "cursor-not-allowed opacity-50",
         className,
       )}
@@ -75,7 +82,7 @@ export function SegmentedControl<T extends string>({
               if (!option.disabled) onChange(option.value);
             }}
             className={cn(
-              SEGMENT_BASE,
+              view ? SEGMENT_VIEW : SEGMENT_BASE,
               active ? SEGMENT_ACTIVE : SEGMENT_INACTIVE,
               disabled && "pointer-events-none",
               option.disabled && "cursor-not-allowed opacity-50",

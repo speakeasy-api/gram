@@ -5,6 +5,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
@@ -279,7 +280,7 @@ function pageTo(iso: string): void {
 
 async function submitExtend(): Promise<void> {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Save" }));
   });
 }
 
@@ -338,13 +339,13 @@ async function openStartDialog(item = "Start trial"): Promise<void> {
 async function submitRearmDays(value: string): Promise<void> {
   fireEvent.change(dayInput(), { target: { value } });
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Re-arm" }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Re-arm" }));
   });
 }
 
 async function submitStart(label = "Start trial"): Promise<void> {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: label }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: label }));
   });
 }
 

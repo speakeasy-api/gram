@@ -62,7 +62,7 @@ func (e *AccessRoleMutationError) Unwrap() error { return e.Cause }
 type MCPAccessRoleRule struct {
 	MCPID       string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp for the explicit project"`
 	Tool        string `json:"tool,omitempty" jsonschema:"optional exact tool name currently returned by get_mcp_access"`
-	Disposition string `json:"disposition,omitempty" jsonschema:"optional closed tool disposition: read_only, destructive, idempotent, or open_world"`
+	Disposition string `json:"disposition,omitempty" jsonschema:"optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"`
 }
 
 type CreateMCPAccessRoleInput struct {
@@ -381,7 +381,7 @@ func (s *AccessRoleMutationService) resolveRules(ctx context.Context, principal 
 			return nil, accessRoleMutationInvalid("A requested exact tool name is invalid.")
 		}
 		if disposition != "" && !validAccessRoleDisposition(disposition) {
-			return nil, accessRoleMutationInvalid("Rule disposition must be read_only, destructive, idempotent, or open_world.")
+			return nil, accessRoleMutationInvalid("Rule disposition must be read_only, destructive, idempotent, open_world, or unannotated.")
 		}
 		if !requireCurrentTarget {
 			result = append(result, normalizedMCPAccessRoleRule{MCPID: mcpID.String(), Tool: tool, Disposition: disposition})
@@ -585,7 +585,7 @@ func validAccessRoleName(value string) bool {
 
 func validAccessRoleDisposition(value string) bool {
 	switch value {
-	case authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld:
+	case authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld, authz.DispositionUnannotated:
 		return true
 	default:
 		return false

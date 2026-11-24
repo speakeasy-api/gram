@@ -117,7 +117,7 @@ function DeleteRemoteIdentityProviderDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Unlink Registration</Dialog.Title>
+        <Dialog.Title>Unlink registration</Dialog.Title>
         <Dialog.Description>
           This unlinks the registration <strong>{clientId}</strong> (
           {registrationId}) from this MCP server only. The registration,

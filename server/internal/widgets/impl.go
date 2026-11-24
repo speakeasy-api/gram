@@ -92,15 +92,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize resolves the project a request runs in and checks a scope on it.
-// Membership is project:read, which every member holds: saving a chart is
-// not an administrative act.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+// authorize resolves the project a request runs in and requires the check
+// that permission builds for it. Callers pass authz.ProjectRef.Read, which
+// every member holds: saving a chart is not an administrative act.
+func (s *Service) authorize(ctx context.Context, permission func(authz.ProjectRef) authz.Check) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -237,7 +237,7 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 	if creator != nil && *creator == authCtx.UserID {
 		return nil
 	}
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 }
 
 // checkWidget validates a widget's query against the catalog and its

@@ -46,10 +46,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
@@ -118,6 +120,10 @@ type Service struct {
 
 	// crashReports counts forwarded crash reports. Nil only logs them.
 	crashReports metric.Int64Counter
+
+	// marketplaceTokens opens each served project's marketplace token into
+	// its install URL.
+	marketplaceTokens *marketplacetokens.Tokens
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -146,6 +152,7 @@ func NewService(
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
 	deviceAgentTokens *deviceagenttoken.Issuer,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -173,6 +180,7 @@ func NewService(
 		claudePlugins:                nil,
 		stateReportLimiter:           nil,
 		newStateReportLimiter:        nil,
+		marketplaceTokens:            marketplaceTokens,
 	}
 }
 
@@ -228,7 +236,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).DeviceAgentSync()); err != nil {
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
@@ -262,7 +270,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 	if !ok || authCtx == nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(admitted, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).DeviceAgentSync()); err != nil {
 		err = fmt.Errorf("authorize workload device sync: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
@@ -641,7 +649,21 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		servers = nil
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
+	// A token that does not open fails the whole poll rather than leaving its
+	// marketplace out: the device keeps its cached policy when a poll fails,
+	// but removes a marketplace a successful poll omits.
+	openToken := func(row repo.GetAgentPluginSetRow) (string, error) {
+		return s.marketplaceTokens.Open(ctx, s.db, marketplacetokens.Stored{
+			OrganizationID: row.ConnectionOrganizationID,
+			Hash:           row.MarketplaceTokenHash,
+			Copies:         orgencryption.Copies{Platform: row.MarketplaceTokenEncrypted, Org: row.MarketplaceTokenOrgEncrypted},
+			Legacy:         row.MarketplaceToken,
+		})
+	}
+	result, err := mv.BuildAgentPluginsView(rows, openToken, marketplaceURL, servers)
+	if err != nil {
+		return nil, nil, marketplacetokens.OpenError(ctx, s.logger, err, authCtx.ActiveOrganizationID)
+	}
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)
@@ -685,7 +707,7 @@ func (s *Service) ListSyncedUsers(ctx context.Context, _ *gen.ListSyncedUsersPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -716,12 +738,7 @@ func (s *Service) GetConfiguration(ctx context.Context, _ *gen.GetConfigurationP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -745,12 +762,7 @@ func (s *Service) UpdateConfiguration(ctx context.Context, payload *gen.UpdateCo
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 

@@ -20,7 +20,7 @@ import (
 )
 
 func (s *Service) setHostedNoUpstream(ctx context.Context, logger *slog.Logger, auth *contextvalues.AuthContext, projectID, serverID uuid.UUID) (*types.McpServerAuthentication, error) {
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), projectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		return nil, err
 	}
 	tx, err := s.db.Begin(ctx)

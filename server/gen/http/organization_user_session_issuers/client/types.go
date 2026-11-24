@@ -555,11 +555,20 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount *int `form:"remote_session_count,omitempty" json:"remote_session_count,omitempty" xml:"remote_session_count,omitempty"`
 	// Active OAuth client ids present on both issuers that cannot be merged.
-	// Non-empty blocks migration. A client resolved from the same Client ID
-	// Metadata Document on both issuers is not listed: it merges onto the target's
-	// client, keeping its sessions and consents, unless an issuance selection
-	// profile pins the source client to the source issuer.
+	// Non-empty blocks migration. Client ids listed in merged_client_ids are not
+	// listed here.
 	ConflictingClientIds []string `form:"conflicting_client_ids,omitempty" json:"conflicting_client_ids,omitempty" xml:"conflicting_client_ids,omitempty"`
+	// Active OAuth client ids present on both issuers whose source client would
+	// merge onto the target's client for the same id. A client resolved from the
+	// same Client ID Metadata Document on both issuers merges, keeping its
+	// sessions and consents. A client registered through dynamic client
+	// registration on both issuers merges only when nothing uses the source copy
+	// (it has no session that has not been revoked, even an expired one, and no
+	// consent) and neither copy has an assistant binding. The target copy
+	// survives, so its own sessions and consents do not block. Neither merges when
+	// an issuance selection profile pins the source client to the source issuer;
+	// it is listed in conflicting_client_ids instead.
+	MergedClientIds []string `form:"merged_client_ids,omitempty" json:"merged_client_ids,omitempty" xml:"merged_client_ids,omitempty"`
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.
 	PrincipalBindingConflictCount *int `form:"principal_binding_conflict_count,omitempty" json:"principal_binding_conflict_count,omitempty" xml:"principal_binding_conflict_count,omitempty"`
@@ -5739,6 +5748,10 @@ func NewGetIssuerMigratePreflightOrganizationUserSessionIssuerMigratePreflightOK
 	for i, val := range body.ConflictingClientIds {
 		v.ConflictingClientIds[i] = val
 	}
+	v.MergedClientIds = make([]string, len(body.MergedClientIds))
+	for i, val := range body.MergedClientIds {
+		v.MergedClientIds[i] = val
+	}
 	v.Warnings = make([]*organizationusersessionissuers.UserSessionIssuerFieldMismatch, len(body.Warnings))
 	for i, val := range body.Warnings {
 		if val == nil {
@@ -7234,6 +7247,9 @@ func ValidateGetIssuerMigratePreflightResponseBody(body *GetIssuerMigratePreflig
 	}
 	if body.ConflictingClientIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("conflicting_client_ids", "body"))
+	}
+	if body.MergedClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("merged_client_ids", "body"))
 	}
 	if body.PrincipalBindingConflictCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_binding_conflict_count", "body"))

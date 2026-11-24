@@ -532,6 +532,7 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
 		RequestFailureInterceptors:   connections.requestFailures(),
+		RequestServedInterceptors:    connections.requestsServed(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -45,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -80,9 +78,6 @@ type Service struct {
 	// catalog is the platforms the Access Hub offers to trust.
 	catalog catalog.Source
 
-	// features evaluates platformFlags. Nil offers none of their entries.
-	features feature.Provider
-
 	// sharedHosts are the hosts the deployment serves shared authorization
 	// servers on, which the token endpoints it lists are derived from.
 	sharedHosts authserver.Hosts
@@ -106,19 +101,17 @@ func NewService(
 	auditLogger *audit.Logger,
 	sharedHosts authserver.Hosts,
 	limitStore ratelimit.Store,
-	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		repo:     repo.New(db),
-		catalog:  catalog.Embedded(),
-		features: features,
+		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
+		logger:  logger,
+		db:      db,
+		auth:    auth.New(logger, db, sessions, authzEngine),
+		authz:   authzEngine,
+		audit:   auditLogger,
+		repo:    repo.New(db),
+		catalog: catalog.Embedded(),
 
 		sharedHosts: sharedHosts,
 
@@ -148,14 +141,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // dashboard session reads and writes the organization tier alone unless it
 // explicitly selects an authorized project. API keys are already project-bound.
 type tenancy struct {
-	organizationID   string
-	organizationSlug string
-	projectID        uuid.NullUUID
-	actor            urn.Principal
-	actorEmail       *string
+	organizationID string
+	projectID      uuid.NullUUID
+	actor          urn.Principal
+	actorEmail     *string
 }
 
-func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProject *string) (tenancy, error) {
+func (s *Service) resolve(ctx context.Context, permission func(authz.WorkloadCollection) authz.Check, explicitProject *string) (tenancy, error) {
 	selectedProject := explicitProject != nil
 	if selectedProject {
 		if strings.TrimSpace(*explicitProject) == "" {
@@ -188,12 +180,7 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 	// organization is the resource the check names. There is no per-workload
 	// resource a grant could narrow to, which is why the dashboard treats this
 	// scope as unrestricted.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Workloads(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return tenancy{}, err
 	}
 
@@ -205,11 +192,10 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 	}
 
 	return tenancy{
-		organizationID:   authCtx.ActiveOrganizationID,
-		organizationSlug: authCtx.OrganizationSlug,
-		projectID:        projectID,
-		actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		actorEmail:       authCtx.Email,
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actor:          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		actorEmail:     authCtx.Email,
 	}, nil
 }
 
@@ -266,7 +252,7 @@ func (s *Service) loadPolicy(ctx context.Context, dbtx repo.DBTX, t tenancy) (*g
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +261,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 }
 
 func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
-	if err != nil {
+	if _, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -285,39 +270,11 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the platform catalog").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildWorkloadPlatformCatalogView(s.offeredPlatforms(ctx, t, platforms)), nil
-}
-
-// platformFlags offer catalog entries that are not enabled yet, by key, to
-// the organizations each flag is on for. An entry's flag goes once its catalog
-// file enables it.
-var platformFlags = map[string]feature.Flag{
-	"github-actions": feature.FlagWorkloadPlatformGitHubActions,
-}
-
-// offeredPlatforms resolves Enabled for the caller's organization: an entry
-// that is not enabled is enabled where its flag in platformFlags is on, and
-// stays not enabled where the flag is off, missing or fails. Every request
-// shares the catalog's slice, so it is copied rather than changed.
-func (s *Service) offeredPlatforms(ctx context.Context, t tenancy, platforms []catalog.Platform) []catalog.Platform {
-	offered := slices.Clone(platforms)
-	for i := range offered {
-		platform := &offered[i]
-		flag, ok := platformFlags[platform.Key]
-		if !ok || platform.Enabled {
-			continue
-		}
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, t.organizationID, feature.OrgProjectGroups(t.organizationSlug, ""))
-		if err != nil {
-			s.logger.WarnContext(ctx, "evaluate workload platform feature flag, keeping the platform coming soon", attr.SlogError(err), attr.SlogOrganizationID(t.organizationID))
-		}
-		platform.Enabled = evaluation == feature.EvaluationEnabled
-	}
-	return offered
+	return mv.BuildWorkloadPlatformCatalogView(platforms), nil
 }
 
 func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput); err != nil {
+	if _, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -330,7 +287,7 @@ func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlow
 }
 
 func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +488,7 @@ func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadI
 }
 
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +592,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 }
 
 func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -787,7 +744,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 }
 
 func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -935,12 +892,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 // using live membership, ownership, and grants for human assignment requests.
 func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx.Tx, agentID uuid.UUID) error {
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeAgentAuthorize,
-			ResourceKind: authz.ResourceKindAgent,
-			ResourceID:   agentID.String(),
-			Dimensions:   nil,
-		})
+		return s.authz.Require(ctx, authz.Agent(authz.AgentIDOf(agentID)).Authorize())
 	}
 	_, _, err := agentmanagement.NewAuthorizer(s.authz).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
@@ -950,7 +902,7 @@ func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx
 }
 
 func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1139,7 +1091,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 }
 
 func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,7 +1290,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 }
 
 func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WithdrawnWorkloadSubjectPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
