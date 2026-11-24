@@ -409,7 +409,7 @@ func TestMemberClientFailure_NamesOnlyAReachedUpstream(t *testing.T) {
 		require.Equal(t, tc.code, failure.code, tc.name)
 		require.Equal(t, tc.text, err.Error(), tc.name)
 
-		service.recordMemberFailure(t.Context(), gate, member, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
+		service.recordMemberFailure(t.Context(), gate, member, uuid.Nil, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
 		rows := rec.Rows()
 		require.Equal(t, tc.host, rows[len(rows)-1].ProviderHost, tc.name)
 	}
@@ -423,19 +423,19 @@ func TestRecordMemberFailure(t *testing.T) {
 	gate := &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New()}
 	first, second := metaMember{serverID: uuid.New()}, metaMember{serverID: uuid.New()}
 
-	service.recordMemberFailure(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
-	service.recordMemberFailure(t.Context(), gate, second, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberFailure(t.Context(), gate, first, uuid.Nil, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberFailure(t.Context(), gate, second, uuid.Nil, mcpconnectionattempts.CodeProviderServerError)
 	require.Len(t, rec.Rows(), 2, "two members with one code are two rows")
 	require.NotEqual(t, rec.Rows()[0].MemberID, rec.Rows()[1].MemberID)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	service.recordMemberFailure(ctx, gate, first, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberFailure(ctx, gate, first, uuid.Nil, mcpconnectionattempts.CodeProviderServerError)
 	require.Len(t, rec.Rows(), 2, "a caller that went away says nothing")
 
 	gate.request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/gateway", nil)
 	gate.request.Header.Set("User-Agent", "claude-code/2.1.0")
-	service.recordMemberFailure(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberFailure(t.Context(), gate, first, uuid.Nil, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[2].ClientFamily)
 }
 
@@ -480,6 +480,26 @@ func TestCallerSubjectPreservesAuthenticatedAgent(t *testing.T) {
 
 		})
 	}
+}
+
+// A session whose subject is an API key has no actor or user; its served and failure rows name the key, as the gate's do.
+func TestCallerSubjectNamesASessionAPIKey(t *testing.T) {
+	t.Parallel()
+	key := uuid.New()
+	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), OrganizationID: "org", ProjectID: uuid.New(), Slug: "toolset"}
+
+	session := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{APIKeyID: key.String()})
+	rec := mcpconnectionattemptstest.New(t)
+	(&Service{connections: rec.Recorder}).recordHostedServed(session, toolset, &hostedServing{}, &mcpInputs{resultSucceeded: true, backendAnswered: true}, "tools/call")
+	require.Equal(t, urn.NewAPIKeySubject(key).String(), rec.RequireServed(true).SubjectURN)
+
+	failed := mcpconnectionattemptstest.New(t)
+	failed.Recorder.Once(session, mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(session))
+	require.Equal(t, urn.NewAPIKeySubject(key).String(), failed.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess).SubjectURN)
+
+	owned := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{UserID: "key-owner", APIKeyID: key.String()})
+	require.Equal(t, urn.NewUserSubject("key-owner").String(), resolvedCaller(owned).String(), "a key with an owner keeps naming the owner")
+	require.Nil(t, resolvedCaller(contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{})))
 }
 
 func TestServerHeadersHaveCredential(t *testing.T) {
@@ -1074,4 +1094,57 @@ func TestUnavailableLabelWording(t *testing.T) {
 	} {
 		require.Equal(t, want, unavailableLabel(code), code.String())
 	}
+}
+
+// Only a person's own stored sign-in names its service client on a row.
+func TestOwnSignInClient(t *testing.T) {
+	t.Parallel()
+
+	client := uuid.New()
+	require.Equal(t, client, ownSignInClient(remotesessions.UpstreamToken{Token: "person", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: client}))
+	require.Equal(t, uuid.Nil, ownSignInClient(remotesessions.UpstreamToken{Token: "shared", CredentialOwner: remotesessions.CredentialOwnerSelf, RemoteSessionClientID: client}), "the server's own credential")
+	require.Equal(t, uuid.Nil, ownSignInClient(remotesessions.UpstreamToken{Token: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: client}), "nothing sent")
+}
+
+// A hosted request is recorded under its fronting server, else its toolset, as its failures are. A tool
+// call or resource read counts only when its result is not an error.
+func TestRecordHostedServed(t *testing.T) {
+	t.Parallel()
+
+	signedIn := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "person"})
+	serverID := uuid.New()
+	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), OrganizationID: "org", ProjectID: uuid.New(), Slug: "toolset"}
+	record := func(cfg *hostedServing, method string, succeeded, answered bool) *mcpconnectionattemptstest.Recording {
+		rec := mcpconnectionattemptstest.New(t)
+		(&Service{connections: rec.Recorder}).recordHostedServed(signedIn, toolset, cfg, &mcpInputs{resultSucceeded: succeeded, backendAnswered: answered}, method)
+		return rec
+	}
+
+	fronted := &hostedServing{mcpServerID: &serverID}
+	row := record(fronted, "tools/call", true, true).RequireServed(true)
+	require.Equal(t, serverID.String(), row.ServerID)
+	require.Equal(t, urn.NewUserSubject("person").String(), row.SubjectURN)
+	record(fronted, "tools/call", true, false).RequireServed(false)
+	record(fronted, "initialize", false, false).RequireServed(false)
+
+	bare := &hostedServing{}
+	row = record(bare, "tools/call", true, true).RequireServed(true)
+	require.Equal(t, toolset.ID.String(), row.ServerID, "a toolset with no server in front is its own connection")
+	require.Equal(t, "toolset", row.ServerKind)
+	require.Equal(t, toolset.ID.String(), record(bare, "tools/list", false, false).RequireServed(false).ServerID)
+
+	for _, cfg := range []*hostedServing{fronted, bare} {
+		record(cfg, "tools/call", false, false).RequireNoneServed()
+		record(cfg, "resources/read", false, false).RequireNoneServed()
+	}
+}
+
+// A passthrough function's result counts as the backend answering only with a 2xx status and no isError.
+func TestBackendSucceededNeedsA2xxWithoutAnError(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, backendSucceeded(http.StatusOK, false))
+	require.False(t, backendSucceeded(http.StatusOK, true), "isError")
+	require.False(t, backendSucceeded(http.StatusInternalServerError, false), "a 500 with valid JSON and no isError")
+	require.False(t, backendSucceeded(http.StatusUnauthorized, false))
 }

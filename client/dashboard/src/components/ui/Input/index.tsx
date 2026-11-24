@@ -30,6 +30,11 @@ export interface InputProps extends Omit<
   /** A prefix the value must carry; shown as static text inside the field. */
   requiredPrefix?: string;
   /**
+   * Keeps the placeholder muted while focused. For type-to-confirm fields,
+   * whose placeholder is the exact value to type and must not look entered.
+   */
+  mutedPlaceholder?: boolean;
+  /**
    * Renders a password field with a built-in show/hide eye toggle. Replaces the
    * former standalone PrivateInput wrapper.
    */
@@ -59,6 +64,7 @@ export function Input({
   lines,
   error,
   requiredPrefix,
+  mutedPlaceholder = false,
   reveal,
   noAutofill,
   className,
@@ -160,7 +166,7 @@ export function Input({
 
   const fieldClassName = cn(
     "h-full w-full bg-transparent text-sm text-default shadow-none outline-none placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50",
-    isFocused && "placeholder:text-default",
+    isFocused && !mutedPlaceholder && "placeholder:text-default",
   );
 
   const displayValue =

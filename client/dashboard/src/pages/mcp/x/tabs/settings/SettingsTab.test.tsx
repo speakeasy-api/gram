@@ -20,15 +20,15 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
   MCP_AUTHENTICATION_SECTION_ID: "authentication",
   AuthenticationSection: ({ mcpServer }: { mcpServer: McpServer }) =>
     mcpServer.remoteMcpServerId ? (
-      <h2 data-testid="legacy-identity-section">Identity</h2>
+      <h2 data-testid="legacy-identity-section">Sign-in method</h2>
     ) : (
-      <h2>Authentication</h2>
+      <h2>Sign-in method</h2>
     ),
 }));
 vi.mock("./sections/authentication/UpstreamCredentialsSection", () => ({
   UPSTREAM_CREDENTIALS_SECTION_ID: "upstream-credentials",
   UpstreamCredentialsSection: () => (
-    <h2 data-testid="upstream-credentials-section">Identity</h2>
+    <h2 data-testid="upstream-credentials-section">Upstream credentials</h2>
   ),
 }));
 
@@ -72,6 +72,10 @@ vi.mock("./sections/PublicRateLimitsSection", () => ({
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
   RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
+}));
+vi.mock("./sections/UpstreamUrlSection", () => ({
+  MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
+  UpstreamUrlSection: () => <h2>Remote URL</h2>,
 }));
 vi.mock("./sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "server-url",
@@ -246,10 +250,10 @@ describe("SettingsTab", () => {
       // server has no Access area.
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      // Upstream headers are the Identity panel's Custom Headers disclosure,
+      // Upstream headers are the Sign-in panel's Custom Headers disclosure,
       // not a section of their own.
-      "Sign-in and identity": ["Identity", "Identity chaining"],
-      Connection: ["Server URL", "Network Access", "Sessions"],
+      "Sign-in": ["Sign-in method", "Sessions", "Identity chaining"],
+      Connection: ["Server URL", "Remote URL", "Network Access"],
       Tools: ["Tool Filtering"],
       "Danger zone": ["Danger Zone"],
     });
@@ -263,11 +267,7 @@ describe("SettingsTab", () => {
       General: ["Availability", "General"],
       Access: ["Visibility", "Public Rate Limits"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": [
-        "Authentication",
-        "Resource Identifier",
-        "Caller Identity",
-      ],
+      "Sign-in": ["Sign-in method", "Resource Identifier", "Caller Identity"],
       Connection: [
         "Server URL",
         "Network Access",
@@ -285,7 +285,7 @@ describe("SettingsTab", () => {
     ).toEqual({
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      "Sign-in and identity": ["Authentication"],
+      "Sign-in": ["Sign-in method"],
       "Danger zone": ["Danger Zone"],
     });
   });
@@ -308,7 +308,7 @@ describe("SettingsTab", () => {
     ).toEqual([
       ["General", "#settings-general"],
       ["Plugins", "#publishing"],
-      ["Sign-in and identity", "#settings-sign-in"],
+      ["Sign-in", "#settings-sign-in"],
       ["Danger zone", "#settings-danger-zone"],
     ]);
   });
@@ -336,17 +336,18 @@ const remoteServer = () =>
   });
 
 describe("SettingsTab upstream identity gate", () => {
-  it("shows only the credentials as Identity on a remote server when enforced", () => {
+  it("shows only the credentials as Upstream sign-in on a remote server when enforced", () => {
     setEnforcement("enforced");
     expect(renderSettings(remoteServer())).toEqual([
       "Availability",
       "General",
       "Plugins",
-      "Identity",
+      "Upstream credentials",
+      "Sessions",
       "Identity chaining",
       "Server URL",
+      "Remote URL",
       "Network Access",
-      "Sessions",
       "Tool Filtering",
       "Danger Zone",
     ]);
@@ -360,9 +361,9 @@ describe("SettingsTab upstream identity gate", () => {
     ).toBeTruthy();
   });
 
-  it("shows only the legacy Identity on a remote server when not enforced", () => {
+  it("shows only the legacy Sign-in on a remote server when not enforced", () => {
     setEnforcement("legacy");
-    expect(renderSettings(remoteServer())).toContain("Identity");
+    expect(renderSettings(remoteServer())).toContain("Sign-in method");
     expect(screen.getByTestId("legacy-identity-section")).toBeTruthy();
     expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
   });
@@ -375,7 +376,7 @@ describe("SettingsTab upstream identity gate", () => {
     (state, message) => {
       setEnforcement(state);
       expect(
-        renderSettings(remoteServer()).filter((h) => h === "Identity"),
+        renderSettings(remoteServer()).filter((h) => h === "Sign-in method"),
       ).toHaveLength(1);
       expect(screen.getByText(message, { exact: false })).toBeTruthy();
       expect(screen.queryByTestId("legacy-identity-section")).toBeNull();
@@ -384,7 +385,7 @@ describe("SettingsTab upstream identity gate", () => {
     },
   );
 
-  it("keeps tunneled caller authentication and adds credentials as Identity when enforced", () => {
+  it("keeps tunneled caller authentication and adds credentials as Upstream sign-in when enforced", () => {
     setEnforcement("enforced");
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
@@ -395,8 +396,8 @@ describe("SettingsTab upstream identity gate", () => {
       "Visibility",
       "Public Rate Limits",
       "Plugins",
-      "Authentication",
-      "Identity",
+      "Sign-in method",
+      "Upstream credentials",
     ]);
     expect(screen.getByTestId("upstream-credentials-section")).toBeTruthy();
   });
@@ -406,8 +407,8 @@ describe("SettingsTab upstream identity gate", () => {
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
-    expect(headings).toContain("Authentication");
-    expect(headings).not.toContain("Identity");
+    expect(headings).toContain("Sign-in method");
+    expect(headings).not.toContain("Upstream credentials");
     expect(screen.queryByTestId("upstream-credentials-section")).toBeNull();
   });
 
@@ -421,7 +422,7 @@ describe("SettingsTab upstream identity gate", () => {
         "Availability",
         "General",
         "Plugins",
-        "Authentication",
+        "Sign-in method",
         "Danger Zone",
       ]);
       cleanup();
@@ -432,7 +433,7 @@ describe("SettingsTab upstream identity gate", () => {
             toolsetId: "toolset-1",
           }),
         ),
-      ).not.toContain("Identity");
+      ).not.toContain("Upstream credentials");
     },
   );
 });

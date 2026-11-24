@@ -503,7 +503,7 @@ func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsLinkedAutomatically(t *test
 
 	detail, denied := enforce()
 	require.True(t, denied, "a server that proxies to the URL is its official version by default")
-	require.Contains(t, detail, `official version "Coincidence", linked automatically`)
+	require.Contains(t, detail, `official version "Coincidence", chosen automatically`)
 
 	// Keeping the shadow version turns the automatic link off.
 	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -515,7 +515,7 @@ func TestEnforceShadowMCPToolAccess_ServerAtSameURLIsLinkedAutomatically(t *test
 	removeOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL)
 	detail, denied = enforce()
 	require.True(t, denied)
-	require.Contains(t, detail, "linked automatically")
+	require.Contains(t, detail, "chosen automatically")
 }
 
 func TestEnforceShadowMCPToolAccess_AutomaticLinkPicksOldestServerUntilOneIsChosen(t *testing.T) {
@@ -543,7 +543,7 @@ func TestEnforceShadowMCPToolAccess_AutomaticLinkPicksOldestServerUntilOneIsChos
 		return detail
 	}
 
-	require.Contains(t, enforce(), `official version "First", linked automatically`)
+	require.Contains(t, enforce(), `official version "First", chosen automatically`)
 
 	// An administrator picks the other one.
 	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: secondID, Valid: true})
@@ -552,7 +552,7 @@ func TestEnforceShadowMCPToolAccess_AutomaticLinkPicksOldestServerUntilOneIsChos
 	// The chosen server is deleted: the automatic link takes over again.
 	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: secondID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.Contains(t, enforce(), `official version "First", linked automatically`)
+	require.Contains(t, enforce(), `official version "First", chosen automatically`)
 }
 
 // seedGatewayServing creates a gateway with its own endpoint that serves the

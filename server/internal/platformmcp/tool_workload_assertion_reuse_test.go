@@ -223,7 +223,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameReadScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
@@ -257,7 +257,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{

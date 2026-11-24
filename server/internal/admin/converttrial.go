@@ -136,7 +136,7 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		return nil, oops.E(oops.CodeConflict, nil, "enterprise trial has incompatible organization access")
 	}
 
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(payload.ID, billing.TierEnterprise, false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.TierEnterprise, false)
 	if !ok || enterpriseFloor <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "enterprise tier has no OpenRouter credit policy").LogError(ctx, logger)
 	}

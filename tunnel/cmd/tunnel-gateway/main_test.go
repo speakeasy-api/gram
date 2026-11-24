@@ -29,3 +29,28 @@ func TestParseMaxSessionsRejectsInvalidValue(t *testing.T) {
 	_, err = parseMaxSessions("-1")
 	require.Error(t, err)
 }
+
+func TestParsePartitionAcceptsKnownPartitions(t *testing.T) {
+	for _, want := range []string{"us", "eu"} {
+		got, err := parsePartition(want)
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+	}
+}
+
+func TestParsePartitionRejectsMissingOrUnknown(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "missing", raw: "", wantErr: "GRAM_PARTITION is required: set it to one of us, eu"},
+		{name: "unknown", raw: "apac", wantErr: `unknown partition "apac"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parsePartition(tc.raw)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}

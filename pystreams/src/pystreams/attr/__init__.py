@@ -12,6 +12,9 @@ DATADOG_GIT_COMMIT_SHA: Final = "git.commit.sha"
 DATADOG_GIT_REPOSITORY_URL: Final = "git.repository_url"
 
 COMPONENT: Final = "gram.component"
+# The Speakeasy partition (an independent production deployment, such as us or
+# eu) that emitted the telemetry. Mirrors attr.PartitionKey in the Go server.
+PARTITION: Final = "gram.partition"
 ORGANIZATION_ID: Final = "gram.org.id"
 ORGANIZATION_SLUG: Final = "gram.org.slug"
 PROJECT_ID: Final = "gram.project.id"

@@ -29,6 +29,7 @@ import (
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -244,10 +245,11 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).UpsertGitHubConnection(prepared, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: project.ID, InstallationID: 1, RepoOwner: "private-owner", RepoName: "private-repository",
-		MarketplaceToken: conv.ToPGText("secret-marketplace-token"), PublishedMcpFingerprints: fingerprints,
-		PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		PublishedMcpFingerprints: fingerprints,
+		PublishedHooksVersion:    pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, conn, project.ID, "secret-marketplace-token")
 
 	result, err := service.ListAssignedPlugins(prepared, principal, ListPluginsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)

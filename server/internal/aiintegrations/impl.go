@@ -17,6 +17,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	srv "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/server"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -24,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -61,7 +61,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	encryptionClient *encryption.Client,
+	keys *aiproviderkeys.Keys,
 	guardianPolicy *guardian.Policy,
 	configPoller ConfigPoller,
 ) *Service {
@@ -73,7 +73,7 @@ func NewService(
 		auth:         auth.New(logger, db, sessions, authzEngine),
 		authz:        authzEngine,
 		audit:        auditLogger,
-		store:        NewStore(logger, db, encryptionClient),
+		store:        NewStore(logger, db, keys),
 		credentials:  NewCredentialVerifier(logger, guardianPolicy),
 		configPoller: configPoller,
 		newGeminiClient: func(cfg geminivault.Config) (geminiSetupClient, error) {

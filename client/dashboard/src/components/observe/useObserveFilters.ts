@@ -182,6 +182,20 @@ function useObserveFiltersImpl<
     [updateSearchParams],
   );
 
+  // The calendar hands back the final day's midnight, which as a `to` drops
+  // that whole day: "Nov 16 – Nov 17" would list Nov 16 alone. Run the range
+  // to the last instant of the final day instead, or to now when that day is
+  // today, so the window is the days the picker names.
+  const setCalendarRangeParam = useCallback(
+    (from: Date, lastDay: Date) => {
+      const nextDay = new Date(lastDay);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const to = new Date(Math.min(nextDay.getTime() - 1, Date.now()));
+      setCustomRangeParam(from, to);
+    },
+    [setCustomRangeParam],
+  );
+
   // Dragging across a chart is the same act as picking a custom range, and
   // both observe surfaces do it, so the label formatting lives here rather
   // than being written out again next to each chart.
@@ -472,6 +486,7 @@ function useObserveFiltersImpl<
     handleHookTypesChange,
     setDateRangeParam,
     setCustomRangeParam,
+    setCalendarRangeParam,
     setRangeFromBrush,
     clearCustomRange,
     selectedRoleIds,

@@ -96,6 +96,7 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"roles and directory", s.seedRoles},
 		{"deployment and connections", s.seedDeployment},
 		{"mcp servers", s.seedServers},
+		{"connection health", s.seedConnectionHealth},
 		{"prompts and skills", s.seedSkills},
 		{"risk and chats", s.seedRiskAndChats},
 		{"team memory eval corpus", s.seedMemoryEval},
