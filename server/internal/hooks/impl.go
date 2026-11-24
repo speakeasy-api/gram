@@ -122,6 +122,15 @@ type Service struct {
 	// deviceAgentTokens authenticates headless devices that present a
 	// device-agent token instead of an agent API key. Nil refuses them.
 	deviceAgentTokens *deviceagenttoken.Issuer
+
+	// transcriptShadow opens encrypted shadows of stored messages for the
+	// projects in transcriptShadowReadProjects. Nil keeps every project on
+	// plaintext.
+	transcriptShadow transcriptShadowReader
+
+	// transcriptShadowReadProjects are the projects whose hook reconciliation
+	// reads stored message bodies through encrypted shadows.
+	transcriptShadowReadProjects map[uuid.UUID]struct{}
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -341,6 +350,9 @@ func NewService(
 		claudeDrains:       sync.WaitGroup{},
 		deviceAgentTokens:  deviceAgentTokens,
 		versionPolicy:      hookversions.Policy{Latest: nil, Minimum: nil},
+		// Shadow reads are off until SetTranscriptShadowReads opts projects in.
+		transcriptShadow:             nil,
+		transcriptShadowReadProjects: map[uuid.UUID]struct{}{},
 	}
 }
 

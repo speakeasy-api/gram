@@ -1671,6 +1671,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("hooks version policy: %w", err)
 			}
 			hooksService.SetVersionPolicy(hooksVersionPolicy)
+			hooksService.SetTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...)
 			hooks.Attach(mux, hooksService)
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)

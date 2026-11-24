@@ -2054,7 +2054,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		}
 	}
 
-	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
+	parentResolver, err := s.newPromptAttachmentParentResolver(ctx, queries, authCtx.ActiveOrganizationID, chatID, projectID, promptAttachmentsMatchPrompts(payload.Data.PromptAttachments))
 	if err != nil {
 		return err
 	}
@@ -2174,7 +2174,13 @@ type promptAttachmentParentResolver struct {
 	byHash  map[string]uuid.NullUUID
 }
 
-func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
+// newPromptAttachmentParentResolver lists the chat's user prompts an attachment
+// can belong to. Matching an attachment to its prompt by text needs the stored
+// prompt bodies; when no attachment carries a prompt hash, only the latest
+// prompt is needed and no body is read. A project on the shadow read allowlist
+// reads those bodies through encrypted shadows with one LoadMany call for the
+// whole request.
+func (s *Service) newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, organizationID string, chatID uuid.UUID, projectID uuid.UUID, matchPrompts bool) (*promptAttachmentParentResolver, error) {
 	candidates, err := queries.ListClaudeUserMessagesForPromptAttachmentParent(ctx, chatRepo.ListClaudeUserMessagesForPromptAttachmentParentParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
@@ -2189,17 +2195,46 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 	}
 	for i, candidate := range candidates {
 		resolver.parents = append(resolver.parents, candidate.ID)
-		id := uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		if i == 0 {
-			resolver.latest = id
+			resolver.latest = uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		}
-		sum := sha256.Sum256([]byte(strings.TrimSpace(candidate.Content)))
+	}
+	if !matchPrompts {
+		return resolver, nil
+	}
+
+	contents := make(map[uuid.UUID]string, len(candidates))
+	for _, candidate := range candidates {
+		contents[candidate.ID] = candidate.Content
+	}
+	if s.readsTranscriptShadows(projectID) {
+		opened, err := s.openTranscriptShadows(ctx, organizationID, projectID, resolver.parents)
+		if err != nil {
+			return nil, fmt.Errorf("open prompt attachment parent candidates: %w", err)
+		}
+		for id, message := range opened {
+			contents[id] = message.Content
+		}
+	}
+	for _, candidate := range candidates {
+		sum := sha256.Sum256([]byte(strings.TrimSpace(contents[candidate.ID])))
 		hash := hex.EncodeToString(sum[:])
 		if _, ok := resolver.byHash[hash]; !ok {
-			resolver.byHash[hash] = id
+			resolver.byHash[hash] = uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		}
 	}
 	return resolver, nil
+}
+
+// promptAttachmentsMatchPrompts reports whether any attachment names its
+// prompt by hash, which is the only case that reads stored prompt bodies.
+func promptAttachmentsMatchPrompts(attachments []*gen.HookPromptAttachmentEntry) bool {
+	for _, attachment := range attachments {
+		if attachment != nil && strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, "")) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *promptAttachmentParentResolver) resolve(promptSHA256 string) uuid.NullUUID {

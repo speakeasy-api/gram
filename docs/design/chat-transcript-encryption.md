@@ -7,8 +7,8 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Only the dashboard chat load (`chat.load`) can read through shadows, and only
-for projects on the read allowlist; messages without a shadow fall back to
+**Only the dashboard chat load (`chat.load`) and hook reconciliation can read
+through shadows, and only for projects on the read allowlist; messages without a shadow fall back to
 plaintext. Every other reader still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
@@ -116,6 +116,16 @@ exists but is stale or fails authentication fails the whole page with an
 unexpected error: it means capture or the data is broken, and plaintext must not
 hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
+
+Hook ingest (`/rpc/hooks.ingest`) uses the same allowlist and semantics when it
+matches a prompt attachment to its prompt by text hash, the one hook path that
+reads stored message bodies. It opens every candidate prompt with one
+`LoadMany` call per request, and only when an attachment carries a prompt hash.
+For other projects the allowlist check is an in-memory lookup and adds no query.
+A stale or unauthentic shadow fails that request's attachment capture, which is
+logged and does not fail the hook. Hook writes that skip a message already
+stored, and the Claude transcript upload, compare external message IDs rather
+than bodies, so they read no body.
 
 Direct SQL writers (see the scope table below) do not seal yet. If one edits a
 message that already has a shadow, that shadow goes stale and the read fails
