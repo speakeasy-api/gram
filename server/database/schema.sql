@@ -6769,9 +6769,6 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Excluded chats are skipped by the summary, memo and digest readers.
   memory_excluded_at timestamptz,
 
-  -- Versioned hashes of the last successfully evaluated inference frame.
-  -- Archival alone must never advance this checkpoint.
-  inference_accepted_checkpoint bytea,
   -- Hash of (tenant, actor type, actor id) for Anthropic inference conversations.
   -- Lets a transcript delivered without a session id be adopted by the chat
   -- that already holds its prefix, scoped to the same actor.
@@ -6838,7 +6835,6 @@ COMMENT ON COLUMN chats.summary IS '@access: opaque-restricted';
 COMMENT ON COLUMN chats.summary_generated_at IS '@access: confidential';
 COMMENT ON COLUMN chats.summary_redacted IS '@access: confidential';
 COMMENT ON COLUMN chats.memory_excluded_at IS '@access: confidential';
-COMMENT ON COLUMN chats.inference_accepted_checkpoint IS '@access: confidential';
 COMMENT ON COLUMN chats.inference_actor_key IS '@access: confidential-pii';
 COMMENT ON COLUMN chats.user_account_id IS '@access: confidential';
 COMMENT ON COLUMN chats.litellm_proxied IS '@access: confidential';
