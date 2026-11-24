@@ -496,7 +496,7 @@ var Problem = Type("SuspectedProblem", func() {
 	Attribute("headline", String, "Who cannot do what, in plain words.")
 	Attribute("fact", String, "What the data establishes about it, in plain words.")
 	Attribute("filters", ProblemFilters)
-	Required("id", "rule", "part", "who_fixes", "scope", "since", "last_failed_at", "people_count", "headline", "fact", "filters")
+	Required("id", "rule", "part", "scope", "since", "last_failed_at", "people_count", "headline", "fact", "filters")
 })
 
 var ProblemBucket = Type("SuspectedProblemBucket", func() {

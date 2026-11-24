@@ -21,7 +21,10 @@ var headlines = map[problems.Rule][2]string{
 }
 
 // connectHeadline names the servers whatever the rule.
-const connectHeadline = "{people} {need} to connect their account for {servers}"
+const (
+	connectHeadline     = "{people} {need} to connect an account for {servers}"
+	connectHeadlineMany = "{people} {need} to connect accounts for {servers}"
+)
 
 // The fact sentences. Each states only what the episodes establish.
 const (
@@ -37,11 +40,12 @@ const (
 	factOtherAppSome  = "Another app worked on at least one of {servers} in this time."
 	factOtherAppEach  = "Another app worked on each of {servers} in this time."
 
-	factConnect        = "Their apps asked for {servers}. Each person has to connect their own account for it, or reconnect it if it expired."
-	factConnectEach    = "Their apps asked for {servers}. Each person has to connect their own account for the server their app asked for, or reconnect it if it expired."
-	factConnectOne     = "{whose} asked for {servers}. They have to connect their own account for it, or reconnect it if it expired."
-	factConnectOneEach = "{whose} asked for {servers}. They have to connect their own account for each of them, or reconnect any that expired."
-	factConnectWhere   = "They can do that from the link their app shows."
+	factTheyUse        = "They use {app}."
+	factConnect        = "For each person, the connection their app asked for on {server} is missing or has expired."
+	factConnectSome    = "For each person, the connection their app asked for on at least one of these servers is missing or has expired."
+	factConnectOne     = "The connection their app asked for on {server} is missing or has expired."
+	factConnectOneEach = "The connection their app asked for on each of these servers is missing or has expired."
+	factConnectLink    = "If their app shows a connection link, they can use it to connect or reconnect."
 )
 
 // savedCredentialReasons fail a saved key or shared credential: nobody signs in.
@@ -84,7 +88,11 @@ func headline(n names, p problems.Problem, scope string) string {
 		if p.Rule == problems.RuleOnePerson {
 			people, need = scope, "needs"
 		}
-		return fill(connectHeadline, "{people}", people, "{need}", need, "{servers}", connectServers(n, p))
+		template := connectHeadline
+		if reachedServers(p) > 1 {
+			template = connectHeadlineMany
+		}
+		return fill(template, "{people}", people, "{need}", need, "{servers}", serversPhrase(n, p))
 	}
 	place := ""
 	if p.Rule == problems.RuleOnePerson {
@@ -105,7 +113,7 @@ func headline(n names, p problems.Problem, scope string) string {
 // fact states what failed in plain words, using the catalog's own sentences.
 func fact(n names, p problems.Problem) string {
 	if needsOwnConnection(p) {
-		return strings.Join(append([]string{connectFact(n, p), factConnectWhere}, sharedAppFact(p, false)...), " ")
+		return strings.Join(append(sharedAppFact(p, false), connectFact(n, p), factConnectLink), " ")
 	}
 	var out []string
 	servers := problemServers(p)
@@ -181,55 +189,18 @@ func fact(n names, p problems.Problem) string {
 	return strings.Join(out, " ")
 }
 
-// connectFact says who has to connect their own account for which servers.
+// connectFact says whose connection is missing on which servers.
 func connectFact(n names, p problems.Problem) string {
-	template := factConnect
-	switch one, each := p.People == 1, reachedServers(p) > 1; {
-	case one && each:
-		template = factConnectOneEach
+	switch one, several := p.People == 1, reachedServers(p) > 1; {
+	case one && several:
+		return factConnectOneEach
+	case several:
+		return factConnectSome
 	case one:
-		template = factConnectOne
-	case each:
-		template = factConnectEach
-	}
-	whose := "Their app"
-	if appsOf(p) > 1 {
-		whose = "Their apps"
-	}
-	return fill(template, "{servers}", serversPhrase(n, p), "{whose}", whose)
-}
-
-// connectServers names the servers in a headline: "Linear", "Linear and GitHub", "3 MCP servers".
-func connectServers(n names, p problems.Problem) string {
-	named := make([]string, 0, 2)
-	for _, e := range namedPlaces(p) {
-		name := episodeServerName(n, e)
-		if name == "" {
-			name = "an MCP server"
-		}
-		named = append(named, name)
-	}
-	switch reached := reachedServers(p); {
-	case reached == 1 && len(named) == 1:
-		return named[0]
-	case reached == 2 && len(named) == 2:
-		return named[0] + " and " + named[1]
+		return fill(factConnectOne, "{server}", serversPhrase(n, p))
 	default:
-		return fmt.Sprintf("%d MCP servers", reached)
+		return fill(factConnect, "{server}", serversPhrase(n, p))
 	}
-}
-
-// appsOf counts the distinct apps of the problem's runs, at least each run's own total.
-func appsOf(p problems.Problem) int {
-	seen := map[string]bool{}
-	most := 0
-	for _, e := range p.Episodes {
-		for _, a := range e.Apps {
-			seen[a.Key+"|"+a.Family+"|"+a.Version] = true
-		}
-		most = max(most, e.AppsTotal)
-	}
-	return max(len(seen), most)
 }
 
 // sharedAppFact names the app every person uses, unless the headline does.
@@ -238,10 +209,14 @@ func sharedAppFact(p problems.Problem, headlineNamesApp bool) []string {
 		return nil
 	}
 	app := attemptlog.AppName(p.SharedApp.Family) + " " + p.SharedApp.Version
-	if p.People == 1 {
+	switch {
+	case p.People > 1:
+		return []string{fill(factAllUse, "{app}", app)}
+	case needsOwnConnection(p):
+		return []string{fill(factTheyUse, "{app}", app)}
+	default:
 		return []string{fill(factUses, "{app}", app)}
 	}
-	return []string{fill(factAllUse, "{app}", app)}
 }
 
 func hostOf(key string) string {
@@ -295,26 +270,30 @@ func namedPlaces(p problems.Problem) []mcpconnectionattempts.FailingPerson {
 	return out
 }
 
-// serversPhrase names the servers the problem's people fail on: "Linear", "Linear and GitHub", "Linear and 2 other servers".
+// serversPhrase names the problem's servers so each name tells them apart: "Linear", "Linear and GitHub", "Linear and 2 other MCP servers", "2 MCP servers".
 func serversPhrase(n names, p problems.Problem) string {
-	named := make([]string, 0, 2)
-	for _, e := range namedPlaces(p) {
-		name := episodeServerName(n, e)
-		if name == "" {
-			name = "an MCP server"
-		}
-		named = append(named, name)
-	}
 	reached := reachedServers(p)
+	var named []string
+	for _, e := range namedPlaces(p) {
+		if name := episodeServerName(n, e); name != "" && !slices.Contains(named, name) {
+			named = append(named, name)
+		}
+	}
 	switch {
-	case len(named) == 0:
+	case reached == 0:
 		return ""
-	case reached == 1:
+	case reached == 1 && len(named) == 1:
 		return named[0]
-	case reached == 2:
+	case reached == 1:
+		return "an MCP server"
+	case reached == 2 && len(named) == 2:
 		return named[0] + " and " + named[1]
+	case reached == 2 && len(named) == 1:
+		return named[0] + " and 1 other MCP server"
+	case len(named) > 0:
+		return fmt.Sprintf("%s and %d other MCP servers", named[0], reached-1)
 	default:
-		return fmt.Sprintf("%s and %d other servers", named[0], reached-1)
+		return fmt.Sprintf("%d MCP servers", reached)
 	}
 }
 

@@ -6209,9 +6209,6 @@ func ValidateSuspectedProblemResponseBody(body *SuspectedProblemResponseBody) (e
 	if body.Part == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("part", "body"))
 	}
-	if body.WhoFixes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("who_fixes", "body"))
-	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
@@ -6377,9 +6374,6 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 	}
 	if body.Part == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("part", "body"))
-	}
-	if body.WhoFixes == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("who_fixes", "body"))
 	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))

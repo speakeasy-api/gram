@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// The seeded connection health lists the Cursor, Internal Wiki and Dana problems, and not
+// The seeded connection health lists the Cursor, Internal Wiki, Dana and Support Desk problems, and not
 // the people who recovered from this morning's Linear errors: at the hours around the
 // story's switch to today, any other hour, and 23 hours after seeding, the read just
 // before the next daily reseed.
@@ -88,7 +88,7 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 			signIn++
 		}
 	}
-	require.Equal(t, 2, signIn, "the provider Overview lists two problems signing in, as the review steps say")
+	require.Equal(t, 3, signIn, "the provider Overview lists three problems signing in, as the review steps say")
 
 	// On a provider page owning every server the daily refusals reach, their person is in no problem.
 	var refusedServers []string
@@ -153,5 +153,6 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyCursor + "@2.0.1"}, People: people("lena", "felix", "lars"), Servers: serverIDs("github", "notion")},
 		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("wiki").String()}, People: people("ken", "ivy", "theo", "amara"), Servers: serverIDs("wiki")},
 		{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: subject("dana")}, People: people("dana"), Servers: serverIDs("linear")},
+		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("support").String()}, People: people("ana", "mei"), Servers: serverIDs("support")},
 	}, listedProblems, "an app version takes only servers where another app worked: Claude Code on GitHub and on Notion")
 }

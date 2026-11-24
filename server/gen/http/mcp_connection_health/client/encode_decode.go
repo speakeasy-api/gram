@@ -2468,13 +2468,16 @@ func unmarshalSuspectedProblemResponseBodyToMcpconnectionhealthSuspectedProblem(
 		ID:                  *v.ID,
 		Rule:                mcpconnectionhealth.SuspectedProblemRule(*v.Rule),
 		Part:                mcpconnectionhealth.SuspectedProblemPart(*v.Part),
-		WhoFixes:            mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes),
 		Since:               *v.Since,
 		LastFailedAt:        *v.LastFailedAt,
 		PeopleCount:         *v.PeopleCount,
 		PeopleOnServerCount: v.PeopleOnServerCount,
 		Headline:            *v.Headline,
 		Fact:                *v.Fact,
+	}
+	if v.WhoFixes != nil {
+		whoFixes := mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
 	}
 	res.Scope = unmarshalSuspectedProblemScopeResponseBodyToMcpconnectionhealthSuspectedProblemScope(v.Scope)
 	res.Filters = unmarshalSuspectedProblemFiltersResponseBodyToMcpconnectionhealthSuspectedProblemFilters(v.Filters)
@@ -2583,7 +2586,6 @@ func unmarshalSuspectedProblemDetailResponseBodyToMcpconnectionhealthSuspectedPr
 		ID:                     *v.ID,
 		Rule:                   mcpconnectionhealth.SuspectedProblemRule(*v.Rule),
 		Part:                   mcpconnectionhealth.SuspectedProblemPart(*v.Part),
-		WhoFixes:               mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes),
 		Since:                  *v.Since,
 		LastFailedAt:           *v.LastFailedAt,
 		PeopleCount:            *v.PeopleCount,
@@ -2594,6 +2596,10 @@ func unmarshalSuspectedProblemDetailResponseBodyToMcpconnectionhealthSuspectedPr
 	if v.Source != nil {
 		source := mcpconnectionhealth.ConnectionFailureSource(*v.Source)
 		res.Source = &source
+	}
+	if v.WhoFixes != nil {
+		whoFixes := mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
 	}
 	res.FailedPer10Minutes = make([]*mcpconnectionhealth.SuspectedProblemBucket, len(v.FailedPer10Minutes))
 	for i, val := range v.FailedPer10Minutes {

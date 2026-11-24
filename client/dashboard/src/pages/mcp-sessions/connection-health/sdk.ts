@@ -324,7 +324,7 @@ function problem(
     },
     rule: p.suspectedProblemRule as ProblemRule,
     part: p.suspectedProblemPart as ProblemPart,
-    whoFixes: p.suspectedProblemWhoFixes as WhoFixes,
+    whoFixes: p.suspectedProblemWhoFixes as WhoFixes | undefined,
     filters: {
       from: iso(p.filters.from),
       outcomes: p.filters.outcomes as Outcome[] | undefined,

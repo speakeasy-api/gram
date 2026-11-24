@@ -105,7 +105,9 @@ export type SuspectedProblem = {
   /**
    * Who has to fix it, unknown when that is not known.
    */
-  suspectedProblemWhoFixes: SuspectedProblemSuspectedProblemWhoFixes;
+  suspectedProblemWhoFixes?:
+    | SuspectedProblemSuspectedProblemWhoFixes
+    | undefined;
 };
 
 /** @internal */
@@ -148,7 +150,9 @@ export const SuspectedProblem$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    who_fixes: SuspectedProblemSuspectedProblemWhoFixes$inboundSchema,
+    who_fixes: z.optional(
+      SuspectedProblemSuspectedProblemWhoFixes$inboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {

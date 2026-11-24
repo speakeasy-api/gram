@@ -140,16 +140,16 @@ func TestListSuspectedProblems_ListsWhatEachPersonFixesLast(t *testing.T) {
 	require.Len(t, res.Problems, 2)
 	admin := res.Problems[0]
 	require.Equal(t, int64(1), admin.PeopleCount, "one person's problem an admin fixes comes before seven people's that each fixes")
-	require.Equal(t, gen.SuspectedProblemWhoFixes("admin"), admin.WhoFixes)
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("admin")), admin.WhoFixes)
 	connect := res.Problems[1]
 	require.Equal(t, int64(7), connect.PeopleCount)
-	require.Equal(t, gen.SuspectedProblemWhoFixes("person"), connect.WhoFixes)
-	require.Equal(t, "7 people need to connect their account for Linear", connect.Headline)
-	require.Equal(t, "Their apps asked for Linear. Each person has to connect their own account for it, or reconnect it if it expired. They can do that from the link their app shows.", connect.Fact)
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("person")), connect.WhoFixes)
+	require.Equal(t, "7 people need to connect an account for Linear", connect.Headline)
+	require.Equal(t, "For each person, the connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.", connect.Fact)
 
 	got := ti.getProblem(t, ctx, connect.ID)
 	require.True(t, got.Found)
-	require.Equal(t, gen.SuspectedProblemWhoFixes("person"), got.Problem.WhoFixes)
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("person")), got.Problem.WhoFixes)
 }
 
 func TestListSuspectedProblems_FiltersByPart(t *testing.T) {

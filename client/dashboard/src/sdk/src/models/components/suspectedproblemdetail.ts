@@ -178,7 +178,7 @@ export type SuspectedProblemDetail = {
   /**
    * Who has to fix it, unknown when that is not known.
    */
-  suspectedProblemWhoFixes: SuspectedProblemWhoFixes;
+  suspectedProblemWhoFixes?: SuspectedProblemWhoFixes | undefined;
 };
 
 /** @internal */
@@ -245,7 +245,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
     source: z.optional(
       SuspectedProblemDetailConnectionFailureSource$inboundSchema,
     ),
-    who_fixes: SuspectedProblemWhoFixes$inboundSchema,
+    who_fixes: z.optional(SuspectedProblemWhoFixes$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

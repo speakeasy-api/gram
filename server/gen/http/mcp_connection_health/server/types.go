@@ -1905,7 +1905,7 @@ type SuspectedProblemResponseBody struct {
 	ID       string                             `form:"id" json:"id" xml:"id"`
 	Rule     string                             `form:"rule" json:"rule" xml:"rule"`
 	Part     string                             `form:"part" json:"part" xml:"part"`
-	WhoFixes string                             `form:"who_fixes" json:"who_fixes" xml:"who_fixes"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
 	Scope    *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
 	// When its earliest failure ended.
 	Since        string `form:"since" json:"since" xml:"since"`
@@ -1988,7 +1988,7 @@ type SuspectedProblemDetailResponseBody struct {
 	ID       string                             `form:"id" json:"id" xml:"id"`
 	Rule     string                             `form:"rule" json:"rule" xml:"rule"`
 	Part     string                             `form:"part" json:"part" xml:"part"`
-	WhoFixes string                             `form:"who_fixes" json:"who_fixes" xml:"who_fixes"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
 	Scope    *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
 	// When its earliest failure ended.
 	Since        string `form:"since" json:"since" xml:"since"`

@@ -22,12 +22,13 @@ import (
 
 func TestProblemText_EachRule(t *testing.T) {
 	t.Parallel()
-	linear, github, notion := uuid.New(), uuid.New(), uuid.New()
+	linear, github, notion, linearCopy := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	n := names{
 		servers: map[string][]repo.ListServerNamesRow{
-			linear.String(): {{ID: linear, Name: "Linear", Kind: "mcp"}},
-			github.String(): {{ID: github, Name: "GitHub", Kind: "mcp"}},
-			notion.String(): {{ID: notion, Name: "Notion", Kind: "mcp"}},
+			linear.String():     {{ID: linear, Name: "Linear", Kind: "mcp"}},
+			github.String():     {{ID: github, Name: "GitHub", Kind: "mcp"}},
+			notion.String():     {{ID: notion, Name: "Notion", Kind: "mcp"}},
+			linearCopy.String(): {{ID: linearCopy, Name: "Linear", Kind: "mcp"}},
 		},
 		people: map[string]person{"dana": {name: "Dana Reyes", email: ""}},
 	}
@@ -46,8 +47,8 @@ func TestProblemText_EachRule(t *testing.T) {
 		return e
 	}
 	notConnected := mcpconnectionattempts.CodeInvalidRemoteSession
-	withApp := func(e mcpconnectionattempts.FailingPerson, family string) mcpconnectionattempts.FailingPerson {
-		e.Apps, e.AppsTotal = []mcpconnectionattempts.EpisodeApp{{Key: "dcr", Family: family, Version: "1.0"}}, 1
+	opened := func(e mcpconnectionattempts.FailingPerson, reason mcpconnectionattempts.Code) mcpconnectionattempts.FailingPerson {
+		e.OpeningReason = reason.String()
 		return e
 	}
 	app := problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.1.4"}
@@ -169,49 +170,101 @@ func TestProblemText_EachRule(t *testing.T) {
 			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 7,
 				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", linear, notConnected)},
 				SharedApp: app, OtherAppsWorked: true},
-			headline: "7 people need to connect their account for Linear",
-			fact:     "Their apps asked for Linear. Each person has to connect their own account for it, or reconnect it if it expired. They can do that from the link their app shows. All use Claude Code 2.1.4.",
+			headline: "7 people need to connect an account for Linear",
+			fact:     "All use Claude Code 2.1.4. For each person, the connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
 		},
 		{
 			name: "several people each on a different server",
 			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
 				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", github, notConnected)},
 				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}, OtherAppsWorked: true},
-			headline: "2 people need to connect their account for Linear and GitHub",
-			fact:     "Their apps asked for Linear and GitHub. Each person has to connect their own account for the server their app asked for, or reconnect it if it expired. They can do that from the link their app shows. All use Claude Code 2.0.1.",
+			headline: "2 people need to connect accounts for Linear and GitHub",
+			fact:     "All use Claude Code 2.0.1. For each person, the connection their app asked for on at least one of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
+		},
+		{
+			name: "people whose servers overlap",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:a", github, notConnected), token("user:b", github, notConnected)},
+				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}},
+			headline: "2 people need to connect accounts for Linear and GitHub",
+			fact:     "All use Claude Code 2.0.1. For each person, the connection their app asked for on at least one of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
 		},
 		{
 			name: "an app version where nobody has connected their account names the server",
 			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
 				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", linear, notConnected)},
 				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}},
-			headline: "2 people need to connect their account for Linear",
-			fact:     "Their apps asked for Linear. Each person has to connect their own account for it, or reconnect it if it expired. They can do that from the link their app shows. All use Claude Code 2.0.1.",
+			headline: "2 people need to connect an account for Linear",
+			fact:     "All use Claude Code 2.0.1. For each person, the connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
 		},
 		{
 			name: "several people on three servers",
 			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 3,
 				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", github, notConnected), token("user:c", notion, notConnected)},
 				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}},
-			headline: "3 people need to connect their account for 3 MCP servers",
-			fact:     "Their apps asked for Linear and 2 other servers. Each person has to connect their own account for the server their app asked for, or reconnect it if it expired. They can do that from the link their app shows. All use Claude Code 2.0.1.",
+			headline: "3 people need to connect accounts for Linear and 2 other MCP servers",
+			fact:     "All use Claude Code 2.0.1. For each person, the connection their app asked for on at least one of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
+		},
+		{
+			name: "two servers with no name",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:a", uuid.New(), notConnected), token("user:b", uuid.New(), notConnected)}},
+			headline: "2 people need to connect accounts for 2 MCP servers",
+			fact:     "For each person, the connection their app asked for on at least one of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
+		},
+		{
+			name: "two servers where one has a name",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), ep("user:b", uuid.New(), signIn, mcpconnectionattempts.CodeInvalidBearerToken)}},
+			headline: "2 people on Claude Code 2.0.1 can't sign in",
+			fact:     "On Linear and 1 other MCP server. The app's sign-in to Speakeasy fails.",
+		},
+		{
+			name: "two servers with the same name",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected), token("user:dana", linearCopy, notConnected)}},
+			headline: "Dana Reyes needs to connect accounts for Linear and 1 other MCP server",
+			fact:     "The connection their app asked for on each of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
 		},
 		{
 			name: "one person who has not connected their account",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
-				Episodes: []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected)}},
-			headline: "Dana Reyes needs to connect their account for Linear",
-			fact:     "Their app asked for Linear. They have to connect their own account for it, or reconnect it if it expired. They can do that from the link their app shows.",
+				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected)},
+				SharedApp: app},
+			headline: "Dana Reyes needs to connect an account for Linear",
+			fact:     "They use Claude Code 2.1.4. The connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
 		},
 		{
-			name: "one person with two apps who has not connected their account on two servers",
+			name: "one person on two servers",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
-				Episodes: []mcpconnectionattempts.FailingPerson{
-					withApp(token("user:dana", linear, notConnected), mcpconnectionattempts.FamilyClaudeCode),
-					withApp(token("user:dana", github, notConnected), mcpconnectionattempts.FamilyCursor),
-				}},
-			headline: "Dana Reyes needs to connect their account for Linear and GitHub",
-			fact:     "Their apps asked for Linear and GitHub. They have to connect their own account for each of them, or reconnect any that expired. They can do that from the link their app shows.",
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected), token("user:dana", github, notConnected)}},
+			headline: "Dana Reyes needs to connect accounts for Linear and GitHub",
+			fact:     "The connection their app asked for on each of these servers is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
+		},
+		{
+			name: "only the latest reason decides",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{opened(token("user:a", linear, notConnected), mcpconnectionattempts.CodeInvalidBearerToken), opened(token("user:b", linear, notConnected), mcpconnectionattempts.CodeInvalidBearerToken)}},
+			headline: "2 people need to connect an account for Linear",
+			fact:     "For each person, the connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.",
+		},
+		{
+			name: "an opening connect reason with another latest reason keeps today's wording",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{opened(token("user:a", linear, mcpconnectionattempts.CodeInvalidBearerToken), notConnected), opened(token("user:b", linear, mcpconnectionattempts.CodeInvalidBearerToken), notConnected)}},
+			headline: "2 people can't sign in to Linear",
+			fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeInvalidBearerToken),
+		},
+		{
+			name: "a connect run that reached no MCP server keeps today's wording",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{func() mcpconnectionattempts.FailingPerson {
+					e := token("user:dana", linear, notConnected)
+					e.ServerKind, e.ServerID = "authorization_server", "https://auth.example.com"
+					return e
+				}()}},
+			headline: "Dana Reyes can't sign in",
+			fact:     "The app's sign-in to Speakeasy fails. " + admin(notConnected),
 		},
 		{
 			name: "some people have not connected their account and others must sign in again",

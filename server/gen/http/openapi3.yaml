@@ -140617,7 +140617,6 @@ components:
                 - id
                 - rule
                 - part
-                - who_fixes
                 - scope
                 - since
                 - last_failed_at
@@ -140760,7 +140759,6 @@ components:
                 - id
                 - rule
                 - part
-                - who_fixes
                 - scope
                 - since
                 - last_failed_at

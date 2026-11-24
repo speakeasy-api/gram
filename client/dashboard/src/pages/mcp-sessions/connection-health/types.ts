@@ -280,7 +280,8 @@ export interface SuspectedProblem {
   rule: ProblemRule;
   /** Whether the failures are signing in to Speakeasy or connecting to the service. */
   part: ProblemPart;
-  whoFixes: WhoFixes;
+  /** Older servers do not send it. */
+  whoFixes?: WhoFixes;
   /** Opens Connection Logs with exactly this item's rows. */
   filters: { from: string } & AttemptFilters;
 }
@@ -288,7 +289,7 @@ export interface SuspectedProblem {
 export interface ListSuspectedProblemsResponse {
   loggingEnabled: boolean;
   viewerScope: ViewerScope;
-  /** At most 100, most people first. */
+  /** At most 100. Problems each person fixes themselves come last; most people first within each group. */
   problems: SuspectedProblem[];
   /** Problems before the cap. */
   problemsTotal: number;

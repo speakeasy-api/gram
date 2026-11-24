@@ -74,7 +74,7 @@ export const SOURCE_LABELS: Record<Source, string> = {
   speakeasy: "Speakeasy",
 };
 
-/** Where a problem's failures came from, in one sentence; name is the service or app when known. */
+/** Where a problem's failures came from, in one sentence true for every reason with that source; name is the service or app when known. */
 export function sourceSentence(source: Source, name?: string): string {
   const named = (what: string) => (name ? `${what} (${name})` : what);
   switch (source) {
@@ -83,13 +83,13 @@ export function sourceSentence(source: Source, name?: string): string {
     case "server":
       return "These failures came from the MCP server.";
     case "app":
-      return `These failures came from ${named("the app")}.`;
+      return `These failures point to ${named("the app")}.`;
     case "identity_provider":
-      return "These failures came from the identity provider.";
+      return "These failures came from the identity provider, or it could not be reached.";
     case "speakeasy_setting":
-      return "A setting in Speakeasy caused these failures.";
+      return "A Speakeasy admin should look into these failures.";
     case "speakeasy":
-      return "These failures came from Speakeasy.";
+      return "Speakeasy should look into these failures.";
   }
 }
 

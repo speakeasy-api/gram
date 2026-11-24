@@ -24,7 +24,6 @@ import {
   appLabel,
   axisLabels,
   formatAt,
-  formatClockMinutes,
   formatCount,
   formatDuration,
   formatSince,
@@ -144,6 +143,14 @@ function sourceName(problem: SuspectedProblemDetail): string | undefined {
   if (problem.source === "service")
     return problem.scope.kind === "service" ? problem.scope.name : undefined;
   if (problem.source !== "app") return undefined;
+  // Name the app only when every person in the problem is in the rows and shows it.
+  if (
+    problem.peopleTotal > problem.people.length ||
+    problem.people.some(
+      (p) => p.apps.length === 0 || p.appsTotal > p.apps.length,
+    )
+  )
+    return undefined;
   const apps = new Set(problem.people.flatMap((p) => p.apps.map(appLabel)));
   return apps.size === 1 ? [...apps][0] : undefined;
 }
@@ -203,6 +210,8 @@ function ProblemBody({
   const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
   const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
+  // Dates show against the day the sheet renders, not the day the page opened.
+  const today = new Date();
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
@@ -215,7 +224,7 @@ function ProblemBody({
         </SheetTitle>
         <SheetDescription>
           Since {sinceLabel} · latest failure{" "}
-          {formatAt(problem.lastFailedAt, now)} ·{" "}
+          {formatAt(problem.lastFailedAt, today)} ·{" "}
           {formatDuration(
             Date.parse(problem.lastFailedAt) - Date.parse(problem.since),
           )}
@@ -299,7 +308,7 @@ function ProblemBody({
                 </div>
                 <span className="text-destructive text-xs">
                   {p.attempts > 1 ? "started" : "at"}{" "}
-                  {formatAt(p.firstFailedAt, now)}
+                  {formatAt(p.firstFailedAt, today)}
                 </span>
                 <span className="text-right text-sm">{p.attempts}</span>
               </PersonRow>
@@ -446,11 +455,18 @@ function FailureBars({
   buckets: { start: string; attempts: number }[];
   now: Date;
 }): JSX.Element {
+  const rendered = new Date();
+  // Midnight today, so the tooltips re-date after midnight.
+  const today = new Date(
+    rendered.getFullYear(),
+    rendered.getMonth(),
+    rendered.getDate(),
+  ).getTime();
   const chart = useMemo(
     () => ({
       labels: axisLabels(buckets.map((b) => b.start)),
       timestamps: buckets.map((b) => Date.parse(b.start)),
-      tooltipLabels: buckets.map((b) => formatClockMinutes(b.start)),
+      tooltipLabels: buckets.map((b) => formatAt(b.start, new Date(today))),
       series: [
         {
           label: "Failed",
@@ -459,7 +475,7 @@ function FailureBars({
         },
       ],
     }),
-    [buckets],
+    [buckets, today],
   );
   return (
     <HealthBarChart

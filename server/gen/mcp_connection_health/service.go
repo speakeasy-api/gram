@@ -483,7 +483,7 @@ type SuspectedProblem struct {
 	ID       string
 	Rule     SuspectedProblemRule
 	Part     SuspectedProblemPart
-	WhoFixes SuspectedProblemWhoFixes
+	WhoFixes *SuspectedProblemWhoFixes
 	Scope    *SuspectedProblemScope
 	// When its earliest failure ended.
 	Since        string
@@ -533,7 +533,7 @@ type SuspectedProblemDetail struct {
 	ID       string
 	Rule     SuspectedProblemRule
 	Part     SuspectedProblemPart
-	WhoFixes SuspectedProblemWhoFixes
+	WhoFixes *SuspectedProblemWhoFixes
 	Scope    *SuspectedProblemScope
 	// When its earliest failure ended.
 	Since        string

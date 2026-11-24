@@ -327,7 +327,7 @@ func problemView(n names, p problems.Problem, serverID string) (*gen.SuspectedPr
 		ID:                  p.ID,
 		Rule:                gen.SuspectedProblemRule(p.Rule),
 		Part:                partOf(p.Part),
-		WhoFixes:            whoFixesOf(p.WhoFixes),
+		WhoFixes:            new(whoFixesOf(p.WhoFixes)),
 		Scope:               scope,
 		Since:               formatTime(p.Since),
 		LastFailedAt:        formatTime(p.LastFailedAt),

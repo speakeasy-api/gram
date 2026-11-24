@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { ServiceProblemsNote, SuspectedProblems } from "./SuspectedProblems";
 import type {
@@ -9,9 +9,33 @@ import type {
   SuspectedProblemDetail,
 } from "./types";
 
+// Pin the zone and locale before the formatters are built at import.
+const pinned = vi.hoisted(() => {
+  const tz = process.env.TZ;
+  const Original = Intl.DateTimeFormat;
+  process.env.TZ = "UTC";
+  const Pinned = function (
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return new Original(locales ?? "en-GB", options);
+  } as unknown as typeof Intl.DateTimeFormat;
+  Pinned.supportedLocalesOf = (locales, options) =>
+    Original.supportedLocalesOf(locales, options);
+  Intl.DateTimeFormat = Pinned;
+  return { tz, Original };
+});
+
+afterAll(() => {
+  Intl.DateTimeFormat = pinned.Original;
+  if (pinned.tz === undefined) delete process.env.TZ;
+  else process.env.TZ = pinned.tz;
+});
+
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   investigation: undefined as { question: string; context: string } | undefined,
+  tooltips: [] as string[],
 }));
 
 vi.mock("./api", async (original) => ({
@@ -39,7 +63,12 @@ vi.mock("./AskAiButton", () => ({
     return null;
   },
 }));
-vi.mock("./HealthBarChart", () => ({ HealthBarChart: () => null }));
+vi.mock("./HealthBarChart", () => ({
+  HealthBarChart: ({ tooltipLabels }: { tooltipLabels: string[] }) => {
+    state.tooltips = tooltipLabels;
+    return null;
+  },
+}));
 
 const NOW = new Date("2026-11-20T12:00:00Z");
 const noop = (): void => {};
@@ -318,6 +347,7 @@ describe("SuspectedProblems", () => {
 describe("ProblemDetailSheet", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     state.query = {};
   });
 
@@ -400,12 +430,13 @@ describe("ProblemDetailSheet", () => {
     };
     renderSheet();
     expect(
-      screen.getByText("A setting in Speakeasy caused these failures."),
+      screen.getByText("A Speakeasy admin should look into these failures."),
     ).toBeTruthy();
     expect(screen.queryByText(/a speakeasy setting/)).toBeNull();
   });
 
-  it("dates a person's first failure from another day", () => {
+  it("dates times from another day and shows only the time today", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     state.query = {
       data: {
         loggingEnabled: true,
@@ -413,25 +444,77 @@ describe("ProblemDetailSheet", () => {
         found: true,
         problem: {
           ...DETAIL,
+          since: "2026-11-18T09:00:00Z",
+          lastFailedAt: "2026-11-19T22:05:00Z",
           people: [
-            {
-              ...person("old"),
-              firstFailedAt: new Date(2026, 10, 18, 10, 0).toISOString(),
-            },
-            {
-              ...person("new"),
-              firstFailedAt: new Date(2026, 10, 20, 10, 0).toISOString(),
-            },
+            { ...person("old"), firstFailedAt: "2026-11-18T10:00:00Z" },
+            { ...person("new"), firstFailedAt: "2026-11-20T10:00:00Z" },
           ],
         },
       },
     };
-    renderSheet(new Date(2026, 10, 20, 12, 0));
+    renderSheet();
     const started = screen
       .getAllByText(/^started /)
       .map((el) => el.textContent);
-    expect(started[0]).toMatch(/^started .*18.*, \d{2}:\d{2}$/);
-    expect(started[1]).toMatch(/^started \d{2}:\d{2}$/);
+    expect(started).toEqual(["started 18 Nov, 10:00", "started 10:00"]);
+    expect(screen.getByText(/latest failure 19 Nov, 22:05/)).toBeTruthy();
+  });
+
+  it("dates against the day the sheet renders, not the day the page opened", () => {
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-20T00:30:00Z"),
+    });
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          lastFailedAt: "2026-11-19T22:00:00Z",
+          failedPer10Minutes: [
+            { start: "2026-11-19T23:50:00Z", attempts: 2 },
+            { start: "2026-11-20T00:10:00Z", attempts: 1 },
+          ],
+        },
+      },
+    };
+    renderSheet(new Date("2026-11-19T23:00:00Z"));
+    expect(screen.getByText(/latest failure 19 Nov, 22:00/)).toBeTruthy();
+    expect(state.tooltips).toEqual(["19 Nov, 23:50", "00:10"]);
+  });
+
+  it("names the app only when every person is listed and shows it", () => {
+    const app = {
+      ...DETAIL,
+      source: "app" as const,
+      people: [person("a"), person("b")],
+    };
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...app, peopleTotal: 2 },
+      },
+    };
+    renderSheet();
+    expect(
+      screen.getByText("These failures point to the app (Claude Code 2.1.4)."),
+    ).toBeTruthy();
+    cleanup();
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...app, peopleTotal: 3 },
+      },
+    };
+    renderSheet();
+    expect(screen.getByText("These failures point to the app.")).toBeTruthy();
   });
 
   it("says the counts are wider when the filters had to be", () => {
