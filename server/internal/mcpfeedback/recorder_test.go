@@ -524,7 +524,7 @@ func TestRecorderServesEarlierSettingsWhenTheyCannotBeRead(t *testing.T) {
 	// stopped answering.
 	pool, err := pgxpool.New(ctx, ti.conn.Config().ConnString())
 	require.NoError(t, err)
-	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), pool, chatredact.New(), noLimits, mcpfeedback.WithSettingsFreshFor(0))
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), pool, chatredact.New(), noLimits, testServiceName, exportOn(), mcpfeedback.WithSettingsFreshFor(0))
 
 	saveFeedbackConfig(t, ctx, ti, server, true)
 	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
