@@ -100,7 +100,7 @@ func TestIsDescriptionText(t *testing.T) {
 
 	for text, want := range map[string]bool{
 		"Notion (work) #1": true,
-		"":                 true,
+		"":                 false,
 		`say "hi"`:         false,
 		`back\slash`:       false,
 		"Café":             false,

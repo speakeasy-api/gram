@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -255,11 +256,26 @@ func classifyEndpointError(stage Stage, err error) Outcome {
 func withoutLinks(description string) string {
 	words := strings.Fields(description)
 	for i, word := range words {
-		if strings.Contains(word, "://") {
-			words[i] = "[link]"
+		core := strings.TrimLeft(word, linkWrapping)
+		lead := word[:len(word)-len(core)]
+		trimmed := strings.TrimRight(core, linkWrapping)
+		if isLink(trimmed) {
+			words[i] = lead + "[link]" + core[len(trimmed):]
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+const linkWrapping = `.,;:!?()[]{}<>"'`
+
+var (
+	schemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:[^\d\s]`)
+	hostPath     = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}(/|$)`)
+)
+
+// isLink: has "://", starts with "www.", starts with a scheme and colon (mailto:x), or is a dotted host with a letters-only last label alone or before "/".
+func isLink(word string) bool {
+	return strings.Contains(word, "://") || strings.HasPrefix(strings.ToLower(word), "www.") || schemePrefix.MatchString(word) || hostPath.MatchString(word)
 }
 
 func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointError) Outcome {

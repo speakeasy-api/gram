@@ -534,3 +534,21 @@ func TestIdentityProviderLoadOutcome_SignerOutageIsRetryable(t *testing.T) {
 		})
 	}
 }
+
+func TestWithoutLinks(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]string{
+		"Open https://app.example.test/connect?state=abc to connect it.": "Open [link] to connect it.",
+		"See (https://example.test/x).":                                  "See ([link]).",
+		"Visit www.example.test/x now":                                   "Visit [link] now",
+		"Go to example.test/path, then retry.":                           "Go to [link], then retry.",
+		"Contact support.example.test.":                                  "Contact [link].",
+		"Email mailto:someone@example.test or call tel:+15550100.":       "Email [link] or call [link].",
+		"Use v1.2, e.g. the default.":                                    "Use v1.2, e.g. the default.",
+		"invalid_grant. No seat was found for this user":                 "invalid_grant. No seat was found for this user",
+		"Retry at 10:30. Note: scope is missing.":                        "Retry at 10:30. Note: scope is missing.",
+	} {
+		require.Equal(t, want, withoutLinks(in), in)
+	}
+}
