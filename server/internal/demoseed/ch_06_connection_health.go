@@ -1,27 +1,58 @@
 package demoseed
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // healthGen builds the connection health attempts (seed_04_connection_health.go): a
-// month of sign-ins with a weekday rhythm, and the stories the sample problems tell.
+// month of sign-ins with a weekday rhythm, and the stories the suspected problems tell.
 type healthGen struct {
-	s    *seeder
-	clk  healthClock
-	r    *seedRand
-	rows []mcpconnectionattempts.Row
-	n    int
-	err  error
+	s      *seeder
+	clk    healthClock
+	r      *seedRand
+	rows   []mcpconnectionattempts.Row
+	served map[servedKey]mcpconnectionattempts.Served
+	n      int
+	err    error
+}
+
+// servedKey is one connection as mcp_connection_last_served keys it.
+type servedKey struct{ kind, server, member, subject, app, family string }
+
+// servedRequest is a request of the person's app that the server answered. It has no event row.
+func (g *healthGen) servedRequest(p healthPerson, server, member string, at time.Time) {
+	// Moved back rather than dropped, so whether the row exists never depends on the seed's second.
+	if latest := g.clk.now.Add(-5 * time.Second); at.After(latest) {
+		at = latest
+	}
+	kind, id := "mcp", g.s.healthServerID(server).String()
+	if server == healthGatewayKey {
+		kind, id = "meta", g.s.healthGateway().String()
+	}
+	memberID := ""
+	if member != "" {
+		memberID = g.s.healthServerID(member).String()
+	}
+	k := servedKey{kind: kind, server: id, member: memberID, subject: urn.NewUserSubject(g.userID(p)).String(), app: healthApp(p.family).String(), family: p.family}
+	if prev, ok := g.served[k]; ok && !at.After(prev.ServedAt) {
+		return
+	}
+	g.served[k] = mcpconnectionattempts.Served{
+		OrganizationID: g.s.orgID(), ProjectID: g.s.projectID(), ServerKind: k.kind, ServerID: k.server, MemberID: k.member,
+		SubjectURN: k.subject, AppKey: k.app, ClientFamily: k.family, RemoteSessionClientID: "", ServedAt: at, AnsweredAt: at,
+	}
 }
 
 // healthAttempt is one attempt being built.
@@ -85,7 +116,7 @@ func (a *healthAttempt) row(step mcpconnectionattempts.Step, what mcpconnectiona
 // metadata document, the others by a dynamic registration.
 func healthApp(family string) mcpconnectionattempts.App {
 	if family == mcpconnectionattempts.FamilyClaudeCode {
-		return mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)
+		return mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	return mcpconnectionattempts.AppDCR
 }
@@ -217,6 +248,9 @@ func (g *healthGen) listing(p healthPerson, t time.Time, missing string) {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
 	a.row(mcpconnectionattempts.StepDiscoveryListing, what, t.Add(4*time.Second), true, g.person(p))
+	if missing == "" {
+		g.servedRequest(p, healthGatewayKey, "", t.Add(4*time.Second))
+	}
 }
 
 // network is a row of nobody known yet: an app or browser on one of a few networks.
@@ -310,7 +344,7 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 		return true
 	case p.key == "lena" && !t.Before(g.clk.cursorBrokenFrom()):
 		return true
-	case p.key == "dana" && t.After(g.clk.danaLast().Add(-8*time.Hour)):
+	case p.key == "dana" && t.After(g.clk.danaFrom().Add(-16*time.Hour)):
 		return true
 	case (server == "linear" || server == healthGatewayKey) && !t.Before(downFrom) && !t.After(downTo):
 		return true
@@ -320,6 +354,16 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 		return true
 	}
 	return false
+}
+
+// busyLater is busy for a row that follows one at a time busy has already allowed: the
+// stories' fixed windows apply, the quiet days counted back from the seed's clock only
+// through the first row, so the pair never splits on the second the seed ran.
+func (g *healthGen) busyLater(p healthPerson, server string, t time.Time) bool {
+	if p.key == "hugo" || p.key == "rosa" {
+		return false
+	}
+	return g.busy(p, server, t)
 }
 
 func (g *healthGen) baseline() {
@@ -373,14 +417,51 @@ func (g *healthGen) baseline() {
 			if (server == "linear" || server == healthGatewayKey) && when.After(downFrom) && kind != "renewal" && kind != "service_renewal" && kind != "sign_in" && kind != "listing" {
 				continue
 			}
-			g.emit(kind, p, server, when)
+			// A baseline failure is a blip the person gets past, so it never shows as a problem.
+			// The recovery follows its failure: one near the cutoff recovers sooner instead of
+			// being dropped, so the pair is in or out with the failure's own time.
+			recoverAt := when.Add(g.r.span(3*time.Minute, 25*time.Minute))
+			if healthBlips[kind] && g.busyLater(p, server, recoverAt) {
+				continue
+			}
+			if cutoff := g.clk.now.Add(-2 * time.Minute); recoverAt.After(cutoff) {
+				recoverAt = when.Add(cutoff.Sub(when) / 2)
+			}
+			g.emit(kind, p, server, when, recoverAt)
+			// After a sign-in or renewal the app usually makes requests the server answers.
+			if requestAt := when.Add(g.r.span(time.Minute, 20*time.Minute)); (kind == "renewal" || kind == "service_renewal" || kind == "sign_in") &&
+				g.r.float() < .6 && !g.busyLater(p, server, requestAt) {
+				g.servedRequest(p, server, "", requestAt)
+			}
 		}
 	}
 }
 
-func (g *healthGen) emit(kind string, p healthPerson, server string, when time.Time) {
+// healthBlips are the baseline's failing kinds, each followed by the person getting past it.
+var healthBlips = map[string]bool{"renewal_fail": true, "service_fail": true, "request_fail": true, "signin_fail": true, "partial": true}
+
+// recovered is the person connecting again after a blip: signed in, renewed with the
+// gateway member's service, and listing the gateway's tools.
+func (g *healthGen) recovered(p healthPerson, server, member string, at time.Time) {
+	g.signIn(p, server, at, healthConnected)
+	g.servedRequest(p, server, member, at.Add(90*time.Second))
+	if server == healthGatewayKey {
+		g.serviceRenewal(p, server, member, at.Add(time.Minute), mcpconnectionattempts.ResultRefreshed)
+		g.listing(p, at.Add(2*time.Minute), "")
+	}
+}
+
+func (g *healthGen) emit(kind string, p healthPerson, server string, when, recoverAt time.Time) {
 	oauth := g.service(server, "") != ""
 	member := healthGatewayMembers[g.r.intn(len(healthGatewayMembers))]
+	if healthBlips[kind] {
+		// A direct server has no gateway member.
+		recoveredMember := ""
+		if server == healthGatewayKey {
+			recoveredMember = member
+		}
+		defer g.recovered(p, server, recoveredMember, recoverAt)
+	}
 	switch {
 	case kind == "renewal", kind == "listing" && server != healthGatewayKey, kind == "partial" && server != healthGatewayKey,
 		kind == "service_renewal" && server != healthGatewayKey && !oauth:
@@ -422,6 +503,15 @@ func (g *healthGen) emit(kind string, p healthPerson, server string, when time.T
 	case kind == "network":
 		g.strayAttempt(server, when)
 	}
+}
+
+// stillTrying moves a story's last failure to ago before now when that is later, so the
+// people in it have tried within the last day whatever the time of the seed.
+func (g *healthGen) stillTrying(last time.Time, ago time.Duration) time.Time {
+	if recent := g.clk.now.Add(-ago); recent.After(last) {
+		return recent
+	}
+	return last
 }
 
 // spread places n times from start to end, the inner ones jittered.
@@ -490,15 +580,22 @@ func (g *healthGen) storyLinear() {
 	}{{"priya", 11, 12}, {"sofia", 11, 19}, {"omar", 11, 26}, {"sam", 11, 41}, {"priya", 12, 8}} {
 		if t := at(0, r.hour, r.minute, 0); t.Before(g.clk.now) {
 			g.serviceRenewal(g.personByKey(r.who), "linear", "", t, mcpconnectionattempts.ResultRefreshed)
+			g.servedRequest(g.personByKey(r.who), "linear", "", t.Add(time.Minute))
 		}
 	}
-	if t := at(0, 11, 33, 0); t.Before(g.clk.now) {
-		g.serviceRenewal(g.personByKey("mei"), healthGatewayKey, "linear", t, mcpconnectionattempts.ResultRefreshed)
+	for _, r := range []struct {
+		who    string
+		minute int
+	}{{"mei", 33}, {"jonas", 36}} {
+		if t := at(0, 11, r.minute, 0); t.Before(g.clk.now) {
+			g.serviceRenewal(g.personByKey(r.who), healthGatewayKey, "linear", t, mcpconnectionattempts.ResultRefreshed)
+			g.servedRequest(g.personByKey(r.who), healthGatewayKey, "linear", t.Add(time.Minute))
+		}
 	}
 }
 
 // storyCursor: Cursor 2.0.1 cannot renew its MCP sign-in on GitHub for three people since
-// two days ago; Cursor 2.0.2 renews fine there.
+// two days ago; Cursor 2.0.2 renews fine there, and Claude Code works there.
 func (g *healthGen) storyCursor() {
 	at := g.clk.at
 	for i, who := range []struct {
@@ -507,20 +604,22 @@ func (g *healthGen) storyCursor() {
 	}{{"lena", 38}, {"felix", 22}, {"lars", 27}} {
 		p := g.personByKey(who.key)
 		start := at(-2, 10, 20+i, 15)
-		end := at(0, 10, 5+g.r.intn(34), 0)
+		storyEnd, ago := at(0, 10, 5+g.r.intn(34), 0), time.Duration(6+2*i)*time.Minute
 		if who.key == "lena" {
-			end = at(0, 10, 41, 26)
+			storyEnd, ago = at(0, 10, 41, 26), 5*time.Minute
 		}
+		end := g.stillTrying(storyEnd, ago)
 		// The app retries a few times minutes apart during working hours, then gives up for a while.
+		// Retries are placed on the story's fixed clock, so the draws never depend on the seed's second.
 		times := []time.Time{start, end}
 		for len(times) < who.count {
-			burst := start.Add(time.Duration(g.r.float() * float64(end.Sub(start))))
+			burst := start.Add(time.Duration(g.r.float() * float64(storyEnd.Sub(start))))
 			if h := burst.In(time.Local).Hour(); h < 8 || h > 17 {
 				continue
 			}
 			for k := range g.r.between(3, 6) {
 				t := burst.Add(time.Duration(float64(k) * float64(g.r.span(5*time.Minute, 11*time.Minute))))
-				if t.After(start) && t.Before(end) && len(times) < who.count {
+				if t.After(start) && t.Before(storyEnd) && len(times) < who.count {
 					times = append(times, t)
 				}
 			}
@@ -534,6 +633,7 @@ func (g *healthGen) storyCursor() {
 	for _, t := range g.spread(at(-2, 11, 0, 0), g.clk.now.Add(-time.Hour), 9) {
 		g.renewal(g.personByKey("sofia"), "github", t, mcpconnectionattempts.ResultRefreshed)
 	}
+	g.servedRequest(g.personByKey("sam"), "github", "", g.clk.now.Add(-25*time.Minute))
 }
 
 // storyWiki: Internal Wiki rejects its saved key since yesterday afternoon.
@@ -545,10 +645,10 @@ func (g *healthGen) storyWiki() {
 		count       int
 		first, last time.Time
 	}{
-		{"ken", 4, at(0, 10, 41, 30), at(0, 10, 50, 10)},
-		{"ivy", 3, at(-1, 16, 5, 40), at(0, 10, 42+g.r.intn(8), 0)},
-		{"theo", 4, at(-1, 16, 6, 40), at(0, 10, 42+g.r.intn(8), 0)},
-		{"amara", 5, at(-1, 16, 7, 40), at(0, 10, 52, 8)},
+		{"ken", 4, at(0, 10, 41, 30), g.stillTrying(at(0, 10, 50, 10), 7*time.Minute)},
+		{"ivy", 3, at(-1, 16, 5, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 11*time.Minute)},
+		{"theo", 4, at(-1, 16, 6, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 9*time.Minute)},
+		{"amara", 5, at(-1, 16, 7, 40), g.stillTrying(at(0, 10, 52, 8), 6*time.Minute)},
 	} {
 		for _, t := range g.spread(who.first, who.last, who.count) {
 			g.request(g.personByKey(who.key), "wiki", "", t, mcpconnectionattempts.CodeStaticKeyRejected, 0)
@@ -556,13 +656,13 @@ func (g *healthGen) storyWiki() {
 	}
 }
 
-// storyDana: Dana's MCP sign-in reached its time limit; her app retried all day, three days ago.
+// storyDana: Dana's MCP sign-in reached its time limit two days ago; her app still retries.
 func (g *healthGen) storyDana() {
 	p := g.personByKey("dana")
-	for _, t := range g.spread(g.clk.at(-3, 9, 12, 44), g.clk.at(-3, 16, 38, 5), 41) {
+	for _, t := range g.spread(g.clk.danaFrom().Add(44*time.Second), g.clk.now.Add(-8*time.Minute), 41) {
 		g.renewal(p, "linear", t, mcpconnectionattempts.CodeRefreshTokenExpired)
 	}
-	g.renewal(p, "linear", g.clk.at(-4, 17, 20, 0), mcpconnectionattempts.ResultRefreshed)
+	g.renewal(p, "linear", g.clk.at(-3, 17, 20, 0), mcpconnectionattempts.ResultRefreshed)
 }
 
 // storyLoop: Codex keeps sending an expired sign-in to Support Desk; the repeats fold into one row.
@@ -610,6 +710,8 @@ func (g *healthGen) storyNow() {
 	g.signIn(g.personByKey("noor"), "notion", now.Add(-6*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundToken, what: mcpconnectionattempts.ResultCodeIssued, unfinished: true})
 	g.begin(now.Add(-19*time.Minute), "notion", mcpconnectionattempts.AppDCR).row(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, now.Add(-19*time.Minute), false, g.network(1, mcpconnectionattempts.FamilyBrowser, ""))
 	g.renewal(g.personByKey("felix"), "notion", now.Add(-14*time.Minute), mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
+	// Claude Code works on Notion after it, so Felix's failure there joins the Cursor 2.0.1 problem.
+	g.servedRequest(g.personByKey("jonas"), "notion", "", now.Add(-4*time.Minute))
 	g.signIn(g.personByKey("theo"), "support", now.Add(-33*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundConsent, what: mcpconnectionattempts.CodeCanceled, unfinished: false})
 	for i, key := range []string{"sam", "priya", "ana", "mei", "sofia", "jonas", "omar"} {
 		p := g.personByKey(key)
@@ -633,9 +735,10 @@ func (g *healthGen) storyFirsts() {
 	}
 }
 
-// connectionHealthRows is the whole dataset, deterministic for the seed's clock.
-func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, error) {
-	g := &healthGen{s: s, clk: newHealthClock(s.now), r: &seedRand{name: s.name("health-attempts"), n: 0}, rows: nil, n: 0, err: nil}
+// connectionHealthRows is the whole dataset, deterministic for the seed's clock: the attempts,
+// and the answered requests that have no attempt rows.
+func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, []mcpconnectionattempts.Served, error) {
+	g := &healthGen{s: s, clk: newHealthClock(s.now), r: &seedRand{name: s.name("health-attempts"), n: 0}, rows: nil, served: map[servedKey]mcpconnectionattempts.Served{}, n: 0, err: nil}
 	g.baseline()
 	g.storyFirsts()
 	g.storyLinear()
@@ -646,5 +749,8 @@ func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, error) {
 	g.storyKillswitch()
 	g.storyDenied()
 	g.storyNow()
-	return g.rows, g.err
+	served := slices.SortedFunc(maps.Values(g.served), func(a, b mcpconnectionattempts.Served) int {
+		return cmp.Or(cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ClientFamily, b.ClientFamily))
+	})
+	return g.rows, served, g.err
 }

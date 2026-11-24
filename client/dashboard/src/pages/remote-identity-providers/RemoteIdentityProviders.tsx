@@ -174,7 +174,7 @@ function RemoteIdentityProvidersOverview() {
         }
       >
         {/* The refresh policy governs these servers' remote sessions, so it
-            lives here rather than on MCP Sessions. Pulled up under the
+            lives here rather than on MCP Sign-in. Pulled up under the
             description so the surface does not read as a dropped card. */}
         <div className="-mt-6 mb-8">
           <RemoteSessionRefreshPolicySetting />

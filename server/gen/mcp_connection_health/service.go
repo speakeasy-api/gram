@@ -34,6 +34,14 @@ type Service interface {
 	// List apps refused at sign-in through a provider, with the reason and the
 	// last time.
 	ListDeniedClients(context.Context, *ListDeniedClientsPayload) (res *ConnectionDeniedClientsResult, err error)
+	// List suspected problems for a provider: 2 or more people who cannot connect
+	// now and failed the same way on one MCP server, one service or one app
+	// version, or one person failing for 24 hours. Only failures on the provider's
+	// servers, gateways and authorization server count. Empty without log:read.
+	ListSuspectedProblems(context.Context, *ListSuspectedProblemsPayload) (res *ListSuspectedProblemsResult, err error)
+	// Get one suspected problem of a provider by id. Not found once it has
+	// cleared, or without log:read.
+	GetSuspectedProblem(context.Context, *GetSuspectedProblemPayload) (res *GetSuspectedProblemResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -56,7 +64,7 @@ const ServiceName = "mcpConnectionHealth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients"}
+var MethodNames = [8]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients", "listSuspectedProblems", "getSuspectedProblem"}
 
 type ConnectionApp struct {
 	// Client family, empty when the app is not on the list.
@@ -371,6 +379,30 @@ type GetSignInSummaryPayload struct {
 	To string
 }
 
+// GetSuspectedProblemPayload is the payload type of the mcpConnectionHealth
+// service getSuspectedProblem method.
+type GetSuspectedProblemPayload struct {
+	// The MCP authentication provider.
+	UserSessionIssuerID string
+	// The problem id from listSuspectedProblems.
+	ID string
+	// Read the problem as listed for this server, gateway or toolset.
+	ServerID         *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetSuspectedProblemResult is the result type of the mcpConnectionHealth
+// service getSuspectedProblem method.
+type GetSuspectedProblemResult struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool
+	ViewerScope    ConnectionViewerScope
+	Found          bool
+	Problem        *SuspectedProblemDetail
+}
+
 // ListAttemptsPayload is the payload type of the mcpConnectionHealth service
 // listAttempts method.
 type ListAttemptsPayload struct {
@@ -416,6 +448,176 @@ type ListDeniedClientsPayload struct {
 	From string
 	// Exclusive end of attempt start times.
 	To string
+}
+
+// ListSuspectedProblemsPayload is the payload type of the mcpConnectionHealth
+// service listSuspectedProblems method.
+type ListSuspectedProblemsPayload struct {
+	// The MCP authentication provider.
+	UserSessionIssuerID string
+	// Keep problems with people on this server, gateway or toolset.
+	ServerID *string
+	// Keep problems with this part of the connection.
+	Part             *SuspectedProblemPart
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListSuspectedProblemsResult is the result type of the mcpConnectionHealth
+// service listSuspectedProblems method.
+type ListSuspectedProblemsResult struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool
+	ViewerScope    ConnectionViewerScope
+	// At most 100, most people first.
+	Problems []*SuspectedProblem
+	// Problems before the cap.
+	ProblemsTotal int64
+}
+
+type SuspectedProblem struct {
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID    string
+	Rule  SuspectedProblemRule
+	Part  SuspectedProblemPart
+	Scope *SuspectedProblemScope
+	// When its earliest failure ended.
+	Since        string
+	LastFailedAt string
+	PeopleCount  int64
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64
+	// Who cannot do what, in plain words.
+	Headline string
+	// What the data establishes about it, in plain words.
+	Fact    string
+	Filters *SuspectedProblemFilters
+}
+
+type SuspectedProblemBucket struct {
+	Start    string
+	Attempts int64
+}
+
+type SuspectedProblemDetail struct {
+	// Who returned the failures, when all agree.
+	Source *ConnectionFailureSource
+	// Failed attempts per 10 minutes over at most the last 24 hours.
+	FailedPer10Minutes []*SuspectedProblemBucket
+	// The latest time any of its people last had the broken part working, when
+	// known.
+	LastConnectedAt *string
+	// People failing on the same scope who are not in this problem.
+	OtherFailuresOnService int64
+	Messages               []*SuspectedProblemMessage
+	// At most 50 people, earliest failure first.
+	People []*SuspectedProblemPerson
+	// Distinct people in the problem.
+	PeopleTotal int64
+	// At most 50, most attempts first.
+	Servers []*SuspectedProblemServer
+	// Servers before the cap.
+	ServersTotal int64
+	// When the problem was read: the end of the chart, the message counts and the
+	// Connection Logs links.
+	AsOf string
+	// True when a filter list was too long to send and was left out, so the chart,
+	// messages and filters may include unrelated failures.
+	CountsWidened bool
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID    string
+	Rule  SuspectedProblemRule
+	Part  SuspectedProblemPart
+	Scope *SuspectedProblemScope
+	// When its earliest failure ended.
+	Since        string
+	LastFailedAt string
+	PeopleCount  int64
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64
+	// Who cannot do what, in plain words.
+	Headline string
+	// What the data establishes about it, in plain words.
+	Fact    string
+	Filters *SuspectedProblemFilters
+}
+
+// Connection Logs filters that show the problem's failed attempts.
+type SuspectedProblemFilters struct {
+	// Inclusive start of attempt start times.
+	From     string
+	Outcomes []ConnectionOutcome
+	Steps    []ConnectionStepGroup
+	// Server, gateway or toolset ids.
+	ServerIds []string
+	// Gateway member ids on the step that ended the attempt.
+	MemberIds []string
+	// Subject URNs.
+	People []string
+	// Network keys.
+	Networks []string
+	// App families. An empty string selects apps that are not on the list.
+	Apps []string
+	// App family and version as family@version.
+	AppVersions []string
+	// Reason codes.
+	Reasons []string
+	// Service hosts.
+	Services []string
+}
+
+type SuspectedProblemMessage struct {
+	Reason string
+	// What happened, in one sentence for the person.
+	Message string
+	// What happened, in one sentence for an administrator.
+	AdminMessage *string
+	Attempts     int64
+}
+
+// speakeasy when the app's sign-in to Speakeasy fails; service when signing in
+// to the service or the server answering fails.
+type SuspectedProblemPart string
+
+// One person in the problem, with up to 5 of the apps and servers they fail on.
+type SuspectedProblemPerson struct {
+	Person *ConnectionPerson
+	// At most 5.
+	Apps []*ConnectionApp
+	// Apps before the cap.
+	AppsTotal int64
+	// At most 5.
+	Servers []*SuspectedProblemPlace
+	// Servers before the cap.
+	ServersTotal  int64
+	Attempts      int64
+	FirstFailedAt string
+}
+
+type SuspectedProblemPlace struct {
+	Server *ConnectionServer
+	Member *ConnectionServer
+}
+
+// The rule a problem was listed by.
+type SuspectedProblemRule string
+
+type SuspectedProblemScope struct {
+	Kind string
+	// The server id, service host, family@version or subject URN.
+	ID string
+	// The server's name, the service's host, the app's name and version, or the
+	// person's name.
+	Name string
+}
+
+type SuspectedProblemServer struct {
+	Server   *ConnectionServer
+	Member   *ConnectionServer
+	Attempts int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -57,7 +57,9 @@ SELECT
   , fa.app_url
   , fa.runner_version
   , access.id AS access_id
+  , access.organization_id
   , access.encryption_key
+  , access.encryption_key_org_encrypted
   , access.bearer_format
 FROM fly_apps fa
 LEFT JOIN functions_access access
@@ -82,14 +84,16 @@ type GetFlyAppAccessParams struct {
 }
 
 type GetFlyAppAccessRow struct {
-	FlyOrgID      string
-	FlyOrgSlug    string
-	AppName       string
-	AppUrl        string
-	RunnerVersion string
-	AccessID      uuid.NullUUID
-	EncryptionKey conv.Secret
-	BearerFormat  pgtype.Text
+	FlyOrgID                  string
+	FlyOrgSlug                string
+	AppName                   string
+	AppUrl                    string
+	RunnerVersion             string
+	AccessID                  uuid.NullUUID
+	OrganizationID            pgtype.Text
+	EncryptionKey             conv.Secret
+	EncryptionKeyOrgEncrypted pgtype.Text
+	BearerFormat              pgtype.Text
 }
 
 func (q *Queries) GetFlyAppAccess(ctx context.Context, arg GetFlyAppAccessParams) (GetFlyAppAccessRow, error) {
@@ -107,7 +111,9 @@ func (q *Queries) GetFlyAppAccess(ctx context.Context, arg GetFlyAppAccessParams
 		&i.AppUrl,
 		&i.RunnerVersion,
 		&i.AccessID,
+		&i.OrganizationID,
 		&i.EncryptionKey,
+		&i.EncryptionKeyOrgEncrypted,
 		&i.BearerFormat,
 	)
 	return i, err

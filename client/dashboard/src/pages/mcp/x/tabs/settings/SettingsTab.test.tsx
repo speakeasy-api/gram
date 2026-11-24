@@ -54,7 +54,7 @@ vi.mock("./sections/PublicRateLimitsSection", () => ({
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
-  RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
+  RemoteMcpSessionsSection: () => <h2>MCP sign-in</h2>,
 }));
 vi.mock("./sections/UpstreamUrlSection", () => ({
   MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
@@ -232,7 +232,7 @@ describe("SettingsTab", () => {
       // server has no Access area.
       General: ["Availability", "General"],
       Plugins: ["Plugins"],
-      "Sign-in": ["Upstream credentials", "Sessions", "Identity chaining"],
+      "Sign-in": ["Upstream credentials", "MCP sign-in", "Identity chaining"],
       Connection: ["Server URL", "Remote URL", "Network Access"],
       Tools: ["Tool Filtering"],
       "Danger zone": ["Danger Zone"],
@@ -312,7 +312,7 @@ describe("SettingsTab typed upstream identity", () => {
       "General",
       "Plugins",
       "Upstream credentials",
-      "Sessions",
+      "MCP sign-in",
       "Identity chaining",
       "Server URL",
       "Remote URL",

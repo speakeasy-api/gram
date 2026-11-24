@@ -22,8 +22,8 @@ it("lights the agent's sign-in and says it never reaches the servers", () => {
   ).toContain("nothing to do with your MCP servers");
 });
 
-it("lights Speakeasy's sign-in to the servers on MCP sign-in", () => {
+it("lights Speakeasy's sign-in to the servers on Server sign-in", () => {
   render(<SignInPath hop="mcp" />);
-  expect(lit()).toEqual(["MCP sign-inThis step", "MCP sign-inThis step"]);
+  expect(lit()).toEqual(["Server sign-inThis step", "Server sign-inThis step"]);
   expect(screen.getByText(/which you choose next/)).toBeTruthy();
 });

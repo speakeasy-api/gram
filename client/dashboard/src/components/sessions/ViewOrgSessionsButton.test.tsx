@@ -47,7 +47,7 @@ describe("ViewOrgSessionsButton", () => {
     vi.clearAllMocks();
   });
 
-  it("links to the project MCP Sessions page with read access", () => {
+  it("links to the project MCP Sign-in page with read access", () => {
     render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
     expect(link()?.getAttribute("href")).toBe(

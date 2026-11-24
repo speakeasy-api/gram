@@ -44,8 +44,9 @@ func NewAttestorTransport(caPEM []byte) (*http.Transport, error) {
 	return transport, nil
 }
 
-// AttestorConfig defines the per-ingress reverse proxy. ExpectedHost is the
-// customer tailnet FQDN while Upstream is gram-server's private listener.
+// AttestorConfig defines the reverse proxy the tailnet gateway runs for each
+// ingress it hosts. ExpectedHost is the customer tailnet FQDN while Upstream
+// is the server's private listener.
 type AttestorConfig struct {
 	Upstream     *url.URL
 	ExpectedHost string

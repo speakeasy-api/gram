@@ -18,7 +18,7 @@ import (
 
 // The connection health dataset: one MCP authentication provider, five servers and a
 // gateway, and a month of sign-ins by the people below. Its people, servers, apps and
-// story times match the dashboard's sample suspected problems, so the two tell one story.
+// story times make the suspected problems the dashboard lists.
 
 // healthPerson is one person signing in through the provider.
 type healthPerson struct {
@@ -119,8 +119,8 @@ func (s *seeder) healthClientID(family string) uuid.UUID {
 	return s.det("health-client-" + family)
 }
 
-// healthClock places the story: its day is the sample problems' day, today when it is
-// past 11:05 local time and yesterday before, as the dashboard's samples place it.
+// healthClock places the story: its day is today once this morning's Linear errors have
+// recovered, past 11:45 local time, and yesterday before.
 type healthClock struct {
 	now time.Time
 	day time.Time
@@ -129,7 +129,7 @@ type healthClock struct {
 func newHealthClock(now time.Time) healthClock {
 	local := now.In(time.Local)
 	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.Local)
-	if day.Add(11*time.Hour + 5*time.Minute).After(local) {
+	if day.Add(11*time.Hour + 45*time.Minute).After(local) {
 		day = day.AddDate(0, 0, -1)
 	}
 	return healthClock{now: now, day: day}
@@ -144,7 +144,7 @@ func (c healthClock) at(days, hour, minute, second int) time.Time {
 func (c healthClock) linearDown() (time.Time, time.Time) { return c.at(0, 9, 42, 0), c.at(0, 11, 6, 0) }
 func (c healthClock) cursorBrokenFrom() time.Time        { return c.at(-2, 10, 14, 0) }
 func (c healthClock) wikiBrokenFrom() time.Time          { return c.at(-1, 16, 0, 0) }
-func (c healthClock) danaLast() time.Time                { return c.at(-3, 16, 40, 0) }
+func (c healthClock) danaFrom() time.Time                { return c.at(-2, 9, 12, 0) }
 
 // seedRand draws deterministic variety from one name, in sequence.
 type seedRand struct {
@@ -282,7 +282,7 @@ func (s *seeder) healthSessions() []healthSession {
 		case "lena":
 			refresh, lastUsed = now.Add(-2*time.Hour), now.Add(-2*time.Hour-20*time.Minute)
 		case "dana":
-			refresh, lastUsed = clk.danaLast().Add(-5*time.Minute), clk.at(-4, 17, 20, 0)
+			refresh, lastUsed = clk.danaFrom().Add(-5*time.Minute), clk.at(-3, 17, 20, 0)
 			if c := lastUsed.Add(-2 * day); c.Before(created) {
 				created = c
 			}

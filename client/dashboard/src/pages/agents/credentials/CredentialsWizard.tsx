@@ -133,7 +133,7 @@ import {
 const STEPS = [
   { label: "Name", short: "Name" },
   { label: "MCP Selection", short: "MCPs" },
-  { label: "MCP sign-in", short: "MCP sign-in" },
+  { label: "Server sign-in", short: "Server sign-in" },
   { label: "Agent sign-in", short: "Agent sign-in" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
@@ -356,7 +356,7 @@ export function CredentialsWizard({
    */
   signInOnly?: boolean;
   /**
-   * The agent page's MCP sign-in tab: which servers an existing agent reaches
+   * The agent page's Server sign-in tab: which servers an existing agent reaches
    * and how Speakeasy signs in to each. Implies `editing`. Only the server
    * picker and the sign-in step are shown, with no stepper or summary: the
    * agent is already set up, and the tab is not a walk through setting it up
@@ -650,7 +650,7 @@ export function CredentialsWizard({
   // agent's gateway never lists the servers just added. Kept across a retry,
   // because the grants a failed save already wrote are not in the next diff.
   const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
-  // Servers just added on the MCP sign-in tab whose keys wait for the reader
+  // Servers just added on the Server sign-in tab whose keys wait for the reader
   // to choose, on the server's row, how they sign in there.
   const [choicePending, setChoicePending] = useState<Set<string>>(
     () => new Set(),
@@ -1368,7 +1368,7 @@ export function CredentialsWizard({
       );
       if (keysMissing.current.length > 0) {
         try {
-          // The credential picked on MCP sign-in for each added server, as a
+          // The credential picked on Server sign-in for each added server, as a
           // key issued now would carry it.
           const picks = selected
             .filter((entry) =>
@@ -1483,7 +1483,7 @@ export function CredentialsWizard({
         queryKey: ["owner-connections"],
       });
       // Saving is the end of editing. The full flow returns to the agent's
-      // own page, where the change shows; the MCP sign-in tab stays put and
+      // own page, where the change shows; the Server sign-in tab stays put and
       // re-reads the saved grants into itself.
       onDone(agent.id);
     } catch (failure) {
@@ -1497,7 +1497,7 @@ export function CredentialsWizard({
     }
   };
 
-  // The MCP sign-in tab saves each change as it is made. A change only asks
+  // The Server sign-in tab saves each change as it is made. A change only asks
   // for a save: it runs after the render that holds the change, since save
   // reads the selection from state, and waits out a save already running and
   // the checks a save waits for.
@@ -2150,7 +2150,7 @@ export function CredentialsWizard({
       case 2:
         return (
           <StepAuthentication
-            // On the agent's MCP sign-in tab the tab's own title says this.
+            // On the agent's Server sign-in tab the tab's own title says this.
             showHeader={!section}
             servers={
               allServers ? listedServers : selected.map((entry) => entry.server)

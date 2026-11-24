@@ -62,6 +62,32 @@ describe("renderVerb", () => {
     );
   });
 
+  it("leaves the noun to an id-only subject label", () => {
+    const id = "01900000-0000-7000-8000-000000000000";
+    expect(
+      renderVerb(
+        log({
+          action: "user-session-issuer:create",
+          subjectType: "user_session_issuer",
+          subjectId: id,
+        }),
+      ),
+    ).toBe("created");
+    expect(formatSubjectLabel(id, "user_session_issuer")).toBe(
+      "MCP sign-in 01900000",
+    );
+    expect(
+      renderVerb(
+        log({
+          action: "user-session-issuer:create",
+          subjectType: "user_session_issuer",
+          subjectId: id,
+          subjectDisplayName: "Acme",
+        }),
+      ),
+    ).toBe("created MCP sign-in");
+  });
+
   it("falls back to a past-tense phrase for unknown actions", () => {
     expect(renderVerb(log({ action: "widget:delete" }))).toBe("deleted widget");
     expect(renderVerb(log({ action: "widget:force_sync" }))).toBe(
@@ -196,6 +222,12 @@ describe("formatSubjectLabel", () => {
     expect(
       formatSubjectLabel("01900000-0000-7000-8000-000000000000", "mcp_server"),
     ).toBe("MCP server 01900000");
+    expect(
+      formatSubjectLabel(
+        "01900000-0000-7000-8000-000000000000",
+        "user_session_issuer",
+      ),
+    ).toBe("MCP sign-in 01900000");
   });
 
   it("leaves human names alone", () => {

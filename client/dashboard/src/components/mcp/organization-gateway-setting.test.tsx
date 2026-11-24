@@ -35,16 +35,13 @@ function renderReason(
   );
 }
 
-const issuersLink = () =>
-  screen.queryByRole("link", { name: "MCP Authentication" });
+const issuersLink = () => screen.queryByRole("link", { name: "MCP Sign-in" });
 
 describe("GatewayNotServed", () => {
   it("sends admins to make a project's server organization-wide", () => {
     renderReason("no_organization_issuer");
 
-    expect(
-      screen.getByText(/Make a project's authorization server/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Make a project's MCP sign-in/)).toBeTruthy();
     expect(issuersLink()?.getAttribute("href")).toBe(
       "/acme/user-session-issuers",
     );

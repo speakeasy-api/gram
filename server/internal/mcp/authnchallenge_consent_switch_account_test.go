@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -56,10 +57,8 @@ func (r *recordingRevoker) RevokeSession(_ context.Context, sessionID string) er
 	if r.err != nil {
 		return r.err
 	}
-	for _, ended := range r.ended {
-		if ended == sessionID {
-			return fmt.Errorf("revoke: %w", workos_errors.HTTPError{Code: http.StatusNotFound, Status: "404 Not Found", RequestID: "", Message: "session not found", ErrorCode: "", Errors: nil, FieldErrors: nil, ErrorDescription: ""})
-		}
+	if slices.Contains(r.ended, sessionID) {
+		return fmt.Errorf("revoke: %w", workos_errors.HTTPError{Code: http.StatusNotFound, Status: "404 Not Found", RequestID: "", Message: "session not found", ErrorCode: "", Errors: nil, FieldErrors: nil, ErrorDescription: ""})
 	}
 	r.ended = append(r.ended, sessionID)
 	return nil

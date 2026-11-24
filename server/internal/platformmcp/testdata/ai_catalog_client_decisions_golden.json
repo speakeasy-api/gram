@@ -1,0 +1,3810 @@
+[
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "claude-code",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "claude.ai"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadata#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/OAUTH/CLAUDE-CODE-CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://claude.ai/oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.claude.ai/oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadatax",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/claude-code-client-metadat",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai//oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai:443/oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/oauth/claude-code-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://claude.ai/OAUTH/CLAUDE-CODE-CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "claude",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "claude.ai"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/OAUTH/MCP-OAUTH-CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://claude.ai/oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.claude.ai/oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadatax",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadat",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai//oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://claude.ai:443/oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CLAUDE.AI/oauth/mcp-oauth-client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://claude.ai/OAUTH/MCP-OAUTH-CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vscode",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "vscode.dev"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://VSCODE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://vscode.dev:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://VSCODE.DEV/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://vscode.dev/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vscode",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "insiders.vscode.dev"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://INSIDERS.VSCODE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://insiders.vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.insiders.vscode.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://INSIDERS.VSCODE.DEV/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://insiders.vscode.dev/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "zed",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "zed.dev"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://ZED.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://zed.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.zed.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://zed.dev:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://ZED.DEV/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://zed.dev/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "goose",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "goose-docs.ai"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://GOOSE-DOCS.AI/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://goose-docs.ai/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.goose-docs.ai/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://goose-docs.ai:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://GOOSE-DOCS.AI/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://goose-docs.ai/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/*/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/abc-123_XYZ/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/AbC0/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth//client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a/b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a%2Fb/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/../client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/./client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a.b/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a?b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a#b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/a b/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CODEX/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/*/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/codex/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CODEX/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/abc-123_XYZ/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/AbC0/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex//client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a/b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a%2Fb/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/../client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/./client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a.b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a?b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a#b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/a b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "codex",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/OAUTH/CODEX/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://chatgpt.com/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.chatgpt.com/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/codex/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com//oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com:443/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CHATGPT.COM/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://chatgpt.com/OAUTH/CODEX/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "notion",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "www.notion.so"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.NOTION.SO/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://www.notion.so/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.www.notion.so/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so/oauth/mcp-client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so//oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.notion.so:443/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.NOTION.SO/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.notion.so/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "notion",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "app.notion.com"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://APP.NOTION.COM/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://app.notion.com/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.app.notion.com/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com/oauth/mcp-client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com//oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://app.notion.com:443/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://APP.NOTION.COM/oauth/mcp-client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://app.notion.com/OAUTH/MCP-CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "mcpjam",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "www.mcpjam.com"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.MCPJAM.COM/.WELL-KNOWN/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.www.mcpjam.com/.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com//.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.mcpjam.com:443/.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.MCPJAM.COM/.well-known/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.mcpjam.com/.WELL-KNOWN/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "factory-droid",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "api.factory.ai"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-client#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.FACTORY.AI/MCP/OAUTH-CLIENT",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://api.factory.ai/mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.api.factory.ai/mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-clientx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai/mcp/oauth-clien",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai//mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.factory.ai:443/mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.FACTORY.AI/mcp/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://api.factory.ai/MCP/OAUTH-CLIENT",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "toolhive",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "toolhive.dev"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://TOOLHIVE.DEV/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://toolhive.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.toolhive.dev/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://toolhive.dev:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://TOOLHIVE.DEV/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://toolhive.dev/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "hermes-agent",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "nousresearch.github.io"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://NOUSRESEARCH.GITHUB.IO/HERMES-AGENT/DOCS/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io//hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://nousresearch.github.io:443/hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://NOUSRESEARCH.GITHUB.IO/hermes-agent/docs/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://nousresearch.github.io/HERMES-AGENT/DOCS/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "skydive",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "www.skydive.com"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.SKYDIVE.COM/API/V1/EXTERNAL-OAUTH/CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://www.skydive.com/api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.www.skydive.com/api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadatax",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadat",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com//api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://www.skydive.com:443/api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://WWW.SKYDIVE.COM/api/v1/external-oauth/client-metadata",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.skydive.com/API/V1/EXTERNAL-OAUTH/CLIENT-METADATA",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "opencode",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "opencode.ai"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://OPENCODE.AI/OAUTH/OPENCODE/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://opencode.ai/oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.opencode.ai/oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai/oauth/opencode/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai//oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://opencode.ai:443/oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://OPENCODE.AI/oauth/opencode/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://opencode.ai/OAUTH/OPENCODE/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "github-copilot-cli",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "github.com"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://GITHUB.COM/COPILOT/CLI/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://github.com/copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.github.com/copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com/copilot/cli/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com//copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://github.com:443/copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://GITHUB.COM/copilot/cli/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://github.com/COPILOT/CLI/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "conductor",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "api.conductor.build"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.CONDUCTOR.BUILD/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://api.conductor.build/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.api.conductor.build/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.conductor.build:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.CONDUCTOR.BUILD/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://api.conductor.build/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CONNECT.VERCEL.COM/CONNECTORS/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://connect.vercel.com/connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.connect.vercel.com/connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/*x",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com//connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com:443/connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://CONNECT.VERCEL.COM/connectors/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://connect.vercel.com/CONNECTORS/*",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/abc-123_XYZ",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/AbC0",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a/b",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a%2Fb",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/..",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/.",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a.b",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a?b",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a#b",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/a b",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://connect.vercel.com/connectors/codex",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "vercel-connect",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "connect.vercel.com"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "linear",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "linear.app"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://LINEAR.APP/.WELL-KNOWN/OAUTH-CLIENT-METADATA/MCP.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.linear.app/.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app//.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://linear.app:443/.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://LINEAR.APP/.well-known/oauth-client-metadata/mcp.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://linear.app/.WELL-KNOWN/OAUTH-CLIENT-METADATA/MCP.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "lovable",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "api.lovable.dev"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-client#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.LOVABLE.DEV/.WELL-KNOWN/OAUTH-CLIENT",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://api.lovable.dev/.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.api.lovable.dev/.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-clientx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.well-known/oauth-clien",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev//.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://api.lovable.dev:443/.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://API.LOVABLE.DEV/.well-known/oauth-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://api.lovable.dev/.WELL-KNOWN/OAUTH-CLIENT",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "antigravity",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "antigravity.google"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://ANTIGRAVITY.GOOGLE/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://antigravity.google/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.antigravity.google/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google/oauth/client-metadata.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google//oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://antigravity.google:443/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://ANTIGRAVITY.GOOGLE/oauth/client-metadata.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://antigravity.google/OAUTH/CLIENT-METADATA.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/OAUTH/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://pi.dev/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.pi.dev/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev//oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev:443/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://pi.dev/OAUTH/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json/",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json?x=1",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.json#frag",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/OAUTH/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "http://pi.dev/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://www.pi.dev/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.jsonx",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/*/client.jso",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev//oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev:443/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "HTTPS://PI.DEV/oauth/*/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://pi.dev/OAUTH/*/CLIENT.JSON",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/abc-123_XYZ/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/AbC0/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth//client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a/b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a%2Fb/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/../client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/./client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a.b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a?b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a#b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/a b/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "https://pi.dev/oauth/codex/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "pi",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "pi.dev"
+  },
+  {
+    "client_id": "",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "first_party"
+  },
+  {
+    "client_id": "not-a-url",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "my-client",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  },
+  {
+    "client_id": "https://unknown.example.com/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://client.example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://chatgpt.com/oauth/connector-id/client.json",
+    "chatgpt": true,
+    "allowlist": [
+      "search_mcp_catalog",
+      "inspect_mcp_candidate",
+      "register_catalog_mcp",
+      "register_remote_mcp",
+      "attach_platform_mcp_identity_provider",
+      "get_setup_handoff",
+      "get_mcp_readiness",
+      "get_my_install_instructions",
+      "search_speakeasy_docs",
+      "list_projects"
+    ],
+    "harness": "chatgpt",
+    "progressive": "full",
+    "code_mode": "full",
+    "readiness_app": "chatgpt.com"
+  },
+  {
+    "client_id": "https://client.example/oauth/client.json",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "other_metadata_url"
+  },
+  {
+    "client_id": "00000000-0000-0000-0000-000000000000",
+    "chatgpt": false,
+    "allowlist": null,
+    "harness": "unknown",
+    "progressive": "progressive",
+    "code_mode": "code_mode",
+    "readiness_app": "dcr"
+  }
+]
