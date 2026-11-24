@@ -3051,8 +3051,12 @@ type FunctionsAccess struct {
 	DeploymentID uuid.UUID
 	// @access: confidential
 	FunctionID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
 	// @access: secret-restricted
 	EncryptionKey conv.Secret
+	// @access: secret-restricted
+	EncryptionKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	BearerFormat pgtype.Text
 	// @access: confidential

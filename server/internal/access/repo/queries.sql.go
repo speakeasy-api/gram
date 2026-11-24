@@ -3439,13 +3439,23 @@ func (q *Queries) ListManagedAssistantAgentIDs(ctx context.Context, arg ListMana
 
 const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
 WITH active_users AS (
-  SELECT users.id AS user_id
+  SELECT users.id AS user_id, users.email
   FROM users
   JOIN organization_user_relationships AS our ON our.user_id = users.id
   WHERE our.organization_id = $1
     AND users.id = ANY($2::text[])
     AND users.deleted_at IS NULL
     AND our.deleted_at IS NULL
+),
+profiles AS (
+  SELECT DISTINCT ON (active_users.user_id) active_users.user_id, d.id, d.attributes
+  FROM active_users
+  JOIN directory_users AS d
+    ON d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
+  ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
 )
 SELECT user_id, ('user:' || user_id)::text AS principal_urn
 FROM active_users
@@ -3465,6 +3475,50 @@ LEFT JOIN global_roles
 WHERE ora.organization_id = $1
   AND ora.deleted_at IS NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+UNION
+SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+FROM profiles
+JOIN directory_role_mappings AS drm
+  ON drm.organization_id = $1
+  AND drm.deleted IS FALSE
+WHERE (
+    (
+      drm.source_kind = 'group'
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        JOIN directory_groups AS dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = drm.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE m.directory_user_id = profiles.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_roles AS r
+      WHERE drm.role_urn = 'role:organization:' || r.id::text
+        AND r.organization_id = drm.organization_id
+        AND r.deleted IS FALSE
+        AND r.workos_deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM global_roles AS g
+      WHERE drm.role_urn = 'role:global:' || g.id::text
+        AND g.deleted IS FALSE
+        AND g.workos_deleted IS FALSE
+    )
+  )
 `
 
 type ListMemberPrincipalsByUsersParams struct {
@@ -3477,7 +3531,12 @@ type ListMemberPrincipalsByUsersRow struct {
 	PrincipalUrn string
 }
 
-// Resolve active user and role principals together for a requested set of owners.
+// Resolve active user and role principals together for a requested set of
+// owners. Roles come from direct assignments and from directory role
+// mappings, with the same rules as ListUserRolePrincipals: the profile is the
+// directory user linked to the member, falling back to an unlinked directory
+// user with the same email, and a mapping applies when its group contains the
+// profile or its attribute value matches it.
 func (q *Queries) ListMemberPrincipalsByUsers(ctx context.Context, arg ListMemberPrincipalsByUsersParams) ([]ListMemberPrincipalsByUsersRow, error) {
 	rows, err := q.db.Query(ctx, listMemberPrincipalsByUsers, arg.OrganizationID, arg.UserIds)
 	if err != nil {

@@ -121,6 +121,7 @@ type expiredTrialDemoter interface {
 type Activities struct {
 	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
+	auditLogger                      *audit.Logger
 	logger                           *slog.Logger
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
@@ -426,6 +427,7 @@ func NewActivities(
 
 	return &Activities{
 		db:                               db,
+		auditLogger:                      auditLogger,
 		logger:                           logger,
 		temporalEnv:                      temporalEnv,
 		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, aiProviderKeys),

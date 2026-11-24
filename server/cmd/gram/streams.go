@@ -497,16 +497,18 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("configure organization encryption: %w", err)
 			}
 			aiProviderKeys := orgEncryption.AIProviderKeys(logger, encryptionClient)
+			orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
+				orEndpoints,
 				openRouter,
 				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				nil,
@@ -606,7 +608,16 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor outcomes publisher: %w", err)
 			}
 
-			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
+			// Sensor evaluation classifies with Jev through System One. Where
+			// OpenRouter serves no System One models, the key is ignored so the
+			// receiver stays stopped instead of failing every batch.
+			sigintKey := c.String("sigint-openrouter-api-key")
+			if sigintKey != "" && !orEndpoints.ServesDecisionModels {
+				logger.WarnContext(ctx, "sensor evaluation is unavailable: OpenRouter serves no System One models in this partition, ignoring sigint-openrouter-api-key")
+				sigintKey = ""
+			}
+
+			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(sigintKey)), jev.WithEndpoint(orEndpoints.Inference+"/v1/systemone"))
 			if err != nil {
 				return fmt.Errorf("create sensor classifier: %w", err)
 			}
@@ -638,7 +649,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
+			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
 			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
 				logger,
@@ -926,7 +937,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				if c.Bool("sigint-ack-only") || c.String("sigint-openrouter-api-key") != "" {
+				if c.Bool("sigint-ack-only") || sigintKey != "" {
 					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db))
 					if c.Bool("sigint-ack-only") {
 						// A successful batch with no staged failures acknowledges every

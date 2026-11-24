@@ -276,6 +276,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	// A row from earlier in the request is about something else, not this call.
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
+	noteGatewayMemberCall(ctx, err == nil && attempt.succeeded)
 	if err != nil {
 		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
 	}
@@ -333,7 +334,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			s.recordMemberFailure(ctx, gate, member, uuid.Nil, failure.code)
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
@@ -348,7 +349,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// toolset's hosting publicness.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil || !satisfied {
-		s.recordMemberFailure(ctx, gate, member, failureCode)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, failureCode)
 	}
 	if err != nil {
 		return nil, err
@@ -395,7 +396,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 	}
 	if code != (mcpconnectionattempts.Code{}) {
-		s.recordMemberFailure(ctx, gate, member, code)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, code)
 	}
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
@@ -415,6 +416,12 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
 		return nil, err
+	}
+	if inputs.backendAnswered {
+		s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	}
+	if inputs.resultSucceeded {
+		attempt.succeeded = true
 	}
 	return body, nil
 }
@@ -623,6 +630,8 @@ func (s *Service) buildMemberDispatch(
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 	return toolset, hosting, inputs, nil
 }

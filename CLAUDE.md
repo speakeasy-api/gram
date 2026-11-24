@@ -131,6 +131,10 @@ Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes `mise run
 
 `.mcp.json` registers the `assistants-dev` MCP server (`server/cmd/dev-mcp`), which drives the local management API without the dashboard UI. It logs into the local stack on its own (dev-idp auto-approves), so no setup is needed beyond a running dev stack. Use its tools — assistant CRUD, `run_turn` (send a message and wait for the assistant's reply), `load_chat`, and trigger CRUD — to exercise assistant runtime changes end to end. `whoami` lists the available project slugs.
 
+### Viewing traces locally
+
+By default the shared `otlp-sink` collector (`compose.shared.yml`) accepts spans and drops them. To see them, run `mise run traces:up`. It starts a shared Jaeger container (UI at http://localhost:16686), writes `OTEL_EXPORTER_OTLP_ENDPOINT` into this worktree's `mise.local.toml`, and restarts the server and worker. Local assistant runner containers inherit the endpoint on their next turn. Filter by the `worktree` tag when several worktrees share the container. `mise run traces:down` removes the override; add `--stop` to also remove the container.
+
 ### Demo org and seed data
 
 We maintain a demo org (`app.getgram.ai/explore-demo`) that customers use to explore the product before their own org is set up. It is reseeded daily from a SQL seed stored in this repo, and the same seed provisions each developer's local org.
