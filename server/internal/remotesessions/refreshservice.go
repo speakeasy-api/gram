@@ -437,8 +437,8 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 	return attachments, nil
 }
 
-// loadClientAttachments also reports which clients have offers, so grant
-// refresh can preserve its client-wide fallback when no offer decides.
+// loadClientAttachments also reports which registrations have typed offers,
+// so attachmentsForClients only falls back to direct associations for others.
 func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,

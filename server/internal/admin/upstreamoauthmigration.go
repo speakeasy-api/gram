@@ -194,6 +194,8 @@ func countReconnectCredentials(gaps []authclientbackfill.SelectionGap) int64 {
 		switch gap.Outcome {
 		case authclientbackfill.SelectionAmbiguous, authclientbackfill.SelectionStaleNoAuth, authclientbackfill.SelectionUnusable:
 			credentials[gap.CredentialID] = struct{}{}
+		case authclientbackfill.SelectionMapped, authclientbackfill.SelectionMap, authclientbackfill.SelectionNoAuth, authclientbackfill.SelectionNoClient, authclientbackfill.SelectionSkippedRace:
+			// These choices are covered, need configuration, or can be rechecked.
 		}
 	}
 	return int64(len(credentials))

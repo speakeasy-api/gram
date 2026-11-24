@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -231,9 +230,11 @@ func TestBuildAuthorizationUrl_RotatesRejectedRegistration(t *testing.T) {
 	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, env.db, audit.ActionRemoteSessionClientUpdate, env.clientID.String())
 	require.NoError(t, err)
 	for _, snapshot := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
-		var view types.RemoteSessionClient
+		var view struct {
+			UserSessionIssuerIDs []string `json:"UserSessionIssuerIds"`
+		}
 		require.NoError(t, json.Unmarshal(snapshot, &view))
-		require.Equal(t, []string{env.session.UserSessionIssuerID.String()}, view.UserSessionIssuerIds)
+		require.Equal(t, []string{env.session.UserSessionIssuerID.String()}, view.UserSessionIssuerIDs)
 	}
 
 	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{

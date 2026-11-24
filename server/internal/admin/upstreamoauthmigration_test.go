@@ -221,11 +221,9 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 // seedCoveredMigrationFixture records the configuration and choice used by typed serving.
 func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
-	tx, err := db.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	tx := testenv.BeginTx(t, ctx, db)
 	q := authclientbackfill.New(tx)
-	_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration})
+	_, err := q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	client := authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession)
 	_, err = q.CreateAuthClient(ctx, authclientbackfill.CreateAuthClientParams{

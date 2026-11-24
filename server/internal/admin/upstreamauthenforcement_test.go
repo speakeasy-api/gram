@@ -31,7 +31,7 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.False(t, status.Enforcement.Ready)
-	require.Contains(t, status.Enforcement.Blockers, "The upstream OAuth migration is incomplete.")
+	require.Contains(t, status.Enforcement.Blockers, "Typed auth clients are not all recorded.")
 
 	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: true})
 	var shareable *oops.ShareableError
