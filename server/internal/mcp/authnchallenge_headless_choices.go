@@ -314,7 +314,11 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 			return ready[0], nil
 		}
 	}
-	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s requires an explicit upstream credential; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, tokenParamUpstreamAuthClient, server.id), errChoiceNotNamed)
+	reason := "offers several upstream credentials"
+	if len(ready) == 1 {
+		reason = "requires an explicit upstream credential"
+	}
+	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s %s; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, reason, tokenParamUpstreamAuthClient, server.id), errChoiceNotNamed)
 }
 
 // headlessReadiness marks the personal options of a server ready or not from
