@@ -30,13 +30,13 @@ const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
 	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode chosen at sign-in decides how the gateway exposes the servers your access reaches. " +
-	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools, execute_tool and execute_read_only_tool. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
+	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool, using execute_read_only_tool instead of execute_tool for tools annotated read-only. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
 	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
 
 // organizationGatewayNextAction gives each tool discovery mode its own first
 // step: only Progressive exposes list_servers.
 const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, choosing a tool discovery mode. " +
-	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools, execute_tool and execute_read_only_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
+	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool, using execute_read_only_tool instead of execute_tool for tools annotated read-only. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
