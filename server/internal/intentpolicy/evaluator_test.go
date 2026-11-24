@@ -33,7 +33,7 @@ func TestRenderStateIsSharedAndUntrustedShaped(t *testing.T) {
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(state, &decoded))
-	require.Len(t, decoded["grounding"], 10)
+	require.Len(t, decoded["grounding"], 9)
 	require.Equal(t, "/work", decoded["working_directory"])
 	action, ok := decoded["action"].(map[string]any)
 	require.True(t, ok)

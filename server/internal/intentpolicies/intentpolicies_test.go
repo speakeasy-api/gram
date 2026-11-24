@@ -56,9 +56,9 @@ func TestGetGuardrail(t *testing.T) {
 	g, err := svc.GetGuardrail(ctx, &gen.GetGuardrailPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, intentpolicy.GuardrailVersion, g.Version)
-	require.Len(t, g.Statements, 10)
+	require.Len(t, g.Statements, 9)
 	require.Len(t, g.Questions, 10)
-	require.Len(t, g.Contracts, 10)
+	require.Len(t, g.Contracts, 9)
 }
 
 func TestUploadAndAnalyzeWithGemini(t *testing.T) {

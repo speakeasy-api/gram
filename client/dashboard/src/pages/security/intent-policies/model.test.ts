@@ -34,11 +34,11 @@ describe("callOutcome", () => {
   it("separates evaluator failure from a policy block", () => {
     const failed = call({
       decision: "block",
-      decidedBy: ["no_secret_egress"],
+      decidedBy: ["no_credential_egress"],
       evaluatorError: "jev: API key is required",
       outcomes: [
         {
-          contractId: "no_secret_egress",
+          contractId: "no_credential_egress",
           error: "evaluator did not answer: carries_secret",
           inputs: {},
         },
@@ -50,10 +50,10 @@ describe("callOutcome", () => {
   it("treats an unanswered label as a failure even without an evaluator error", () => {
     const failed = call({
       decision: "block",
-      decidedBy: ["no_secret_egress"],
+      decidedBy: ["no_credential_egress"],
       outcomes: [
         {
-          contractId: "no_secret_egress",
+          contractId: "no_credential_egress",
           error: "evaluator did not answer: carries_secret",
           inputs: {},
         },
