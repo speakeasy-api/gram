@@ -1819,7 +1819,10 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			// the finish reason is what tells a reader the call failed.
 			msg.FinishReason = conv.ToPGText(toolResultFinishReasonError)
 		}
-		titleContent = content
+		// A tool's output says little about the session's topic and can run to
+		// megabytes, too much to scan for harness envelopes on every event;
+		// seed the surface placeholder for title generation to replace.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	default:
 		return false, nil
 	}
@@ -2600,7 +2603,10 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 	if cronTitle, ok := chat.CronJobTitle(title); ok {
 		return cronTitle
 	}
-	return chat.DerivedTitle(title)
+	if derived := chat.DerivedTitle(title); derived != "" {
+		return derived
+	}
+	return canonicalPlaceholderTitle(source)
 }
 
 // canonicalPlaceholderTitle is the stand-in for a chat opened by an event that
@@ -2740,11 +2746,8 @@ func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.Ingest
 	if !enabled {
 		return
 	}
-	title := canonicalPlaceholderTitle(hookSource)
-	if row.role == "user" {
-		title = chat.DerivedTitle(row.content)
-	}
-	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), []claudeTranscriptRow{row}, hookSource, "", title); err != nil {
+	rows := []claudeTranscriptRow{row}
+	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), rows, hookSource, "", claudeTranscriptTitle(rows, hookSource)); err != nil {
 		event := "hooks_ingest_chat_persist_failed"
 		if errors.Is(err, errChatProjectMismatch) {
 			event = "hooks_ingest_chat_project_mismatch"

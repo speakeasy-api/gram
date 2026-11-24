@@ -115,6 +115,31 @@ func TestIngest_ToolTrafficSeedsPlaceholderWithoutScheduling(t *testing.T) {
 	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
 }
 
+// A chat whose first captured event is a tool result is seeded with the surface
+// placeholder, not a cut of the tool's output.
+func TestIngest_ToolResultOpeningChatSeedsPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "title-tool-result-" + uuid.NewString()
+	toolName := "Bash"
+	completion := canonicalIngestPayload("claude", "tool.completed", sessionID)
+	completion.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{Name: &toolName, Output: "exit status 0"}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, completion)
+	require.NoError(t, err)
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
+}
+
 // A Claude Tag session is titled after its channel on every wake, so a
 // generated name would only be overwritten.
 func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
@@ -147,6 +172,43 @@ func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Claude Tag in #DEMO_CHANNEL", stored.Title.String)
+}
+
+// promptReminders is the <system-reminder> stack Cowork and Claude Code put in
+// front of a prompt.
+const promptReminders = "<system-reminder>This session can reach the connected device, but no folder is connected yet.</system-reminder>\n" +
+	"<system-reminder>The user's timezone is America/New_York (UTC-05:00).</system-reminder>\n"
+
+func TestCanonicalChatTitle_SkipsLeadingSystemReminders(t *testing.T) {
+	t.Parallel()
+
+	text := promptReminders + "draft the quarterly report outline"
+	payload := canonicalIngestPayload(agentVariantCowork, "prompt.submitted", "reminder-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	require.Equal(t, "draft the quarterly report outline", canonicalChatTitle(payload, "", agentVariantCowork))
+}
+
+// A prompt that is only reminders seeds the surface placeholder, never a raw
+// reminder.
+func TestCanonicalChatTitle_SeedsPlaceholderForReminderOnlyPrompt(t *testing.T) {
+	t.Parallel()
+
+	text := promptReminders
+	payload := canonicalIngestPayload(agentVariantCowork, "prompt.submitted", "reminder-only-title")
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+
+	require.Equal(t, chat.DefaultCoworkChatTitle, canonicalChatTitle(payload, "", agentVariantCowork))
+}
+
+func TestClaudeTranscriptTitle_SkipsReminderOnlyUserRows(t *testing.T) {
+	t.Parallel()
+
+	reminderOnly := claudeTranscriptRow{role: "user", content: "<system-reminder>No folder is connected yet.</system-reminder>"}
+	prompt := claudeTranscriptRow{role: "user", content: "rename the exported files"}
+
+	require.Equal(t, "rename the exported files", claudeTranscriptTitle([]claudeTranscriptRow{reminderOnly, prompt}, agentVariantCowork))
+	require.Equal(t, chat.DefaultCoworkChatTitle, claudeTranscriptTitle([]claudeTranscriptRow{reminderOnly}, agentVariantCowork))
 }
 
 // An OpenClaw cron run opens with a "[cron:<uuid> <job>]" envelope. The chat is
