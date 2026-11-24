@@ -147,18 +147,16 @@ var serverFeedbackReports = []serverFeedbackReport{
 		"gpt-5.6 in Cursor", 4, "", "cursor", "1.7.31"},
 }
 
-// seedServerFeedback switches the feedback tool on for two servers and files
-// reports against one of them, so each state of a server's Agent Feedback tab
-// has a server showing it: the OpenAPI Server has reports, Example OAuth is on
-// under its own tool name with nothing sent yet, and Example Shared Credential
-// was never set up.
+// seedServerFeedback switches the feedback tool on for the OpenAPI Server and
+// files reports against it. It is the demo's one server built from an API,
+// the only kind that offers the feedback tool; the others belong to third
+// parties, so their pages have no Agent Feedback tab.
 func (s *seeder) seedServerFeedback(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
 
 	configs := []serverFeedbackConfig{
 		{server: s.supportServer(), toolName: "", changedBy: "priya", changedDaysAgo: 40},
-		{server: s.det("mcpserver-linear"), toolName: "report_a_problem", changedBy: "lucas", changedDaysAgo: 3},
 	}
 	for _, config := range configs {
 		if err := s.q.ServerFeedbackInsertConfig(ctx, repo.ServerFeedbackInsertConfigParams{

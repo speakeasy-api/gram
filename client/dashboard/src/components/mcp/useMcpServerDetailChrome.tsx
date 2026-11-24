@@ -502,9 +502,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       // vendor with the vendor's own credentials, so Speakeasy never mints a session
       // or registers a client for them and the tab would always be empty.
       !isUnproxied && "sessions",
-      // Hidden for unproxied servers: agents reach them directly, so Speakeasy
-      // cannot add the feedback tool or receive what it would collect.
-      !isUnproxied && FEEDBACK_TAB,
+      // Only for servers built from an API or functions: Speakeasy does not
+      // add a tool to a third party's server, so nothing could be collected.
+      !!mcpServer?.toolsetId && FEEDBACK_TAB,
       "settings",
     ],
     activeTab,

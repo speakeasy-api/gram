@@ -37,10 +37,10 @@ holds 21 rows, newest first. Open a report and confirm what the agent was
 trying to do, what it did instead, who sent it and the model read in full, and
 that **Technical details** stays closed until opened. Choose a tool in the
 ranking and confirm the list narrows to it and scrolls into view, then clear
-the filter. Open Example OAuth's tab and confirm it names the tool
-`report_a_problem` and says there are no reports yet. Open Example Shared
-Credential's tab and confirm **Feedback is off** with nothing below it. Turn
-feedback on and off on Example Shared Credential and confirm the state and its
+the filter. Open Example OAuth and Example Shared Credential and confirm
+neither has an **Agent Feedback** tab: both belong to third parties, and only
+servers built from an API or functions offer the feedback tool. Turn feedback
+off and on again on the OpenAPI Server and confirm the state and its
 **Changed by** line follow; in the demo org the next daily reseed puts it back.
 To check the read-only state, sign in as a member without `mcp:write` on the
 server in the local org and confirm the tab shows no **Customize** or switch

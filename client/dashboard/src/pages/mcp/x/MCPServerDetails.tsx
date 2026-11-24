@@ -150,16 +150,16 @@ export default function MCPServerDetails(): JSX.Element | null {
       />
     );
   }
-  // Inspect, Clients and Sessions, and Agent Feedback are hidden from the nav
-  // for unproxied servers (see McpServerXSidebarNav) but the routes still
-  // resolve, so bounce anyone who lands on them directly (old links, the legacy
-  // /tools redirect above) back to Overview instead of rendering a tab with
-  // nothing to show.
+  // Inspect and Clients and Sessions are hidden from the nav for unproxied
+  // servers, and Agent Feedback for every server not built from an API or
+  // functions (see McpServerXSidebarNav), but the routes still resolve, so
+  // bounce anyone who lands on them directly (old links, the legacy /tools
+  // redirect above) back to Overview instead of rendering a tab with nothing
+  // to show.
   if (
-    (activeTab === "inspect" ||
-      activeTab === "sessions" ||
-      activeTab === "feedback") &&
-    mcpServer?.unproxiedMcpServerId
+    ((activeTab === "inspect" || activeTab === "sessions") &&
+      mcpServer?.unproxiedMcpServerId) ||
+    (activeTab === "feedback" && mcpServer && !mcpServer.toolsetId)
   ) {
     return (
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
