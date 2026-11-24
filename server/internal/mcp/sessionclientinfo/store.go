@@ -3,16 +3,20 @@
 // initialize handshake; Speakeasy's hosted MCP path is otherwise stateless, so
 // without this record the identity is gone by the time the client calls a tool.
 //
-// There is deliberately no Postgres row and no expiry. MCP sessions can run for
-// a month or longer, and a TTL long enough to cover that would put no bound on
-// the keyspace at all — while a short one would quietly drop the identity of a
-// session that is merely idle. Instead each MCP server gets a fixed budget of
-// records and the least recently used ones fall out when it is exceeded.
+// There is deliberately no Postgres row. Two limits keep the Redis footprint
+// bounded instead.
 //
-// That bounds abuse to the server being abused: initialize is unauthenticated
-// on a public MCP server, so anyone can mint records, but they can only churn
-// that one server's budget rather than compete for Redis with the OAuth
-// challenges and session grants sharing it.
+// Records slide with use: every write and every read pushes the expiry of both
+// the record and its MCP server's live set out by recordIdleExpiry, so a
+// session in use keeps its identity however long it runs, and a session left
+// idle longer than that expires. Servers nobody uses any more therefore drop
+// out of Redis entirely instead of accumulating forever.
+//
+// Each MCP server also gets a fixed budget of records, and the least recently
+// used ones fall out when it is exceeded. That bounds abuse to the server being
+// abused: initialize is unauthenticated on a public MCP server, so anyone can
+// mint records, but they can only churn that one server's budget rather than
+// compete for Redis with the OAuth challenges and session grants sharing it.
 package sessionclientinfo
 
 import (
@@ -22,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -31,6 +36,14 @@ import (
 // the anonymous session cap the tunneled path uses; at roughly 360 bytes a
 // record that is a few megabytes per server.
 const DefaultLiveRecordCap = 10000
+
+// recordIdleExpiry is how long a session's record, and its MCP server's live
+// set, survive without being written or read. Every Store and every Load
+// refreshes it, so a session in use never expires. A session idle for longer
+// loses only its attribution — callers already treat a missing record as
+// "caller unknown" — until the client reconnects and sends initialize again.
+// A week covers clients left idle over a weekend.
+const recordIdleExpiry = 7 * 24 * time.Hour
 
 // ErrNotFound is returned when a session has no recorded identity — never
 // handshaked with one, or evicted since. Callers treat it as "caller unknown",
@@ -106,9 +119,14 @@ func member(sessionID string) string {
 // time a record is read, so a session still in use survives no matter how old
 // it is, and what falls out is genuinely dormant. Evicting oldest-first would
 // drop exactly the long-lived sessions this record exists to serve.
+//
+// The record and the live set both take the idle expiry (ARGV[6], in
+// milliseconds). The live set is refreshed by every member's activity, so it
+// outlives each record it tracks and only expires once the whole server is idle.
 var admitScript = redis.NewScript(`
-redis.call('SET', KEYS[2], ARGV[3])
+redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[6])
 redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+redis.call('PEXPIRE', KEYS[1], ARGV[6])
 local excess = redis.call('ZCARD', KEYS[1]) - tonumber(ARGV[4])
 if excess > 0 then
   local evicted = redis.call('ZRANGE', KEYS[1], 0, excess - 1)
@@ -121,15 +139,19 @@ return 1
 `)
 
 // loadScript reads a record and, when present, slides its live-set score so
-// the entry counts as recently used. A record that is gone drops its (stale)
-// live-set member too, so the budget accounting converges.
+// the entry counts as recently used, and pushes the idle expiry (ARGV[3], in
+// milliseconds) of both the record and the live set out again. A record that
+// is gone drops its (stale) live-set member too, so the budget accounting
+// converges.
 var loadScript = redis.NewScript(`
 local value = redis.call('GET', KEYS[1])
 if not value then
   redis.call('ZREM', KEYS[2], ARGV[1])
   return false
 end
+redis.call('PEXPIRE', KEYS[1], ARGV[3])
 redis.call('ZADD', KEYS[2], 'XX', ARGV[2], ARGV[1])
+redis.call('PEXPIRE', KEYS[2], ARGV[3])
 return value
 `)
 
@@ -150,7 +172,7 @@ func (s *Store) Store(ctx context.Context, projectID uuid.UUID, toolsetSlug, ses
 	key := member(sessionID)
 	err = admitScript.Run(ctx, s.redis,
 		[]string{liveSetKey(projectID, toolsetSlug), recordKeyPrefix(projectID, toolsetSlug) + key},
-		key, nowMillis, string(payload), s.cap, recordKeyPrefix(projectID, toolsetSlug),
+		key, nowMillis, string(payload), s.cap, recordKeyPrefix(projectID, toolsetSlug), recordIdleExpiry.Milliseconds(),
 	).Err()
 	if err != nil {
 		return fmt.Errorf("admit session client info: %w", err)
@@ -169,7 +191,7 @@ func (s *Store) Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sess
 	key := member(sessionID)
 	raw, err := loadScript.Run(ctx, s.redis,
 		[]string{recordKeyPrefix(projectID, toolsetSlug) + key, liveSetKey(projectID, toolsetSlug)},
-		key, nowMillis,
+		key, nowMillis, recordIdleExpiry.Milliseconds(),
 	).Text()
 	switch {
 	case errors.Is(err, redis.Nil):
