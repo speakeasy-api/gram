@@ -3,17 +3,27 @@
  */
 
 import * as z from "zod/v4-mini";
+import {
+  SkillFileInput,
+  SkillFileInput$Outbound,
+  SkillFileInput$outboundSchema,
+} from "./skillfileinput.js";
 
 export type CreateSkillRequestBody = {
   /**
    * The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
    */
   content: string;
+  /**
+   * Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB per file and 10 MiB in total.
+   */
+  files?: Array<SkillFileInput> | undefined;
 };
 
 /** @internal */
 export type CreateSkillRequestBody$Outbound = {
   content: string;
+  files?: Array<SkillFileInput$Outbound> | undefined;
 };
 
 /** @internal */
@@ -22,6 +32,7 @@ export const CreateSkillRequestBody$outboundSchema: z.ZodMiniType<
   CreateSkillRequestBody
 > = z.object({
   content: z.string(),
+  files: z.optional(z.array(SkillFileInput$outboundSchema)),
 });
 
 export function createSkillRequestBodyToJSON(
