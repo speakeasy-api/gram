@@ -7,6 +7,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const shadowMCPDecisionsFeature = "shadow_mcp_decisions"
+
 func registerShadowDecisionTool(reg *Registrar, service *ShadowDecisionService) {
 	description := "Record and enforce an allow or deny decision for one Shadow MCP target after reviewing it. Requires the current opaque decision version, a stable idempotency key, and explicit confirmation. Allow requires one or more opaque audience references from list_plugin_assignments, including the explicit Everyone reference for organization-wide access. Deny blocks everyone when it names no audience, or only the roles or groups whose references it names; a project that blocks servers by default for everyone accepts only a deny for everyone. The committed decision, frozen evidence, enforcement grants, legacy-request drain, audit, and receipt are atomic."
 	if service == nil || !service.valid() {
@@ -15,18 +17,9 @@ func registerShadowDecisionTool(reg *Registrar, service *ShadowDecisionService) 
 		return
 	}
 	addTool(reg, &mcp.Tool{Name: operationDecideShadowMCPAccess, Title: "Allow or Block a Shadow MCP Server", Description: description, Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)}}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DecideShadowMCPAccessInput) (*mcp.CallToolResult, DecideShadowMCPAccessOutput, error) {
-		principal, err := principalFromToolContext(ctx)
-		if err != nil {
-			return nil, DecideShadowMCPAccessOutput{}, err
-		}
-		output, err := service.Decide(ctx, principal, input)
-		if err == nil {
-			return nil, output, nil
-		}
-		if result, ok := shadowDecisionToolResult(err); ok {
-			return result, DecideShadowMCPAccessOutput{}, nil
-		}
-		return nil, DecideShadowMCPAccessOutput{}, err
+		return shadowWriteToolCall(ctx, shadowMCPDecisionsFeature, func(principal Principal) (DecideShadowMCPAccessOutput, error) {
+			return service.Decide(ctx, principal, input)
+		})
 	})
 }
 
@@ -39,5 +32,5 @@ func unavailableShadowDecisionTool(_ context.Context, _ *mcp.CallToolRequest, _ 
 }
 
 func shadowDecisionToolResult(err error) (*mcp.CallToolResult, bool) {
-	return shadowWriteToolResult(err, "shadow_mcp_decisions")
+	return shadowWriteToolResult(err, shadowMCPDecisionsFeature)
 }

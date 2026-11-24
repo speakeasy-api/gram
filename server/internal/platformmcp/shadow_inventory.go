@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -181,6 +183,7 @@ type ShadowInventoryService struct {
 	now                       func() time.Time
 	distributionAdmissionRead distributionAdmissionReader
 	settings                  *pgxpool.Pool
+	settingsLogger            *slog.Logger
 }
 
 func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowReviewReader, dbQueries *platformrepo.Queries, budget OperationBudget, keyMaterial string) (*ShadowInventoryService, error) {
@@ -197,7 +200,7 @@ func NewShadowInventoryService(dbReader shadowInventoryReader, reviews shadowRev
 	}
 	return &ShadowInventoryService{
 		projects: postgresRiskProjectResolver{queries: dbQueries}, inventory: dbReader, reviews: reviews,
-		budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil, settings: nil,
+		budget: budget, references: codec, versions: versions, now: time.Now, distributionAdmissionRead: nil, settings: nil, settingsLogger: nil,
 	}, nil
 }
 
@@ -210,9 +213,10 @@ func (s *ShadowInventoryService) WithDistributionAdmissionReads(read distributio
 
 // WithSettingsReads lets the inventory and the review report the project's
 // default access and each server's official link version.
-func (s *ShadowInventoryService) WithSettingsReads(db *pgxpool.Pool) *ShadowInventoryService {
+func (s *ShadowInventoryService) WithSettingsReads(db *pgxpool.Pool, logger *slog.Logger) *ShadowInventoryService {
 	if s != nil {
 		s.settings = db
+		s.settingsLogger = logger
 	}
 	return s
 }
@@ -225,6 +229,9 @@ func (s *ShadowInventoryService) defaultAccess(ctx context.Context, principal Pr
 	}
 	access, err := readShadowDefaultAccess(ctx, s.settings, principal.OrganizationID, project.ID, s.versions)
 	if err != nil {
+		if s.settingsLogger != nil {
+			s.settingsLogger.ErrorContext(ctx, "read shadow mcp default access", attr.SlogError(err), attr.SlogProjectID(project.ID.String()))
+		}
 		return nil
 	}
 	return &access

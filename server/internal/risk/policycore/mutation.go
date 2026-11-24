@@ -541,7 +541,7 @@ func (c *Core) AfterUpdatePolicy(ctx context.Context, result MutationResult) {
 // a caller-owned transaction. The caller owns commit and must invoke
 // AfterDeletePolicy only after that commit succeeds.
 func (c *Core) DeletePolicyInTransaction(ctx context.Context, tx pgx.Tx, input DeleteMutation) (DeleteResult, error) {
-	deps, err := c.requireMutationDependencies()
+	deps, err := c.requireDeleteDependencies()
 	if err != nil {
 		return DeleteResult{}, err
 	}
@@ -602,7 +602,7 @@ func (c *Core) DeletePolicyInTransaction(ctx context.Context, tx pgx.Tx, input D
 // AfterDeletePolicy runs best-effort convergence only after the transaction
 // containing the delete, audit, and any outer receipt has committed.
 func (c *Core) AfterDeletePolicy(ctx context.Context, result DeleteResult) {
-	deps, err := c.requireMutationDependencies()
+	deps, err := c.requireDeleteDependencies()
 	if err != nil {
 		return
 	}
@@ -614,6 +614,16 @@ func (c *Core) AfterDeletePolicy(ctx context.Context, result DeleteResult) {
 func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {
 	if c.mutations == nil || c.mutations.Transactor == nil || c.mutations.Auditor == nil || c.mutations.ReconcileURLs == nil || c.mutations.Signaler == nil {
 		return nil, mutationError("policy mutation dependencies are not configured", nil)
+	}
+	return c.mutations, nil
+}
+
+// requireDeleteDependencies checks only what a delete uses: the caller owns
+// the transaction, the delete is audited, and the cache invalidator is
+// optional. A delete reconciles no URLs and signals no workflow.
+func (c *Core) requireDeleteDependencies() (*MutationDependencies, error) {
+	if c.mutations == nil || c.mutations.Auditor == nil {
+		return nil, mutationError("policy delete dependencies are not configured", nil)
 	}
 	return c.mutations, nil
 }

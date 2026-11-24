@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -258,12 +259,39 @@ func (s *ShadowMCPSettingsService) previewDefaultAccess(ctx context.Context, pri
 	}
 	consequence := "Every MCP server connects unless an administrator denies it; denials and official servers still apply."
 	if mode == shadowDefaultAccessBlocked {
+		roles, err := s.previewDefaultAccessRoles(ctx, principal, project, references)
+		if err != nil {
+			return err
+		}
 		consequence = "Every MCP server nobody approved is blocked for everyone, including servers people use today, until an administrator approves it."
-		if len(references) > 0 {
-			consequence = fmt.Sprintf("Every MCP server nobody approved is blocked for the %d selected audience reference(s), including servers they use today; everyone else is still allowed by default.", len(references))
+		if roles > 0 {
+			consequence = fmt.Sprintf("Every MCP server nobody approved is blocked for the %d selected role(s), including servers they use today; everyone else is still allowed by default.", roles)
 		}
 	}
 	return shadowDecisionError("confirmation_required", "Nothing was changed. Confirming "+change+". "+consequence+" Show this to the user, then resend the same inputs with confirmed: true.", ErrShadowDecisionInvalid)
+}
+
+// previewDefaultAccessRoles resolves the audience references the way the
+// write does, in a transaction that is rolled back, and returns how many roles
+// a blocked default would be narrowed to. Zero means everyone, including when
+// the only reference is the Everyone reference.
+func (s *ShadowMCPSettingsService) previewDefaultAccessRoles(ctx context.Context, principal Principal, project ResolvedProject, references []string) (int, error) {
+	if len(references) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:exhaustruct_v5 // default isolation, read-only
+	if err != nil {
+		return 0, shadowDecisionUnavailable(err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	principals, everyone, err := s.resolveDefaultAccessAudience(ctx, tx, principal, project, references)
+	if err != nil {
+		return 0, err
+	}
+	if everyone {
+		return 0, nil
+	}
+	return len(principals), nil
 }
 
 // shadowDefaultAccessHeldRefusal refuses a change the dashboard would not

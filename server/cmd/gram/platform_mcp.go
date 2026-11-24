@@ -706,7 +706,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
-	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)).WithSettingsReads(config.DB)
+	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)).WithSettingsReads(config.DB, config.Logger)
 	reader.WithShadowInventory(shadowInventory)
 	return true
 }
@@ -1420,7 +1420,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// The default access and official server writes share the decision
 		// tool's cohort and allowance, and the dashboard's policy and link
 		// write paths.
-		shadowInventory.WithSettingsReads(config.DB)
+		shadowInventory.WithSettingsReads(config.DB, config.Logger)
 		shadowSettings := platformmcp.NewShadowMCPSettingsService(
 			config.DB,
 			shadowInventory,

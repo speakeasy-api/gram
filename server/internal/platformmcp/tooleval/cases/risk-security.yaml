@@ -257,6 +257,7 @@
   allow: [list_shadow_mcp_inventory, get_shadow_mcp_review, find_mcp]
   args:
     action: make_official
+    mcp_id: 0b6f2a10-0000-4000-8000-000000000071
     project_slug: default
     target_reference: smr_7f3a9c21
 - id: risk-shadow-mcp-keep-shadow

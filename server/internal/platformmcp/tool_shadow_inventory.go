@@ -17,7 +17,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 	addTool(reg, &mcp.Tool{
 		Name:        "list_shadow_mcp_inventory",
 		Title:       "List Shadow MCP Inventory",
-		Description: "List privacy-safe observed or requested MCP targets in an explicit project. Pending reviews appear before observed targets on the first page. Raw URLs, local commands, people, principals, policies, evidence, and research traces are never returned; use the short-lived opaque target reference to inspect one review.",
+		Description: "List privacy-safe observed or requested MCP targets in an explicit project. Pending reviews appear before observed targets on the first page. Raw URLs, local commands, people, principals, policies, evidence, and research traces are never returned; use the short-lived opaque target reference to inspect one review. Also returns the project's default_access (allowed or blocked by default, who it applies to, held_by when a Guardrails policy owns it, and the version set_shadow_mcp_default_access expects).",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowMCPInventoryInput) (*mcp.CallToolResult, ListShadowMCPInventoryOutput, error) {
 		return shadowInventoryToolCall(ctx, func(principal Principal) (ListShadowMCPInventoryOutput, error) {
@@ -27,7 +27,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 	addTool(reg, &mcp.Tool{
 		Name:        "get_shadow_mcp_review",
 		Title:       "Get a Shadow MCP Server's Review",
-		Description: "Inspect the closed, privacy-safe evidence and review state for one opaque Shadow MCP target from list_shadow_mcp_inventory. Returns aggregate declarations, gaps, advisory counts, and research coverage only; never raw target values, requesters, evidence documents, findings text, citations, or research traces.",
+		Description: "Inspect the closed, privacy-safe evidence and review state for one opaque Shadow MCP target from list_shadow_mcp_inventory. Returns aggregate declarations, gaps, advisory counts, and research coverage, plus the official server settings: official_server, official_choice, suggested_official_server and the official_link_version set_shadow_mcp_official_server expects. Never returns raw target values, requesters, evidence documents, findings text, citations, or research traces.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetShadowMCPReviewInput) (*mcp.CallToolResult, GetShadowMCPReviewOutput, error) {
 		return shadowInventoryToolCall(ctx, func(principal Principal) (GetShadowMCPReviewOutput, error) {
