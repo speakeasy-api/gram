@@ -27,7 +27,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return err
 	}
 	if !enforce {
-		return e.requireAny(ctx, true, checks...)
+		return e.RequireAny(ctx, checks...)
 	}
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
@@ -45,6 +45,10 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 	if err != nil {
 		return e.mapError(ctx, err)
 	}
+	if bounded, ok := authorization.boundedByAuthorizer(); ok && blocked == nil {
+		vetoed, err := firstUnoverriddenExclusion(bounded, checks)
+		reportAuthorizerRefusal(ctx, e.logger, authorization, vetoed, err)
+	}
 	if blocked != nil {
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
@@ -59,7 +63,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 		return e.mapError(ctx, Denied(blocked.Scope, blocked.selector()))
 	}
-	return e.requireAny(ctx, true, checks...)
+	return e.RequireAny(ctx, checks...)
 }
 
 // firstUnoverriddenExclusion returns the first check an exclusion rejects,
