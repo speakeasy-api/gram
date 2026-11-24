@@ -1,0 +1,27 @@
+server/internal/intentpolicies/intentpolicies_test.go
+  s_4d057fcd02a0cb::t_48ea15d99bce4a 59,61
+client/dashboard/src/pages/security/intent-policies/model.test.ts
+  s_4d057fcd02a0cb::t_df38083bdea661 37,41,53,56
+server/internal/intentpolicy/contracts_test.go
+  s_4d057fcd02a0cb::t_48ea15d99bce4a 82-83,95-96,140,159-160,171
+server/internal/intentpolicy/evaluator_test.go
+  s_4d057fcd02a0cb::t_48ea15d99bce4a 36
+server/internal/intentpolicy/guardrail.go
+  s_4d057fcd02a0cb::t_48ea15d99bce4a 52,71,83,153-155,157-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8cec7d862ec8c28bc13362905fd26590d6183bb8",
+  "prompts": {},
+  "sessions": {
+    "s_4d057fcd02a0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "495781be-b47d-4d6a-a74e-45c31f9007bc",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
