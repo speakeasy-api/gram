@@ -799,10 +799,13 @@ describe("canInGrants", () => {
     expect(
       canInGrants(everything, authz.mcpServer("has space", "p").write()),
     ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("next\u0085line", "p").write()),
+    ).toBe(false);
     expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
       true,
     );
-    expect(consoleError).toHaveBeenCalledTimes(4);
+    expect(consoleError).toHaveBeenCalledTimes(5);
     consoleError.mockRestore();
   });
 });

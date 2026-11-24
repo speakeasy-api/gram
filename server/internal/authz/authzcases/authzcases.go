@@ -183,6 +183,7 @@ func atomsFor(scope authz.Scope, inProject bool, dimensions []string) []caseAtom
 func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 	allowedKeys := r.DeriveAllowedSelectorKeys()
 	required := r.DeriveRequiredCheckDimensions()
+	scopeKeys := r.DeriveScopeSelectorKeys()
 	exclusions := r.DeriveScopeExclusions()
 	checkExclusions := authzgen.DashboardExclusions(r)
 	// implied maps a scope to the scopes a grant of it also satisfies.
@@ -248,10 +249,12 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 			var blockAtoms []caseAtom
 			for _, block := range blocks {
 				if slices.ContainsFunc(covered, func(s registry.Scope) bool { return slices.Contains(checkExclusions[s], block) }) {
-					blockAtoms = append(blockAtoms, atomsFor(authz.Scope(block), inProject, dimensions)...)
+					blockAtoms = append(blockAtoms, atomsFor(authz.Scope(block), inProject || scopeKeys[block][authz.SelectorKeyProjectID], dimensions)...)
 				}
 			}
-			for _, allow := range atomsFor(authz.Scope(scope), inProject, dimensions) {
+			// A permission can be checked per project on a kind that is not,
+			// like org:hooks_ingest, so its grants are limited to one too.
+			for _, allow := range atomsFor(authz.Scope(scope), inProject || scopeKeys[scope][authz.SelectorKeyProjectID], dimensions) {
 				sets = append(sets, caseSet{atoms: []caseAtom{allow}, checks: allows})
 				for _, block := range blockAtoms {
 					sets = append(sets, caseSet{atoms: []caseAtom{allow, block}, checks: covered})
@@ -320,6 +323,10 @@ func constructorCalls(grants []authz.Grant, scopes []registry.Scope, targets []c
 			argSets = [][]string{{caseOrg}}
 		default:
 			for _, tg := range targets {
+				if tg.project == "" && slices.Contains(c.keys, authz.SelectorKeyProjectID) {
+					argSets = append(argSets, refArgs(c, tg.resource, caseProject), refArgs(c, tg.resource, caseProject2))
+					continue
+				}
 				argSets = append(argSets, refArgs(c, tg.resource, tg.project))
 			}
 		}
@@ -334,12 +341,8 @@ func constructorCalls(grants []authz.Grant, scopes []registry.Scope, targets []c
 	return calls, nil
 }
 
-// refArgs fills in a constructor's arguments for one resource in project. A
-// kind without a project still gets one for a method that takes it.
+// refArgs fills in a constructor's arguments for one resource in project.
 func refArgs(c constructor, resource, project string) []string {
-	if project == "" {
-		project = caseProject
-	}
 	args := make([]string, 0, len(c.keys))
 	for _, key := range c.keys {
 		if key == authz.SelectorKeyProjectID {

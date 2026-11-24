@@ -241,14 +241,14 @@ interface CheckFields {
   readonly invalid: boolean;
 }
 
-/** Mirrors idFromString in authz/ids.go. */
+/** Mirrors idFromString in authz/ids.go, spaces as Go's unicode.IsSpace. */
 function namesResource(id: string): boolean {
   return (
     id !== "" &&
     id.toLowerCase() !== "00000000-0000-0000-0000-000000000000" &&
     id !== "*" &&
     !id.startsWith("$") &&
-    !/\s/.test(id)
+    !/[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000]/.test(id)
   );
 }
 

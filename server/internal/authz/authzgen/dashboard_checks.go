@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
@@ -259,14 +260,14 @@ interface CheckFields {
   readonly invalid: boolean;
 }
 
-/** Mirrors idFromString in authz/ids.go. */
+/** Mirrors idFromString in authz/ids.go, spaces as Go's unicode.IsSpace. */
 function namesResource(id: string): boolean {
   return (
     id !== "" &&
     id.toLowerCase() !== "00000000-0000-0000-0000-000000000000" &&
     id !== "*" &&
     !id.startsWith("$") &&
-    !/\s/.test(id)
+    !/[SPACES]/.test(id)
   );
 }
 
@@ -299,7 +300,7 @@ func renderDashboardChecks(b *strings.Builder, r registry.Registry) {
 	}
 	b.WriteString("};\n\n")
 
-	b.WriteString(dashboardCheckPreamble)
+	b.WriteString(strings.Replace(dashboardCheckPreamble, "SPACES", tsSpaceClass(), 1))
 	for _, c := range constructors {
 		params := make([]string, 0, len(c.Params))
 		args := make([]string, 0, len(c.Params))
@@ -389,4 +390,26 @@ func renderDashboardCaseConstructors(r registry.Registry) ([]byte, error) {
 		return nil, fmt.Errorf("format %s: %w\n%s", dashboardCaseConstructorsPath, err, b.String())
 	}
 	return formatted, nil
+}
+
+// tsSpaceClass is the body of a regular expression character class holding
+// every rune unicode.IsSpace accepts. JavaScript's \s differs: it has U+FEFF
+// and lacks U+0085.
+func tsSpaceClass() string {
+	var b strings.Builder
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if !unicode.IsSpace(r) {
+			continue
+		}
+		end := r
+		for end+1 <= unicode.MaxRune && unicode.IsSpace(end+1) {
+			end++
+		}
+		fmt.Fprintf(&b, "\\u%04x", r)
+		if end > r {
+			fmt.Fprintf(&b, "-\\u%04x", end)
+		}
+		r = end
+	}
+	return b.String()
 }
