@@ -157,7 +157,10 @@ export function OverviewRoute(): JSX.Element | null {
 
 // One field per write. The endpoint takes both as optional, and a type that
 // allows both would let a write carry a field the operator never touched.
-type FactChange = { account_type: string } | { whitelisted: boolean };
+type FactChange =
+  | { account_type: string }
+  | { whitelisted: boolean }
+  | { internal: boolean };
 
 export function Overview({
   org,
@@ -177,6 +180,7 @@ export function Overview({
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
+  const internalControl = useRef<HTMLButtonElement>(null);
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const conversionControl = useRef<HTMLButtonElement>(null);
   const conversionContext = useRef(org);
@@ -463,6 +467,7 @@ export function Overview({
             <div className="flex flex-wrap items-center gap-3">
               <Switch
                 ref={whitelistedControl}
+                aria-label="Whitelisted"
                 checked={org.whitelisted}
                 disabled={mut.isPending || conversionPending}
                 onCheckedChange={(v) => {
@@ -477,6 +482,28 @@ export function Overview({
                 {org.whitelisted
                   ? "Platform access, no demo gate"
                   : "Demo gate applies; MCP servers are not served"}
+              </span>
+            </div>
+          </Row>
+          <Row label="Internal">
+            <div className="flex flex-wrap items-center gap-3">
+              <Switch
+                ref={internalControl}
+                aria-label="Internal"
+                checked={org.internal}
+                disabled={mut.isPending || conversionPending}
+                onCheckedChange={(v) => {
+                  void commit(
+                    { internal: v },
+                    `Internal: ${yesNo(org.internal)} → ${yesNo(v)}`,
+                    internalControl,
+                  );
+                }}
+              />
+              <span className="text-muted-foreground text-sm">
+                {org.internal
+                  ? "Hidden from customer analytics"
+                  : "Counts as a customer"}
               </span>
             </div>
           </Row>
