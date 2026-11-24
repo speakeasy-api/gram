@@ -128,10 +128,11 @@ type WorkerOptions struct {
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
-	// TranscriptShadowStore opens encrypted chat transcript shadows for risk
-	// batch scans in TranscriptShadowReadProjectIDs. Nil keeps every project
-	// on plaintext.
-	TranscriptShadowStore          *transcriptstore.Store
+	// TranscriptShadow opens encrypted chat transcript shadows. Nil reads
+	// plaintext for every project.
+	TranscriptShadow *transcriptstore.Store
+	// TranscriptShadowReadProjectIDs are the projects whose background chat
+	// reads open encrypted shadows instead of plaintext.
 	TranscriptShadowReadProjectIDs []uuid.UUID
 	ChatClient                     *chat.Client
 	OpenRouter                     openrouter.Provisioner
@@ -280,7 +281,7 @@ func ForDeploymentProcessing(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
-		TranscriptShadowStore:          nil,
+		TranscriptShadow:               nil,
 		TranscriptShadowReadProjectIDs: nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
@@ -383,7 +384,7 @@ func NewTemporalWorker(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
-		TranscriptShadowStore:          nil,
+		TranscriptShadow:               nil,
 		TranscriptShadowReadProjectIDs: nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
@@ -452,7 +453,7 @@ func NewTemporalWorker(
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
 			SlackDirectoryTokenRefresher:   conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
 			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
-			TranscriptShadowStore:          conv.Default(o.TranscriptShadowStore, opts.TranscriptShadowStore),
+			TranscriptShadow:               conv.Default(o.TranscriptShadow, opts.TranscriptShadow),
 			TranscriptShadowReadProjectIDs: conv.DefaultSlice(o.TranscriptShadowReadProjectIDs, opts.TranscriptShadowReadProjectIDs),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:                conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
@@ -633,7 +634,7 @@ func NewTemporalWorker(
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
 	if activities.analyzeBatch != nil {
-		activities.analyzeBatch.WithTranscriptShadowReads(opts.TranscriptShadowStore, opts.TranscriptShadowReadProjectIDs...)
+		activities.analyzeBatch.WithTranscriptShadowReads(opts.TranscriptShadow, opts.TranscriptShadowReadProjectIDs...)
 	}
 
 	if opts.FleetHealthCache != nil {

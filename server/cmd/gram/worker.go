@@ -873,7 +873,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			transcriptShadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			shadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}
@@ -921,8 +921,8 @@ func newWorkerCommand() *cli.Command {
 				SlackClient:                    slackClient,
 				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
 				ChatMessageWriter:              chatWriter,
-				TranscriptShadowStore:          transcriptShadow.Store,
-				TranscriptShadowReadProjectIDs: transcriptShadow.ReadProjectIDs,
+				TranscriptShadow:               shadow.Store,
+				TranscriptShadowReadProjectIDs: shadow.ReadProjectIDs,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,
 				OpenRouterSpend:                openRouter,
