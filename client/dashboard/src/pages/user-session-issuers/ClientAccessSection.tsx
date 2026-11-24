@@ -97,7 +97,7 @@ export function ClientAccessSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Client access</SettingsSection.Title>
         <SettingsSection.Description>
-          Which MCP clients may connect through this provider.
+          Which MCP clients may connect through this MCP sign-in.
           <ExplainerDialog title="Client ID Metadata Documents (CIMD)">
             <Text muted small className="block">
               A client can host a small public file — its name, logo and where
@@ -243,7 +243,7 @@ function WhenToPick({
 
 /**
  * The clients Known clients admits: Speakeasy's catalog, then the ones this
- * organization added for this provider.
+ * organization added for this MCP sign-in.
  */
 function KnownClients({
   issuer,

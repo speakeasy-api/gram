@@ -58,7 +58,7 @@ export const routesWithSubroutes = (routes: PagedRoute[]): JSX.Element[] => {
     .filter((item) => !item.external)
     .map((item) => (
       <Route
-        key={item.title}
+        key={item.url}
         path={item.url}
         element={
           item.component ? (

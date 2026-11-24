@@ -309,13 +309,13 @@ export default function CreateTunneledMcp(): JSX.Element {
                 disabled={issuerQuery.isLoading || issuerQuery.isError}
               />
               <Text muted small>
-                Organization-wide MCP sign-ins work in every project. Create one
-                for this project only when you need different settings.
+                Use an organization-wide MCP sign-in if one is available, or
+                create one for this project.
               </Text>
               {issuerQuery.isError ? (
                 <Alert variant="error" dismissible={false}>
-                  Couldn&apos;t load your organization&apos;s MCP sign-ins. Try
-                  again.
+                  Couldn&apos;t load your organization&apos;s MCP sign-ins.
+                  Refresh the page to try again.
                 </Alert>
               ) : null}
             </Stack>

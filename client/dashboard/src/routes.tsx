@@ -461,12 +461,7 @@ const ROUTE_STRUCTURE = {
     title: "MCP Sign-in",
     url: "mcp-sessions",
     icon: "users",
-    keywords: [
-      "sessions",
-      "mcp sessions",
-      "authentication provider",
-      "connections",
-    ],
+    keywords: ["sessions", "mcp sessions", "authentication provider"],
     subPages: {
       // One MCP sign-in, chosen with the header's picker.
       // The index opens the one an old `?issuerId=` link names, else the one
@@ -1218,7 +1213,7 @@ const ORG_ROUTE_STRUCTURE = {
     title: "MCP Sign-in",
     url: "user-session-issuers",
     icon: "key-round",
-    keywords: ["mcp authentication", "authentication provider"],
+    keywords: ["mcp authentication", "authentication"],
     subPages: {
       issuerDetail: {
         title: "MCP sign-in",

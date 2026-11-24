@@ -87,6 +87,7 @@ export function UserSessionIssuerField({
         <div className="w-full max-w-md min-w-0 [&_[data-slot=select-value]]:truncate">
           <UserSessionIssuerSelect
             issuers={issuers}
+            ariaLabel={label}
             value={selectedIssuerId}
             onValueChange={setDraftIssuerId}
             disabled={update.isPending}

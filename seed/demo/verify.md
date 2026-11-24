@@ -364,11 +364,12 @@ open their effective assignments; the dropdown always offers compact member sear
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 19. **Remote MCP identity settings**: open the settings page for each
     fixture-backed Remote MCP server. Example OAuth shows the **User** identity pill, the MCP
-    Fixture OAuth provider, and the Session length / Client access controls
-    in Sessions. Example Shared Credential shows **Shared credential** with its static
+    Fixture OAuth provider, and the **MCP sign-in** section's picker. Its
+    Session length and Client access controls are in the selected MCP
+    sign-in's settings. Example Shared Credential shows **Shared credential** with its static
     Authorization header (the MCP fixture's checked-in example shared token).
     Both use the Display,
-    Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
+    Identity, Server URL, MCP sign-in, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, of the two
     only the Example OAuth row in `mcp_servers` has `remote_session_issuer_id` set, to the
     MCP Fixture OAuth provider, and the one client bound to Example OAuth's

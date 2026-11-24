@@ -13,7 +13,8 @@ import {
 } from "@/contexts/CommandPalette";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { routeToNavAction } from "../navigation-actions";
-import { fuzzyScore } from "../ranker";
+import { fuzzyScore, prefilter, rank } from "../ranker";
+import type { LauncherCandidate } from "./types";
 import { useActionCandidates } from "./useActionCandidates";
 
 function candidatesFor(
@@ -57,9 +58,25 @@ function rendered(actions: CommandAction[]) {
   }).result.current;
 }
 
+// Shaped like the project gateway's Connections candidate.
+const gatewayConnections: LauncherCandidate = {
+  id: "gateway-connections:project:project-1",
+  kind: "page",
+  title: "Project Gateway Connections",
+  detail: "Sessions through this project's gateway",
+  keywords: ["gateway", "sessions", "connections", "project"],
+  verbs: ["open"],
+  group: "Pages",
+  run: () => {},
+};
+
+function firstFor(query: string, candidates: LauncherCandidate[]): string {
+  return rank(prefilter(query, candidates))[0]!.candidate.id;
+}
+
 describe("page action keywords", () => {
-  it("finds MCP Sign-in by its former name", () => {
-    const actions = candidatesFor((routes, orgRoutes) => [
+  const actions = () =>
+    candidatesFor((routes, orgRoutes) => [
       routeToNavAction(routes.mcpSessions, "Pages", "nav-page-mcp-sessions"),
       routeToNavAction(
         orgRoutes.userSessionIssuers,
@@ -68,13 +85,35 @@ describe("page action keywords", () => {
       ),
       routeToNavAction(routes.triggers, "Pages", "nav-page-triggers"),
     ]);
-    const [project, org, other] = rendered(actions);
+
+  it("finds MCP Sign-in by its former name", () => {
+    const [project, org, other] = rendered(actions());
 
     expect(project!.title).toBe("MCP Sign-in");
     expect(fuzzyScore("sessions", { ...project!, keywords: [] })).toBe(0);
     expect(fuzzyScore("sessions", project!)).toBeGreaterThan(0);
-    expect(fuzzyScore("mcp sessions", project!)).toBeGreaterThan(0);
     expect(fuzzyScore("authentication provider", org!)).toBeGreaterThan(0);
     expect(other!.keywords).toEqual([]);
+  });
+
+  it("sends each former name to the page it named", () => {
+    const candidates = [...rendered(actions()), gatewayConnections];
+
+    expect(firstFor("MCP Authentication", candidates)).toBe(
+      "action:nav-org-userSessionIssuers",
+    );
+    expect(firstFor("MCP Sessions", candidates)).toBe(
+      "action:nav-page-mcp-sessions",
+    );
+  });
+
+  it("leaves connections to the gateway's pages", () => {
+    const candidates = [...rendered(actions()), gatewayConnections];
+    const ids = rank(prefilter("connections", candidates)).map(
+      (row) => row.candidate.id,
+    );
+
+    expect(ids[0]).toBe(gatewayConnections.id);
+    expect(ids).not.toContain("action:nav-page-mcp-sessions");
   });
 });

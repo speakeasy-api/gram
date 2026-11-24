@@ -278,6 +278,7 @@ const SUBJECT_TYPE_LABELS: Record<string, string> = {
   chat_session: "Chat session",
   channels_settings: "Organization",
   channels_access: "Member",
+  user_session_issuer: "MCP sign-in",
 };
 
 function subjectTypeLabel(subjectType: string): string {

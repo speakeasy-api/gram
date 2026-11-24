@@ -196,6 +196,12 @@ describe("formatSubjectLabel", () => {
     expect(
       formatSubjectLabel("01900000-0000-7000-8000-000000000000", "mcp_server"),
     ).toBe("MCP server 01900000");
+    expect(
+      formatSubjectLabel(
+        "01900000-0000-7000-8000-000000000000",
+        "user_session_issuer",
+      ),
+    ).toBe("MCP sign-in 01900000");
   });
 
   it("leaves human names alone", () => {

@@ -48,13 +48,15 @@ vi.mock("@/components/user-session-issuer-select", () => ({
     issuers,
     value,
     onValueChange,
+    ariaLabel,
   }: {
     issuers: UserSessionIssuer[];
     value: string;
     onValueChange: (value: string) => void;
+    ariaLabel?: string;
   }) => (
     <select
-      aria-label="User session issuer"
+      aria-label={ariaLabel}
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
     >
@@ -164,6 +166,7 @@ const link = vi.fn<(userSessionIssuerId: string) => Promise<void>>();
 function renderField(
   currentIssuerId: string | null,
   mcpServerId?: string,
+  label?: string,
 ): void {
   const target: AuthTarget = {
     mcpServerId,
@@ -185,6 +188,7 @@ function renderField(
           issuers={[issuer("current"), issuer("candidate")]}
           isLoading={false}
           isError={false}
+          label={label}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -192,7 +196,7 @@ function renderField(
 }
 
 function chooseCandidateAndSave(): void {
-  fireEvent.change(screen.getByLabelText("User session issuer"), {
+  fireEvent.change(screen.getByRole("combobox", { name: "MCP sign-in" }), {
     target: { value: "candidate" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -210,6 +214,15 @@ afterEach(() => {
 });
 
 describe("UserSessionIssuerField", () => {
+  it.each([
+    [undefined, "MCP sign-in"],
+    ["Used by this server", "Used by this server"],
+  ])("names the picker after its row (%s)", (label, name) => {
+    renderField("current", undefined, label);
+    expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name })).toBeTruthy();
+  });
+
   it("confirms before replacing an issuer and names the new authorization server", async () => {
     testState.impact.data = {
       authorizationServerChanges: true,

@@ -193,7 +193,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
 }
 
 /**
- * How clients reach this provider to sign in. Rarely needed, so it stays
+ * How clients reach this MCP sign-in to sign in. Rarely needed, so it stays
  * closed; only a broken sign-in address shows without opening it.
  */
 export function AdvancedSection({
