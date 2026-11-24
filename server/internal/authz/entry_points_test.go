@@ -28,9 +28,8 @@ const (
 
 // Require and Decide answer the same checks the same way, except where a case
 // names the difference. The caller holds project read on proj_b and a block
-// on proj_a. Example: Either(proj_a, proj_b) is refused by both,
-// because the block on proj_a vetoes the whole group; Either(proj_a, proj_b)
-// is allowed by both.
+// on proj_a. Example: Either(proj_a, proj_b) is refused by both, because the
+// block on proj_a refuses the whole group.
 func TestRequireAndDecideAgree(t *testing.T) {
 	t.Parallel()
 

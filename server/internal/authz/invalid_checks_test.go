@@ -345,11 +345,9 @@ func TestProbe_RefusedByRequire(t *testing.T) {
 		require.Equal(t, []string{"server-1"}, ids, name)
 
 		for call, err := range map[string]error{
-			"require":               engine.Require(ctx, probe),
-			"require any":           engine.Require(ctx, Either(probe)),
-			"require any unblocked": engine.Require(ctx, Either(probe)),
-			"anyof alternative":     engine.Require(ctx, Either(probe)),
-			"probed anyof":          engine.Require(ctx, Either(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
+			"require":       engine.Require(ctx, probe),
+			"either":        engine.Require(ctx, Either(probe)),
+			"probed either": engine.Require(ctx, Either(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
 		} {
 			require.ErrorIs(t, err, ErrInvalidCheck, "%s: %s", name, call)
 		}

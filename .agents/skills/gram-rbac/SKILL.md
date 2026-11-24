@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Either` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `Decide` / `Either` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Environments(p).Read()`, `authz.Check{...}` literals, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
