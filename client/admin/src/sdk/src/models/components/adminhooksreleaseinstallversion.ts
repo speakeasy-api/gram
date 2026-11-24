@@ -6,6 +6,10 @@ import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AdminHooksReleaseInstallStatus,
+  AdminHooksReleaseInstallStatus$inboundSchema,
+} from "./adminhooksreleaseinstallstatus.js";
 
 /**
  * Hooks installs reporting one binary version.
@@ -16,9 +20,9 @@ export type AdminHooksReleaseInstallVersion = {
    */
   installs: number;
   /**
-   * How the version compares to the release Speakeasy ships: current, behind, unsupported or unknown.
+   * How the version compares to the release Speakeasy ships.
    */
-  status: string;
+  status: AdminHooksReleaseInstallStatus;
   /**
    * The hooks binary version, or empty for installs that sent no version.
    */
@@ -31,7 +35,7 @@ export const AdminHooksReleaseInstallVersion$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   installs: z.int(),
-  status: z.string(),
+  status: AdminHooksReleaseInstallStatus$inboundSchema,
   version: z.string(),
 });
 

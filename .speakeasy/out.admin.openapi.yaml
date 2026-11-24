@@ -11348,12 +11348,11 @@ components:
           type: integer
           description: Installs whose latest version is this one.
           format: int64
-        status:
-          type: string
-          description: 'How the version compares to the release Speakeasy ships: current, behind, unsupported or unknown.'
         version:
           type: string
           description: The hooks binary version, or empty for installs that sent no version.
+        status:
+          $ref: "#/components/schemas/AdminHooksReleaseInstallStatus"
       description: Hooks installs reporting one binary version.
       required:
         - version
@@ -16778,6 +16777,14 @@ components:
         - organization
         - default
         - legacy_flag
+    AdminHooksReleaseInstallStatus:
+      type: string
+      description: How the version compares to the release Speakeasy ships.
+      enum:
+        - current
+        - behind
+        - unsupported
+        - unknown
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

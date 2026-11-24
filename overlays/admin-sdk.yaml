@@ -68,6 +68,24 @@ actions:
     update:
       source:
         $ref: "#/components/schemas/AdminHooksRolloutSource"
+  # Same for the install status enum, which would otherwise claim the generated
+  # name Status.
+  - target: $.components.schemas
+    update:
+      AdminHooksReleaseInstallStatus:
+        type: string
+        description: How the version compares to the release Speakeasy ships.
+        enum:
+          - current
+          - behind
+          - unsupported
+          - unknown
+  - target: $.components.schemas.AdminHooksReleaseInstallVersion.properties.status
+    remove: true
+  - target: $.components.schemas.AdminHooksReleaseInstallVersion.properties
+    update:
+      status:
+        $ref: "#/components/schemas/AdminHooksReleaseInstallStatus"
   # Goa's service-method separator is not a valid generated operation name.
   - target: $.paths.*[?@.operationId=='admin#logout']
     update:

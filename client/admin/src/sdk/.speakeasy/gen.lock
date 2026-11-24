@@ -202,6 +202,7 @@ trackedFiles:
   src/models/components/adminhookfleetresult.ts: {}
   src/models/components/adminhookfleetversion.ts: {}
   src/models/components/adminhooksreleasefleet.ts: {}
+  src/models/components/adminhooksreleaseinstallstatus.ts: {}
   src/models/components/adminhooksreleaseinstallversion.ts: {}
   src/models/components/adminhooksreleaseprogress.ts: {}
   src/models/components/adminhooksreleaserepoversion.ts: {}

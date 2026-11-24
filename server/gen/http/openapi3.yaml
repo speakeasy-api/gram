@@ -101848,7 +101848,12 @@ components:
                     format: int64
                 status:
                     type: string
-                    description: 'How the version compares to the release Speakeasy ships: current, behind, unsupported or unknown.'
+                    description: How the version compares to the release Speakeasy ships.
+                    enum:
+                        - current
+                        - behind
+                        - unsupported
+                        - unknown
                 version:
                     type: string
                     description: The hooks binary version, or empty for installs that sent no version.

@@ -30059,8 +30059,7 @@ type AdminHooksReleaseFleetResponseBody struct {
 type AdminHooksReleaseInstallVersionResponseBody struct {
 	// The hooks binary version, or empty for installs that sent no version.
 	Version string `form:"version" json:"version" xml:"version"`
-	// How the version compares to the release Speakeasy ships: current, behind,
-	// unsupported or unknown.
+	// How the version compares to the release Speakeasy ships.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Installs whose latest version is this one.
 	Installs int64 `form:"installs" json:"installs" xml:"installs"`
