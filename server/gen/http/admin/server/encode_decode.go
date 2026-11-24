@@ -30727,6 +30727,12 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		CreatedAt:                      v.CreatedAt,
 		UpdatedAt:                      v.UpdatedAt,
 	}
+	{
+		var zero bool
+		if res.Internal == zero {
+			res.Internal = false
+		}
+	}
 
 	return res
 }

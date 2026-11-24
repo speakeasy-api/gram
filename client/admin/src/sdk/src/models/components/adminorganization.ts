@@ -144,7 +144,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     id: z.string(),
-    internal: z.boolean(),
+    internal: z._default(z.boolean(), false),
     member_count: z.int(),
     name: z.string(),
     slug: z.string(),

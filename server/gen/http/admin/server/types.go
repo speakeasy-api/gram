@@ -33653,6 +33653,12 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -33707,6 +33713,12 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -33738,6 +33750,12 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -33768,6 +33786,12 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
 	}
 	return body
 }
@@ -33946,6 +33970,12 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -33977,6 +34007,12 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -34007,6 +34043,12 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
 	}
 	return body
 }
@@ -34134,6 +34176,12 @@ func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCu
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -34164,6 +34212,12 @@ func NewSetAdoptionDashboardURLResponseBody(res *admin.AdminOrganization) *SetAd
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
 	}
 	return body
 }
@@ -34730,6 +34784,12 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
 	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
+	}
 	return body
 }
 
@@ -34760,6 +34820,12 @@ func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTria
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
 	}
 	return body
 }
@@ -36044,6 +36110,12 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	{
+		var zero bool
+		if body.Internal == zero {
+			body.Internal = false
+		}
 	}
 	return body
 }

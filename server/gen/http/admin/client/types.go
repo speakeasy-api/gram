@@ -36301,7 +36301,6 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -36313,6 +36312,12 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -36649,7 +36654,6 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -36661,6 +36665,12 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -36831,7 +36841,6 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -36843,6 +36852,12 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -37013,7 +37028,6 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -37025,6 +37039,12 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -38372,7 +38392,6 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -38384,6 +38403,12 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -38554,7 +38579,6 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -38566,6 +38590,12 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -38736,7 +38766,6 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -38748,6 +38777,12 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -40098,7 +40133,6 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -40110,6 +40144,12 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -40295,7 +40335,6 @@ func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURL
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -40307,6 +40346,12 @@ func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURL
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -43788,7 +43833,6 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -43800,6 +43844,12 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -43970,7 +44020,6 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -43982,6 +44031,12 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -51594,7 +51649,6 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		StripeCustomerDashboardURL:     body.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: body.StripeSubscriptionDashboardURL,
 		Whitelisted:                    *body.Whitelisted,
-		Internal:                       *body.Internal,
 		DisabledAt:                     body.DisabledAt,
 		TrialState:                     body.TrialState,
 		TrialTier:                      body.TrialTier,
@@ -51606,6 +51660,12 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -59912,9 +59972,6 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -59992,9 +60049,6 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -60060,9 +60114,6 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -60127,9 +60178,6 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
@@ -60329,9 +60377,6 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -60397,9 +60442,6 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -60464,9 +60506,6 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
@@ -60637,9 +60676,6 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -60704,9 +60740,6 @@ func ValidateSetAdoptionDashboardURLResponseBody(body *SetAdoptionDashboardURLRe
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
@@ -61243,9 +61276,6 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
-	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
 	}
@@ -61310,9 +61340,6 @@ func ValidateChangeTrialEndDateResponseBody(body *ChangeTrialEndDateResponseBody
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
@@ -62889,9 +62916,6 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
@@ -99994,9 +100018,6 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.Internal == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("internal", "body"))
 	}
 	if body.MemberCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))

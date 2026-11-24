@@ -404,6 +404,27 @@ describe("organization writes through the generated client", () => {
     };
   }
 
+  it("accepts a write answered by a server that predates the internal label", async () => {
+    // The admin dashboard and the server ship as separate images. During a
+    // rollout, or after a server-only rollback, a write can be answered by a
+    // server that does not send `internal` yet. The write already happened, so
+    // reporting it as failed invites a retry that applies it twice.
+    const { internal: _omitted, ...older } = WIRE;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(older), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      boundary.extendTrial({ id: WIRE.id, days: 7 }),
+    ).resolves.toEqual({ ...RECORD, internal: false });
+  });
+
   it("posts the id to the disable path", async () => {
     const fetch = stubFetch();
 

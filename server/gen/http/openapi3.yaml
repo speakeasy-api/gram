@@ -105361,6 +105361,7 @@ components:
                 internal:
                     type: boolean
                     description: 'Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.'
+                    default: false
                 member_count:
                     type: integer
                     description: Number of active members in the organization.
@@ -105431,7 +105432,6 @@ components:
                 - slug
                 - account_type
                 - whitelisted
-                - internal
                 - member_count
                 - created_at
                 - updated_at

@@ -58,7 +58,7 @@ var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", 
 
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
-	Required("id", "name", "slug", "account_type", "whitelisted", "internal", "member_count", "created_at", "updated_at")
+	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
@@ -80,7 +80,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Format(FormatURI)
 	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
-	Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.")
+	// Defaulted rather than required. The admin dashboard ships separately from
+	// the server and validates responses, so a required field would make it
+	// reject every organization a not-yet-upgraded server returns.
+	Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.", func() { Default(false) })
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
