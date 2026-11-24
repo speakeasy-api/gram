@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 )
@@ -89,7 +90,31 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
-// seedRemoteBackedServer inserts an MCP server whose traffic Speakeasy proxies.
+// seedHostedServer inserts an MCP server whose tools Speakeasy serves itself,
+// the only kind that offers the feedback tool.
+func seedHostedServer(t *testing.T, ctx context.Context, ti *testInstance) mcpserversrepo.McpServer {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "acme-tasks-" + uuid.NewString()
+	toolsetID, err := testrepo.New(ti.conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID:             uuid.Must(uuid.NewV7()),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Acme Tasks",
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+
+	return seedServer(t, ctx, ti, func(params *mcpserversrepo.CreateMCPServerParams) {
+		params.ToolsetID = uuid.NullUUID{UUID: toolsetID, Valid: true}
+	})
+}
+
+// seedRemoteBackedServer inserts an MCP server whose traffic Speakeasy
+// proxies to a third party's server.
 func seedRemoteBackedServer(t *testing.T, ctx context.Context, ti *testInstance) mcpserversrepo.McpServer {
 	t.Helper()
 

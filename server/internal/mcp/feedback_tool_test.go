@@ -320,7 +320,10 @@ func (u *methodRecordingUpstream) count(method string) int {
 	return n
 }
 
-func TestServePublic_FeedbackTool_ProxiedServerListsAndRecordsIt(t *testing.T) {
+// A remote server belongs to a third party, so the gateway never adds the
+// feedback tool to it, even if settings stored for it say otherwise: its
+// tools are listed and called exactly as the server serves them.
+func TestServePublic_FeedbackTool_RemoteServerIsNeverOfferedIt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -333,46 +336,17 @@ func TestServePublic_FeedbackTool_ProxiedServerListsAndRecordsIt(t *testing.T) {
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, slug, "public", issuerID)
 	token := mintIssuerBearerForEndpoint(t, ctx, ti, slug, mcpServer, authCtx.ActiveOrganizationID)
+	setFeedbackTool(t, ctx, ti, mcpServer.ID, true, "")
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeToolsListBody(), token, nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{"ping"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
-
-	setFeedbackTool(t, ctx, ti, mcpServer.ID, true, "acme_submit_feedback")
-
-	w, err = servePublicHTTP(t, ctx, ti, slug, makeToolsListBody(), token, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.Equal(t, []string{"ping", "acme_submit_feedback"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
-
-	w, err = servePublicHTTP(t, ctx, ti, slug, feedbackCallBody(t, "acme_submit_feedback", map[string]any{
-		"content":  "ping answered pong but the docs promise a timestamp.",
-		"severity": "cosmetic",
-		"tool":     "ping",
-	}), token, map[string]string{"Mcp-Session-Id": "session-remote"})
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	outcome := decodeToolCall(t, w.Body.Bytes())
-	require.NotNil(t, outcome.Result, w.Body.String())
-	require.False(t, outcome.Result.IsError)
-	require.Contains(t, outcome.Result.Content[0].Text, "Feedback received")
-	require.Zero(t, upstream.count("tools/call"), "the remote server never sees the feedback call")
-
-	rows := storedFeedback(t, ctx, ti, mcpServer.ID)
-	require.Len(t, rows, 1)
-	require.Equal(t, "cosmetic", rows[0].Severity.String)
-	require.Equal(t, "ping", rows[0].ToolName.String)
-
-	// The server's own tools still reach it, and the default name is not taken here.
-	w, err = servePublicHTTP(t, ctx, ti, slug, feedbackCallBody(t, "ping", map[string]any{}), token, nil)
-	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), "pong")
-	require.Equal(t, 1, upstream.count("tools/call"))
 
 	_, err = servePublicHTTP(t, ctx, ti, slug, feedbackCallBody(t, mcpfeedback.DefaultToolName, map[string]any{"content": "x"}), token, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, upstream.count("tools/call"), "a name the server does not use for feedback is forwarded")
-	require.Len(t, storedFeedback(t, ctx, ti, mcpServer.ID), 1)
+	require.Equal(t, 1, upstream.count("tools/call"), "the call goes to the remote server as any other would")
+	require.Empty(t, storedFeedback(t, ctx, ti, mcpServer.ID))
 }
 
 // A gateway in front of several servers lists their tools, not one feedback

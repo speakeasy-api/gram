@@ -5,12 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -18,9 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/requestip"
 )
@@ -195,85 +191,4 @@ func feedbackCaller(ctx context.Context, organizationID string, r *http.Request,
 	}
 
 	return caller
-}
-
-// feedbackLocalTools has a proxied server's feedback tool answered here
-// instead of being forwarded. The proxy resolves it only for requests that
-// list or call tools, so every other request to the server costs nothing.
-func (s *Service) feedbackLocalTools(logger *slog.Logger, organizationID string, projectID uuid.UUID, mcpServer *mcpserversrepo.McpServer) remotemcp.BuildOption {
-	feedback := s.feedback
-	if feedback == nil {
-		return remotemcp.WithLocalTools(nil)
-	}
-
-	target := mcpfeedback.Target{OrganizationID: organizationID, ProjectID: projectID, McpServerID: mcpServer.ID}
-	clientScope := mcpServerClientInfoScope(mcpServer)
-
-	return remotemcp.WithLocalTools(func(ctx context.Context) ([]proxy.LocalTool, error) {
-		tool, ok, err := feedback.Tool(ctx, projectID, mcpServer.ID)
-		if err != nil {
-			return nil, fmt.Errorf("load mcp feedback tool: %w", err)
-		}
-		if !ok {
-			return nil, nil
-		}
-
-		return []proxy.LocalTool{{
-			Definition: &sdkmcp.Tool{
-				Meta: nil,
-				Annotations: &sdkmcp.ToolAnnotations{
-					DestructiveHint: new(false),
-					IdempotentHint:  false,
-					OpenWorldHint:   new(true),
-					ReadOnlyHint:    false,
-					Title:           tool.Title,
-				},
-				Description:  tool.Description,
-				InputSchema:  tool.InputSchema,
-				Name:         tool.Name,
-				OutputSchema: nil,
-				Title:        tool.Title,
-				Icons:        nil,
-			},
-			Call: func(ctx context.Context, call *proxy.ToolsCallRequest) (*sdkmcp.CallToolResult, error) {
-				// A proxied request carries an auth context only when its
-				// caller presented a credential.
-				caller := feedbackCaller(ctx, organizationID, call.UserRequest.UserHTTPRequest, true)
-				sessionID := ""
-				if call.UserRequest.UserHTTPRequest != nil {
-					sessionID = call.UserRequest.UserHTTPRequest.Header.Get(proxy.McpSessionIDHeader)
-				}
-				caller.ClientName, caller.ClientVersion = s.proxiedFeedbackClient(ctx, logger, projectID, clientScope, sessionID)
-
-				outcome := feedback.Call(ctx, target, caller, call.Params.Arguments)
-
-				called := &sdkmcp.CallToolResult{
-					Meta:              nil,
-					Content:           []sdkmcp.Content{&sdkmcp.TextContent{Meta: nil, Annotations: nil, Text: outcome.Text}},
-					StructuredContent: nil,
-					IsError:           outcome.IsError,
-					InputRequests:     nil,
-					RequestState:      "",
-				}
-				if len(outcome.Structured) > 0 {
-					called.StructuredContent = outcome.Structured
-				}
-				return called, nil
-			},
-		}}, nil
-	})
-}
-
-// proxiedFeedbackClient names the MCP client behind a proxied call: the one
-// the gateway already resolved for the request, else the one the call's
-// session reported at its handshake.
-func (s *Service) proxiedFeedbackClient(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, scope, sessionID string) (name, version string) {
-	if info, ok := contextvalues.GetMCPClientInfo(ctx); ok {
-		return info.Name, info.Version
-	}
-	if s.tunnelClientFamilies == nil || scope == "" || sessionID == "" {
-		return "", ""
-	}
-
-	return s.tunnelClientFamilies.forRow(logger, projectID, scope, sessionID)
 }

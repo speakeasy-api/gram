@@ -63,7 +63,7 @@ func TestRecorderOffersTheToolOnlyWhenSwitchedOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -113,7 +113,7 @@ func TestRecorderSubmitStoresTheReport(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 	target := targetOf(t, ctx, server)
 
@@ -143,7 +143,7 @@ func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 
 	anonymous := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
@@ -163,7 +163,7 @@ func TestRecorderSubmitMasksSecretsAndPersonalData(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 
 	const secret = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD"
@@ -188,7 +188,7 @@ func TestRecorderSubmitCutsMaskedTextBackToItsLimit(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, replacingRedactor{}, noLimits)
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
@@ -224,7 +224,7 @@ func TestRecorderSubmitStoresNothingWhenTheScanFails(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), sampleCaller(), sampleReport())
@@ -237,8 +237,8 @@ func TestRecorderLimitsEachCallerAndEachServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
-	other := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
+	other := seedHostedServer(t, ctx, ti)
 
 	// Every test shares one Redis, so each gets its own buckets.
 	store := ratelimit.NewRedisStore(ti.redis)
@@ -282,7 +282,7 @@ func TestRecorderLimitsAnonymousCallersByServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	store := ratelimit.NewRedisStore(ti.redis)
 	limits := mcpfeedback.Limits{
@@ -306,7 +306,7 @@ func TestRecorderLimitsACallerItDoesNotName(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	store := ratelimit.NewRedisStore(ti.redis)
 	limits := mcpfeedback.Limits{
@@ -331,7 +331,7 @@ func TestRecorderCallAnswersWithAToolResult(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	store := ratelimit.NewRedisStore(ti.redis)
 	limits := mcpfeedback.Limits{
@@ -367,7 +367,7 @@ func TestRecorderCallDoesNotLeakWhyStoringFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, failingRedactor{}, noLimits)
 
 	failed := recorder.Call(ctx, targetOf(t, ctx, server), sampleCaller(), json.RawMessage(`{"content":"A problem."}`))
@@ -381,7 +381,7 @@ func TestRecorderServesSettingsFromMemoryWhileFresh(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), noLimits)
 
 	saveFeedbackConfig(t, ctx, ti, server, true)
@@ -401,8 +401,8 @@ func TestRecorderServesEarlierSettingsWhenTheyCannotBeRead(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
-	unread := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
+	unread := seedHostedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 
 	saveFeedbackConfig(t, ctx, ti, server, true)

@@ -71,7 +71,7 @@ func TestListOfAServerWithNoFeedbackIsEmptyButShaped(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	result, err := listFeedback(ctx, ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: nil, limit: 0})
 	require.NoError(t, err)
@@ -94,8 +94,8 @@ func TestListReturnsFeedbackNewestFirstWithCounts(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
-	other := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
+	other := seedHostedServer(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -141,7 +141,7 @@ func TestListRanksOnlyTheToolsNamedMostOften(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	// Eleven tools are each named twice, one more than the ranking holds.
 	for i := range 11 {
@@ -165,7 +165,7 @@ func TestListFiltersNarrowThePageAndNotTheCounts(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	submit(t, ctx, ti, server, mcpfeedback.SeverityBlocked, "search_logs", "search_logs timed out.")
 	submit(t, ctx, ti, server, mcpfeedback.SeverityDegraded, "search_logs", "search_logs was slow.")
@@ -199,7 +199,7 @@ func TestListPagesThroughEveryReportOnce(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	var submitted []string
 	for i := range 5 {
@@ -229,7 +229,7 @@ func TestListRejectsWhatItCannotPage(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	_, err := listFeedback(ctx, ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: new("not-a-cursor"), limit: 0})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -247,15 +247,15 @@ func TestListFollowsAccessToTheServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
-	other := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
+	other := seedHostedServer(t, ctx, ti)
 	submit(t, ctx, ti, server, mcpfeedback.SeverityBlocked, "search_logs", "search_logs timed out.")
 
 	noGrants := authztest.WithExactGrants(t, ctx)
 	_, err := listFeedback(noGrants, ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: nil, limit: 0})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	reader := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, server.ID.String()))
+	reader := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, server.ToolsetID.UUID.String()))
 	result, err := listFeedback(reader, ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: nil, limit: 0})
 	require.NoError(t, err)
 	require.Len(t, result.Feedback, 1)
@@ -278,7 +278,7 @@ func TestListOmitsTheEmailOfARemovedMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

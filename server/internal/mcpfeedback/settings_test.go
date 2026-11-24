@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -48,7 +49,7 @@ func TestGetSettingsOfAServerThatNeverHadAnyReturnsTheDefaultsSwitchedOff(t *tes
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	settings, err := getSettings(ctx, ti, server.ID.String())
 	require.NoError(t, err)
@@ -69,7 +70,7 @@ func TestUpdateSettingsSwitchesTheToolOnWithTheDefaults(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -114,7 +115,7 @@ func TestUpdateSettingsStoresACustomNameAndDescription(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	updated, err := updateSettings(ctx, ti, server.ID.String(), true, new("  acme_submit_feedback "), new(" Tell the Acme Tasks team what went wrong. "))
 	require.NoError(t, err)
@@ -151,7 +152,7 @@ func TestUpdateSettingsStoresARepeatedDefaultAsUnset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	updated, err := updateSettings(ctx, ti, server.ID.String(), true, new(mcpfeedback.DefaultToolName), new(mcpfeedback.DefaultToolDescription))
 	require.NoError(t, err)
@@ -163,7 +164,7 @@ func TestUpdateSettingsRefusesWhatAgentsCouldNotCall(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	cases := map[string]struct {
 		toolName        *string
@@ -188,29 +189,30 @@ func TestUpdateSettingsRefusesWhatAgentsCouldNotCall(t *testing.T) {
 	require.False(t, settings.Enabled, "a refused change stores nothing")
 }
 
-// The gateway can only add a tool to a server whose traffic it carries.
-func TestUpdateSettingsRefusesToSwitchTheToolOnForACataloguedServer(t *testing.T) {
+// Only servers whose tools Speakeasy serves itself offer the feedback tool
+// for now: a third party's server, proxied or reached directly, does not.
+func TestUpdateSettingsRefusesToSwitchTheToolOnForAThirdPartyServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedCataloguedServer(t, ctx, ti)
+	for _, server := range []mcpserversrepo.McpServer{seedRemoteBackedServer(t, ctx, ti), seedCataloguedServer(t, ctx, ti)} {
+		_, err := updateSettings(ctx, ti, server.ID.String(), true, nil, nil)
+		requireOopsCode(t, err, oops.CodeInvalid)
+		require.ErrorContains(t, err, "built from your API or functions")
 
-	_, err := updateSettings(ctx, ti, server.ID.String(), true, nil, nil)
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "does not go through Speakeasy")
-
-	// Switching it off is still allowed, so a server that stopped being
-	// proxied can be cleaned up.
-	off, err := updateSettings(ctx, ti, server.ID.String(), false, nil, nil)
-	require.NoError(t, err)
-	require.False(t, off.Enabled)
+		// Switching it off is still allowed, so settings stored before can be
+		// cleaned up.
+		off, err := updateSettings(ctx, ti, server.ID.String(), false, nil, nil)
+		require.NoError(t, err)
+		require.False(t, off.Enabled)
+	}
 }
 
 func TestSettingsRejectAnUnknownOrForeignServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	_, err := getSettings(ctx, ti, uuid.NewString())
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -237,12 +239,13 @@ func TestSettingsRejectAnUnknownOrForeignServer(t *testing.T) {
 	require.False(t, settings.Enabled)
 }
 
+// A hosted server's access is granted on its toolset, as on its own endpoint.
 func TestSettingsFollowAccessToTheServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
-	other := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
+	other := seedHostedServer(t, ctx, ti)
 
 	noGrants := authztest.WithExactGrants(t, ctx)
 	_, err := getSettings(noGrants, ti, server.ID.String())
@@ -254,7 +257,7 @@ func TestSettingsFollowAccessToTheServer(t *testing.T) {
 	_, err = getSettings(noGrants, ti, uuid.NewString())
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	reader := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, server.ID.String()))
+	reader := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPRead, server.ToolsetID.UUID.String()))
 	_, err = getSettings(reader, ti, server.ID.String())
 	require.NoError(t, err)
 	_, err = updateSettings(reader, ti, server.ID.String(), true, nil, nil)
@@ -262,7 +265,7 @@ func TestSettingsFollowAccessToTheServer(t *testing.T) {
 	_, err = getSettings(reader, ti, other.ID.String())
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	writer := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPWrite, server.ID.String()))
+	writer := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPWrite, server.ToolsetID.UUID.String()))
 	updated, err := updateSettings(writer, ti, server.ID.String(), true, nil, nil)
 	require.NoError(t, err)
 	require.True(t, updated.Enabled)
@@ -276,7 +279,7 @@ func TestUpdateSettingsRefusesAChangeMadeFromStaleSettings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	server := seedRemoteBackedServer(t, ctx, ti)
+	server := seedHostedServer(t, ctx, ti)
 
 	update := func(expected *string, toolName string) (*types.McpFeedbackSettings, error) {
 		settings, err := ti.service.UpdateSettings(ctx, &gen.UpdateSettingsPayload{

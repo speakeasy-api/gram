@@ -165,8 +165,8 @@ func (s *Service) UpdateSettings(ctx context.Context, payload *gen.UpdateSetting
 	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(server)), authz.ProjectIDOf(server.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
-	if settings.Enabled && !servedByGateway(server) {
-		return nil, oops.E(oops.CodeInvalid, nil, "this MCP server's traffic does not go through Speakeasy, so it cannot offer the feedback tool")
+	if settings.Enabled && !builtWithSpeakeasy(server) {
+		return nil, oops.E(oops.CodeInvalid, nil, "only MCP servers built from your API or functions can offer the feedback tool for now")
 	}
 
 	queries := repo.New(dbtx)
@@ -433,9 +433,10 @@ func mcpGrantResourceID(server mcpserversrepo.McpServer) uuid.UUID {
 	return server.ID
 }
 
-// servedByGateway reports whether agents reach the server through Speakeasy,
-// which is what lets the gateway add a tool to it. A server that is only
-// catalogued is reached directly.
-func servedByGateway(server mcpserversrepo.McpServer) bool {
-	return server.ToolsetID.Valid || server.RemoteMcpServerID.Valid || server.TunneledMcpServerID.Valid
+// builtWithSpeakeasy reports whether Speakeasy serves the server's tools
+// itself, from an OpenAPI document or functions. Only those servers offer the
+// feedback tool for now: a remote, tunneled or catalogued server belongs to a
+// third party, and the gateway does not add tools to it.
+func builtWithSpeakeasy(server mcpserversrepo.McpServer) bool {
+	return server.ToolsetID.Valid
 }
