@@ -456,8 +456,8 @@ func TestAttachedConsentReadFailureRefusesMandatoryServing(t *testing.T) {
 		f.service.logger = testenv.NewLogger(t)
 		f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
 		f.service.mandatoryShadowLog = newOnceLog()
-		if !tc.mandatory {
-			f.service.authClientPermitter = connectPermitter{}
+		if tc.mandatory {
+			f.service.authClientPermitter = nil
 		}
 		reads := 0
 		f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
