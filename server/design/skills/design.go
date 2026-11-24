@@ -10,7 +10,7 @@ import (
 const (
 	skillCreateFilesDescription   = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB per file and 10 MiB in total."
 	skillFilesInputDescription    = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit to keep the supporting files of the current version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
-	skillApprovalFilesDescription = "Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
+	skillApprovalFilesDescription = "Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version with any taken changes to them applied, send an empty list to remove them all, or send the complete new set. Cannot be sent while taking a change that edits a supporting file: approve without files so the suggested edits apply, or leave those changes out of change_ids. At most 100 files, 5 MiB per file and 10 MiB in total."
 )
 
 var _ = Service("skills", func() {

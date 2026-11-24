@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -128,6 +129,26 @@ func editsSupportingFile(changes []repo.ListSkillEditSuggestionChangesRow, sugge
 	return slices.ContainsFunc(changes, func(change repo.ListSkillEditSuggestionChangesRow) bool {
 		return change.SuggestionID == suggestionID && !skilldiff.IsManifestPath(change.Path.String)
 	})
+}
+
+// takenSupportingFilePaths returns the distinct supporting-file paths edited by
+// the changes an approval takes: those named in changeIDs, or every change
+// when changeIDs is empty. Unknown IDs are ignored here; approvalContent
+// reports them.
+func takenSupportingFilePaths(changes []repo.ListSkillEditSuggestionChangesRow, changeIDs []uuid.UUID) []string {
+	var paths []string
+	for _, change := range changes {
+		if skilldiff.IsManifestPath(change.Path.String) {
+			continue
+		}
+		if len(changeIDs) > 0 && !slices.Contains(changeIDs, change.ID) {
+			continue
+		}
+		if !slices.Contains(paths, change.Path.String) {
+			paths = append(paths, change.Path.String)
+		}
+	}
+	return paths
 }
 
 type suggestionApproval struct {
@@ -295,6 +316,13 @@ func (s *Service) approveSuggestion(
 	proposedTree := skilldiff.Tree{Manifest: content, Files: baseTree.Files}
 	var remaining []repo.ListSkillEditSuggestionChangesRow
 	if editedContent == nil {
+		// An explicit file list would silently discard a taken edit to a
+		// supporting file, so the two cannot be combined.
+		if conflicting := takenSupportingFilePaths(changes, changeIDs); files.explicit && len(conflicting) > 0 {
+			return approval, oops.E(oops.CodeBadRequest, nil,
+				"files cannot be sent while taking changes to supporting files (%s); approve without files so the suggested edits apply, or leave those changes out of change_ids",
+				strings.Join(conflicting, ", "))
+		}
 		proposedTree, remaining, err = approvalContent(baseTree, changes, changeIDs)
 		if err != nil {
 			return approval, err
@@ -302,7 +330,8 @@ func (s *Service) approveSuggestion(
 	}
 
 	// Files the reviewer sends replace the version's supporting files
-	// outright. Otherwise the version keeps the base version's files with the
+	// outright; they only reach here alongside SKILL.md changes or edited
+	// content. Otherwise the version keeps the base version's files with the
 	// taken changes applied.
 	if files.explicit {
 		proposedTree.Files = entryFiles(files.entries)

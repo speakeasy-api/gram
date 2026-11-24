@@ -94,9 +94,11 @@ type ApproveSuggestionRequestBody struct {
 	// edited content.
 	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
 	// Supporting files stored with the approved SKILL.md. Omit to keep the
-	// supporting files of the suggestion's base version, send an empty list to
-	// remove them all, or send the complete new set. At most 100 files, 5 MiB per
-	// file and 10 MiB in total.
+	// supporting files of the suggestion's base version with any taken changes to
+	// them applied, send an empty list to remove them all, or send the complete
+	// new set. Cannot be sent while taking a change that edits a supporting file:
+	// approve without files so the suggested edits apply, or leave those changes
+	// out of change_ids. At most 100 files, 5 MiB per file and 10 MiB in total.
 	Files []*SkillFileInputRequestBodyRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
