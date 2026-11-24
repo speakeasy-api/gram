@@ -36,8 +36,9 @@ type RemoteSession struct {
 	UserSessionIssuerID string
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string
+	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
+	// the upstream issued a non-expiring token.
+	AccessExpiresAt *string
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string
 	// Upstream authorization deadline. When present, the connection cannot be used

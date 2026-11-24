@@ -13,9 +13,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type RemoteSession = {
   /**
-   * Upstream access-token expiry. Independent of refresh_expires_at.
+   * Upstream access-token expiry. Independent of refresh_expires_at. Null when the upstream issued a non-expiring token.
    */
-  accessExpiresAt: Date;
+  accessExpiresAt?: Date | undefined;
   /**
    * Upstream authorization deadline. When present, the connection cannot be used or refreshed after this time even if its tokens have later expiries.
    */
@@ -82,9 +82,8 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    access_expires_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    access_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     authorization_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),

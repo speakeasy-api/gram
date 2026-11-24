@@ -51,8 +51,9 @@ type RefreshSessionResponseBody struct {
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
+	// the upstream issued a non-expiring token.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
 	// Upstream authorization deadline. When present, the connection cannot be used
@@ -867,8 +868,9 @@ type RemoteSessionResponseBody struct {
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
-	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
+	// the upstream issued a non-expiring token.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
 	// Upstream authorization deadline. When present, the connection cannot be used

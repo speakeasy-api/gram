@@ -2944,7 +2944,8 @@ type RemoteSessionResponseBody struct {
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The remote_session_client this session was minted against.
 	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
-	// Upstream access-token expiry. Independent of refresh_expires_at.
+	// Upstream access-token expiry. Independent of refresh_expires_at. Null when
+	// the upstream issued a non-expiring token.
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
@@ -9467,9 +9468,6 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	}
 	if body.RemoteSessionClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
-	}
-	if body.AccessExpiresAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
 	}
 	if body.HasRefreshToken == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
