@@ -133,6 +133,12 @@ type Outcome struct {
 	// Unfinished is an agent that ran out of turns or time without a tool
 	// call or a final answer. It is a miss even on a negative case.
 	Unfinished bool
+	// Refused is a turn the provider's safety filter stopped before the
+	// model answered: no content, no tool call, a content_filter finish or a
+	// refusal message. Answer holds the refusal text. Like any answer
+	// without a Platform tool, it is right on a negative case and a miss on
+	// one that expects a tool.
+	Refused bool
 
 	// Hit is an expected tool reached first; OnPath is one of the case's
 	// allowed first steps reached first instead.
@@ -270,7 +276,7 @@ func attempt(parent context.Context, client openrouter.CompletionClient, model s
 	ctx, cancel := context.WithTimeout(parent, caseTimeout)
 	defer cancel()
 	started := time.Now()
-	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c, Selected: nil, Reads: nil, Answer: "", Unfinished: false, Hit: false, OnPath: false, SchemaValid: false, SchemaError: "", ArgsMatch: false, ConfirmedFirst: false, Turns: 0, PromptTokens: 0, CachedTokens: 0, CompletionTokens: 0, CostUSD: 0, Latency: 0, Err: nil}
+	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c, Selected: nil, Reads: nil, Answer: "", Unfinished: false, Refused: false, Hit: false, OnPath: false, SchemaValid: false, SchemaError: "", ArgsMatch: false, ConfirmedFirst: false, Turns: 0, PromptTokens: 0, CachedTokens: 0, CompletionTokens: 0, CostUSD: 0, Latency: 0, Err: nil}
 
 	listed := make([]openrouter.Tool, 0, len(surface.Tools))
 	for _, tool := range surface.Tools {
@@ -315,6 +321,10 @@ turns:
 		}
 		if len(response.ToolCalls) == 0 {
 			outcome.Answer = response.Content
+			if text, ok := refusal(response); ok {
+				outcome.Refused = true
+				outcome.Answer = text
+			}
 			break
 		}
 		messages = append(messages, assistantToolCallMessage(response))
@@ -340,12 +350,35 @@ turns:
 			}))
 		}
 	}
-	if outcome.Err == nil && outcome.Selected == nil && outcome.Answer == "" {
+	if outcome.Err == nil && outcome.Selected == nil && outcome.Answer == "" && !outcome.Refused {
 		outcome.Unfinished = true
 	}
 	outcome.Latency = time.Since(started)
 	score(&outcome, tools, validators)
 	return outcome
+}
+
+// contentFilterFinish is the finish reason OpenRouter reports when a
+// provider's safety filter stops a completion. The provider's own reason,
+// such as Anthropic's "refusal", is not passed through the client.
+const contentFilterFinish = "content_filter"
+
+// refusal reports whether the provider refused a completion that carries no
+// text, and returns the refusal message it sent, if any. A filtered response
+// has no content and no usage, so without this it would read as an agent
+// that never answered.
+func refusal(response *openrouter.CompletionResponse) (string, bool) {
+	if response.Content != "" {
+		return "", false
+	}
+	var text string
+	if message := response.Message; message != nil && message.ChatAssistantMessage != nil {
+		if refused, ok := message.ChatAssistantMessage.Refusal.GetOrZero(); ok {
+			text = strings.TrimSpace(refused)
+		}
+	}
+	filtered := response.FinishReason != nil && *response.FinishReason == contentFilterFinish
+	return text, filtered || text != ""
 }
 
 // score fills in the hit and argument checks from the selected call.
