@@ -355,6 +355,15 @@ func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t
 	require.NoError(t, authclientbackfill.New(ti.conn).SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{
 		ProjectID: fx.projectID, OrganizationID: fx.organizationID, CredentialID: credentialID, McpServerID: server, AuthClientID: conv.ToNullUUID(typed),
 	}))
+	otherSubject := urn.NewUserSubject("other-grant-owner")
+	other := insertRemoteSession(t, ctx, ti.conn, otherSubject, fx.userIssuerID.String(), fx.clientID.String())
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, otherSubject, sibling, fx.projectID, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "a recorded choice for one subject cannot retire another subject's grant on the same registration")
+	stillLive, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: otherSubject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, other.ID, stillLive.ID)
+
 	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1, "the exact downstream credential's current choice reaches the same subject's grant")
