@@ -321,30 +321,36 @@ func (r *RedisCacheAdapter) Delete(ctx context.Context, key string) error {
 	return r.cache.Delete(ctx, key)
 }
 
+// listAppendScript appends ARGV[1] to the list at KEYS[1] and, when ARGV[2]
+// is a positive number of milliseconds, gives the list that lifetime if it has
+// none yet. An existing expiry is kept, so appends never extend a list's life.
+// Running both in one script means no client ever sees the list without its
+// expiry, which an eviction policy that only evicts keys with one relies on.
+var listAppendScript = redis.NewScript(`
+redis.call("RPUSH", KEYS[1], ARGV[1])
+local ttl = tonumber(ARGV[2])
+if ttl > 0 and redis.call("PTTL", KEYS[1]) == -1 then
+  redis.call("PEXPIRE", KEYS[1], ttl)
+end
+return 1
+`)
+
+// ListAppend appends value to the list at key. A positive ttl is set when the
+// list has no expiry yet, in the same step as the append.
 func (r *RedisCacheAdapter) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
-	// Marshal the value to JSON
 	data, err := r.cache.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("marshal value: %w", err)
 	}
 
-	// Use RPUSH to atomically append to the list
-	if err := r.client.RPush(ctx, key, data).Err(); err != nil {
-		return fmt.Errorf("rpush: %w", err)
+	var ttlMillis int64
+	if ttl > 0 {
+		// PEXPIRE 0 would delete the list, so a sub-millisecond lifetime rounds up.
+		ttlMillis = max(ttl.Milliseconds(), 1)
 	}
 
-	// Set expiration if TTL is provided and key is new
-	if ttl > 0 {
-		// Only set TTL if it's not already set (to avoid resetting TTL on each append)
-		exists, err := r.client.TTL(ctx, key).Result()
-		if err != nil {
-			return fmt.Errorf("check ttl: %w", err)
-		}
-		if exists == -1 { // Key exists but has no TTL
-			if err := r.client.Expire(ctx, key, ttl).Err(); err != nil {
-				return fmt.Errorf("expire: %w", err)
-			}
-		}
+	if err := listAppendScript.Run(ctx, r.client, []string{key}, data, ttlMillis).Err(); err != nil {
+		return fmt.Errorf("append to list %s: %w", key, err)
 	}
 
 	return nil
