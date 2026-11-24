@@ -83,8 +83,9 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 		   AND tool_name = 'list_servers'
 		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
 		   AND toString(attributes.gram.authorization.actor.id) = ?
-		   AND toString(attributes.gram.workload.subject) != ''`,
-		1, authCtx.ProjectID.String(), f.agentID.String())
+		   AND toString(attributes.gram.workload_issuer.id) = ?
+		   AND toString(attributes.gram.workload.subject) = ?`,
+		1, authCtx.ProjectID.String(), f.agentID.String(), f.issuerID.String(), f.subject)
 
 	_, err = serveOrganizationGatewayHTTP(t, f.ctx, f.ti, fixture.organizationSlug, bearer, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)

@@ -225,8 +225,9 @@ func TestServePublic_StoredGatewayIssuerWorkloadListsAdmittedMember(t *testing.T
 		   AND meta_mcp_server_id = ?
 		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
 		   AND toString(attributes.gram.authorization.actor.id) = ?
-		   AND toString(attributes.gram.workload.subject) != ''`,
-		1, f.fx.target.ProjectID.String(), gateway.ID.String(), f.agentID.String())
+		   AND toString(attributes.gram.workload_issuer.id) = ?
+		   AND toString(attributes.gram.workload.subject) = ?`,
+		1, f.fx.target.ProjectID.String(), gateway.ID.String(), f.agentID.String(), f.issuerID.String(), f.subject)
 }
 
 func TestServePublic_StoredGatewayAgentListsOnlyAdmittedMembers(t *testing.T) {
