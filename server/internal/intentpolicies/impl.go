@@ -116,16 +116,16 @@ func (s *Service) authorize(ctx context.Context, check func(authz.ProjectID) aut
 	}
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	// The rollout targets people by email, the same distinct id and person
-	// property the dashboard identifies with. No email, no access.
+	// The rollout targets signed-in people by email, as the dashboard
+	// identifies them; API keys and sessions without an email never match.
 	email := ""
-	if authCtx.Email != nil {
+	if contextvalues.HasValidatedGramSession(ctx) && authCtx.Email != nil {
 		email = strings.TrimSpace(*authCtx.Email)
 	}
 	if email == "" {
 		return nil, logger, oops.C(oops.CodeNotFound)
 	}
-	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagIntentPolicies, email, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""), map[string]string{"email": email})
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagIntentPolicies, email, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""), map[string]string{"email": strings.ToLower(email)})
 	if err != nil {
 		logger.WarnContext(ctx, "evaluate intent-policies flag", attr.SlogError(err))
 	}

@@ -115,8 +115,8 @@ const (
 	// FlagIntentPolicies gates the Intent-based policies page and its
 	// intentPolicies endpoints (guardrail, analyze, upload). Evaluated on the
 	// server and in the dashboard under the same key; targeted per person by
-	// the `email` person property (the server passes it for local evaluation,
-	// the dashboard identifies with it). Fails closed. A rollout gate on top of the
+	// "email" (lowercase). Only signed-in sessions match, and the server only
+	// with local evaluation (PostHog personal API key). Fails closed. A rollout gate on top of the
 	// endpoints' chat and project RBAC checks, not authorization. Removed once
 	// the feature is GA.
 	FlagIntentPolicies Flag = "intent-policies"
