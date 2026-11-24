@@ -43,6 +43,10 @@ const (
 	// UseCaseFunctionRunnerKeys is the use case for the per-function keys
 	// Speakeasy Functions runners and the server authenticate each other with.
 	UseCaseFunctionRunnerKeys UseCase = "function-runner-keys"
+
+	// UseCaseTailscaleOAuthClients is the use case for the Tailscale OAuth
+	// clients organizations connect their private network ingress with.
+	UseCaseTailscaleOAuthClients UseCase = "tailscale-oauth-clients"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -55,6 +59,7 @@ var registeredUseCases = []UseCase{
 	UseCaseAIProviderKeys,
 	UseCaseMarketplaceTokens,
 	UseCaseFunctionRunnerKeys,
+	UseCaseTailscaleOAuthClients,
 }
 
 // ParseUseCase returns the registered use case named value.
