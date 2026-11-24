@@ -269,14 +269,6 @@ const (
 	// full catalogue, because the ChatGPT app directory rejects tools that run
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
-
-	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
-	// person's own MCP servers through list_my_servers, search_my_tools,
-	// describe_tools and execute_tool, which run the organization gateway's
-	// tools as that person, and names those servers in the connection's
-	// instructions. Evaluated server-side on every call with the organization
-	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
-	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
