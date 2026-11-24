@@ -42,8 +42,8 @@ type DeviceAgentStateReport struct {
 	// Marketplace and plugin slugs chosen by the organization.
 	// @access: opaque-confidential
 	WithheldPlugins []byte
-	// Speakeasy-defined tool ids and enforcement enums.
-	// @access: confidential
+	// Per-tool enforcement state. Tool ids are reported by the device agent and stored as sent; layer and outcome fields are normalized enums.
+	// @access: opaque-confidential
 	Tools []byte
 	// @access: confidential
 	DegradedToolCount int32
@@ -312,21 +312,27 @@ type RiskResult struct {
 	SkillVersionID uuid.NullUUID
 	// @access: confidential
 	Source string
-	// @access: confidential
+	// Whether the scan found a risk in the anchored content. Security finding.
+	// @access: restricted
 	Found bool
-	// @access: confidential
+	// Detection rule that matched. Security finding.
+	// @access: restricted
 	RuleID pgtype.Text
 	// @access: opaque-restricted
 	Description pgtype.Text
 	// @access: secret-restricted
 	Match pgtype.Text
-	// @access: confidential
+	// Start offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	StartPos pgtype.Int4
-	// @access: confidential
+	// End offset of the primary match in the scanned content. Security finding.
+	// @access: restricted
 	EndPos pgtype.Int4
-	// @access: confidential
+	// Detector confidence for the finding. Security finding.
+	// @access: restricted
 	Confidence pgtype.Float8
-	// @access: confidential
+	// Detector tags for the finding. Security finding.
+	// @access: restricted
 	Tags []string
 	// @access: secret-restricted
 	Spans []byte
