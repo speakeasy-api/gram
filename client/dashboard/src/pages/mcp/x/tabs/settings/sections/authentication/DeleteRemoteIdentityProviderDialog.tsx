@@ -1,3 +1,4 @@
+import { invalidateAllMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
@@ -91,6 +92,7 @@ function DeleteRemoteIdentityProviderDialogBody({
       });
       await Promise.all([
         invalidateAllServerClientAssociations(queryClient),
+        invalidateAllMcpServerAuthentication(queryClient),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar

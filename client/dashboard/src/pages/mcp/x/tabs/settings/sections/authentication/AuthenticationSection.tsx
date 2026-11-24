@@ -166,7 +166,7 @@ function StandardAuthenticationSectionBody({
   });
 
   const gatewayId = target.attachImpactTarget.metaMcpServerId;
-  const serverId = target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+  const serverId = target.mcpServerId;
   const associations = useServerClientAssociations(
     { mcpServerId: serverId ?? "" },
     undefined,
