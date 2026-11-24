@@ -32,9 +32,8 @@ a database failure. A valid empty catalog is published, including when staff
 soft-delete every product. Retaining a last good snapshot is reserved for read
 or validation failures, not valid staff deletions.
 
-`Snapshot.Version` is a positive 31-bit content-derived identifier. It is stable
-but neither monotonic nor collision-free; full fingerprints drive refresh
-detection.
+Full fingerprints drive refresh detection. The device scan list version is
+derived from the served targets in `agent/aitargets`, not from the snapshot.
 
 Product families and reported-name aliases stay in the compiled registry by
 design: they change with plugin and telemetry code, so the database does not
