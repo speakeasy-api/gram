@@ -33,7 +33,11 @@
       "category": "org",
       "sensitive": true,
       "sensitivity": "destructive_admin",
-      "sub_scopes": ["org:device_agent_sync", "org:hooks_ingest", "org:read"],
+      "sub_scopes": [
+        "org:device_agent_sync",
+        "org:hooks_ingest",
+        "org:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": false,
@@ -144,7 +148,9 @@
       "resource_type": "project",
       "category": "project",
       "sensitive": false,
-      "sub_scopes": ["project:read"],
+      "sub_scopes": [
+        "project:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": true,
       "temporary_grantable": true,
@@ -194,7 +200,9 @@
       "resource_type": "mcp",
       "category": "mcp",
       "sensitive": false,
-      "sub_scopes": ["mcp:read"],
+      "sub_scopes": [
+        "mcp:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": true,
       "temporary_grantable": true,
@@ -294,7 +302,9 @@
       "resource_type": "environment",
       "category": "environment",
       "sensitive": false,
-      "sub_scopes": ["environment:read"],
+      "sub_scopes": [
+        "environment:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": true,
       "temporary_grantable": true,
@@ -344,7 +354,9 @@
       "resource_type": "skill",
       "category": "skill",
       "sensitive": false,
-      "sub_scopes": ["skill:read"],
+      "sub_scopes": [
+        "skill:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": true,
       "temporary_grantable": true,
@@ -419,7 +431,9 @@
       "resource_type": "assistant",
       "category": "assistant",
       "sensitive": false,
-      "sub_scopes": ["assistant:read"],
+      "sub_scopes": [
+        "assistant:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": true,
       "temporary_grantable": true,
@@ -495,7 +509,9 @@
       "category": "session",
       "sensitive": true,
       "sensitivity": "conversations",
-      "sub_scopes": ["chat:read"],
+      "sub_scopes": [
+        "chat:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": true
@@ -519,7 +535,9 @@
       "resource_type": "project",
       "category": "session",
       "sensitive": false,
-      "sub_scopes": ["memory:read"],
+      "sub_scopes": [
+        "memory:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": false
@@ -562,13 +580,27 @@
       "temporary_grantable": true
     },
     {
+      "slug": "agent:create",
+      "label": "Create agents",
+      "description": "Add agents you own. Does not allow changing or deleting existing agents.",
+      "resource_type": "agent",
+      "category": "agent",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false,
+      "temporary_grantable": false
+    },
+    {
       "slug": "agent:write",
       "label": "Manage agents",
       "description": "Create, configure, and manage agents.",
       "resource_type": "agent",
       "category": "agent",
       "sensitive": false,
-      "sub_scopes": [],
+      "sub_scopes": [
+        "agent:create"
+      ],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": false
@@ -629,7 +661,9 @@
       "resource_type": "workload",
       "category": "workload",
       "sensitive": false,
-      "sub_scopes": ["workload:read"],
+      "sub_scopes": [
+        "workload:read"
+      ],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": false,
@@ -652,22 +686,35 @@
     {
       "slug": "agent_setup",
       "label": "Set up an agent",
-      "scopes": ["agent:write", "agent:authorize", "environment:read"]
+      "scopes": [
+        "agent:write",
+        "agent:authorize",
+        "environment:read"
+      ]
     },
     {
       "slug": "mcp_maintenance",
       "label": "Maintain an MCP server",
-      "scopes": ["mcp:write", "environment:read"]
+      "scopes": [
+        "mcp:write",
+        "environment:read"
+      ]
     },
     {
       "slug": "session_review",
       "label": "Review other members' sessions",
-      "scopes": ["chat:read", "log:read"]
+      "scopes": [
+        "chat:read",
+        "log:read"
+      ]
     },
     {
       "slug": "plugin_publish",
       "label": "Publish a plugin",
-      "scopes": ["plugin:write", "project:read"]
+      "scopes": [
+        "plugin:write",
+        "project:read"
+      ]
     }
   ]
 }

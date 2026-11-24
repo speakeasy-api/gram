@@ -16,6 +16,7 @@ type Action string
 
 const (
 	ActionRead      Action = "read"
+	ActionCreate    Action = "create"
 	ActionWrite     Action = "write"
 	ActionAdmin     Action = "admin"
 	ActionConnect   Action = "connect"
@@ -32,6 +33,7 @@ const (
 // is added here first; Validate refuses a permission whose action is missing.
 var Actions = []Action{
 	ActionRead,
+	ActionCreate,
 	ActionWrite,
 	ActionAdmin,
 	ActionConnect,

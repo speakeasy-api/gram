@@ -56,6 +56,7 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		"chat read":           {Chat(ChatIDFrom(id)).Read(), literal(ScopeChatRead, id, nil)},
 		"chat write":          {Chat(ChatIDFrom(id)).Write(), literal(ScopeChatWrite, id, nil)},
 		"agent read":          {Agent(AgentIDFrom(id)).Read(), literal(ScopeAgentRead, id, nil)},
+		"agent create":        {Agent(AgentIDFrom(id)).Create(), literal(ScopeAgentCreate, id, nil)},
 		"agent write":         {Agent(AgentIDFrom(id)).Write(), literal(ScopeAgentWrite, id, nil)},
 		"agent authorize":     {Agent(AgentIDFrom(id)).Authorize(), literal(ScopeAgentAuthorize, id, nil)},
 		"agent transfer":      {Agent(AgentIDFrom(id)).Transfer(), literal(ScopeAgentTransfer, id, nil)},

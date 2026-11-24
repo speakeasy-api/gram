@@ -4,6 +4,7 @@
 /** The resource kind each scope's checks and grant selectors name. */
 export const scopeResourceKinds: Readonly<Record<string, string>> = {
   "agent:authorize": "agent",
+  "agent:create": "agent",
   "agent:read": "agent",
   "agent:transfer": "agent",
   "agent:write": "agent",

@@ -180,19 +180,23 @@ func (h HumanContext) satisfies(check authz.Check) bool {
 }
 
 // RequireCreate authorizes a prospective agent ID and locks the eligible owner
-// membership until the insert commits. Self-owned creation is intrinsic; any
-// other owner requires agent:write evaluated against the prospective agent.
+// membership until the insert commits. Creating an agent you own requires
+// agent:create; any other owner requires agent:write. Both are evaluated
+// against the prospective agent.
 func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, error) {
 	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
 	if err != nil {
 		return HumanContext{}, err
 	}
 
-	if ownerUserID == human.Auth.UserID {
-		return human, nil
-	}
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
+	}
+	if ownerUserID == human.Auth.UserID {
+		if err := a.evaluate(ctx, human, agentCheck(authz.AgentRef.Create, agentID)); err != nil {
+			return HumanContext{}, fmt.Errorf("authorize agent creation: %w", err)
+		}
+		return human, nil
 	}
 	if err := a.evaluate(ctx, human, agentCheck(authz.AgentRef.Write, agentID)); err != nil {
 		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)

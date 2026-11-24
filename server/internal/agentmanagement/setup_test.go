@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -71,6 +72,8 @@ func seedOrganizationUser(t *testing.T, conn *pgxpool.Pool, organizationID, user
 		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
+	// Members hold agent:create through the Member role.
+	seedGrant(t, t.Context(), conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), authz.ScopeAgentCreate, authz.WildcardResource)
 }
 
 func createAgent(t *testing.T, conn *pgxpool.Pool, organizationID, ownerUserID, name string) repo.Agent {

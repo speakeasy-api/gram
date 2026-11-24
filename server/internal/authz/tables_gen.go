@@ -15,6 +15,7 @@ package authz
 // relate the way they do.
 var scopeExpansions = map[Scope][]Scope{
 	"agent:authorize":           nil,
+	"agent:create":              {"agent:write"},
 	"agent:read":                nil,
 	"agent:transfer":            nil,
 	"agent:write":               nil,
@@ -74,6 +75,7 @@ var scopeExpansions = map[Scope][]Scope{
 // scopes are handled by scopeExpansions on the blocklist scope itself.
 var scopeExclusions = map[Scope]Scope{
 	"agent:authorize":           "",
+	"agent:create":              "",
 	"agent:read":                "",
 	"agent:transfer":            "",
 	"agent:write":               "",
@@ -132,6 +134,7 @@ var scopeExclusions = map[Scope]Scope{
 // is set where its permission is.
 var scopeGrantSource = map[Scope]GrantSource{
 	"agent:authorize":           "access",
+	"agent:create":              "access",
 	"agent:read":                "access",
 	"agent:transfer":            "access",
 	"agent:write":               "access",
@@ -190,6 +193,7 @@ var scopeGrantSource = map[Scope]GrantSource{
 // kind its checks and grant selectors name.
 var scopeResourceKinds = map[Scope]string{
 	"agent:authorize":           "agent",
+	"agent:create":              "agent",
 	"agent:read":                "agent",
 	"agent:transfer":            "agent",
 	"agent:write":               "agent",
@@ -327,14 +331,15 @@ var validDispositions = map[string]bool{
 
 // systemRoleScopes lists the scopes each built-in role is seeded with.
 var systemRoleScopes = map[string][]Scope{
-	"admin":  {"channels:connect", "channels:admin", "org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "mcp:auth", "environment:read", "environment:write", "skill:read", "skill:write", "assistant:read", "assistant:write", "plugin:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "memory:read", "memory:write"},
-	"member": {"org:read", "project:read", "mcp:read", "mcp:connect", "mcp:auth", "skill:read", "assistant:read", "workload:read"},
+	"admin":  {"channels:connect", "channels:admin", "org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "mcp:auth", "environment:read", "environment:write", "skill:read", "skill:write", "assistant:read", "assistant:write", "plugin:write", "agent:read", "agent:create", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "memory:read", "memory:write"},
+	"member": {"org:read", "project:read", "mcp:read", "mcp:connect", "mcp:auth", "skill:read", "assistant:read", "agent:create", "workload:read"},
 }
 
 // agentEligibilityByScope is the agent eligibility of every scope the registry
 // knows, retired tombstones included.
 var agentEligibilityByScope = map[Scope]DerivedAgentEligibility{
 	"agent:authorize":           {SafeSince: 0, Retired: false},
+	"agent:create":              {SafeSince: 0, Retired: false},
 	"agent:read":                {SafeSince: 0, Retired: false},
 	"agent:transfer":            {SafeSince: 0, Retired: false},
 	"agent:write":               {SafeSince: 0, Retired: false},
@@ -441,6 +446,7 @@ var scopeCatalog = []ScopeEntry{
 	{Scope: "inference:execute", Label: "Run inference", Category: "inference", ResourceType: "inference", Description: "Run model inference without accessing chat transcripts.", Sensitivity: ""},
 	{Scope: "log:read", Label: "View tool logs", Category: "log", ResourceType: "project", Description: "View every member's tool-call logs and traces in the project, including tool arguments, results, and prompt text. Everyone keeps the logs of their own sessions and of agents they own. Not implied by project or organization admin access.", Sensitivity: "tool_logs"},
 	{Scope: "agent:read", Label: "View agents", Category: "agent", ResourceType: "agent", Description: "View agents and their settings.", Sensitivity: ""},
+	{Scope: "agent:create", Label: "Create agents", Category: "agent", ResourceType: "agent", Description: "Add agents you own. Does not allow changing or deleting existing agents.", Sensitivity: ""},
 	{Scope: "agent:write", Label: "Manage agents", Category: "agent", ResourceType: "agent", Description: "Create, configure, and manage agents.", Sensitivity: ""},
 	{Scope: "agent:authorize", Label: "Authorize agent credentials", Category: "agent", ResourceType: "agent", Description: "Authorize agents and manage their credentials.", Sensitivity: ""},
 	{Scope: "agent:transfer", Label: "Transfer agent ownership", Category: "agent", ResourceType: "agent", Description: "Hand an agent to another owner. The previous owner loses control of it.", Sensitivity: ""},
@@ -455,6 +461,7 @@ var scopeCatalog = []ScopeEntry{
 // declared permissions are user-visible, generated blocks and root are internal.
 var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	"agent:authorize":           scopeVisibilityUserVisible,
+	"agent:create":              scopeVisibilityUserVisible,
 	"agent:read":                scopeVisibilityUserVisible,
 	"agent:transfer":            scopeVisibilityUserVisible,
 	"agent:write":               scopeVisibilityUserVisible,
