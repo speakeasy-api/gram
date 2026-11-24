@@ -1486,3 +1486,62 @@ WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
     AND a.project_id = @project_id AND a.deleted IS FALSE
     AND h.deleted IS FALSE
 ORDER BY a.name, a.id;
+
+-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+-- Organizations with saved network ingress credentials in either copy,
+-- soft-deleted ingresses included, for the temporary Tailscale OAuth client
+-- move to organization keys.
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id;
+
+-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+-- The organization a Tailscale OAuth client migration step targets.
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = @id;
+
+-- name: AdminListOrganizationEncryptionTransitions :many
+-- Every organization with its transition state for one use case, oldest first.
+-- An organization without a transition row for the use case is in
+-- platform_key, so the LEFT JOIN reports it there and the state filter matches
+-- it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+SELECT
+  om.id AS organization_id,
+  om.name,
+  om.slug,
+  (om.disabled_at IS NOT NULL)::boolean AS disabled,
+  COALESCE(t.state, 'platform_key')::text AS state,
+  t.state_changed_at,
+  t.platform_copies_cleared_at,
+  t.last_backfill_started_at,
+  t.last_backfill_completed_at,
+  t.last_backfill_remaining_count,
+  t.last_backfill_unreadable_count,
+  t.last_backfill_error,
+  t.last_verified_at
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+WHERE sqlc.narg('state')::text IS NULL
+   OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
+ORDER BY om.created_at, om.id
+LIMIT @limit_value
+OFFSET @offset_value;
+
+-- name: AdminCountOrganizationEncryptionTransitionStates :many
+-- How many organizations are in each transition state for one use case,
+-- counting organizations without a row as platform_key.
+SELECT
+  COALESCE(t.state, 'platform_key')::text AS state,
+  count(*) AS organizations
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+GROUP BY 1
+ORDER BY 1;

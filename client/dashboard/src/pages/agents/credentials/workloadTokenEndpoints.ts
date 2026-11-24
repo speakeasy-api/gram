@@ -29,6 +29,16 @@ export interface SetupValues {
    */
   recommendedEndpointId: string;
   /**
+   * How many of the agent's servers already use the recommended one. Zero
+   * when none of them use any shared authorization server yet.
+   */
+  recommendedUsedBy: number;
+  /**
+   * The project that owns the selected one, or "" when it is
+   * organization-wide or none is selected.
+   */
+  selectedProjectId: string;
+  /**
    * The agent's servers that won't accept tokens from the chosen shared
    * authorization server, or null when they all will. An agent running on a
    * platform gets one token, and only servers on that server accept it.
@@ -171,6 +181,8 @@ export function useSetupValues(
 
   return {
     recommendedEndpointId: recommended?.userSessionIssuerId ?? "",
+    recommendedUsedBy: recommended ? usedBy(recommended) : 0,
+    selectedProjectId: selected?.projectId ?? "",
     mismatch,
     checking: servers.length > 0 && query.isPending,
     values:

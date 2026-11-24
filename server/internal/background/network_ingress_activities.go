@@ -120,25 +120,11 @@ func rollbackNetworkIngressSweep(ctx context.Context, rollback func(context.Cont
 	o11y.NoLogDefer(func() error { return rollback(rollbackCtx) })
 }
 
-func (a *networkIngressActivities) findOrphans(ctx context.Context) error {
-	orphans, err := a.executor.FindOrphans(ctx)
-	if err != nil {
-		return orphanInventoryActivityError(err)
-	}
-	for _, orphan := range orphans {
-		activity.GetLogger(ctx).Warn("orphan network ingress resource", string(attr.NetworkIngressIDKey), orphan.OwnerID.String(), "resource_kind", orphan.Kind)
-	}
+// findOrphans used to inventory Tailscale Kubernetes operator resources. It is
+// a no-op kept for sweep runs started before the inventory was dropped; remove
+// it once none can still be replaying.
+func (a *networkIngressActivities) findOrphans(context.Context) error {
 	return nil
-}
-
-func orphanInventoryActivityError(err error) error {
-	if failure, ok := errors.AsType[*networkingress.ReconcileError](err); ok {
-		if !failure.Retryable {
-			return temporal.NewNonRetryableApplicationError(failure.Code, "network_ingress", nil)
-		}
-		return fmt.Errorf("inventory: %w", temporal.NewApplicationError(failure.Code, "network_ingress"))
-	}
-	return fmt.Errorf("inventory: %w", temporal.NewApplicationError("orphan_inventory_unavailable", "network_ingress"))
 }
 
 type networkIngressRegistry interface {
@@ -150,7 +136,7 @@ func registerNetworkIngress(worker networkIngressRegistry, executor *networkingr
 	a := &networkIngressActivities{executor: executor, db: db, queue: queue}
 	worker.RegisterActivityWithOptions(a.reconcile, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})
 	worker.RegisterActivityWithOptions(a.sweep, activity.RegisterOptions{Name: "SweepNetworkIngresses"})
-	worker.RegisterActivityWithOptions(a.findOrphans, activity.RegisterOptions{Name: "FindNetworkIngressOrphans"})
+	worker.RegisterActivityWithOptions(a.findOrphans, activity.RegisterOptions{Name: networkIngressOrphanInventoryActivityName})
 	worker.RegisterWorkflow(NetworkIngressReconcileWorkflow)
 	worker.RegisterWorkflow(NetworkIngressSweepWorkflow)
 }
@@ -167,7 +153,7 @@ func (w *Workers) RegisterNetworkIngress(executor *networkingress.Executor, queu
 }
 
 // NetworkIngressWorker polls only the private-ingress queue. Keeping it separate
-// prevents the narrow Kubernetes identity from executing unrelated activities.
+// prevents the reconciler's narrow identity from executing unrelated activities.
 type NetworkIngressWorker struct {
 	worker worker.Worker
 	env    *tenv.Environment

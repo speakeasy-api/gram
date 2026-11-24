@@ -55,10 +55,12 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isAssistantsAvailable = useAssistantsAvailable();
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
+  const intentPoliciesFlag = useFeatureFlag(FEATURE_FLAGS.intentPolicies);
 
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
+  const isIntentPoliciesEnabled = intentPoliciesFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -118,6 +120,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
+      // Rollout-gated per person; the server enforces the same flag and chat RBAC.
+      ...(isIntentPoliciesEnabled
+        ? [{ route: routes.intentPolicies, scope: ["chat:read"] as Scope[] }]
+        : []),
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [
@@ -148,6 +154,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isAssistantsAvailable,
     isExploreEnabled,
     isOrgMemoryEnabled,
+    isIntentPoliciesEnabled,
     isSignalsIntelligenceEnabled,
   ]);
 }

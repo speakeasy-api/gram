@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -130,6 +131,31 @@ func TestService_UpdateRole_RejectsRiskPolicyGrantMutation(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
+	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_UpdateRole_RejectsToolLimitOnWriteScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
+
+	// Tool kinds only limit mcp:connect, so this rule is a bad request.
+	_, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{
+		ID: roleID,
+		AddGrants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeMCPWrite), Selectors: []*gen.Selector{
+				{ResourceKind: "mcp", ResourceID: "*", Disposition: conv.PtrEmpty("read_only")},
+			}},
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, `invalid selector for scope "mcp:write"`)
 	ti.roles.AssertNotCalled(t, "UpdateRole", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 

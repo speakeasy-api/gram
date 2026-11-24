@@ -115,7 +115,7 @@ func TestConnectionReference_MemberDispatchDoesNotInheritAnEarlierRow(t *testing
 
 	service := &Service{aiCatalog: aivendorstest.NewStore(), logger: testenv.NewLogger(t)}
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call", Params: nil}
-	_, err := service.executeMetaMemberTool(ctx, service.logger, &metaGateContext{}, nil, req, "member-b--tool", nil, nil)
+	_, err := service.executeMetaMemberTool(ctx, service.logger, &metaGateContext{}, nil, req, "member-b--tool", nil, nil, memberToolAnyDisposition)
 	require.Error(t, err, "the unknown server is answered with no row of its own")
 	require.Empty(t, contextvalues.ConnectionReference(ctx), "member B's error shows no reference")
 }

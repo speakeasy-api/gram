@@ -1,9 +1,10 @@
 # Tailnet gateway
 
 `gram tailnet-gateway` hosts every enabled private network ingress on its
-customer's tailnet using [tsnet](https://tailscale.com/kb/1244/tsnet). It
-replaces the Tailscale Kubernetes operator, its privileged proxy pods and the
-per-ingress attestor pods.
+customer's tailnet using [tsnet](https://tailscale.com/kb/1244/tsnet). It is
+the only runtime for private network ingresses: it replaced the Tailscale
+Kubernetes operator, its privileged proxy pods and the per-ingress attestor
+pods, which have been removed.
 
 ## How it works
 
@@ -57,8 +58,8 @@ per-ingress attestor pods.
   the tailnet peer, and the gateway terminates TLS itself. It resolves the
   peer with `WhoIs`, replaces
   every `Tailscale-*` header with the resolved identity and forwards to the
-  private listener with the pod's projected service-account token, exactly as
-  the attestor did.
+  private listener with the pod's projected service-account token. The
+  listener accepts only the gateway's service account.
 - Certificates are covered in detail in [CERTIFICATES.md](CERTIFICATES.md):
   the Let's Encrypt limits and how slots coordinate issuance and renewal.
 - In Kubernetes, tsnet keeps each node's TLS certificate in the state store.
@@ -141,22 +142,13 @@ bound to its organization and column.
 
 ## Which ingresses use it
 
-The `network_ingresses.runtime` column decides:
-
-- `gateway`: hosted only by this gateway.
-- `NULL` (or anything else): hosted only by the Tailscale Kubernetes operator,
-  as before. Nothing in this package moves an ingress between the two.
-
-A new ingress is created with `gateway` only when its organization has the
-`private-network-gateway` PostHog flag (targeted by organization slug), and
-with `NULL` otherwise, including when the flag cannot be read. The choice is
-fixed at creation, so changing the flag never moves an ingress; the API
-returns it as `runtime`, and the dashboard's setup sheet reads the same flag
-to show matching steps. Local development sets the flag on.
-`GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
-are deployed; until it is set, gateway ingresses wait as
-`provider_configuration_unavailable` instead of falling back to the operator,
-so target the flag only once the gateway runs in that environment.
+Every ingress. The management API creates each one with
+`network_ingresses.runtime = 'gateway'`, and the reconciler applies only
+those rows. A row with any other runtime was created for the retired
+Kubernetes operator: nothing hosts it, the reconciler reports it as
+`unsupported_provider`, and deleting it still completes. Apply and rotation
+run only with `GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED`, which an
+environment sets only where the gateway pods run.
 
 ## Running locally
 
