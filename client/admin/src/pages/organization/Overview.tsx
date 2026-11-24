@@ -181,6 +181,8 @@ export function Overview({
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
   const internalControl = useRef<HTMLButtonElement>(null);
+  // Absent on a record from a server that predates the label.
+  const isInternal = org.internal ?? false;
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const conversionControl = useRef<HTMLButtonElement>(null);
   const conversionContext = useRef(org);
@@ -490,18 +492,18 @@ export function Overview({
               <Switch
                 ref={internalControl}
                 aria-label="Internal"
-                checked={org.internal}
+                checked={isInternal}
                 disabled={mut.isPending || conversionPending}
                 onCheckedChange={(v) => {
                   void commit(
                     { internal: v },
-                    `Internal: ${yesNo(org.internal)} → ${yesNo(v)}`,
+                    `Internal: ${yesNo(isInternal)} → ${yesNo(v)}`,
                     internalControl,
                   );
                 }}
               />
               <span className="text-muted-foreground text-sm">
-                {org.internal
+                {isInternal
                   ? "Hidden from customer analytics"
                   : "Counts as a customer"}
               </span>
