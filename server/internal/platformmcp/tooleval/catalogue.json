@@ -4294,7 +4294,7 @@
     },
     {
       "name": "get_mcp_network_traffic",
-      "description": "Read observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use set_mcp_network_access to change the mode. Review traffic when asked to assess migration impact; a quiet route is not proof all clients migrated.",
+      "description": "Read historical network traffic: public and private inbound request counts and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use for traffic and migration-impact questions; a quiet route is not proof all clients migrated.",
       "input_schema": {
         "type": "object",
         "properties": {

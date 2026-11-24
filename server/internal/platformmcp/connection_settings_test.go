@@ -279,5 +279,5 @@ func (f gatewaySettingsQueryFailure) Query(ctx context.Context, sql string, args
 	if strings.HasPrefix(sql, "-- name: "+f.query+" ") {
 		return nil, f.cause
 	}
-	return f.DBTX.Query(ctx, sql, args...) //nolint:glint // Passes through existing SQLc queries; the test does not construct statements.
+	return f.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: passes through existing SQLc queries without constructing statements.
 }
