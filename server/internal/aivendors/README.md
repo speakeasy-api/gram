@@ -36,8 +36,8 @@ refresh.
 
 ## Removing a product or document
 
-A removed or disabled row stops being matched. An organization's block on that
-client then no longer applies: the client is unknown, and an issuer that admits
+A removed or disabled row no longer identifies its client. An organization's
+block on that client then no longer applies: the client is unknown, and an issuer that admits
 unknown clients lets it in. Before soft-deleting or disabling a row, check for
 blocks on it:
 
@@ -69,6 +69,9 @@ one snapshot and use it throughout. Snapshots keep input order for products
 and listings; database reads sort by id, then URL, in byte order. Listing order
 is content, so it is part of the fingerprint. Exact URLs win over patterns;
 among matching patterns the one with the most literal path segments wins.
+A disabled document still wins its match, so its client is unknown rather than
+a broader pattern's product; an enabled document with the same URL or
+specificity wins over it.
 Validation keeps overlapping patterns of different products strictly nested,
 so a tie can only be between one product's own patterns, and goes to the lower
 URL. The database's `is_pattern` discriminator is authoritative. A malformed
