@@ -1,0 +1,147 @@
+client/dashboard/src/pages/security/intent-policies/IntentPolicies.tsx
+  s_7f7b161a4d59e4::t_c84eadc815ede1 518
+  s_7f7b161a4d59e4::t_1275a965153cfd 98,100-101,449
+  s_7f7b161a4d59e4::t_dca04096191e23 124-185,205
+  s_7f7b161a4d59e4::t_055ea89f7a5b94 38,50,52,118-120,223-239,257-261,264,266,268-278,281-336,346,351,353-354,356-362,364-392,401,407,425,436,442,550
+  s_7f7b161a4d59e4::t_9a23678c8ec360 15,25-37,49,51,428,433-434,437,443-445,448,450,452-455,515-517,530,614-615
+  s_7f7b161a4d59e4::t_f2c21a2cc5e9cb 99
+  s_7f7b161a4d59e4::t_62d66a440d3e17 458-461,491-493,497-505,509,519-520,522-528,539-541,549,556-568,570-613
+  s_7f7b161a4d59e4::t_6e7190ec43b4a0 40-48,337-339,341-345,347-350,352,363,400,406,424,435,441
+  s_7f7b161a4d59e4::t_ec302335edf13a 7-12
+  s_95994065d4a857::t_02a7a26b38addb 644
+  s_7f7b161a4d59e4::t_0c642debf500da 418-423,426-427,430-432,438-440,446-447,451,456-457,462-464,466-467,469-475,477,480-481,488,506,510-511,529,531-538,542-543,545-548
+  s_95994065d4a857::t_e087c866d86fff 521,544,617-643,645-685
+  s_95994065d4a857::t_29e399499d4f78 53
+  s_7f7b161a4d59e4::t_09b9151056406f 429
+client/dashboard/src/pages/security/intent-policies/SessionTimeline.tsx
+  s_95994065d4a857::t_1539a6c4f8a936 2,4,15,33,36-38,40,43-44,47,52,68,95,118,157,159-161,169,176,200,248,278-279,287,289,299-300,302-304,306-307,320,325-326,330-332
+  s_7f7b161a4d59e4::t_48585fb698db0f 99
+  s_7f7b161a4d59e4::t_1cc9fd6e5e4975 5-6,13,132,177,190-191,264-269
+  s_7f7b161a4d59e4::t_cd231a437cdda4 1,3,7-12,14,16-32,34-35,39,41-42,45-46,48-49,51,53-63,65-67,69-94,96-98,100-117,119-131,133-156,158,162-168,170-175,178-189,192-199,201-210,214-247,249-263,270-277,280-286,288,290-298,301,305,308-309,314-319,321-324,327-329
+  s_7f7b161a4d59e4::t_c84eadc815ede1 50,64,211-213,310-313
+client/dashboard/src/hooks/useNavArea.ts
+  s_7f7b161a4d59e4::t_34b850d2b5fd74 34-35
+client/dashboard/src/pages/chatLogs/transcriptFull.ts
+  s_7f7b161a4d59e4::t_3dd414a27353f1 8-9,13,18,27
+client/dashboard/src/pages/security/intent-policies/DecisionPanel.tsx
+  s_7f7b161a4d59e4::t_ea762e827d8955 8,23,25-29,39-47,51,55,66-68,71-82,94-101,106-109,111-114,116-133,135-143,146-148,155-159,170-171,201-211,237-257,260,286
+  s_7f7b161a4d59e4::t_6085f4ba134d25 104,212-218
+  s_7f7b161a4d59e4::t_cdbbcd0d4c82e7 219-236
+  s_95994065d4a857::t_c044c5c82f4994 2,4,6,13,16,19-20,57,59-65,134,160-169,172-200,258,264-285,287-289,294,296-338
+  s_7f7b161a4d59e4::t_ec302335edf13a 9-10,84-90,290-293,295,340-365
+  s_7f7b161a4d59e4::t_1fb731cc4adba1 105
+client/dashboard/src/pages/security/intent-policies/SessionViewer.tsx
+  s_7f7b161a4d59e4::t_055ea89f7a5b94 21-23,29,34,62-67
+  s_7f7b161a4d59e4::t_109926121906c2 8,32
+  s_7f7b161a4d59e4::t_62d66a440d3e17 17,28,33,178
+  s_7f7b161a4d59e4::t_097a3d92ab34f7 38,109,163,180
+  s_7f7b161a4d59e4::t_cdbbcd0d4c82e7 41
+  s_7f7b161a4d59e4::t_543d0a71c94e53 1-7,9-16,18-20,24-27,30-31,35-37,39-40,42,46-61,68-98,103-108,110-162,164-177,179,181-186
+  s_7f7b161a4d59e4::t_c84eadc815ede1 43-45,99-102
+client/dashboard/src/pages/security/intent-policies/events.ts
+  s_7f7b161a4d59e4::t_48528098318f50 1-2,15-25,27-32,36-41,56-64,68-72,75,77-94,111-118,121-125,141-143,161-162,166-167,172-173,175-208,212-213,215-216,219-222,230-232,234-237,242-244,246-248,251,266-319,321-329
+  s_7f7b161a4d59e4::t_127b3f7bc7e978 238
+  s_7f7b161a4d59e4::t_9c167860e2d275 209-211,214,217-218,223-229,233,239-241
+  s_7f7b161a4d59e4::t_11d78aa80396f5 3-14,26,33-35,42-55,65-67,73-74,76,95-104,107-110,119-120,126-140,144-160,163-165,174
+  s_7f7b161a4d59e4::t_cdbbcd0d4c82e7 105-106
+  s_7f7b161a4d59e4::t_c84eadc815ede1 168-171,320
+  s_7f7b161a4d59e4::t_12d37e0cb9e7f6 245
+  s_7f7b161a4d59e4::t_1f42dd47e84ef8 249-250,252-265
+client/dashboard/src/pages/security/intent-policies/GuardrailView.tsx
+  s_7f7b161a4d59e4::t_30c958c7161517 1-118,123-349,351-531,533-594,599-624,626-654,662-721
+  s_7f7b161a4d59e4::t_ec302335edf13a 119-122,350,532,595-598,625,655-661
+client/dashboard/src/hooks/useNavArea.test.ts
+  s_7f7b161a4d59e4::t_34b850d2b5fd74 38-43
+server/internal/intentpolicy/guardrail_test.go
+  s_7f7b161a4d59e4::t_b6b3d8bcc8467f 1-58
+server/design/intentpolicies/design.go
+  s_7f7b161a4d59e4::t_ba79addc33c766 39,53-60
+  s_7f7b161a4d59e4::t_27fc6907523a7d 127-139,143-147,149
+client/dashboard/src/pages/security/intent-policies/guardrail.test.ts
+  s_7f7b161a4d59e4::t_f57500163b4350 5,38-42
+  s_7f7b161a4d59e4::t_926b221dce8df0 110,120-121
+  s_7f7b161a4d59e4::t_03b8f7fd22b7a4 1-4,6-37,43-109,111-119,122-132
+server/internal/intentpolicy/analyze.go
+  s_7f7b161a4d59e4::t_ba79addc33c766 60-71
+client/dashboard/src/pages/security/intent-policies/Inspector.tsx
+  s_7f7b161a4d59e4::t_c84eadc815ede1 118-120,177-181,203-205,207
+  s_7f7b161a4d59e4::t_aeb77c5bf35662 193-197,208-209,218-226,229
+  s_7f7b161a4d59e4::t_cdbbcd0d4c82e7 150
+  s_7f7b161a4d59e4::t_62d66a440d3e17 31-38,45,54,94
+  s_7f7b161a4d59e4::t_cc66ed84dc5ff9 1-4,6,14-30,39-44,46-52,55-65,71-79,109-117,121-128,130-149,151-176,182-192,198,200-202,206,210-217,227-228,230-305
+  s_7f7b161a4d59e4::t_6085f4ba134d25 5,7-13,53,66-70,80-93,95-108,129,199
+client/dashboard/src/pages/security/intent-policies/analysisRun.test.ts
+  s_7f7b161a4d59e4::t_ba01f95ddc0908 12-15,31-34,40-45,65-69
+  s_7f7b161a4d59e4::t_7069e1dec1b2e0 1-11,16-30,35-39,46-64,70-129
+client/dashboard/src/pages/security/intent-policies/styles.ts
+  s_7f7b161a4d59e4::t_5ee33bce645223 16-35
+  s_95994065d4a857::t_2ec5c317df6ba0 1-15
+client/dashboard/src/pages/security/intent-policies/events.test.ts
+  s_7f7b161a4d59e4::t_aeb77c5bf35662 115-121,125,127-134
+  s_7f7b161a4d59e4::t_cdbbcd0d4c82e7 99-107
+  s_7f7b161a4d59e4::t_c84eadc815ede1 16-18,47-51,56-69
+  s_7f7b161a4d59e4::t_3115c9cdcfe7ad 1-15,19-46,52-55,70-98,108-114,122-124,126,135-175
+client/dashboard/src/pages/security/intent-policies/model.ts
+  s_95994065d4a857::t_ffc9116da6ab46 178-212
+  s_95994065d4a857::t_2ec5c317df6ba0 10-13
+  s_95994065d4a857::t_12b4d068ce9dff 80-177
+server/internal/intentpolicy/guardrail.go
+  s_7f7b161a4d59e4::t_ea9fa810d960d6 3-6,99-112,114-177,187-191,195,197-205,207
+server/internal/intentpolicy/analyze_window_test.go
+  s_7f7b161a4d59e4::t_ba79addc33c766 1-30
+server/internal/intentpolicies/impl.go
+  s_7f7b161a4d59e4::t_d42daf8c42cb15 15
+  s_7f7b161a4d59e4::t_ba79addc33c766 184-189,193-195
+  s_7f7b161a4d59e4::t_27fc6907523a7d 239-243
+client/dashboard/src/pages/security/intent-policies/guardrail.ts
+  s_7f7b161a4d59e4::t_b5bc7f6429bbbc 81-123
+  s_7f7b161a4d59e4::t_ec302335edf13a 39-40
+  s_7f7b161a4d59e4::t_ad98754a2956cb 1-38,41-80
+server/internal/intentpolicy/types.go
+  s_7f7b161a4d59e4::t_ea9fa810d960d6 110-119,124-149
+  s_7f7b161a4d59e4::t_44594faaacc710 150-151
+client/dashboard/src/pages/security/intent-policies/Transcript.tsx
+  s_7f7b161a4d59e4::t_d63efcbf848c00 13,268,293-300
+  s_7f7b161a4d59e4::t_be232242991321 1-6,9-12,14-16,18-56,58-99,103-189,192-198,205-238,245-267,269-272,274-278,283-287,289-290,292,301-303
+  s_7f7b161a4d59e4::t_c84eadc815ede1 57,100-102,190-191,199-204,239-244,279-282
+  s_7f7b161a4d59e4::t_1cc9fd6e5e4975 7-8,17,273,288,291
+client/dashboard/src/pages/security/intent-policies/model.test.ts
+  s_95994065d4a857::t_ffc9116da6ab46 4-14,86-148,155-177
+  s_95994065d4a857::t_02a7a26b38addb 149-154
+client/dashboard/src/pages/security/intent-policies/analysisRun.ts
+  s_7f7b161a4d59e4::t_6856e26d6ea5c8 3-4,42-70,82
+  s_7f7b161a4d59e4::t_9b3deef1bd2188 1-2,5-41,71-81,83-91,96,98-135
+  s_7f7b161a4d59e4::t_62d66a440d3e17 92-95,97
+.speakeasy/out.openapi.yaml
+  s_7f7b161a4d59e4::t_351e8904169365 32369,92087-92098,103901-103936,103940-103944,103954-103962,103966-103968
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_7f7b161a4d59e4::t_8963790d181ef2 1442,4823,8050
+server/gen/http/cli/gram/cli.go
+  s_7f7b161a4d59e4::t_f63b59bd612ea6 20656,20692,20701
+server/gen/http/openapi3.yaml
+  s_7f7b161a4d59e4::t_93e99000ebfdb6 42742,105782-105793,118272-118307,118311-118315,118325-118333,118337-118339
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82c0173f50d914a64a62f1c5af76e959b42a4922",
+  "prompts": {},
+  "sessions": {
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_95994065d4a857": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "701a32e0-dc2c-48a2-8031-aa4d74e07259",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

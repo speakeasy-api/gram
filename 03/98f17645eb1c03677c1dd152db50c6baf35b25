@@ -1,0 +1,136 @@
+.speakeasy/openapi-hooks.yaml
+  s_939a11e59e098b::t_5b1030e752733d 964-965
+server/internal/intentpolicy/contracts_test.go
+  s_939a11e59e098b::t_7889cfe6641903 45-47,75,79-96,102,164
+server/cmd/gram/intentpoliciesimport.go
+  s_939a11e59e098b::t_5a295c102323e7 21,65
+  s_939a11e59e098b::t_5a009eb918efac 1-20,22-64,66-147
+server/internal/intentpolicy/analyze.go
+  s_939a11e59e098b::t_7889cfe6641903 112
+server/cmd/gram/root.go
+  s_939a11e59e098b::t_b35a48020ae9b0 56
+server/cmd/gram/intentpolicies.go
+  s_939a11e59e098b::t_a9e562aecd8ff6 2-38
+  s_939a11e59e098b::t_dab0f4a40e6f27 1
+.mise-tasks/intent-policies/import.sh
+  s_939a11e59e098b::t_e8f9f221a34f78 1-12
+server/internal/intentpolicies/impl.go
+  s_939a11e59e098b::t_b308aa6ca5a470 206
+  s_939a11e59e098b::t_e3d6e67782d4d5 1-12,14-73,75-205,207-321
+  s_939a11e59e098b::t_7889cfe6641903 13,74
+server/design/gram.go
+  s_939a11e59e098b::t_81a03a2e220314 44
+server/cmd/gram/start.go
+  s_939a11e59e098b::t_be275b51ad4e01 91
+  s_939a11e59e098b::t_981a0c42d82b8c 521,1830-1838
+server/internal/intentpolicy/store.go
+  s_939a11e59e098b::t_b308aa6ca5a470 34-36,67-73,80,107,111,127
+server/internal/intentpolicies/setup_test.go
+  s_939a11e59e098b::t_8fd5064932864d 1-124
+server/internal/intentpolicy/evaluator_test.go
+  s_939a11e59e098b::t_7889cfe6641903 19,42-44
+server/design/intentpolicies/design.go
+  s_939a11e59e098b::t_89464284a14f6a 1-224
+server/internal/intentpolicies/intentpolicies_test.go
+  s_939a11e59e098b::t_91d3c118163bc7 1-106
+.speakeasy/out.openapi.yaml
+  s_939a11e59e098b::t_b0f6c8837216b0 32367-32650,92069-92089,103757-104084,126248-126280,128485-128486
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_939a11e59e098b::t_69af5895f5581a 364-366,1029,1439-1449,2269-2270,2364,2621,3200,3294,3742-3743,4433,4546,4819-4829,8045-8053,15005-15015
+client/dashboard/src/sdk/src/funcs/intentPoliciesAnalyzeSession.ts
+  s_939a11e59e098b::t_b37ae54dcba48a 1-208
+client/dashboard/src/sdk/src/funcs/intentPoliciesGetGuardrail.ts
+  s_939a11e59e098b::t_511fdfb754ddd3 1-206
+client/dashboard/src/sdk/src/funcs/intentPoliciesUploadTranscript.ts
+  s_939a11e59e098b::t_f13192f103c4e2 1-208
+client/dashboard/src/sdk/src/models/components/analyzesessionrequestbody.ts
+  s_939a11e59e098b::t_fbb304dc56842a 1-71
+client/dashboard/src/sdk/src/models/components/intentanalysistotals.ts
+  s_939a11e59e098b::t_ad3a71d358e61d 1-72
+client/dashboard/src/sdk/src/models/components/intentcallassessment.ts
+  s_939a11e59e098b::t_8971d0ac0ffbef 1-148
+client/dashboard/src/sdk/src/models/components/intentcallusage.ts
+  s_939a11e59e098b::t_c068a453ef69ac 1-59
+client/dashboard/src/sdk/src/models/components/intentcontract.ts
+  s_939a11e59e098b::t_8c63455de5b45a 1-43
+client/dashboard/src/sdk/src/models/components/intentcontractoutcome.ts
+  s_939a11e59e098b::t_ec1c5bfed67233 1-56
+client/dashboard/src/sdk/src/models/components/intentevaluatordescriptor.ts
+  s_939a11e59e098b::t_7361dc06eaffef 1-56
+client/dashboard/src/sdk/src/models/components/intentguardrail.ts
+  s_939a11e59e098b::t_f1ae4ce70fa115 1-61
+client/dashboard/src/sdk/src/models/components/intentlabeloption.ts
+  s_939a11e59e098b::t_f107ffed7f5a1f 1-48
+client/dashboard/src/sdk/src/models/components/intentlabelquestion.ts
+  s_939a11e59e098b::t_3d9e94a4b778ac 1-73
+client/dashboard/src/sdk/src/models/components/intentlabelvalue.ts
+  s_939a11e59e098b::t_ba1233b1fe2ae6 1-58
+client/dashboard/src/sdk/src/models/components/intentsessionanalysis.ts
+  s_939a11e59e098b::t_b99b5abe404418 1-79
+client/dashboard/src/sdk/src/models/components/uploadtranscriptrequestbody.ts
+  s_939a11e59e098b::t_b1894623751611 1-41
+client/dashboard/src/sdk/src/models/components/uploadtranscriptresult.ts
+  s_939a11e59e098b::t_77f114406af46c 1-52
+client/dashboard/src/sdk/src/models/operations/analyzeintentsession.ts
+  s_939a11e59e098b::t_02e3b070564492 1-97
+client/dashboard/src/sdk/src/models/operations/getintentguardrail.ts
+  s_939a11e59e098b::t_69a71a0d394da5 1-84
+client/dashboard/src/sdk/src/models/operations/uploadintenttranscript.ts
+  s_939a11e59e098b::t_adf8d02bb8928d 1-97
+client/dashboard/src/sdk/src/react-query/analyzeIntentSession.ts
+  s_939a11e59e098b::t_89455be49ac168 1-117
+client/dashboard/src/sdk/src/react-query/intentGuardrail.core.ts
+  s_939a11e59e098b::t_195f62153e0c8b 1-84
+client/dashboard/src/sdk/src/react-query/intentGuardrail.ts
+  s_939a11e59e098b::t_ab4f21d84987a1 1-154
+client/dashboard/src/sdk/src/react-query/uploadIntentTranscript.ts
+  s_939a11e59e098b::t_5f631816f3681e 1-117
+client/dashboard/src/sdk/src/sdk/intentpolicies.ts
+  s_939a11e59e098b::t_e176ab97b79fa1 1-83
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  s_939a11e59e098b::t_34390e7d32fcd2 43,295-299
+server/gen/http/cli/gram/cli.go
+  s_939a11e59e098b::t_770f9fafe1ee6f 56,158,1691-1706,6071-6075,7032-7033,8108-8120,11582-11594,20649-20725
+server/gen/http/intent_policies/client/cli.go
+  s_939a11e59e098b::t_f04bee0f0f2b81 1-130
+server/gen/http/intent_policies/client/client.go
+  s_939a11e59e098b::t_8d33bba3582f98 1-134
+server/gen/http/intent_policies/client/encode_decode.go
+  s_939a11e59e098b::t_21df24249223a5 1-905
+server/gen/http/intent_policies/client/paths.go
+  s_939a11e59e098b::t_962d4302f80eba 1-23
+server/gen/http/intent_policies/client/types.go
+  s_939a11e59e098b::t_4ae0958347d5ae 1-2368
+server/gen/http/intent_policies/server/encode_decode.go
+  s_939a11e59e098b::t_6efe3c1a242889 1-871
+server/gen/http/intent_policies/server/paths.go
+  s_939a11e59e098b::t_b8491135ec9125 1-23
+server/gen/http/intent_policies/server/server.go
+  s_939a11e59e098b::t_c60d9fa6188229 1-246
+server/gen/http/intent_policies/server/types.go
+  s_939a11e59e098b::t_3521ac6a622c4a 1-1394
+server/gen/http/openapi3.yaml
+  s_939a11e59e098b::t_db5456222ac954 42740-43020,105764-105784,118128-118455,142392-142424,144578-144579
+server/gen/intent_policies/client.go
+  s_939a11e59e098b::t_e2f0310802e363 1-99
+server/gen/intent_policies/endpoints.go
+  s_939a11e59e098b::t_dda23c69e3cb8e 1-147
+server/gen/intent_policies/service.go
+  s_939a11e59e098b::t_a0b503ac3f6f54 1-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0398f17645eb1c03677c1dd152db50c6baf35b25",
+  "prompts": {},
+  "sessions": {
+    "s_939a11e59e098b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06bbd70-3627-49d7-9eb0-bf822f5d09b6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

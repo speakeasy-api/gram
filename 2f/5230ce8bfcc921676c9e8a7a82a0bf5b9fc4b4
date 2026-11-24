@@ -1,0 +1,41 @@
+server/internal/intentpolicy/contracts_test.go
+  s_4d057fcd02a0cb::t_0a95491ffdd6ae 34-36,84,92-102,105,107,109
+  s_4d057fcd02a0cb::t_42a153994545cb 171
+client/dashboard/src/pages/security/intent-policies/model.test.ts
+  s_7f7b161a4d59e4::t_ce9d8cf7c2c7b4 110,113,120
+  s_4d057fcd02a0cb::t_f193aac0f60fbc 121-122
+client/dashboard/src/pages/security/intent-policies/model.ts
+  s_7f7b161a4d59e4::t_ce9d8cf7c2c7b4 87
+server/internal/intentpolicy/evaluator_test.go
+  s_4d057fcd02a0cb::t_431498b97a58c7 52
+  s_4d057fcd02a0cb::t_0a95491ffdd6ae 135,141-143,148
+  s_4d057fcd02a0cb::t_42a153994545cb 36,64-65,71-77
+server/internal/intentpolicy/guardrail.go
+  s_4d057fcd02a0cb::t_1031f0ec8e1588 17-19,28-38,52,64-65,83,98-121,160-167,189-190,195,197-198,203-211,213-214,227,229-230
+server/internal/intentpolicies/intentpolicies_test.go
+  s_4d057fcd02a0cb::t_0bbfb37d8c61ef 45-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f5230ce8bfcc921676c9e8a7a82a0bf5b9fc4b4",
+  "prompts": {},
+  "sessions": {
+    "s_4d057fcd02a0cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "495781be-b47d-4d6a-a74e-45c31f9007bc",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
