@@ -499,6 +499,15 @@ func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
 	offers, err := fixtures.ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
 	require.Empty(t, offers, "the physical parent is not a typed upstream offer")
+
+	// The existing FK parent is not routing intent, but it also must not
+	// prevent an explicit configuration operation from creating the offer.
+	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: client, UserSessionIssuerID: signIn.String()})
+	require.NoError(t, err)
+	offers, err = fixtures.ListServerAuthClientsFixture(ctx, server.ID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{authclientbackfill.OAuthClientID(auth.ActiveOrganizationID, session.RemoteSessionClientID, authclientbackfill.TypeRemoteSession)}, offers)
+
 	pinned, err := q.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: signIn, RemoteSessionClientID: session.RemoteSessionClientID})
 	require.NoError(t, err)
 	require.Equal(t, session.ID, pinned.ID)
