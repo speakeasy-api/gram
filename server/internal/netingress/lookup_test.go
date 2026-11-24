@@ -14,15 +14,12 @@ import (
 )
 
 type fakeIngressRepository struct {
-	attestorParams repo.GetActiveIngressByAttestorParams
-	attestorRow    repo.GetActiveIngressByAttestorRow
-	attestorErr    error
-	versionParams  repo.GetIngressServingStateParams
-	versionRow     repo.GetIngressServingStateRow
-	versionErr     error
-	dnsName        string
-	dnsRows        []repo.GetActiveIngressesByDNSNameRow
-	dnsErr         error
+	versionParams repo.GetIngressServingStateParams
+	versionRow    repo.GetIngressServingStateRow
+	versionErr    error
+	dnsName       string
+	dnsRows       []repo.GetActiveIngressesByDNSNameRow
+	dnsErr        error
 }
 
 func (f *fakeIngressRepository) GetActiveIngressesByDNSName(_ context.Context, dnsName string) ([]repo.GetActiveIngressesByDNSNameRow, error) {
@@ -30,68 +27,9 @@ func (f *fakeIngressRepository) GetActiveIngressesByDNSName(_ context.Context, d
 	return f.dnsRows, f.dnsErr
 }
 
-func (f *fakeIngressRepository) GetActiveIngressByAttestor(_ context.Context, params repo.GetActiveIngressByAttestorParams) (repo.GetActiveIngressByAttestorRow, error) {
-	f.attestorParams = params
-	return f.attestorRow, f.attestorErr
-}
-
 func (f *fakeIngressRepository) GetIngressServingState(_ context.Context, params repo.GetIngressServingStateParams) (repo.GetIngressServingStateRow, error) {
 	f.versionParams = params
 	return f.versionRow, f.versionErr
-}
-
-func TestIngressLookupByAttestor(t *testing.T) {
-	t.Parallel()
-
-	ingressID := uuid.New()
-	fake := &fakeIngressRepository{attestorRow: repo.GetActiveIngressByAttestorRow{
-		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
-		DnsName: pgtype.Text{String: "Private.Example.ts.net", Valid: true}, IdentityRequired: true,
-	}}
-	lookup := &IngressLookup{repo: fake}
-
-	ingress, err := lookup.ByAttestor(t.Context(), "attestor-ns", "attestor-sa")
-	require.NoError(t, err)
-	require.Equal(t, repo.GetActiveIngressByAttestorParams{AttestorNamespace: "attestor-ns", AttestorServiceAccount: "attestor-sa"}, fake.attestorParams)
-	require.Equal(t, Ingress{
-		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
-		DNSName: "private.example.ts.net", IdentityRequired: true,
-		AttestorNamespace: "attestor-ns", AttestorServiceAccount: "attestor-sa",
-	}, ingress)
-}
-
-func TestIngressLookupByAttestorFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name      string
-		namespace string
-		account   string
-		row       repo.GetActiveIngressByAttestorRow
-		err       error
-	}{
-		{name: "missing namespace", account: "sa"},
-		{name: "missing service account", namespace: "ns"},
-		{name: "not found", namespace: "ns", account: "sa", err: pgx.ErrNoRows},
-		{
-			name: "offline without DNS", namespace: "ns", account: "sa",
-			row: repo.GetActiveIngressByAttestorRow{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale},
-		},
-		{
-			name: "malformed DNS", namespace: "ns", account: "sa",
-			row: repo.GetActiveIngressByAttestorRow{
-				ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
-				DnsName: pgtype.Text{String: "private.example.ts.net.", Valid: true},
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			lookup := &IngressLookup{repo: &fakeIngressRepository{attestorRow: test.row, attestorErr: test.err}}
-			_, err := lookup.ByAttestor(t.Context(), test.namespace, test.account)
-			require.ErrorIs(t, err, ErrIngressUnavailable)
-		})
-	}
 }
 
 func TestIngressLookupRecheck(t *testing.T) {
@@ -101,12 +39,10 @@ func TestIngressLookupRecheck(t *testing.T) {
 	cached := Ingress{
 		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
 		DNSName: "private.example.ts.net", IdentityRequired: true,
-		AttestorNamespace: "attestor-ns", AttestorServiceAccount: "attestor-sa",
 	}
 	unchanged := repo.GetIngressServingStateRow{
 		OrganizationID: "org_123", Provider: ProviderTailscale,
-		DnsName: pgtype.Text{String: "private.example.ts.net", Valid: true}, IdentityRequired: true,
-		AttestorNamespace: "attestor-ns", AttestorServiceAccount: "attestor-sa", Enabled: true,
+		DnsName: pgtype.Text{String: "private.example.ts.net", Valid: true}, IdentityRequired: true, Enabled: true,
 	}
 
 	for _, test := range []struct {
@@ -126,11 +62,7 @@ func TestIngressLookupRecheck(t *testing.T) {
 			return row
 		}(), want: ErrIngressChanged},
 		{name: "organization changed", row: func() repo.GetIngressServingStateRow { row := unchanged; row.OrganizationID = "org_other"; return row }(), want: ErrIngressChanged},
-		{name: "attestor rebound", row: func() repo.GetIngressServingStateRow {
-			row := unchanged
-			row.AttestorServiceAccount = "other-sa"
-			return row
-		}(), want: ErrIngressChanged},
+		{name: "offline without DNS", row: func() repo.GetIngressServingStateRow { row := unchanged; row.DnsName = pgtype.Text{}; return row }(), want: ErrIngressChanged},
 		{name: "lookup failure", err: errors.New("database unavailable"), want: errors.New("database unavailable")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -159,7 +91,6 @@ func TestIngressLookupByDNSName(t *testing.T) {
 	row := repo.GetActiveIngressesByDNSNameRow{
 		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
 		DnsName: pgtype.Text{String: "speakeasy.example.ts.net", Valid: true}, IdentityRequired: true,
-		AttestorNamespace: "ns-derived", AttestorServiceAccount: "sa-derived",
 	}
 	fake := &fakeIngressRepository{dnsRows: []repo.GetActiveIngressesByDNSNameRow{row}}
 	lookup := &IngressLookup{repo: fake}
@@ -170,7 +101,6 @@ func TestIngressLookupByDNSName(t *testing.T) {
 	require.Equal(t, Ingress{
 		ID: ingressID, OrganizationID: "org_123", Provider: ProviderTailscale,
 		DNSName: "speakeasy.example.ts.net", IdentityRequired: true,
-		AttestorNamespace: "ns-derived", AttestorServiceAccount: "sa-derived",
 	}, ingress)
 }
 
@@ -180,7 +110,6 @@ func TestIngressLookupByDNSNameFailsClosed(t *testing.T) {
 	valid := repo.GetActiveIngressesByDNSNameRow{
 		ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
 		DnsName: pgtype.Text{String: "speakeasy.example.ts.net", Valid: true}, IdentityRequired: false,
-		AttestorNamespace: "ns", AttestorServiceAccount: "sa",
 	}
 	for _, test := range []struct {
 		name string
@@ -192,6 +121,11 @@ func TestIngressLookupByDNSNameFailsClosed(t *testing.T) {
 		{name: "invalid host", host: "bad host", rows: []repo.GetActiveIngressesByDNSNameRow{valid}},
 		{name: "not found", host: "speakeasy.example.ts.net"},
 		{name: "ambiguous", host: "speakeasy.example.ts.net", rows: []repo.GetActiveIngressesByDNSNameRow{valid, valid}},
+		{name: "offline without DNS", host: "speakeasy.example.ts.net", rows: []repo.GetActiveIngressesByDNSNameRow{{ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale}}},
+		{name: "malformed DNS", host: "speakeasy.example.ts.net", rows: []repo.GetActiveIngressesByDNSNameRow{{
+			ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
+			DnsName: pgtype.Text{String: "speakeasy.example.ts.net.", Valid: true},
+		}}},
 		{name: "database error", host: "speakeasy.example.ts.net", err: errors.New("boom")},
 	} {
 		t.Run(test.name, func(t *testing.T) {

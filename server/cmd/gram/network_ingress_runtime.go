@@ -19,31 +19,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
-// newNetworkIngressExecutor registers the Tailscale provider as a composite
-// that routes by runtime: gateway ingresses to the tailnet gateway, every
-// other ingress to the operator provider while it is still enabled. enc
-// decrypts the customer's saved Tailscale credentials; the gateway's own
-// secrets use organization encryption (orgEnc, orgKeys), and either may be nil
-// when it is not configured.
+// newNetworkIngressExecutor registers the tailnet gateway as the Tailscale
+// provider. enc decrypts the customer's saved Tailscale credentials; the
+// gateway's own secrets use organization encryption (orgEnc, orgKeys), and
+// either may be nil when it is not configured.
 //
 // lockDB serves only the executor's reconcile connections, each held for a
 // whole reconcile because it carries the reconcile lock; providers and
 // organization encryption use db. A reconcile then never waits for a
 // connection of the kind it holds, so reconciles cannot exhaust a pool between
 // them and wait on each other for good.
-func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db, lockDB *pgxpool.Pool, enc *encryption.Client, orgEnc *orgencryption.Service, orgKeys *orgencryption.Provisioner, clients *k8s.KubernetesClients, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
-	providers := make(map[string]k8s.NetworkIngressProvisioner)
-	var operator *k8s.TailscaleNetworkIngressProvisioner
-	if config.OperatorProviderEnabled && clients != nil && clients.Clientset != nil && clients.DynamicClient != nil && config.Tailscale.OperatorNamespace != "" {
-		provider, err := k8s.NewTailscaleNetworkIngressProvisioner(clients.Clientset, clients.DynamicClient, config.Tailscale)
-		if err != nil {
-			return nil, fmt.Errorf("configure network ingress cleanup provider: %w", err)
-		}
-		operator = provider
-	}
-	// The composite always routes by the ingress's runtime column. A missing
-	// encryption key only disables Apply; observation and teardown still run,
-	// and the executor's gate reports the gap.
+func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterProvider, db, lockDB *pgxpool.Pool, enc *encryption.Client, orgEnc *orgencryption.Service, orgKeys *orgencryption.Provisioner, config networkingress.RuntimeConfig, publicationRequester networkingress.PublicationRequester) (*networkingress.Executor, error) {
+	// A missing encryption key only disables Apply; observation and teardown
+	// still run, and the executor's gate reports the gap.
 	api, err := tailscaleapi.New(guardian.NewDefaultPolicy(otel.GetTracerProvider()), config.Gateway.APIURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure Tailscale API client: %w", err)
@@ -62,23 +50,14 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 	if err != nil {
 		return nil, fmt.Errorf("configure tailnet gateway provider: %w", err)
 	}
-	var operatorProvider tailnetgateway.OperatorProvisioner
-	if operator != nil {
-		operatorProvider = operator
-	}
-	composite, err := tailnetgateway.NewCompositeProvisioner(operatorProvider, gateway, config.Gateway.Enabled)
-	if err != nil {
-		return nil, fmt.Errorf("configure network ingress provider: %w", err)
-	}
-	providers[networkingress.ProviderTailscale] = composite
-	registry, err := k8s.NewNetworkIngressProvisionerRegistry(providers, logger, k8s.NewNetworkIngressMetrics(logger, meterProvider))
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{
+		networkingress.ProviderTailscale: gateway,
+	}, logger, k8s.NewNetworkIngressMetrics(logger, meterProvider))
 	if err != nil {
 		return nil, fmt.Errorf("configure network ingress registry: %w", err)
 	}
 	return networkingress.NewExecutor(lockDB, enc, registry, networkingress.ExecutorOptions{
-		Queue: config.ReconcileTaskQueue, Image: config.AttestorImage,
-		BackendService: config.BackendService, BackendPort: config.BackendPort,
-		AttestorRequired:     !config.Gateway.Enabled,
+		Queue:                config.ReconcileTaskQueue,
 		PublicationRequester: publicationRequester,
 		PublicationActor:     "",
 		Logger:               logger,

@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,12 +44,6 @@ func TestNetworkIngressResourceNamesStableAndRoundTrip(t *testing.T) {
 	drifted := first
 	drifted.Ingress = "valid-but-wrong"
 	require.ErrorIs(t, drifted.Validate(), ErrNetworkIngressInvalidDesiredState)
-
-	for _, runtime := range []string{"operator", "gateway"} {
-		withRuntime := first
-		withRuntime.Runtime = runtime
-		require.NoError(t, withRuntime.Validate(), "the runtime comes from the row, not the owner id")
-	}
 }
 
 func TestNetworkIngressResourceNamesRejectIncompleteState(t *testing.T) {
@@ -64,39 +57,22 @@ func TestNetworkIngressResourceNamesRejectIncompleteState(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNetworkIngressDesiredValidationDoesNotExposeCredentials(t *testing.T) {
+func TestParseTailscaleCredentials(t *testing.T) {
 	t.Parallel()
 
-	ingressID := uuid.New()
-	names, err := NewNetworkIngressResourceNames(ingressID)
+	parsed, err := ParseTailscaleCredentials([]byte(`{"client_id":"cid","client_secret":"csecret"}`))
 	require.NoError(t, err)
-	secret := []byte(`{"client_id":"sensitive-client","client_secret":"sensitive-secret"}`)
-	desired := NetworkIngressDesired{
-		ID:             ingressID,
-		Provider:       NetworkIngressProviderTailscale,
-		Hostname:       "private-example",
-		Credentials:    secret,
-		Resources:      names,
-		AttestorImage:  "attestor@example",
-		BackendService: "gram-server-private",
-		BackendPort:    8443,
-	}
-	require.NoError(t, desired.Validate())
-	serialized, err := json.Marshal(struct {
-		NetworkIngressDesired NetworkIngressDesired `json:"desired"`
-	}{NetworkIngressDesired: desired})
-	require.NoError(t, err)
-	require.NotContains(t, string(serialized), "sensitive")
-	require.NotContains(t, string(serialized), "Credentials")
+	require.Equal(t, TailscaleCredentials{ClientID: "cid", ClientSecret: "csecret"}, parsed)
 
-	desired.BackendPort = 65536
-	err = desired.Validate()
-	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
-	desired.BackendPort = 0
-	err = desired.Validate()
-	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
-	require.NotContains(t, err.Error(), "sensitive-client")
-	require.NotContains(t, err.Error(), "sensitive-secret")
+	for _, encoded := range []string{
+		`{"client_id":"cid"}`,
+		`{"client_id":"cid","client_secret":"csecret","extra":true}`,
+		`{"client_id":"cid","client_secret":"csecret"}{}`,
+		`not-json`,
+	} {
+		_, err := ParseTailscaleCredentials([]byte(encoded))
+		require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState, encoded)
+	}
 }
 
 func TestNetworkIngressProvisionerRegistry(t *testing.T) {

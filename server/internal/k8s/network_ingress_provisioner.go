@@ -1,12 +1,14 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -26,7 +28,9 @@ const (
 	NetworkIngressErrorInvalidDesiredState = "invalid_desired_state"
 	NetworkIngressErrorUnsupportedProvider = "unsupported_provider"
 	NetworkIngressErrorInvalidCredentials  = "invalid_credentials" // #nosec G101 -- bounded status code, not credential material.
-	NetworkIngressErrorKubernetes          = "kubernetes_api"
+	// No provider reports kubernetes_api any more; rows recorded while the
+	// Kubernetes operator hosted ingresses can still carry it.
+	NetworkIngressErrorKubernetes = "kubernetes_api"
 	// Teardown is blocked because the provider refused the saved credentials.
 	NetworkIngressErrorProviderCredentialsRejected = "provider_credentials_rejected" // #nosec G101 -- bounded status code, not credential material.
 	// The provider accepted the credentials but they lack a scope, or may not
@@ -51,12 +55,7 @@ const (
 
 var (
 	ErrNetworkIngressUnsupportedProvider = errors.New("unsupported network ingress provider")
-
-	// ErrNetworkIngressProviderUnavailable means the provider that hosts this
-	// ingress is known but not deployed or enabled in this environment yet.
-	ErrNetworkIngressProviderUnavailable = errors.New("network ingress provider unavailable")
 	ErrNetworkIngressInvalidDesiredState = errors.New("invalid network ingress desired state")
-	ErrNetworkIngressReplacementPending  = errors.New("network ingress immutable replacement pending")
 
 	// ErrNetworkIngressDeletionPending means teardown must be retried until resources are absent.
 	ErrNetworkIngressDeletionPending = errors.New("network ingress deletion pending")
@@ -78,10 +77,12 @@ var (
 	ErrNetworkIngressProviderAPIUnavailable = errors.New("network ingress provider api unavailable")
 )
 
-// NetworkIngressResourceNames is the provider-neutral, persisted identity of
-// every Kubernetes resource owned by one ingress. Reconciliation and deletion
-// consume this value verbatim; they never derive names from mutable customer
-// input or from a tombstone.
+// NetworkIngressResourceNames is the persisted identity of one ingress,
+// stored in network_ingresses.provider_resources. The names are those of the
+// Kubernetes resources the retired Tailscale operator provider created; the
+// tailnet gateway reads only OwnerID. New rows still store the full document,
+// and attestor_namespace and attestor_service_account are derived from it,
+// until a contract migration drops those columns.
 type NetworkIngressResourceNames struct {
 	OwnerID                uuid.UUID `json:"owner_id"`
 	Namespace              string    `json:"namespace"`
@@ -95,13 +96,7 @@ type NetworkIngressResourceNames struct {
 	AttestorService        string    `json:"attestor_service"`
 	AttestorNetworkPolicy  string    `json:"attestor_network_policy"`
 	ProxyNetworkPolicy     string    `json:"proxy_network_policy"`
-
-	// Runtime is the ingress's network_ingresses.runtime, which the executor
-	// sets from the row it reconciles; it is not stored with the names. A
-	// routing provider reads it here rather than querying for it while the
-	// executor holds its reconcile connection.
-	Runtime string `json:"-"`
-	Ingress string `json:"ingress"`
+	Ingress                string    `json:"ingress"`
 }
 
 func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, error) {
@@ -123,9 +118,7 @@ func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, 
 		AttestorService:        prefix + "-attestor",
 		AttestorNetworkPolicy:  prefix + "-attestor",
 		ProxyNetworkPolicy:     prefix + "-proxy",
-		// The runtime is the row's, set by whoever reads the row.
-		Runtime: "",
-		Ingress: prefix,
+		Ingress:                prefix,
 	}, nil
 }
 
@@ -137,8 +130,6 @@ func (n NetworkIngressResourceNames) Validate() error {
 	if err != nil {
 		return err
 	}
-	// The runtime comes from the row, not the owner id, so it is not compared.
-	expected.Runtime = n.Runtime
 	if n != expected {
 		return fmt.Errorf("%w: resource identities do not match owner", ErrNetworkIngressInvalidDesiredState)
 	}
@@ -195,35 +186,38 @@ func ParseNetworkIngressResourceNames(encoded []byte) (NetworkIngressResourceNam
 type NetworkIngressDesired struct {
 	ID uuid.UUID `json:"id"`
 
-	// OrganizationID owns the ingress. Providers that keep per-organization
-	// state (the tailnet gateway) require it; the operator provider ignores it.
+	// OrganizationID owns the ingress; the tailnet gateway keeps
+	// per-organization state.
 	OrganizationID string                      `json:"organization_id"`
 	Provider       string                      `json:"provider"`
 	Hostname       string                      `json:"hostname"`
 	Credentials    []byte                      `json:"-"`
 	Resources      NetworkIngressResourceNames `json:"resources"`
-	AttestorImage  string                      `json:"attestor_image"`
-	BackendService string                      `json:"backend_service"`
-	BackendPort    int32                       `json:"backend_port"`
-
-	// Runtime is the ingress's network_ingresses.runtime, as Resources.Runtime.
-	Runtime string `json:"-"`
 }
 
-func (d NetworkIngressDesired) Validate() error {
-	if d.ID == uuid.Nil || d.Provider == "" || d.Hostname == "" || len(d.Credentials) == 0 || d.AttestorImage == "" || d.BackendService == "" || d.BackendPort <= 0 || d.BackendPort > 65535 {
-		return fmt.Errorf("%w: desired state is incomplete", ErrNetworkIngressInvalidDesiredState)
+// TailscaleCredentials is the plaintext shape of a Tailscale ingress's
+// encrypted OAuth client credentials.
+type TailscaleCredentials struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// ParseTailscaleCredentials decodes decrypted Tailscale credentials, rejecting
+// unknown fields, trailing data and incomplete values.
+func ParseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
+	var credentials TailscaleCredentials
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credentials); err != nil {
+		return credentials, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
-	if d.Hostname != strings.ToLower(d.Hostname) || len(k8svalidation.IsDNS1123Label(d.Hostname)) > 0 {
-		return fmt.Errorf("%w: hostname must be a lowercase DNS label", ErrNetworkIngressInvalidDesiredState)
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return TailscaleCredentials{}, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
-	if err := d.Resources.Validate(); err != nil {
-		return err
+	if credentials.ClientID == "" || credentials.ClientSecret == "" {
+		return TailscaleCredentials{}, fmt.Errorf("%w: Tailscale credentials are incomplete", ErrNetworkIngressInvalidDesiredState)
 	}
-	if d.Resources.OwnerID != d.ID {
-		return fmt.Errorf("%w: resource owner does not match ingress", ErrNetworkIngressInvalidDesiredState)
-	}
-	return nil
+	return credentials, nil
 }
 
 type NetworkIngressObservation struct {
@@ -237,7 +231,7 @@ type NetworkIngressProvisioner interface {
 	Apply(context.Context, NetworkIngressDesired) (NetworkIngressObservation, error)
 	Observe(context.Context, NetworkIngressResourceNames) (NetworkIngressObservation, error)
 	// Delete returns nil only once all persisted resources are confirmed absent.
-	// ErrNetworkIngressDeletionPending is retryable while Kubernetes completes deletion.
+	// ErrNetworkIngressDeletionPending is retryable while teardown completes.
 	Delete(context.Context, NetworkIngressResourceNames) error
 }
 

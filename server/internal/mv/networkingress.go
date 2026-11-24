@@ -36,9 +36,9 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 	}
 }
 
-// networkIngressRuntime names an ingress's runtime for clients: only
-// "gateway" is the tailnet gateway; anything else, including NULL, is the
-// operator.
+// networkIngressRuntime names an ingress's runtime for clients. Every ingress
+// is created on the tailnet gateway; "operator" marks a row created for the
+// retired Tailscale Kubernetes operator, which nothing hosts any more.
 func networkIngressRuntime(runtime pgtype.Text) string {
 	if runtime.Valid && runtime.String == "gateway" {
 		return "gateway"

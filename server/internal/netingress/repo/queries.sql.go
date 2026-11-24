@@ -12,55 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getActiveIngressByAttestor = `-- name: GetActiveIngressByAttestor :one
-SELECT
-    id,
-    organization_id,
-    provider,
-    dns_name,
-    identity_required
-FROM network_ingresses
-WHERE attestor_namespace = $1
-  AND attestor_service_account = $2
-  AND enabled IS TRUE
-  AND deleted IS FALSE
-`
-
-type GetActiveIngressByAttestorParams struct {
-	AttestorNamespace      string
-	AttestorServiceAccount string
-}
-
-type GetActiveIngressByAttestorRow struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	Provider         string
-	DnsName          pgtype.Text
-	IdentityRequired bool
-}
-
-func (q *Queries) GetActiveIngressByAttestor(ctx context.Context, arg GetActiveIngressByAttestorParams) (GetActiveIngressByAttestorRow, error) {
-	row := q.db.QueryRow(ctx, getActiveIngressByAttestor, arg.AttestorNamespace, arg.AttestorServiceAccount)
-	var i GetActiveIngressByAttestorRow
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Provider,
-		&i.DnsName,
-		&i.IdentityRequired,
-	)
-	return i, err
-}
-
 const getActiveIngressesByDNSName = `-- name: GetActiveIngressesByDNSName :many
 SELECT
     id,
     organization_id,
     provider,
     dns_name,
-    identity_required,
-    attestor_namespace,
-    attestor_service_account
+    identity_required
 FROM network_ingresses
 WHERE dns_name = $1::text
   AND runtime = 'gateway'
@@ -70,13 +28,11 @@ LIMIT 2
 `
 
 type GetActiveIngressesByDNSNameRow struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	Provider               string
-	DnsName                pgtype.Text
-	IdentityRequired       bool
-	AttestorNamespace      string
-	AttestorServiceAccount string
+	ID               uuid.UUID
+	OrganizationID   string
+	Provider         string
+	DnsName          pgtype.Text
+	IdentityRequired bool
 }
 
 // Resolves the ingress a tailnet gateway pod is proxying for from the request
@@ -97,8 +53,6 @@ func (q *Queries) GetActiveIngressesByDNSName(ctx context.Context, dnsName strin
 			&i.Provider,
 			&i.DnsName,
 			&i.IdentityRequired,
-			&i.AttestorNamespace,
-			&i.AttestorServiceAccount,
 		); err != nil {
 			return nil, err
 		}
@@ -116,8 +70,6 @@ SELECT
     provider,
     dns_name,
     identity_required,
-    attestor_namespace,
-    attestor_service_account,
     enabled,
     deleted
 FROM network_ingresses
@@ -131,14 +83,12 @@ type GetIngressServingStateParams struct {
 }
 
 type GetIngressServingStateRow struct {
-	OrganizationID         string
-	Provider               string
-	DnsName                pgtype.Text
-	IdentityRequired       bool
-	AttestorNamespace      string
-	AttestorServiceAccount string
-	Enabled                bool
-	Deleted                bool
+	OrganizationID   string
+	Provider         string
+	DnsName          pgtype.Text
+	IdentityRequired bool
+	Enabled          bool
+	Deleted          bool
 }
 
 func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServingStateParams) (GetIngressServingStateRow, error) {
@@ -149,8 +99,6 @@ func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServ
 		&i.Provider,
 		&i.DnsName,
 		&i.IdentityRequired,
-		&i.AttestorNamespace,
-		&i.AttestorServiceAccount,
 		&i.Enabled,
 		&i.Deleted,
 	)
