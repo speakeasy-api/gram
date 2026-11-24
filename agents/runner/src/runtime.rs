@@ -85,11 +85,14 @@ pub struct QueuedTurn {
     pub input: RunnerContent,
     pub token: String,
     pub mcp_servers: Option<Vec<McpServer>>,
-    /// The span the turn was admitted under (`thread_turn`). The loop parents
-    /// the turn's `assistant.turn` span under it, so one trace covers
-    /// admission through the final answer even though the loop runs on its
-    /// own task.
-    pub span: tracing::Span,
+    /// OpenTelemetry context of the span the turn was admitted under
+    /// (`thread_turn`). The loop parents the turn's `assistant.turn` span
+    /// under it, so one trace covers admission through the final answer even
+    /// though the loop runs on its own task. Only the context is carried: a
+    /// live span would keep `thread_turn` open until the loop dropped it,
+    /// after the MCP boundary, so a slow boundary would look like a slow
+    /// `/turn` response.
+    pub otel_parent: opentelemetry::Context,
 }
 
 /// Live per-thread state, shared by successive queued turns.
@@ -137,7 +140,7 @@ impl ConfiguredThread {
                 input,
                 token,
                 mcp_servers,
-                span: tracing::Span::current(),
+                otel_parent: tracing::Span::current().context(),
             })
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
         *idle = None;
@@ -748,7 +751,7 @@ where
                     thread_id = %thread_id,
                     finish_reason = tracing::field::Empty,
                 );
-                let _ = span.set_parent(turn.span.context());
+                let _ = span.set_parent(turn.otel_parent);
                 if let Some(cmd) = &mcp_cmd {
                     let (reply, ack) = tokio::sync::oneshot::channel();
                     cmd.send(McpCmd::TurnBoundary {
@@ -1185,7 +1188,7 @@ mod tests {
             input: RunnerContent::Text("Alice".into()),
             token: "token-a".into(),
             mcp_servers: None,
-            span: tracing::Span::none(),
+            otel_parent: opentelemetry::Context::new(),
         })
         .unwrap();
         let first_boundary = boundaries.recv().await.unwrap();
@@ -1204,7 +1207,7 @@ mod tests {
                 url: "https://example.com/mcp".into(),
                 headers: Default::default(),
             }]),
-            span: tracing::Span::none(),
+            otel_parent: opentelemetry::Context::new(),
         })
         .unwrap();
         assert_eq!(tokens.current().unwrap(), "token-a");
@@ -1273,7 +1276,7 @@ mod tests {
             input: RunnerContent::Text("must not run".into()),
             token: "next".into(),
             mcp_servers: None,
-            span: tracing::Span::none(),
+            otel_parent: opentelemetry::Context::new(),
         })
         .unwrap();
         let McpCmd::TurnBoundary { reply, .. } = commands.recv().await.unwrap() else {

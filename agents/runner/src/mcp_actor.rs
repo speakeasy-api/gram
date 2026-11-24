@@ -618,9 +618,12 @@ impl McpActor {
                 );
             }
             Err(flow_err) => {
+                // Class and status only: a non-2xx body could land in the
+                // trace, since this runs inside an actor command span.
                 tracing::warn!(
                     server_id,
-                    error = %flow_err,
+                    error_class = flow_err.class(),
+                    http_status = flow_err.http_status(),
                     "failed to create assistant mcp auth flow; will retry on next search"
                 );
                 self.auth_pending.insert(server_id.to_string(), None);
@@ -639,7 +642,12 @@ impl McpActor {
             .instrument(span)
             .await
         {
-            tracing::warn!(server_id = %id, error = %err, action, "mcp disconnect reported error");
+            tracing::warn!(
+                server_id = %id,
+                error_class = mcp_error_class(&err),
+                action,
+                "mcp disconnect reported error"
+            );
         }
     }
 
@@ -698,7 +706,12 @@ impl McpActor {
             }
             Err(e) => {
                 let auth_required = matches!(e, McpError::AuthRequired(_));
-                tracing::warn!(server_id = %server_uid, error = %e, "mcp connect failed");
+                // Class only: the error text can come from the MCP server.
+                tracing::warn!(
+                    server_id = %server_uid,
+                    error_class = mcp_error_class(&e),
+                    "mcp connect failed"
+                );
                 Err(McpConnectFailure {
                     message: e.to_string(),
                     auth_required,
@@ -711,6 +724,22 @@ impl McpActor {
         if self.inbox_tx.send(notice).is_err() {
             tracing::warn!("drop mcp notice: thread inbox closed");
         }
+    }
+}
+
+/// Stable class name for an MCP error, for logs and spans. The `Display`
+/// text can carry server-supplied content, so traces record only this.
+fn mcp_error_class(err: &McpError) -> &'static str {
+    match err {
+        McpError::Io(_) => "io",
+        McpError::Serialize(_) => "serialization",
+        McpError::Transport(_) => "transport",
+        McpError::Timeout { .. } => "timeout",
+        McpError::Protocol(_) => "protocol",
+        McpError::AuthRequired(_) => "auth_required",
+        McpError::AuthResolution(_) => "auth_resolution",
+        McpError::Invocation(_) => "invocation",
+        McpError::UnknownServer(_) => "unknown_server",
     }
 }
 

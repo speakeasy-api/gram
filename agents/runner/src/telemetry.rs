@@ -84,10 +84,13 @@ impl SpanProcessor for IdentityStampProcessor {
 /// answer can be split into waiting for the provider versus streaming.
 ///
 /// agentkit's `chat` span covers the whole request and stream but records no
-/// first-token time. A request starts at `TurnStarted` (the turn's first model
-/// call) or after a tool result (each later call follows its tool round), so
-/// both arm the timer and the first delta after either fires the event. The
-/// event lands on the span current at emit time, agentkit's `agent.turn`.
+/// first-token time. A request follows `TurnStarted` (the turn's first model
+/// call) or a tool result (each later call follows its tool round), so both
+/// arm the timer and the first delta after either fires the event. Inline
+/// compaction can run between those events and the request; its
+/// `MutationFinished` restarts an armed timer, so compaction time is not
+/// counted as model latency. The event lands on the span current at emit
+/// time, agentkit's `agent.turn`.
 #[derive(Debug, Default)]
 pub struct FirstTokenObserver {
     armed_at: Mutex<Option<Instant>>,
@@ -98,6 +101,9 @@ impl LoopObserver for FirstTokenObserver {
         let mut armed_at = self.armed_at.lock().unwrap_or_else(PoisonError::into_inner);
         match observed.event {
             AgentEvent::TurnStarted { .. } | AgentEvent::ToolResultReceived(_) => {
+                *armed_at = Some(Instant::now());
+            }
+            AgentEvent::MutationFinished { .. } if armed_at.is_some() => {
                 *armed_at = Some(Instant::now());
             }
             AgentEvent::ContentDelta(_) => {
@@ -285,6 +291,55 @@ mod tests {
         let mut outbound = http::HeaderMap::new();
         inject_current_trace_context(&mut outbound);
         assert!(outbound.is_empty());
+    }
+
+    fn observe(observer: &FirstTokenObserver, event: AgentEvent) {
+        observer.handle_event(ObservedEvent {
+            session_id: Arc::new(agentkit_core::SessionId::new("s")),
+            event,
+        });
+    }
+
+    fn mutation_finished() -> AgentEvent {
+        AgentEvent::MutationFinished {
+            session_id: agentkit_core::SessionId::new("s"),
+            turn_id: None,
+            mutator: "compaction".into(),
+            dirty: true,
+            metadata: agentkit_core::MetadataMap::new(),
+        }
+    }
+
+    fn armed_at(observer: &FirstTokenObserver) -> Option<Instant> {
+        *observer
+            .armed_at
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn first_token_timer_restarts_after_inline_compaction() {
+        let observer = FirstTokenObserver::default();
+        observe(
+            &observer,
+            AgentEvent::TurnStarted {
+                session_id: agentkit_core::SessionId::new("s"),
+                turn_id: agentkit_core::TurnId::new("t"),
+            },
+        );
+        let armed = armed_at(&observer).expect("turn start arms the timer");
+        std::thread::sleep(Duration::from_millis(5));
+        observe(&observer, mutation_finished());
+        let rearmed = armed_at(&observer).expect("compaction keeps the timer armed");
+        assert!(rearmed > armed, "compaction must restart the timer");
+    }
+
+    #[test]
+    fn first_token_timer_ignores_compaction_when_not_armed() {
+        let observer = FirstTokenObserver::default();
+        observe(&observer, mutation_finished());
+        assert!(armed_at(&observer).is_none());
     }
 
     #[test]
