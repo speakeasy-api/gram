@@ -1787,6 +1787,50 @@ WHERE event_urn = 'urn:telemetry:gram_service:log:mcp_network_request'
   AND surface IN ('public', 'private')
 GROUP BY gram_project_id, hour, server_kind, server_id, surface;
 
+CREATE TABLE IF NOT EXISTS mcp_tool_call_summaries (
+    gram_project_id UUID COMMENT 'Project the tool call belongs to.\n@access: confidential',
+    mcp_server_id String COMMENT 'MCP server ID, empty when the call did not go through one.\n@access: confidential',
+    remote_mcp_server_id String COMMENT 'Remote MCP server ID, empty when none applies.\n@access: confidential',
+    toolset_slug String COMMENT 'Toolset slug of the call.\n@access: confidential',
+    meta_mcp_server_id String COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call went through a gateway, empty otherwise.\n@access: confidential',
+    hook_source LowCardinality(String) COMMENT 'Hook source of the call, empty for non-hook traffic.\n@access: confidential',
+    time_bucket DateTime('UTC') COMMENT 'Start of the 15-minute UTC bucket containing the call.\n@access: confidential',
+    gram_urn String COMMENT 'Tool URN, always starting with tools:.\n@access: confidential',
+    total_calls SimpleAggregateFunction(sum, UInt64) COMMENT 'Number of tool calls.\n@access: confidential',
+    success_calls SimpleAggregateFunction(sum, UInt64) COMMENT 'Tool calls with an HTTP response status from 200 to 299.\n@access: confidential',
+    failed_calls SimpleAggregateFunction(sum, UInt64) COMMENT 'Tool calls with an HTTP response status of 400 or more.\n@access: confidential',
+    latency_ms_sum SimpleAggregateFunction(sum, Float64) COMMENT 'Sum of request durations in milliseconds, zero for calls without a duration. Divide by total_calls for the average.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(time_bucket)
+ORDER BY (gram_project_id, mcp_server_id, remote_mcp_server_id, toolset_slug, meta_mcp_server_id, hook_source, time_bucket, gram_urn)
+TTL time_bucket + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Tool call counts and latency per server, hook source, tool and 15-minute bucket';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_tool_call_summaries_mv TO mcp_tool_call_summaries AS
+WITH
+    -- Cutoff separates live MV ingestion from the one-time historical
+    -- backfill, which an operator runs outside migrations, in chunks, for
+    -- event times before it. Must be a whole 15-minute boundary.
+    toUnixTimestamp64Nano(toDateTime64('2026-12-02 00:00:00', 9, 'UTC')) AS mcp_tool_call_summaries_cutoff_unix_nano
+SELECT
+    gram_project_id,
+    mcp_server_id,
+    remote_mcp_server_id,
+    toolset_slug,
+    meta_mcp_server_id,
+    toLowCardinality(hook_source) AS hook_source,
+    toStartOfInterval(fromUnixTimestamp64Nano(time_unix_nano, 'UTC'), toIntervalMinute(15), 'UTC') AS time_bucket,
+    gram_urn,
+    toUInt64(count()) AS total_calls,
+    toUInt64(countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300)) AS success_calls,
+    toUInt64(countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)) AS failed_calls,
+    sum(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000) AS latency_ms_sum
+FROM telemetry_logs
+WHERE startsWith(gram_urn, 'tools:')
+  AND time_unix_nano >= mcp_tool_call_summaries_cutoff_unix_nano
+GROUP BY gram_project_id, mcp_server_id, remote_mcp_server_id, toolset_slug, meta_mcp_server_id, hook_source, time_bucket, gram_urn;
+
 CREATE TABLE IF NOT EXISTS mcp_connection_events (
     organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential' CODEC(ZSTD),
     project_id UUID COMMENT 'Project the attempt belongs to, nil when it belongs to none, such as an organization gateway or an identity provider renewal. Must be the same on every step of an attempt. Readers always filter on organization_id.\n@access: confidential',
