@@ -85,7 +85,7 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 		Skill(SkillIDFrom("s")).Read(), Skill(SkillIDFrom("s")).Write(),
 		Assistant(AssistantIDFrom("a"), ProjectIDFrom("p")).Read(), Assistant(AssistantIDFrom("a"), ProjectIDFrom("p")).Write(),
 		Chat(ChatIDFrom("c")).Read(), Chat(ChatIDFrom("c")).Write(),
-		Agent(AgentIDFrom("a")).Read(), Agent(AgentIDFrom("a")).Write(), Agent(AgentIDFrom("a")).Authorize(), Agent(AgentIDFrom("a")).Transfer(),
+		Agent(AgentIDFrom("a")).Read(), Agent(AgentIDFrom("a")).Create(), Agent(AgentIDFrom("a")).Write(), Agent(AgentIDFrom("a")).Authorize(), Agent(AgentIDFrom("a")).Transfer(),
 		Workload(WorkloadIDFrom("w")).Read(), Workload(WorkloadIDFrom("w")).Write(),
 	} {
 		reached[check.Scope] = true

@@ -132724,6 +132724,7 @@ components:
                         - inference:execute
                         - log:read
                         - agent:read
+                        - agent:create
                         - agent:write
                         - agent:authorize
                         - agent:transfer
