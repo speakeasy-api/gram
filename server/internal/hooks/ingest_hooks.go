@@ -1231,7 +1231,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// call once. See claude_cowork_rows.go.
 	if fromCowork(payload) {
 		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
-		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 		return
 	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
@@ -1253,13 +1253,13 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
-	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 }
 
 // persistPromptAttachmentsLogged stores the event's prompt attachments and
 // logs, rather than returns, a failure: attachment capture is best effort.
-func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time) {
-	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, timestamp); err != nil {
+func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time) {
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, hookSource, timestamp); err != nil {
 		event := "hooks_ingest_prompt_attachment_persist_failed"
 		msg := "failed to persist prompt attachments"
 		if errors.Is(err, errChatProjectMismatch) {
@@ -2001,7 +2001,7 @@ func canonicalAgentTurnID(payload *gen.IngestPayload) string {
 	return "opencode:" + messageID
 }
 
-func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
+func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) error {
 	if payload.Data == nil || len(payload.Data.PromptAttachments) == 0 || authCtx.ProjectID == nil {
 		return nil
 	}
@@ -2035,7 +2035,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	if logicalAttachments {
 		// Attachment-only events have no prompt row to create their chat. Do
 		// this before starting a transaction that cannot recover from an FK error.
-		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
 			return err
 		}
 		// Content parts have no external-ID uniqueness constraint. Serialize
@@ -2125,7 +2125,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	}
 
 	if !logicalAttachments {
-		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
 			return err
 		}
 	}
@@ -2162,7 +2162,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		// Only autocommit writes can use the missing-chat retry below.
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
-	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", hookSource)); err != nil {
 		return fmt.Errorf("upsert claude code session for prompt attachments: %w", err)
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {

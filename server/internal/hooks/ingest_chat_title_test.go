@@ -140,6 +140,36 @@ func TestIngest_ToolResultOpeningChatSeedsPlaceholder(t *testing.T) {
 	require.True(t, chat.IsPlaceholderTitle(stored.Title.String), "seeded %q instead of a placeholder", stored.Title.String)
 }
 
+// An attachment-only event opens its chat under the resolved surface's
+// placeholder, not the one for the raw adapter the hook reported.
+func TestIngest_AttachmentOnlyCoworkChatSeedsCoworkPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "title-attachment-" + uuid.NewString()
+	surface := surfaceCowork
+	payload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	payload.Session.Surface = &surface
+	payload.Data = &gen.HookIngestData{PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+		EntryUUID:      "attachment-" + uuid.NewString(),
+		AttachmentKind: "file",
+		Content:        "quarterly numbers",
+	}}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+
+	stored, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{
+		ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, chat.DefaultCoworkChatTitle, stored.Title.String)
+}
+
 // A Claude Tag session is titled after its channel on every wake, so a
 // generated name would only be overwritten.
 func TestIngest_DoesNotScheduleChatTitleGenerationForClaudeTag(t *testing.T) {
