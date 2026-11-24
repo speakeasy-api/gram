@@ -96,10 +96,10 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 				require.NoError(t, err)
 				fixtures := testrepo.New(ti.conn)
 				_, err = fixtures.GetPrincipalRemoteSessionBindingSessionFixture(ctx, binding.ID)
-				require.NoError(t, err, "the compatibility FK did not physically remove the attachment")
+				require.NoError(t, err, "registration deletion physically removed the attachment")
 				active, err := fixtures.CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, session.ID)
 				require.NoError(t, err)
-				require.Zero(t, active, "the registration deletion explicitly retired its attachment")
+				require.Zero(t, active, "registration deletion did not retire the attachment")
 			case "issuer-deleted":
 				_, err = testrepo.New(ti.conn).SoftDeleteAttachmentIssuerFixture(ctx, testrepo.SoftDeleteAttachmentIssuerFixtureParams{ID: uuid.MustParse(issuer), ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 			case "project-deleted":
