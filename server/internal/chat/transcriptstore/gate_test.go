@@ -20,12 +20,18 @@ type countingProvisioner struct {
 	calls atomic.Int32
 	err   error
 
+	// panicWith, when set, makes each call panic with it.
+	panicWith any
+
 	// release, when set, holds each call until it is closed.
 	release chan struct{}
 }
 
 func (p *countingProvisioner) EnsureUseCase(context.Context, string, orgencryption.UseCase, orgencryption.Actor) error {
 	p.calls.Add(1)
+	if p.panicWith != nil {
+		panic(p.panicWith)
+	}
 	if p.release != nil {
 		<-p.release
 	}
@@ -98,4 +104,14 @@ func TestCaptureGateWaiterReturnsWhenItsWriteIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.False(t, gate.OrganizationReady(ctx, "org_a"), "a cancelled write must not wait on a hung provisioning call")
+}
+
+func TestCaptureGateTurnsAProvisioningPanicIntoOff(t *testing.T) {
+	t.Parallel()
+	provisioner := &countingProvisioner{panicWith: "kms client exploded"}
+	gate := NewCaptureGate(testenv.NewLogger(t), &feature.InMemory{}, provisioner)
+
+	require.NotPanics(t, func() {
+		require.False(t, gate.OrganizationReady(t.Context(), "org_a"))
+	})
 }

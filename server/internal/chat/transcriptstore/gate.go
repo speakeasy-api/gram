@@ -59,8 +59,9 @@ func (g *CaptureGate) ProjectEnabled(ctx context.Context, projectID uuid.UUID) b
 }
 
 // OrganizationReady makes sure the organization has its transcript data key,
-// once per process; concurrent first writes share one provisioning call. A failure is logged and reads as not ready, so the write
-// commits without a shadow instead of failing.
+// once per process; concurrent first writes share one provisioning call. A
+// failure reads as not ready, so the write commits without a shadow instead of
+// failing.
 func (g *CaptureGate) OrganizationReady(ctx context.Context, organizationID string) bool {
 	if g == nil || g.provisioner == nil || organizationID == "" {
 		return false
@@ -68,31 +69,42 @@ func (g *CaptureGate) OrganizationReady(ctx context.Context, organizationID stri
 	if _, ok := g.ready.Load(organizationID); ok {
 		return true
 	}
+	// Every waiting write shares this call, so it is bounded on its own rather
+	// than by the first caller's context.
+	provisionCtx := context.WithoutCancel(ctx)
 	done := g.provisioning.DoChan(organizationID, func() (any, error) {
-		if _, ok := g.ready.Load(organizationID); ok {
-			return nil, nil
-		}
-		// Every waiting write shares this call, so it is bounded on its own
-		// rather than by the first caller's context.
-		provisionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), provisionTimeout)
-		defer cancel()
-		if err := g.provisioner.EnsureUseCase(provisionCtx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-			return nil, fmt.Errorf("provision chat transcript key: %w", err)
-		}
-		g.ready.Store(organizationID, struct{}{})
-		return nil, nil
+		return nil, g.provision(provisionCtx, organizationID)
 	})
-	var err error
 	select {
 	case <-ctx.Done():
-		err = fmt.Errorf("wait for chat transcript key: %w", ctx.Err())
-	case result := <-done:
-		err = result.Err
-	}
-	if err != nil {
-		g.logger.ErrorContext(ctx, "chat transcript capture stays off for this write",
-			attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		// A cancelled write is routine; the shared call still logs its own failure.
 		return false
+	case result := <-done:
+		return result.Err == nil
 	}
-	return true
+}
+
+// provision runs in the singleflight goroutine, away from the request's panic
+// recovery, so it recovers panics itself. It logs its own failure once, even
+// when every waiting write has given up.
+func (g *CaptureGate) provision(ctx context.Context, organizationID string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("provision chat transcript key panicked: %v", r)
+		}
+		if err != nil {
+			g.logger.ErrorContext(ctx, "chat transcript capture stays off until the key is provisioned",
+				attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		}
+	}()
+	if _, ok := g.ready.Load(organizationID); ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	defer cancel()
+	if err := g.provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
+		return fmt.Errorf("provision chat transcript key: %w", err)
+	}
+	g.ready.Store(organizationID, struct{}{})
+	return nil
 }
