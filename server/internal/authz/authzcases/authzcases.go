@@ -361,8 +361,11 @@ func constructorAnswer(grants []authz.Grant, c constructor, args []string, probe
 		check = check.Probe()
 	}
 	allowed, err := authz.GrantsAuthorize(grants, check)
-	if err != nil || allowed || !probe || c.parent == "" {
-		return allowed, err
+	if err != nil {
+		return false, fmt.Errorf("authorize: %w", err)
+	}
+	if allowed || !probe || c.parent == "" {
+		return allowed, nil
 	}
 	ref := findConstructor(c.ref, c.method)
 	if ref == nil {
@@ -374,8 +377,11 @@ func constructorAnswer(grants []authz.Grant, c constructor, args []string, probe
 	}
 	for _, resource := range []string{caseResource, caseResource2, caseOtherResource} {
 		allowed, err := authz.GrantsAuthorize(grants, ref.build(refArgs(*ref, resource, project)).Probe())
-		if err != nil || allowed {
-			return allowed, err
+		if err != nil {
+			return false, fmt.Errorf("authorize %s on %s: %w", c.ref, resource, err)
+		}
+		if allowed {
+			return true, nil
 		}
 	}
 	return false, nil

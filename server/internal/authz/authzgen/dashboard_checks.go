@@ -169,8 +169,13 @@ let newCheck: (
   resourceId: string,
   dimensions: Readonly<Record<string, string>>,
   ids: readonly string[],
-  options?: { connection?: boolean; collection?: boolean },
+  options?: CheckOptions,
 ) => Check;
+
+interface CheckOptions {
+  readonly connection?: boolean;
+  readonly collection?: boolean;
+}
 
 /**
  * One permission question, built by a constructor below and never by hand.
@@ -205,7 +210,14 @@ export class Check {
   }
 
   static {
-    newCheck = (scope, resourceKind, resourceId, dimensions, ids, options) =>
+    newCheck = (
+      scope: Scope,
+      resourceKind: string,
+      resourceId: string,
+      dimensions: Readonly<Record<string, string>>,
+      ids: readonly string[],
+      options?: CheckOptions,
+    ): Check =>
       new Check(
         {
           scope,
@@ -303,7 +315,15 @@ func renderDashboardChecks(b *strings.Builder, r registry.Registry) {
 		} else {
 			fmt.Fprintf(b, "/** One %s resource: authz.%s(%s). */\n", c.Kind, c.GoName, strings.Join(goArgs, ", "))
 		}
-		fmt.Fprintf(b, "export function %s(%s) {\n  return {\n", c.Name, strings.Join(params, ", "))
+		methodTypes := make([]string, 0, len(c.Methods))
+		for _, m := range c.Methods {
+			mparams := make([]string, 0, len(m.Params))
+			for _, p := range m.Params {
+				mparams = append(mparams, p.Name+": string")
+			}
+			methodTypes = append(methodTypes, fmt.Sprintf("  readonly %s: (%s) => Check;\n", m.Name, strings.Join(mparams, ", ")))
+		}
+		fmt.Fprintf(b, "export function %s(%s): {\n%s} {\n  return {\n", c.Name, strings.Join(params, ", "), strings.Join(methodTypes, ""))
 		for _, m := range c.Methods {
 			mparams := make([]string, 0, len(m.Params))
 			ids := slices.Clone(args)

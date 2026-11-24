@@ -152,8 +152,13 @@ let newCheck: (
   resourceId: string,
   dimensions: Readonly<Record<string, string>>,
   ids: readonly string[],
-  options?: { connection?: boolean; collection?: boolean },
+  options?: CheckOptions,
 ) => Check;
+
+interface CheckOptions {
+  readonly connection?: boolean;
+  readonly collection?: boolean;
+}
 
 /**
  * One permission question, built by a constructor below and never by hand.
@@ -188,7 +193,14 @@ export class Check {
   }
 
   static {
-    newCheck = (scope, resourceKind, resourceId, dimensions, ids, options) =>
+    newCheck = (
+      scope: Scope,
+      resourceKind: string,
+      resourceId: string,
+      dimensions: Readonly<Record<string, string>>,
+      ids: readonly string[],
+      options?: CheckOptions,
+    ): Check =>
       new Check(
         {
           scope,
@@ -241,7 +253,12 @@ function namesResource(id: string): boolean {
 }
 
 /** One org resource: authz.Org(id). */
-export function org(id: string) {
+export function org(id: string): {
+  readonly read: () => Check;
+  readonly admin: () => Check;
+  readonly deviceAgentSync: () => Check;
+  readonly hooksIngest: (projectId: string) => Check;
+} {
   return {
     /** org:read: View organization */
     read: (): Check =>
@@ -259,7 +276,10 @@ export function org(id: string) {
 }
 
 /** One chat resource: authz.Chat(id). */
-export function chat(id: string) {
+export function chat(id: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** chat:read: View agent sessions */
     read: (): Check =>
@@ -271,7 +291,10 @@ export function chat(id: string) {
 }
 
 /** Every chat resource of one parent: authz.Chats(project). */
-export function chats(projectId: string) {
+export function chats(projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** chat:read: View agent sessions */
     read: (): Check =>
@@ -283,7 +306,17 @@ export function chats(projectId: string) {
 }
 
 /** One project resource: authz.Project(id). */
-export function project(id: string) {
+export function project(id: string): {
+  readonly channelsConnect: () => Check;
+  readonly channelsAdmin: () => Check;
+  readonly channelsReadAll: () => Check;
+  readonly read: () => Check;
+  readonly write: () => Check;
+  readonly pluginWrite: () => Check;
+  readonly logRead: () => Check;
+  readonly memoryRead: () => Check;
+  readonly memoryWrite: () => Check;
+} {
   return {
     /** channels:connect: Connect to Channels */
     channelsConnect: (): Check =>
@@ -316,7 +349,11 @@ export function project(id: string) {
 }
 
 /** One mcp resource: authz.MCPServer(id, project). */
-export function mcpServer(id: string, projectId: string) {
+export function mcpServer(id: string, projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+  readonly connect: () => Check;
+} {
   return {
     /** mcp:read: View MCP servers */
     read: (): Check =>
@@ -331,7 +368,11 @@ export function mcpServer(id: string, projectId: string) {
 }
 
 /** Every mcp resource of one parent: authz.MCPServers(project). */
-export function mcpServers(projectId: string) {
+export function mcpServers(projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+  readonly connect: () => Check;
+} {
   return {
     /** mcp:read: View MCP servers */
     read: (): Check =>
@@ -346,7 +387,10 @@ export function mcpServers(projectId: string) {
 }
 
 /** One environment resource: authz.Environment(id, project). */
-export function environment(id: string, projectId: string) {
+export function environment(id: string, projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** environment:read: View environments */
     read: (): Check =>
@@ -358,7 +402,10 @@ export function environment(id: string, projectId: string) {
 }
 
 /** Every environment resource of one parent: authz.Environments(project). */
-export function environments(projectId: string) {
+export function environments(projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** environment:read: View environments */
     read: (): Check =>
@@ -370,7 +417,10 @@ export function environments(projectId: string) {
 }
 
 /** One skill resource: authz.Skill(id). */
-export function skill(id: string) {
+export function skill(id: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** skill:read: View skills */
     read: (): Check =>
@@ -382,7 +432,10 @@ export function skill(id: string) {
 }
 
 /** Every skill resource of one parent: authz.Skills(project). */
-export function skills(projectId: string) {
+export function skills(projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** skill:read: View skills */
     read: (): Check =>
@@ -394,7 +447,10 @@ export function skills(projectId: string) {
 }
 
 /** One assistant resource: authz.Assistant(id, project). */
-export function assistant(id: string, projectId: string) {
+export function assistant(id: string, projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** assistant:read: View assistants */
     read: (): Check =>
@@ -406,7 +462,10 @@ export function assistant(id: string, projectId: string) {
 }
 
 /** Every assistant resource of one parent: authz.Assistants(project). */
-export function assistants(projectId: string) {
+export function assistants(projectId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** assistant:read: View assistants */
     read: (): Check =>
@@ -418,7 +477,12 @@ export function assistants(projectId: string) {
 }
 
 /** One agent resource: authz.Agent(id). */
-export function agent(id: string) {
+export function agent(id: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+  readonly authorize: () => Check;
+  readonly transfer: () => Check;
+} {
   return {
     /** agent:read: View agents */
     read: (): Check =>
@@ -436,7 +500,12 @@ export function agent(id: string) {
 }
 
 /** Every agent resource of one parent: authz.Agents(org). */
-export function agents(orgId: string) {
+export function agents(orgId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+  readonly authorize: () => Check;
+  readonly transfer: () => Check;
+} {
   return {
     /** agent:read: View agents */
     read: (): Check =>
@@ -454,7 +523,10 @@ export function agents(orgId: string) {
 }
 
 /** One workload resource: authz.Workload(id). */
-export function workload(id: string) {
+export function workload(id: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** workload:read: View workload identities */
     read: (): Check =>
@@ -466,7 +538,10 @@ export function workload(id: string) {
 }
 
 /** Every workload resource of one parent: authz.Workloads(org). */
-export function workloads(orgId: string) {
+export function workloads(orgId: string): {
+  readonly read: () => Check;
+  readonly write: () => Check;
+} {
   return {
     /** workload:read: View workload identities */
     read: (): Check =>
