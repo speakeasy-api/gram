@@ -123,21 +123,30 @@ SELECT
     COUNT(*)::bigint AS platform_copies
 FROM platform_copies AS k;
 
--- name: ClearRunnerKeyPlatformCopies :execrows
+-- name: ClearRunnerKeyPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's runner keys
 -- after finalize. The organization-key copy stays.
-UPDATE functions_access AS fa
-SET encryption_key = NULL
-WHERE fa.id IN (
-    SELECT target.id FROM functions_access AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.encryption_key IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND fa.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy.
+WITH cleared AS (
+    UPDATE functions_access AS fa
+    SET encryption_key = NULL
+    WHERE fa.id IN (
+        SELECT target.id FROM functions_access AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.encryption_key IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND fa.organization_id = @organization_id::text
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (fa.encryption_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
