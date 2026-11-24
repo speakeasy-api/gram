@@ -21,7 +21,9 @@ Snapshots own their data and return copies. A compound operation should capture
 one snapshot and use it throughout. Snapshots keep input order for products
 and listings. Exact URLs win over patterns; among matching patterns the one with
 the most literal path segments wins, then the lower URL, then the lower product
-id, so input order never decides attribution. Listing order is content, so it is
+id, so input order never decides attribution. A disabled document still wins
+its match, so its client is unknown rather than a broader pattern's product; an
+enabled document with the same URL or specificity wins over it. Listing order is content, so it is
 part of the fingerprint. Database reads sort by id, then URL, in byte order.
 `CompiledSnapshot` has no families or aliases, like a database snapshot. The database's
 `is_pattern` discriminator is authoritative. Invalid patterns are logged and
