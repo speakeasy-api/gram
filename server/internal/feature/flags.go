@@ -104,6 +104,14 @@ const (
 	// enabled organization. Fails closed. A rollout gate, not authorization.
 	// Removed once the pages are GA.
 	FlagMCPConnectionHealth Flag = "mcp-connection-health"
+	// FlagIntentPolicies gates the Intent-based policies page and its
+	// intentPolicies endpoints (guardrail, analyze, upload). Evaluated on the
+	// server and in the dashboard under the same key; targeted per person by
+	// "email" (lowercase). Only signed-in sessions match, and the server only
+	// with local evaluation (PostHog personal API key). Fails closed. A rollout gate on top of the
+	// endpoints' chat and project RBAC checks, not authorization. Removed once
+	// the feature is GA.
+	FlagIntentPolicies Flag = "intent-policies"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:

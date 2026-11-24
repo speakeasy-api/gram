@@ -53,6 +53,7 @@ import (
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	intentpoliciesc "github.com/speakeasy-api/gram/server/gen/http/intent_policies/client"
 	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -155,6 +156,7 @@ func UsageCommands() []string {
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"integrations (get|list)",
+		"intent-policies (get-guardrail|analyze-session|upload-transcript)",
 		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
@@ -1687,6 +1689,22 @@ func ParseEndpoint(
 		integrationsListKeywordsFlag         = integrationsListFlags.String("keywords", "", "")
 		integrationsListSessionTokenFlag     = integrationsListFlags.String("session-token", "", "")
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
+
+		intentPoliciesFlags = flag.NewFlagSet("intent-policies", flag.ContinueOnError)
+
+		intentPoliciesGetGuardrailFlags                = flag.NewFlagSet("get-guardrail", flag.ExitOnError)
+		intentPoliciesGetGuardrailSessionTokenFlag     = intentPoliciesGetGuardrailFlags.String("session-token", "", "")
+		intentPoliciesGetGuardrailProjectSlugInputFlag = intentPoliciesGetGuardrailFlags.String("project-slug-input", "", "")
+
+		intentPoliciesAnalyzeSessionFlags                = flag.NewFlagSet("analyze-session", flag.ExitOnError)
+		intentPoliciesAnalyzeSessionBodyFlag             = intentPoliciesAnalyzeSessionFlags.String("body", "REQUIRED", "")
+		intentPoliciesAnalyzeSessionSessionTokenFlag     = intentPoliciesAnalyzeSessionFlags.String("session-token", "", "")
+		intentPoliciesAnalyzeSessionProjectSlugInputFlag = intentPoliciesAnalyzeSessionFlags.String("project-slug-input", "", "")
+
+		intentPoliciesUploadTranscriptFlags                = flag.NewFlagSet("upload-transcript", flag.ExitOnError)
+		intentPoliciesUploadTranscriptBodyFlag             = intentPoliciesUploadTranscriptFlags.String("body", "REQUIRED", "")
+		intentPoliciesUploadTranscriptSessionTokenFlag     = intentPoliciesUploadTranscriptFlags.String("session-token", "", "")
+		intentPoliciesUploadTranscriptProjectSlugInputFlag = intentPoliciesUploadTranscriptFlags.String("project-slug-input", "", "")
 
 		internalSessionIssuersFlags = flag.NewFlagSet("internal-session-issuers", flag.ContinueOnError)
 
@@ -6090,6 +6108,11 @@ func ParseEndpoint(
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
 
+	intentPoliciesFlags.Usage = intentPoliciesUsage
+	intentPoliciesGetGuardrailFlags.Usage = intentPoliciesGetGuardrailUsage
+	intentPoliciesAnalyzeSessionFlags.Usage = intentPoliciesAnalyzeSessionUsage
+	intentPoliciesUploadTranscriptFlags.Usage = intentPoliciesUploadTranscriptUsage
+
 	internalSessionIssuersFlags.Usage = internalSessionIssuersUsage
 	internalSessionIssuersGetFlags.Usage = internalSessionIssuersGetUsage
 	internalSessionIssuersSetEnabledFlags.Usage = internalSessionIssuersSetEnabledUsage
@@ -7054,6 +7077,8 @@ func ParseEndpoint(
 			svcf = identityProviderConnectionsFlags
 		case "integrations":
 			svcf = integrationsFlags
+		case "intent-policies":
+			svcf = intentPoliciesFlags
 		case "internal-session-issuers":
 			svcf = internalSessionIssuersFlags
 		case "json-web-key-sets":
@@ -8127,6 +8152,19 @@ func ParseEndpoint(
 
 			case "list":
 				epf = integrationsListFlags
+
+			}
+
+		case "intent-policies":
+			switch epn {
+			case "get-guardrail":
+				epf = intentPoliciesGetGuardrailFlags
+
+			case "analyze-session":
+				epf = intentPoliciesAnalyzeSessionFlags
+
+			case "upload-transcript":
+				epf = intentPoliciesUploadTranscriptFlags
 
 			}
 
@@ -11612,6 +11650,19 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = integrationsc.BuildListPayload(*integrationsListKeywordsFlag, *integrationsListSessionTokenFlag, *integrationsListProjectSlugInputFlag)
+			}
+		case "intent-policies":
+			c := intentpoliciesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-guardrail":
+				endpoint = c.GetGuardrail()
+				data, err = intentpoliciesc.BuildGetGuardrailPayload(*intentPoliciesGetGuardrailSessionTokenFlag, *intentPoliciesGetGuardrailProjectSlugInputFlag)
+			case "analyze-session":
+				endpoint = c.AnalyzeSession()
+				data, err = intentpoliciesc.BuildAnalyzeSessionPayload(*intentPoliciesAnalyzeSessionBodyFlag, *intentPoliciesAnalyzeSessionSessionTokenFlag, *intentPoliciesAnalyzeSessionProjectSlugInputFlag)
+			case "upload-transcript":
+				endpoint = c.UploadTranscript()
+				data, err = intentpoliciesc.BuildUploadTranscriptPayload(*intentPoliciesUploadTranscriptBodyFlag, *intentPoliciesUploadTranscriptSessionTokenFlag, *intentPoliciesUploadTranscriptProjectSlugInputFlag)
 			}
 		case "internal-session-issuers":
 			c := internalsessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20687,6 +20738,83 @@ func integrationsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// intentPoliciesUsage displays the usage of the intent-policies command and
+// its subcommands.
+func intentPoliciesUsage() {
+	fmt.Fprintln(os.Stderr, `Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] intent-policies COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s intent-policies COMMAND --help\n", os.Args[0])
+}
+func intentPoliciesGetGuardrailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies get-guardrail", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies get-guardrail --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesAnalyzeSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies analyze-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies analyze-session --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1,\n      \"limit\": 2,\n      \"offset\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesUploadTranscriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies upload-transcript", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies upload-transcript --body '{\n      \"content\": \"aa\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // internalSessionIssuersUsage displays the usage of the

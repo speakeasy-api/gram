@@ -40,6 +40,7 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Integrations } from "./integrations.js";
+import { IntentPolicies } from "./intentpolicies.js";
 import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
@@ -290,6 +291,11 @@ export class Gram extends ClientSDK {
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _intentPolicies?: IntentPolicies;
+  get intentPolicies(): IntentPolicies {
+    return (this._intentPolicies ??= new IntentPolicies(this._options));
   }
 
   private _internalSessionIssuers?: InternalSessionIssuers;
