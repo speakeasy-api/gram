@@ -193,6 +193,8 @@ func requireAttachmentRefreshReach(t *testing.T, ctx context.Context, q *repo.Qu
 	require.Len(t, rows, 1)
 	require.Equal(t, id, rows[0].ID)
 	require.NoError(t, err)
+	_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(id, "org_unrelated"))
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a live attachment cannot reauthorize a refresh claimed in another tenant")
 	require.Equal(t, id, candidate.RemoteSession.ID)
 }
 
