@@ -172,3 +172,33 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 		})
 	}
 }
+
+// Deployed databases keep application tables in a non-public schema reached
+// through search_path. The check must find the table where the store's
+// unqualified queries do.
+func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
+	t.Parallel()
+	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	db, err := infra.CloneTestDatabase(t, "transcript_shadow_search_path")
+	require.NoError(t, err)
+
+	//nolint:glint // notestingrawsql: isolated DDL fixture that moves the table into another schema.
+	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS public.chat_message_transcripts;
+CREATE SCHEMA app;
+CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
+ organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp())`)
+	require.NoError(t, err)
+
+	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
+	require.NoError(t, err)
+	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	require.EqualError(t, checkTranscriptShadowSchema(t.Context(), tx), "chat transcript shadow schema is unavailable or incompatible",
+		"a table outside the search_path is not the one the store would use")
+
+	_, err = tx.Exec(t.Context(), "SET LOCAL search_path = app") //nolint:glint // notestingrawsql: mirrors the deployed connection's search_path.
+	require.NoError(t, err)
+	require.NoError(t, checkTranscriptShadowSchema(t.Context(), tx))
+}
