@@ -17,6 +17,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -257,9 +260,9 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// Inventory attributes the shared upstream grant to its minting issuer,
-// never to a sibling issuer merely linked to the same client.
-func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *testing.T) {
+// A sibling issuer can reuse the same user grant via a live typed offer,
+// but an issuer-client compatibility link alone is not reachability.
+func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -316,6 +319,45 @@ func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *te
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
 	require.Empty(t, res.Items[0].Upstreams, "a stale sibling link is not session provenance")
+
+	projectID := *authCtx.ProjectID
+	source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ProjectID: projectID, Name: conv.ToPGText("Shared upstream"), Slug: conv.ToPGText("shared-upstream"),
+		TransportType: "streamable-http", Url: "https://shared-upstream.example.test/mcp",
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Sibling server"), Slug: conv.ToPGText("sibling-server"),
+		UserSessionIssuerID: conv.ToNullUUID(siblingID), RemoteMcpServerID: conv.ToNullUUID(source.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	offerClientID := seedInventoryOAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, server.ID, clientID)
+
+	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1)
+	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
+
+	require.NoError(t, authclientbackfill.New(ti.conn).SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: offerClientID, Enabled: false}))
+	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Empty(t, res.Items[0].Upstreams, "disabling the offer removes sibling reach without consulting the legacy link")
+}
+
+func seedInventoryOAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, clientID uuid.UUID) uuid.UUID {
+	t.Helper()
+	typed := authclientbackfill.New(ti.conn)
+	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID),
+		ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: authClient, Source: "admin",
+	}))
+	return authClient
 }
 
 // A client detached from the issuer that minted the grant keeps live upstream
