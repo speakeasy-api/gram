@@ -405,17 +405,17 @@ func (f failure) sameServer(s signIn) bool {
 	return a.ServerID != "" || (s.project == a.ProjectID && s.remoteClientID == a.RemoteSessionClientID)
 }
 
-// sameApp treats a failure of an unnamed client, or filed under no verified app, as any
-// app's: an unnamed app can sign in again under another registration. Otherwise it
-// compares the client only when both rows name a real one: one registration kind covers many apps.
+// sameApp: an unnamed failure is any app's but the dashboard's, a named one its family's or, unnamed, its registration's.
 func (f failure) sameApp(app, clientFamily string) bool {
-	if !NamedClient(f.a.ClientFamily) {
+	switch {
+	case !NamedClient(f.a.ClientFamily):
+		return app != AppFirstParty.key || f.a.AppKey == AppFirstParty.key
+	case f.a.ClientFamily == clientFamily:
 		return true
-	}
-	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
+	case f.a.AppKey != AppUnverified.key && app != f.a.AppKey:
 		return false
 	}
-	return !NamedClient(f.a.ClientFamily) || !NamedClient(clientFamily) || f.a.ClientFamily == clientFamily
+	return !NamedClient(clientFamily)
 }
 
 // servedBySameService reports whether the person's served connection s, on f's server,

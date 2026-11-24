@@ -288,7 +288,7 @@ func (f *failingFixture) unnamedServed(p urn.SessionSubject) Served {
 // An unnamed app that gave up its expired registration and signed in under another one got in.
 func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnSignInThere(t *testing.T) {
 	t.Parallel()
-	for _, family := range []string{"", FamilyOther} {
+	for _, family := range []string{"", FamilyOther, FamilyScript, FamilyBrowser} {
 		f := newFailingFixture(t)
 		p := person()
 		f.unnamedRenewalsFail(p, client(family))
@@ -304,7 +304,7 @@ func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnSignInThere(t *testing.
 
 func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnServedRequestThere(t *testing.T) {
 	t.Parallel()
-	for _, family := range []string{"", FamilyOther} {
+	for _, family := range []string{"", FamilyOther, FamilyScript, FamilyBrowser} {
 		f := newFailingFixture(t)
 		p := person()
 		f.unnamedRenewalsFail(p, client(family))
@@ -343,6 +343,44 @@ func TestFailingNow_AnUnnamedAppSignInFailureStaysForOtherServersPeopleAndOrgani
 	require.Len(t, f.failing(), 1, "another server's, person's or organization's success does not end it")
 }
 
+// The dashboard's own sign-in is the person using Speakeasy, not an app getting in.
+func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterTheDashboardSignsIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppFirstParty), 20*time.Minute, StepInboundConsent, ResultComplete, Subject(&p), client(FamilyBrowser))
+	require.Len(t, f.failing(), 1)
+}
+
+func TestFailingNow_AnUnnamedGatewayAppSignInFailureEndsOnAnyOwnRequestThroughAMember(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	gateway := uuid.New()
+	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p))
+	require.Len(t, f.failing(), 1)
+
+	s := f.conn(p, serverKindMeta, gateway, AppOtherMetadataURL)
+	s.MemberID, s.ClientFamily = uuid.NewString(), FamilyOther
+	f.answered(s, 20*time.Minute)
+	require.Empty(t, f.failing())
+}
+
+// Another app working mid-run restarts it: only the failures after that count.
+func TestFailingNow_AnotherAppWorkingInAnUnnamedRunRestartsIt(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 2*time.Hour, StepInboundToken, ResultCodeIssued, Subject(&p))
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, f.at(30*time.Minute), got[0].OpenedAt.UTC())
+	require.Equal(t, uint64(2), got[0].Failures, "the 30 minute attempt and its one repeat")
+	require.Equal(t, f.at(2*time.Hour), got[0].LastWorkedAt.UTC())
+}
+
 // Later means after the last failed attempt ended; a success at or before it does not end the run.
 func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterAnEarlierSuccess(t *testing.T) {
 	t.Parallel()
@@ -354,6 +392,16 @@ func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterAnEarlierSuccess(t *testi
 	got := f.failing()
 	require.Len(t, got, 1)
 	require.Equal(t, f.at(30*time.Minute), got[0].LastWorkedAt.UTC())
+}
+
+// A named app that signs in again under another registration got in.
+func TestFailingNow_ANamedAppSignInFailureEndsOnItsSignInUnderAnotherRegistration(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyCodexCLI))
+	require.Empty(t, f.failing())
 }
 
 // A named app that keeps failing stays listed while another named app works for the same person.
