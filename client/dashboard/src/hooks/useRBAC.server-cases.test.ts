@@ -77,6 +77,14 @@ describe("hasScopeInGrants agrees with the server", () => {
 
   it("has cases", () => {
     expect(cases.length).toBeGreaterThan(0);
-    expect(cases.some((c) => c.calls.length > 0)).toBe(true);
+    // Every generated constructor is answered by the server somewhere.
+    const constructorNames = Object.entries(authz)
+      .filter(
+        ([name, value]) => name !== "Check" && typeof value === "function",
+      )
+      .map(([name]) => name);
+    expect(
+      new Set(cases.flatMap((c) => c.calls.map(([name]) => name))),
+    ).toEqual(new Set(constructorNames));
   });
 });

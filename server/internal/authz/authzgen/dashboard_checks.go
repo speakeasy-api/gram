@@ -12,7 +12,8 @@ import (
 
 // The dashboard gets one check constructor per Go ref and collection, with the
 // same name, arguments and methods: authz.mcpServer(id, projectId).write() is
-// authz.MCPServer(id, project).Write(). Both sides are rendered from
+// authz.MCPServer(id, project).Write(). Tool calls (DimensionSets such as
+// ToolCall) are left out: the dashboard never decides one. Both sides are rendered from
 // dashboardConstructors, and the cases in authzcases are answered by calling
 // the Go function each TypeScript constructor names, so a constructor that
 // asks a different question than its Go twin fails the dashboard's tests.

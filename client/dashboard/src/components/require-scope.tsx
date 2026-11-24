@@ -110,10 +110,19 @@ export function RequireScope(
   if (props.check !== undefined) {
     const checks = Array.isArray(props.check) ? props.check : [props.check];
     allowed = all ? checks.every(can) : checks.some(can);
-    // The fallback names what is missing and lets the viewer ask for it.
+    // The fallback names what is missing and lets the viewer ask for it. A
+    // probe on a collection, or checks on different resources, ask about no
+    // single resource, so the request covers the project.
     scopes = checks.map((check) => check.scope);
-    resourceId = checks[0]?.resourceId;
-    projectId = checks[0]?.dimensions.projectId;
+    const [first] = checks;
+    const oneResource = checks.every(
+      (check) =>
+        check.resourceId === first?.resourceId &&
+        !(check.collection && check.isProbe),
+    );
+    resourceId = oneResource ? first?.resourceId : undefined;
+    const projects = new Set(checks.map((check) => check.dimensions.projectId));
+    projectId = projects.size === 1 ? first?.dimensions.projectId : undefined;
   } else {
     scopes = Array.isArray(props.scope) ? props.scope : [props.scope];
     resourceId = props.resourceId;

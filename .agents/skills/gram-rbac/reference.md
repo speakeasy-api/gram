@@ -127,7 +127,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 **`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `can(check)`, for a check built by a generated constructor in `lib/authz.gen.ts` (`can(authz.environments(projectId).write())`), and the older `hasScope(scope, resourceId?, projectId?)`, whose optional arguments let a call leave out a dimension the server checks, so new code uses `can`. It also exposes `hasAllScopes(scopes, resourceId?, projectId?)`, `hasAnyScope(scopes, resourceId?, projectId?)`, plus `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while grants are loading. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` for code that needs parity with backend matching outside the standard `hasScope` flow. Resource kinds and exclusions come from the generated `client/dashboard/src/lib/authz.gen.ts`; the matching and precedence logic is hand-written TypeScript, held to the server by `useRBAC.server-cases.test.ts` replaying the generated `authz-cases.gen.json`.
 
-**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `check: Check | Check[]` from the generated constructors (new code), or the older `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `projectId?: string` (the project the resource belongs to, for scope families with a `project_id` dimension), `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
+**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `check: Check | Check[]` from the generated constructors (new code), or the older `scope: Scope | Scope[]` with `resourceId?: string` and `projectId?: string` (the project the resource belongs to, for scope families with a `project_id` dimension); `resourceId` and `projectId` go with `scope`, never with `check`. Also `all?: boolean` (AND vs OR when several), `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
 
 - `level="page"` — renders a full Unauthorized fallback page when the scope is missing.
 - `level="section"` — hides the children entirely.
@@ -171,29 +171,35 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
    - `level="component"` around a button or input renders disabled with a tooltip reason.
 
    ```tsx
-   <RequireScope scope="org:admin" level="component" reason="Admin only">
+   <RequireScope
+     check={authz.org(organization.id).admin()}
+     level="component"
+     reason="Admin only"
+   >
      <Button onClick={() => setDialogOpen(true)}>New API key</Button>
    </RequireScope>
    ```
 
-2. **Multi-scope gates.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope scope={["org:read", "org:admin"]} level="page">`.
+   Build every check with a constructor from `lib/authz.gen.ts` (`import * as authz from "@/lib/authz.gen"`). Each is the Go ref of the same name with the same required arguments, so a check cannot leave out the project or the resource the server checks. Older code still passes `scope`, `resourceId` and `projectId`; move a gate to `check` when you touch it.
 
-3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} projectId={projectId} level="component">`. For scope families with a `project_id` dimension (MCP, environments, assistants, inference), also pass `projectId` so project-wide grants match and grants for other projects do not (`mcp:auth` also carries one, but it cannot be checked in the dashboard: the server binds the connection owner): `hasScope("assistant:write", assistant.id, project.id)` for one assistant, `hasScope("assistant:write", project.id, project.id)` for project-level actions such as create, and `hasScope("assistant:read", undefined, project.id)` for "any assistant in this project".
+2. **Several checks.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope check={[authz.org(orgId).read(), authz.org(orgId).admin()]} level="page">`.
 
-4. **Imperative checks — use `useRBAC`.** When you need the scope result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
+3. **One resource, a collection, or any resource.** `authz.assistant(assistant.id, project.id).write()` asks about one assistant; `authz.assistants(project.id).write()` asks about the project's assistants as a whole, as the server does for create and list; `authz.assistants(project.id).read().probe()` asks whether the caller could act on any assistant in the project, for navigation and discovery. Take the project from the row you loaded, never from the URL when they can differ.
+
+4. **Imperative checks — use `useRBAC`.** When you need the result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
 
    ```tsx
-   const { hasScope, isLoading } = useRBAC();
-   const canEdit = hasScope("mcp:write", toolsetId, projectId);
+   const { can, isLoading } = useRBAC();
+   const canEdit = can(authz.mcpServer(server.id, server.projectId).write());
    ```
 
-5. **The `Scope` string you pass must match the server.** Import `Scope` directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
+5. **The `Scope` string you pass to the older `scope` props must match the server.** Import `Scope` directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
 
 6. **Update the dashboard grant reference.** Any new or changed dashboard gate must update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md), including page-level access, component/action-level access, resource selector target, and any notable server-side check that differs from the visible UI gate.
 
 ### How to inspect the caller's grants
 
-- **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
+- **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `can` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
 - **In Go handlers**: `authz.GrantsFromContext(ctx)` returns the grants on the request context after the engine's `PrepareContext` middleware has run.
 - **Within long-lived requests**: use `Engine.RefreshContext` before a later operation that must observe grant revocation. It clears resolved grant/policy snapshots and repeats admission while retaining the original credential constraints. Continue with the returned context and fail closed on error.
 - **Admitted jobs**: capture the originally prepared policies with `CaptureAdmissionBoundary`, then `Apply` that boundary to callback contexts when a job must never gain newly granted authority. The boundary retains no request context, survives later refreshes, and every policy must allow the operation.
