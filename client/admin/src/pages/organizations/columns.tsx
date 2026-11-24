@@ -33,13 +33,19 @@ export const ORG_COLUMNS = column.columns([
     // The link, not the row, carries the keyboard path and the accessible
     // name. It also lets the operator open the organization in a new tab.
     cell: ({ row }) => (
-      <Link
-        to="/organizations/$idOrSlug"
-        params={{ idOrSlug: row.original.slug || row.original.id }}
-        className="text-sm underline-offset-4 hover:underline focus-visible:underline"
-      >
-        {row.original.name}
-      </Link>
+      <>
+        <Link
+          to="/organizations/$idOrSlug"
+          params={{ idOrSlug: row.original.slug || row.original.id }}
+          className="text-sm underline-offset-4 hover:underline focus-visible:underline"
+        >
+          {row.original.name}
+        </Link>
+        {/* The row is muted for sighted operators; colour alone tells a
+            screen reader nothing. Outside the link so its name stays the
+            organization's name. */}
+        {row.original.internal && <span className="sr-only">Internal</span>}
+      </>
     ),
   }),
   column.accessor("slug", {

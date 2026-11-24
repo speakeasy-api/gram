@@ -5,6 +5,8 @@ import {
   NO_FILTERS,
   statusParams,
   statusSelection,
+  internalParams,
+  internalSelection,
 } from "./organizationFilters";
 
 describe("organization status", () => {
@@ -62,5 +64,43 @@ describe("organization status", () => {
     expect(
       statusSelection({ disabledOnly: false, disabled: ["active"] }),
     ).toEqual([]);
+  });
+});
+
+describe("internal label", () => {
+  it("maps the internal filter to the request", () => {
+    expect(internalParams({})).toEqual({ internal_status: "all" });
+    expect(internalParams({ internalStatus: "all" })).toEqual({
+      internal_status: "all",
+    });
+    expect(internalParams({ internalStatus: "internal" })).toEqual({
+      internal_status: "internal",
+    });
+    expect(internalParams({ internalStatus: "external" })).toEqual({
+      internal_status: "external",
+    });
+  });
+
+  it("writes only a chosen internal status to the URL", () => {
+    expect(
+      filtersToSearch({ ...NO_FILTERS, internal: ["external"] }).internalStatus,
+    ).toBe("external");
+    expect(
+      filtersToSearch({ ...NO_FILTERS, internal: ["internal"] }).internalStatus,
+    ).toBe("internal");
+    expect(filtersToSearch(NO_FILTERS).internalStatus).toBeUndefined();
+    // Both at once is every organization, which is the default and so absent.
+    expect(
+      filtersToSearch({ ...NO_FILTERS, internal: ["internal", "external"] })
+        .internalStatus,
+    ).toBeUndefined();
+  });
+
+  it("reads the chosen status back for the controls", () => {
+    expect(internalSelection({})).toEqual([]);
+    expect(internalSelection({ internalStatus: "all" })).toEqual([]);
+    expect(internalSelection({ internalStatus: "external" })).toEqual([
+      "external",
+    ]);
   });
 });

@@ -21,7 +21,18 @@ export const DISABLED_STATES = ["active", "disabled"] as const;
 
 export type DisabledState = (typeof DISABLED_STATES)[number];
 
-export const FILTER_GROUP_KEYS = ["type", "trial", "disabled"] as const;
+// Whether staff marked the organization as internal: owned by Speakeasy
+// employees for testing or dogfooding.
+export const INTERNAL_STATES = ["internal", "external"] as const;
+
+export type InternalState = (typeof INTERNAL_STATES)[number];
+
+export const FILTER_GROUP_KEYS = [
+  "type",
+  "trial",
+  "disabled",
+  "internal",
+] as const;
 
 export type FilterGroupKey = (typeof FILTER_GROUP_KEYS)[number];
 
@@ -50,6 +61,7 @@ export const NO_FILTERS: FilterSelection = {
   type: [],
   trial: [],
   disabled: [],
+  internal: [],
 };
 
 export type FilterOption = { value: string; label: string };
@@ -72,6 +84,13 @@ export type FilterGroup = {
 const DISABLED_LABELS: Record<DisabledState, string> = {
   active: "Active",
   disabled: "Disabled",
+};
+
+// Named for what the list does, not for the stored value: "external" is every
+// organization staff have not marked.
+const INTERNAL_LABELS: Record<InternalState, string> = {
+  internal: "Internal only",
+  external: "Exclude internal",
 };
 
 // The order here is the order the URL, the request and the cache key put a
@@ -104,6 +123,16 @@ export const FILTER_GROUPS: FilterGroup[] = [
     options: DISABLED_STATES.map((value) => ({
       value,
       label: DISABLED_LABELS[value],
+    })),
+  },
+  {
+    key: "internal",
+    label: "Internal",
+    emptyLabel: "All organizations",
+    allLabel: "All organizations",
+    options: INTERNAL_STATES.map((value) => ({
+      value,
+      label: INTERNAL_LABELS[value],
     })),
   },
 ];
@@ -203,6 +232,11 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
   return kept.length > 0 ? kept : undefined;
 }
 
+export function internalStates(chosen: string[]): InternalState[] | undefined {
+  const kept = inOptionOrder(chosen, INTERNAL_STATES);
+  return kept.length > 0 ? kept : undefined;
+}
+
 /** Canonical status; old fields are read only for bookmark compatibility. */
 export type FilterSearch = MemberRange &
   CreatedSelection & {
@@ -212,6 +246,7 @@ export type FilterSearch = MemberRange &
     disabledStatus?: "all" | DisabledState;
     disabled?: DisabledState[];
     disabledOnly?: boolean;
+    internalStatus?: "all" | InternalState;
   };
 
 /** New navigations only write the canonical status, omitting All. */
@@ -221,8 +256,10 @@ export function filtersToSearch(filters: FilterSelection): MemberRange &
     trial?: TrialState[];
     disabledStatus?: DisabledState;
     whitelisted?: WhitelistState;
+    internalStatus?: InternalState;
   } {
   const status = disabledStates(filters.disabled);
+  const internal = internalStates(filters.internal);
   return {
     ...memberRange(filters),
     ...createdRange(filters),
@@ -231,6 +268,7 @@ export function filtersToSearch(filters: FilterSelection): MemberRange &
     trial: trialStates(filters.trial),
     disabledStatus: status?.length === 1 ? status[0] : undefined,
     whitelisted: whitelistState(filters.whitelisted),
+    internalStatus: internal?.length === 1 ? internal[0] : undefined,
   };
 }
 
@@ -279,6 +317,25 @@ export function statusParams(search: FilterSearch): {
   return {
     disabled_status:
       status === "active" || status === "disabled" ? status : "all",
+  };
+}
+
+/** Empty is every organization, which is the default and is never written. */
+export function internalSelection(search: FilterSearch): string[] {
+  return search.internalStatus === "internal" ||
+    search.internalStatus === "external"
+    ? [search.internalStatus]
+    : [];
+}
+
+/** Translate the internal label at the API boundary. */
+export function internalParams(search: FilterSearch): {
+  internal_status: "all" | InternalState;
+} {
+  const status = internalSelection(search)[0];
+  return {
+    internal_status:
+      status === "internal" || status === "external" ? status : "all",
   };
 }
 

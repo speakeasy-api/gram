@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext } from "react";
 
 import {
   filtersToSearch,
+  internalSelection,
   statusSelection,
   type FilterSelection,
 } from "@/lib/organizationFilters";
@@ -48,6 +49,7 @@ export function useApplyFilters(): (
           type: search.type ?? [],
           trial: search.trial ?? [],
           disabled: statusSelection(search),
+          internal: internalSelection(search),
         });
       // A preset label is not a request filter. Only that metadata changing
       // preserves the page; an unchanged Apply still intentionally resets it.

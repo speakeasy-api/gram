@@ -289,7 +289,11 @@ function picker(group: string): HTMLElement {
 // choice does not close it, because the group takes more than one, so a second
 // call must not toggle the open list shut.
 async function chooseFilter(group: string, option: string): Promise<void> {
-  if (group === "Organization Status" || group === "Whitelist") {
+  if (
+    group === "Organization Status" ||
+    group === "Whitelist" ||
+    group === "Internal"
+  ) {
     openOn(picker(group));
     fireEvent.click(await screen.findByRole("option", { name: option }));
     return;
@@ -5208,5 +5212,77 @@ describe("created date filters", () => {
         direction: "asc",
       }),
     );
+  });
+});
+
+describe("internal organizations", () => {
+  it("mutes internal rows and names them for screen readers", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: [{ ...FIRST_ORG, internal: true }, SECOND_ORG],
+      total: 2,
+    });
+    await renderRouteTree(routeTree);
+
+    const internalLink = await tableQueries().findByRole("link", {
+      name: FIRST_ORG.name,
+    });
+    const internalRow = rowFor(internalLink);
+    const customerRow = rowFor(
+      tableQueries().getByRole("link", { name: SECOND_ORG.name }),
+    );
+
+    expect(internalRow.classList.contains("text-muted-foreground")).toBe(true);
+    expect(customerRow.classList.contains("text-muted-foreground")).toBe(false);
+
+    // Colour alone says nothing to a screen reader, so the row also says it in
+    // text. The link's own name stays the organization's name.
+    const label = within(internalRow).getByText("Internal");
+    expect(label.classList.contains("sr-only")).toBe(true);
+    expect(internalLink.contains(label)).toBe(false);
+    expect(within(customerRow).queryByText("Internal")).toBeNull();
+  });
+
+  it("shows every organization unless the filter is set", async () => {
+    await renderRouteTree(routeTree);
+    await waitFor(() => expect(lastListParams().internal_status).toBe("all"));
+  });
+
+  it.each([
+    ["internal", "Internal only", "Internal: only"],
+    ["external", "Exclude internal", "Internal: excluded"],
+  ] as const)(
+    "requests %s from the filter sheet and clears it from the chip",
+    async (status, option, chip) => {
+      const { router } = await renderRouteTree(routeTree);
+      await waitFor(() => expect(lastListParams().internal_status).toBe("all"));
+
+      await openFilters("Internal");
+      await chooseFilter("Internal", option);
+      // Nothing is requested until the operator applies.
+      expect(lastListParams().internal_status).toBe("all");
+      applyFilters();
+
+      await waitFor(() =>
+        expect(lastListParams().internal_status).toBe(status),
+      );
+      expect(currentSearch(router)).toContain(`internalStatus=${status}`);
+      expect(screen.getByText(chip)).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: `Clear Internal ${option}` }),
+      );
+      await waitFor(() => expect(lastListParams().internal_status).toBe("all"));
+      expect(currentSearch(router)).not.toContain("internalStatus");
+    },
+  );
+
+  it("reads the internal filter from a shared link", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: urlFor({ internalStatus: "external" }),
+    });
+    await waitFor(() =>
+      expect(lastListParams().internal_status).toBe("external"),
+    );
+    expect(screen.getByText("Internal: excluded")).toBeTruthy();
   });
 });

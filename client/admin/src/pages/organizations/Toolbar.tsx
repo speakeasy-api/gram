@@ -19,10 +19,12 @@ import { Input } from "@/components/ui/input";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   FILTER_GROUPS,
+  internalSelection,
   statusSelection,
   optionsFor,
   WHITELIST_LABELS,
   type FilterControlKey,
+  type FilterGroup,
   type FilterSelection,
 } from "@/lib/organizationFilters";
 import { CREATED_PRESETS, createdPresetMetadata } from "@/lib/createdRange";
@@ -124,6 +126,7 @@ export function Toolbar({
     type: search.type ?? [],
     trial: search.trial ?? [],
     disabled: statusSelection(search),
+    internal: internalSelection(search),
     createdFrom: search.createdFrom,
     createdTo: search.createdTo,
     createdPreset: search.createdPreset,
@@ -184,9 +187,7 @@ export function Toolbar({
                 })
               }
             >
-              {group.key === "disabled"
-                ? `Status: ${label}`
-                : `${group.label}: ${label}`}
+              {chipText(group, value, label)}
             </AppliedFilterChip>
           );
         }),
@@ -267,6 +268,16 @@ export function Toolbar({
       <CreateOrganization reporter={reporter} />
     </div>
   );
+}
+
+// The sheet's options are phrased as choices ("Exclude internal"); a chip
+// states what is already in force, so two groups word it differently.
+function chipText(group: FilterGroup, value: string, label: string): string {
+  if (group.key === "disabled") return `Status: ${label}`;
+  if (group.key === "internal") {
+    return value === "internal" ? "Internal: only" : "Internal: excluded";
+  }
+  return `${group.label}: ${label}`;
 }
 
 function AppliedFilterChip({

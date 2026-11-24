@@ -86,6 +86,7 @@ export function FilterSheet({
 }): JSX.Element {
   const disabledId = useId();
   const whitelistedId = useId();
+  const internalId = useId();
   const membersId = useId();
   const createdId = useId();
   const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
@@ -191,6 +192,44 @@ export function FilterSheet({
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="disabled">Disabled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : group.key === "internal" ? (
+              <div key={group.key} className="space-y-2">
+                <label htmlFor={internalId} className="text-sm font-medium">
+                  {group.label}
+                </label>
+                <Select
+                  value={
+                    draft.internal.length === 1 ? draft.internal[0] : "all"
+                  }
+                  onValueChange={(status) =>
+                    setDraft((previous) => ({
+                      ...previous,
+                      internal:
+                        status === "internal" || status === "external"
+                          ? [status]
+                          : [],
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id={internalId}
+                    className="w-full"
+                    ref={(node) => {
+                      if (node) pickers.current.internal = node;
+                    }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{group.emptyLabel}</SelectItem>
+                    {group.options.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

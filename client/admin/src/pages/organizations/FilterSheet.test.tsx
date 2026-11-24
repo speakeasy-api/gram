@@ -63,3 +63,28 @@ it("opens directly on a custom endpoint and clearing an invalid bound recovers",
     createdTo: undefined,
   });
 });
+
+it("offers the internal label as a single choice and applies it", async () => {
+  const onApply = vi.fn<() => void>();
+  render(
+    <FilterSheet
+      value={NO_FILTERS}
+      openGroup="internal"
+      onApply={onApply}
+      onOpenChange={vi.fn<() => void>()}
+      onReturnFocus={vi.fn<() => void>()}
+    />,
+  );
+  const select = screen.getByRole("combobox", { name: /^Internal/ });
+  expect(select.textContent).toBe("All organizations");
+  select.focus();
+  fireEvent.keyDown(select, { key: "ArrowDown" });
+  expect(
+    (await screen.findAllByRole("option")).map((option) => option.textContent),
+  ).toEqual(["All organizations", "Internal only", "Exclude internal"]);
+  fireEvent.click(screen.getByRole("option", { name: "Internal only" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  expect(onApply).toHaveBeenCalledWith(
+    expect.objectContaining({ internal: ["internal"] }),
+  );
+});
