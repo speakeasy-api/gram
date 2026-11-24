@@ -368,6 +368,17 @@ const (
 	CacheKeyKey                 = attribute.Key("gram.cache.key")
 	CacheNamespaceKey           = attribute.Key("gram.cache.namespace")
 
+	// RedisRoleKey names the Redis role (auth, ops, or evictable) of the
+	// client or adapter that saw a key.
+	RedisRoleKey = attribute.Key("gram.redis.role")
+
+	// RedisKeyPrefixKey is the declared key-family prefix a key matched, or
+	// "unclassified" for a key that matched none.
+	RedisKeyPrefixKey = attribute.Key("gram.redis.key_prefix")
+
+	// RedisCommandKey is the lower-case Redis command name.
+	RedisCommandKey = attribute.Key("gram.redis.command")
+
 	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
 	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
 	// on the unauthenticated OAuth surface, so it is deliberately omitted for
@@ -2314,6 +2325,13 @@ func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyK
 
 func CacheNamespace(v string) attribute.KeyValue { return CacheNamespaceKey.String(v) }
 func SlogCacheNamespace(v string) slog.Attr      { return slog.String(string(CacheNamespaceKey), v) }
+
+func RedisRole(v string) attribute.KeyValue      { return RedisRoleKey.String(v) }
+func SlogRedisRole(v string) slog.Attr           { return slog.String(string(RedisRoleKey), v) }
+func RedisKeyPrefix(v string) attribute.KeyValue { return RedisKeyPrefixKey.String(v) }
+func SlogRedisKeyPrefix(v string) slog.Attr      { return slog.String(string(RedisKeyPrefixKey), v) }
+func RedisCommand(v string) attribute.KeyValue   { return RedisCommandKey.String(v) }
+func SlogRedisCommand(v string) slog.Attr        { return slog.String(string(RedisCommandKey), v) }
 
 func CIMDOrigin(v string) attribute.KeyValue { return CIMDOriginKey.String(v) }
 func SlogCIMDOrigin(v string) slog.Attr      { return slog.String(string(CIMDOriginKey), v) }

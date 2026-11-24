@@ -194,7 +194,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	spendGateCache := &namespacedSpendGateCache{
 		Cache:     cacheAdapter,
-		namespace: "hooks-spend-gate-test:" + uuid.NewString(),
+		namespace: testenv.TestRedisKeyPrefix + "hooks-spend-gate:" + uuid.NewString(),
 	}
 	t.Cleanup(func() {
 		require.NoError(t, spendGateCache.DeleteByPrefix(context.Background(), ""))

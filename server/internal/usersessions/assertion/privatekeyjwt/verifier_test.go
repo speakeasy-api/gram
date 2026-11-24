@@ -417,7 +417,7 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), privatekeyjwt.DefaultMaxReplayHold-time.Second)
+	short, err := replay.NewRedisGuard(client, testenv.TestRedisKeyPrefix+string(testenv.NewCacheSuffix(t, "short")), privatekeyjwt.DefaultMaxReplayHold-time.Second)
 	require.NoError(t, err)
 
 	_, err = privatekeyjwt.NewVerifier(newKeyResolver(t, client), short)
@@ -524,7 +524,7 @@ func TestVerify_ReplayStoreOutageRefuses(t *testing.T) {
 	// A client pointed at nothing: every command fails at dial time.
 	dead := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
 	t.Cleanup(func() { _ = dead.Close() })
-	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), privatekeyjwt.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(dead, testenv.TestRedisKeyPrefix+string(testenv.NewCacheSuffix(t, "outage")), privatekeyjwt.DefaultMaxReplayHold)
 	require.NoError(t, err)
 	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, live), guard)
 	require.NoError(t, err)
