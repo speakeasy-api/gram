@@ -131,7 +131,9 @@ const (
 // Condition is one clause of a contract's firing condition. A label clause
 // sets Label; a tool clause sets Pattern, matched against the shell command.
 type Condition struct {
-	// Join links the clause to the previous one: "", "and", or "or".
+	// Join links the clause to the previous one: "", "and", or "or". Clauses
+	// joined by "or" form a group and groups are joined by "and", so
+	// A or B and C reads as (A or B) and C.
 	Join string
 
 	// Label is the label key the clause reads.

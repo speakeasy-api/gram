@@ -1,3 +1,4 @@
+import type { IntentCondition } from "@gram/client/models/components/intentcondition.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -384,35 +385,32 @@ function RuleDetail({
 
       <Section title="Fires when">
         <div className="flex flex-col gap-1.5 border bg-card px-3.5 py-3">
-          {contract.conditions.map((c, i) => (
-            <div key={i} className="flex flex-wrap items-baseline gap-2">
+          {conditionGroups(contract.conditions).map((group, g) => (
+            <div key={g} className="flex items-baseline gap-2">
               <span className="w-7 shrink-0 font-mono text-[10px] text-muted-foreground uppercase">
-                {c.join}
+                {g > 0 ? "and" : ""}
               </span>
-              {c.pattern ? (
-                <>
-                  <span className="text-sm text-muted-foreground">
-                    shell command matches
-                  </span>
-                  <code className="bg-muted px-1 font-mono text-xs break-all">
-                    {c.pattern}
-                  </code>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onToggleLabel(c.label)}
-                    className="cursor-pointer font-mono text-[13px] text-foreground underline decoration-neutral-default decoration-dotted underline-offset-2"
-                  >
-                    {c.label}
-                  </button>
-                  <span className="text-sm text-muted-foreground">{c.op}</span>
-                  <span className="font-mono text-[13px] text-foreground">
-                    {c.values.join(" or ")}
-                  </span>
-                </>
-              )}
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 flex-col gap-1.5",
+                  group.length > 1 &&
+                    "border-l-2 border-neutral-default pl-2.5",
+                )}
+              >
+                {group.map((c, i) => (
+                  <div key={i} className="flex flex-wrap items-baseline gap-2">
+                    {group.length > 1 && (
+                      <span className="w-5 shrink-0 font-mono text-[10px] text-muted-foreground uppercase">
+                        {i > 0 ? "or" : ""}
+                      </span>
+                    )}
+                    <ConditionClause
+                      condition={c}
+                      onToggleLabel={onToggleLabel}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
           <div className="mt-1 flex flex-wrap items-baseline gap-2 border-t border-neutral-softest pt-2">
@@ -748,5 +746,49 @@ function Section({
       </div>
       {children}
     </div>
+  );
+}
+
+// Clauses joined by "or" form a group; groups are joined by "and".
+function conditionGroups(conditions: IntentCondition[]): IntentCondition[][] {
+  const groups: IntentCondition[][] = [];
+  for (const c of conditions) {
+    const last = groups.at(-1);
+    if (last && c.join === "or") last.push(c);
+    else groups.push([c]);
+  }
+  return groups;
+}
+
+function ConditionClause({
+  condition: c,
+  onToggleLabel,
+}: {
+  condition: IntentCondition;
+  onToggleLabel: (label: string) => void;
+}) {
+  return c.pattern ? (
+    <>
+      <span className="text-sm text-muted-foreground">
+        shell command matches
+      </span>
+      <code className="bg-muted px-1 font-mono text-xs break-all">
+        {c.pattern}
+      </code>
+    </>
+  ) : (
+    <>
+      <button
+        type="button"
+        onClick={() => onToggleLabel(c.label)}
+        className="cursor-pointer font-mono text-[13px] text-foreground underline decoration-neutral-default decoration-dotted underline-offset-2"
+      >
+        {c.label}
+      </button>
+      <span className="text-sm text-muted-foreground">{c.op}</span>
+      <span className="font-mono text-[13px] text-foreground">
+        {c.values.join(" or ")}
+      </span>
+    </>
   );
 }
