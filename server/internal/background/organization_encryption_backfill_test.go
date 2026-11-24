@@ -18,11 +18,14 @@ import (
 )
 
 // fakeOrganizationEncryptionMigrator records calls in order and fails the
-// organizations named in errs. Every candidate in due is due, except those in
-// notDue, and its due check fails for those in dueErrs.
+// organizations named in errs. It offers the candidates in pages, one page per
+// call, or due as a single page when pages is empty. Every candidate is due,
+// except those in notDue, and its due check fails for those in dueErrs.
 type fakeOrganizationEncryptionMigrator struct {
 	mu        sync.Mutex
 	calls     []string
+	pages     [][]orgencryption.Transition
+	pageReads int
 	due       []orgencryption.Transition
 	notDue    map[string]bool
 	dueErrs   map[string]error
@@ -39,8 +42,18 @@ func (f *fakeOrganizationEncryptionMigrator) record(call, organizationID string)
 	return f.errs[organizationID]
 }
 
-func (f *fakeOrganizationEncryptionMigrator) NextBackfillCandidates(context.Context, orgencryption.BackfillCursor) (orgencryption.BackfillPage, error) {
-	return orgencryption.BackfillPage{Candidates: f.due, More: false}, nil
+func (f *fakeOrganizationEncryptionMigrator) NextBackfillCandidates(_ context.Context, cursor orgencryption.BackfillCursor) (orgencryption.BackfillPage, error) {
+	if len(f.pages) == 0 {
+		return orgencryption.BackfillPage{Candidates: f.due, Next: cursor, More: false}, nil
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	page := f.pageReads
+	f.pageReads++
+
+	return orgencryption.BackfillPage{Candidates: f.pages[page], Next: cursor, More: page < len(f.pages)-1}, nil
 }
 
 func (f *fakeOrganizationEncryptionMigrator) BackfillDue(_ context.Context, transition orgencryption.Transition) (bool, error) {
@@ -358,4 +371,22 @@ func TestOrganizationEncryptionBackfill_ChecksEachCandidateBeforeBackfillingIt(t
 	require.Equal(t, []string{"backfill org_due"}, migrator.calls, "only due candidates are backfilled, and a failed check moves on")
 	require.Equal(t, 1, result.Backfilled)
 	require.Equal(t, 1, result.Failed)
+}
+
+func TestOrganizationEncryptionBackfill_WorksThroughEveryCandidatePage(t *testing.T) {
+	t.Parallel()
+
+	migrator := &fakeOrganizationEncryptionMigrator{
+		pages: [][]orgencryption.Transition{
+			{dualWrite("org_a"), dualWrite("org_b")},
+			{dualWrite("org_c")},
+			{dualWrite("org_d")},
+		},
+	}
+
+	result, err := newBackfillActivities(t, migrator).Backfill(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 3, migrator.pageReads, "it reads every page, and no more")
+	require.Equal(t, []string{"backfill org_a", "backfill org_b", "backfill org_c", "backfill org_d"}, migrator.calls)
+	require.Equal(t, 4, result.Backfilled)
 }
