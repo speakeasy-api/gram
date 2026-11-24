@@ -7,9 +7,6 @@
  * consumers import — not everything the module happens to define. Internals
  * stay internal until something outside needs them.
  */
-export type { IdentityMode } from "./model/identity";
-
-export { REDACTED_SECRET } from "./model/secret";
 
 export { providerUrlLabel } from "./model/provider";
 
