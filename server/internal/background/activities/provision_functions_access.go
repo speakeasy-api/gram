@@ -2,36 +2,33 @@ package activities
 
 import (
 	"context"
-	"crypto/rand"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type ProvisionFunctionsAccess struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	encryption *encryption.Client
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	keys   *runnerkeys.Keys
 }
 
 func NewProvisionFunctionsAccess(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	encryption *encryption.Client,
+	keys *runnerkeys.Keys,
 ) *ProvisionFunctionsAccess {
 	return &ProvisionFunctionsAccess{
-		logger:     logger.With(attr.SlogComponent("provision_functions_access")),
-		db:         db,
-		encryption: encryption,
+		logger: logger.With(attr.SlogComponent("provision_functions_access")),
+		db:     db,
+		keys:   keys,
 	}
 }
 
@@ -49,48 +46,20 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 		return oops.E(oops.CodeInvalid, err, "invalid inputs").LogError(ctx, logger)
 	}
 
-	dbtx, err := p.db.Begin(ctx)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error accessing database").LogError(ctx, p.logger)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return dbtx.Rollback(ctx)
-	})
-
-	deprepo := repo.New(dbtx)
-	attachments, err := deprepo.GetDeploymentFunctionsWithoutAccess(ctx, repo.GetDeploymentFunctionsWithoutAccessParams{
+	attachments, err := repo.New(p.db).GetDeploymentFunctionsWithoutAccess(ctx, repo.GetDeploymentFunctionsWithoutAccessParams{
 		DeploymentID: deploymentID,
 		ProjectID:    projectID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get functions missing access").LogError(ctx, logger)
 	}
-
-	for _, aid := range attachments {
-		key := make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate encryption key").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
-		}
-
-		sealedKey, err := p.encryption.Encrypt(key)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to encrypt functions access key").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
-		}
-
-		_, err = deprepo.CreateDeploymentFunctionsAccess(ctx, repo.CreateDeploymentFunctionsAccessParams{
-			ProjectID:     projectID,
-			DeploymentID:  deploymentID,
-			FunctionID:    aid,
-			EncryptionKey: conv.NewSecret([]byte(sealedKey)),
-			BearerFormat:  conv.ToPGText("v01"),
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to create functions access").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
-		}
+	if len(attachments) == 0 {
+		return nil
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error committing functions access creation").LogError(ctx, logger)
+	// A failed run leaves some functions without access; the retry fills them.
+	if _, err := p.keys.Create(ctx, p.db, projectID, deploymentID, attachments); err != nil {
+		return runnerkeys.Error(ctx, logger, err, "failed to create functions access")
 	}
 
 	return nil

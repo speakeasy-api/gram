@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -939,6 +940,56 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 		arg.Value,
 	)
 	return err
+}
+
+const createFunctionsAccessFixture = `-- name: CreateFunctionsAccessFixture :one
+INSERT INTO functions_access (
+    project_id
+  , organization_id
+  , deployment_id
+  , function_id
+  , encryption_key
+  , bearer_format
+) VALUES (
+    $1
+  , (
+      SELECT p.organization_id
+      FROM projects AS p
+      JOIN organization_metadata AS om ON om.id = p.organization_id
+      WHERE p.id = $1
+    )
+  , $2
+  , $3
+  , $4
+  , $5
+)
+RETURNING id
+`
+
+type CreateFunctionsAccessFixtureParams struct {
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	EncryptionKey conv.Secret
+	BearerFormat  pgtype.Text
+}
+
+// Test-only fixture: stores a function runner key as given, unfenced, for
+// tests that need a deployment's function to have credentials.
+// organization_id is the project's organization, or NULL when it has no
+// metadata row. Production code writes runner keys through package
+// runnerkeys.
+func (q *Queries) CreateFunctionsAccessFixture(ctx context.Context, arg CreateFunctionsAccessFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createFunctionsAccessFixture,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.EncryptionKey,
+		arg.BearerFormat,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
@@ -2561,6 +2612,32 @@ func (q *Queries) GetFunctionsAccessOrganizationFixture(ctx context.Context, id 
 	row := q.db.QueryRow(ctx, getFunctionsAccessOrganizationFixture, id)
 	var i GetFunctionsAccessOrganizationFixtureRow
 	err := row.Scan(&i.OrganizationID, &i.UpdatedAt)
+	return i, err
+}
+
+const getFunctionsAccessRowFixture = `-- name: GetFunctionsAccessRowFixture :one
+SELECT id, seq, project_id, deployment_id, function_id, organization_id, encryption_key, encryption_key_org_encrypted, bearer_format, created_at, updated_at, deleted_at, deleted FROM functions_access WHERE id = $1
+`
+
+// Test-only fixture: reads a function runner key row as stored.
+func (q *Queries) GetFunctionsAccessRowFixture(ctx context.Context, id uuid.UUID) (FunctionsAccess, error) {
+	row := q.db.QueryRow(ctx, getFunctionsAccessRowFixture, id)
+	var i FunctionsAccess
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.OrganizationID,
+		&i.EncryptionKey,
+		&i.EncryptionKeyOrgEncrypted,
+		&i.BearerFormat,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
 	return i, err
 }
 
