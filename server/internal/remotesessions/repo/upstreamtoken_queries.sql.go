@@ -24,6 +24,7 @@ WITH cleared AS (
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE c.id = picked.id
       AND c.organization_id = $1::text
@@ -60,7 +61,9 @@ type ClearEMACredentialAccessTokenPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearEMACredentialAccessTokenPlatformCopies(ctx context.Context, arg ClearEMACredentialAccessTokenPlatformCopiesParams) (ClearEMACredentialAccessTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearEMACredentialAccessTokenPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearEMACredentialAccessTokenPlatformCopiesRow
@@ -79,6 +82,7 @@ WITH cleared AS (
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -115,7 +119,9 @@ type ClearRemoteSessionAccessTokenPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearRemoteSessionAccessTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionAccessTokenPlatformCopiesParams) (ClearRemoteSessionAccessTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRemoteSessionAccessTokenPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearRemoteSessionAccessTokenPlatformCopiesRow
@@ -178,6 +184,7 @@ WITH cleared AS (
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -214,7 +221,9 @@ type ClearRemoteSessionRefreshTokenPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearRemoteSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearRemoteSessionRefreshTokenPlatformCopiesParams) (ClearRemoteSessionRefreshTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearRemoteSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearRemoteSessionRefreshTokenPlatformCopiesRow
@@ -233,6 +242,7 @@ WITH cleared AS (
           AND target.identity_assertion_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -269,7 +279,9 @@ type ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearTrustedIssuerSessionIdentityAssertionPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesParams) (ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionIdentityAssertionPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearTrustedIssuerSessionIdentityAssertionPlatformCopiesRow
@@ -288,6 +300,7 @@ WITH cleared AS (
           AND target.nonce_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -324,7 +337,9 @@ type ClearTrustedIssuerSessionNoncePlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearTrustedIssuerSessionNoncePlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionNoncePlatformCopiesParams) (ClearTrustedIssuerSessionNoncePlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionNoncePlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearTrustedIssuerSessionNoncePlatformCopiesRow
@@ -343,6 +358,7 @@ WITH cleared AS (
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -379,7 +395,9 @@ type ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearTrustedIssuerSessionRefreshTokenPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionRefreshTokenPlatformCopiesParams) (ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionRefreshTokenPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearTrustedIssuerSessionRefreshTokenPlatformCopiesRow
@@ -398,6 +416,7 @@ WITH cleared AS (
           AND target.upstream_subject_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT $3
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = $1::text
@@ -434,7 +453,9 @@ type ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow struct {
 // organization-key copy. The outer statement rechecks that the platform-key
 // copy is still set, so a row a concurrent clear already emptied is neither
 // updated nor counted. A copy of ” stores no value: it is cleared too, but
-// counted apart as empty.
+// counted apart as empty. The picked rows are locked before they are
+// classified, so a row a concurrent writer changes is classified as the
+// version this statement clears.
 func (q *Queries) ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies(ctx context.Context, arg ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesParams) (ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow, error) {
 	row := q.db.QueryRow(ctx, clearTrustedIssuerSessionUpstreamSubjectPlatformCopies, arg.OrganizationID, arg.DecidedGeneration, arg.LimitValue)
 	var i ClearTrustedIssuerSessionUpstreamSubjectPlatformCopiesRow

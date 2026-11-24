@@ -133,7 +133,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET access_token_encrypted = NULL
@@ -144,6 +146,7 @@ WITH cleared AS (
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
@@ -243,7 +246,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE remote_sessions AS s
     SET refresh_token_encrypted = NULL
@@ -254,6 +259,7 @@ WITH cleared AS (
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
@@ -366,7 +372,9 @@ WHERE c.organization_id = @organization_id::text;
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE remote_session_ema_credentials AS c
     SET access_token_encrypted = NULL
@@ -377,6 +385,7 @@ WITH cleared AS (
           AND target.access_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE c.id = picked.id
       AND c.organization_id = @organization_id::text
@@ -521,7 +530,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET identity_assertion_encrypted = NULL
@@ -532,6 +543,7 @@ WITH cleared AS (
           AND target.identity_assertion_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
@@ -632,7 +644,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET refresh_token_encrypted = NULL
@@ -643,6 +657,7 @@ WITH cleared AS (
           AND target.refresh_token_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
@@ -743,7 +758,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET upstream_subject_encrypted = NULL
@@ -754,6 +771,7 @@ WITH cleared AS (
           AND target.upstream_subject_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text
@@ -854,7 +872,9 @@ WHERE s.organization_id = @organization_id::text
 -- organization-key copy. The outer statement rechecks that the platform-key
 -- copy is still set, so a row a concurrent clear already emptied is neither
 -- updated nor counted. A copy of '' stores no value: it is cleared too, but
--- counted apart as empty.
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
 WITH cleared AS (
     UPDATE trusted_issuer_sessions AS s
     SET nonce_encrypted = NULL
@@ -865,6 +885,7 @@ WITH cleared AS (
           AND target.nonce_encrypted IS NOT NULL
         ORDER BY target.id
         LIMIT @limit_value
+        FOR UPDATE
       ) AS picked
     WHERE s.id = picked.id
       AND s.organization_id = @organization_id::text

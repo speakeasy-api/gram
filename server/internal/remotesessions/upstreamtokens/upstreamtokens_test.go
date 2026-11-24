@@ -504,6 +504,52 @@ func TestCopyStoreClearCountsAnEmptyPlatformCopyApart(t *testing.T) {
 	for _, session := range []repo.RemoteSession{emptyAlone, emptyBeside, valueAlone} {
 		require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "every platform-key copy is cleared")
 	}
+	require.True(t, ti.stored(t, emptyBeside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy beside an empty one stays")
+}
+
+func TestCopyStoreClearClassifiesTheVersionItClears(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	setAccess := func(db repo.DBTX, platform string) {
+		t.Helper()
+
+		_, err := repo.New(db).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(platform),
+			AccessOrgCopy:       nullText(),
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  session.ID,
+			OrganizationID:      session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+	setAccess(ti.conn, "")
+
+	// A writer replaces the empty copy with a value in a transaction that
+	// holds the row's lock while the clear runs.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	setAccess(tx, "platform-key copy")
+
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	done := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		done <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-done
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 0}, result.cleared, "the value the clear destroyed is reported, not taken for the empty copy it replaced")
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid)
 }
 
 // remoteSessionStores are the CopyStores of the remote session columns.

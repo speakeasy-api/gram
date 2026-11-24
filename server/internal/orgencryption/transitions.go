@@ -553,12 +553,13 @@ type StragglerCount struct {
 
 // SweepPlatformCopies clears platform-key copies that appeared after a use
 // case's clear finished, and reports one StragglerCount per column that held
-// any, counted by the statements that cleared them. It changes no transition
-// state and records nothing on the transition row. Any copy it finds means a
-// writer bypassed the fence or held a transaction open far longer than the
-// server's timeouts allow, because writers decide org_kms after finalize and
-// write only the organization-key copy. It requires org_kms with the clear
-// finished.
+// any value, counted by the statements that cleared them. A column whose only
+// cleared copies stored no value, such as a legacy ”, is cleared without a
+// report. It changes no transition state and records nothing on the
+// transition row. Any value it finds means a writer bypassed the fence or held
+// a transaction open far longer than the server's timeouts allow, because
+// writers decide org_kms after finalize and write only the organization-key
+// copy. It requires org_kms with the clear finished.
 func (t *Transitions) SweepPlatformCopies(ctx context.Context, organizationID string, useCase UseCase, stores []CopyStore) ([]StragglerCount, error) {
 	if err := useCase.validate(); err != nil {
 		return nil, err
