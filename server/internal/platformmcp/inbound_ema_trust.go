@@ -18,6 +18,7 @@ import (
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
@@ -870,7 +871,7 @@ func inboundEMATrustNextStep(issuer InboundEMAIssuer, directory InboundEMADirect
 }
 
 func inboundEMAPresetClients() []InboundEMAClient {
-	presets := admission.Catalog()
+	presets := aivendors.CompiledSnapshot().Catalog()
 	clients := make([]InboundEMAClient, 0, len(presets))
 	for _, preset := range presets {
 		if preset.Enabled {

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -197,7 +198,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	// and the first registration's failure is reported when none does.
 	var firstErr error
 	for i, client := range clients {
-		tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)))})
+		tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)))})
 		token := tokens[client.RemoteSessionIssuerID]
 		if resolveErr == nil && token.Token == "" {
 			resolveErr = remotesessions.ErrNoValidToken

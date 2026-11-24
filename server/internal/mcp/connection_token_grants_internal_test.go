@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -94,7 +95,7 @@ func (c assistantGrantCase) post(t *testing.T, form url.Values) *httptest.Respon
 
 	r := newTokenDispatchRequest(t, form)
 	w := httptest.NewRecorder()
-	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.client, "https://gram.example", "client_secret_post", c.service.logger))
+	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.service.aiCatalog.Snapshot(), c.client, "https://gram.example", "client_secret_post", c.service.logger))
 	return w
 }
 
@@ -117,7 +118,7 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
 	require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
 	require.Equal(t, c.client.ID.String(), row.UserSessionClientID)
-	require.Equal(t, mcpconnectionattempts.AppOf(c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 	require.Len(t, rec.Rows(), 1)
 }
 

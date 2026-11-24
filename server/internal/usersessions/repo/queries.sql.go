@@ -2631,8 +2631,8 @@ type IssuerAdmitsCimdClientURIParams struct {
 	ClientIDMetadataUri string
 }
 
-// Admission check for a presented CIMD client_id that missed the compile-time
-// preset catalog. Runs on the unauthenticated /authorize surface, so project
+// Admission check for a presented CIMD client_id that missed the AI client
+// catalog. Runs on the unauthenticated /authorize surface, so project
 // scoping is intentionally NOT applied — the issuer_id is the authoritative
 // scope, matching GetUserSessionClientByClientID. Served by the partial
 // unique index on (user_session_issuer_id, client_id_metadata_uri).

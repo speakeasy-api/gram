@@ -712,6 +712,23 @@ const (
 	// not open during verification.
 	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
+	// OrgEncryptionSourceColumnKey is the "table.column" of the platform-key
+	// copy a count or event is about, such as
+	// remote_sessions.access_token_encrypted.
+	OrgEncryptionSourceColumnKey = attribute.Key("gram.orgencryption.source_column")
+
+	// OrgEncryptionStragglerKindKey says whether a platform-key copy found
+	// after clearing stood alone or beside an organization-key copy.
+	OrgEncryptionStragglerKindKey = attribute.Key("gram.orgencryption.straggler_kind")
+
+	// OrgEncryptionPlatformOnlyCountKey counts platform-key copies cleared
+	// with no organization-key copy beside them.
+	OrgEncryptionPlatformOnlyCountKey = attribute.Key("gram.orgencryption.platform_only_count")
+
+	// OrgEncryptionBesideOrgCopyCountKey counts platform-key copies cleared
+	// beside an organization-key copy.
+	OrgEncryptionBesideOrgCopyCountKey = attribute.Key("gram.orgencryption.beside_org_copy_count")
+
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
 	// connect callback, or the idle keepalive re-check. Used as a metric
@@ -2776,6 +2793,26 @@ func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
 
 func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
 	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
+}
+
+func OrgEncryptionSourceColumn(v string) attribute.KeyValue {
+	return OrgEncryptionSourceColumnKey.String(v)
+}
+
+func SlogOrgEncryptionSourceColumn(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionSourceColumnKey), v)
+}
+
+func OrgEncryptionStragglerKind[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionStragglerKindKey.String(string(v))
+}
+
+func SlogOrgEncryptionPlatformOnlyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionPlatformOnlyCountKey), v)
+}
+
+func SlogOrgEncryptionBesideOrgCopyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionBesideOrgCopyCountKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
