@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -95,7 +96,7 @@ func TestCatalogReadinessRejectsStaleRegisteredTarget(t *testing.T) {
 	require.NoError(t, err)
 	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
 	serverID := typedCatalogServer(t, ctx, conn, f, 1)
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	_, err = prober.ProbeCatalogReadiness(ctx, f.principal, f.projectID, f.registrationID, serverID, f.remoteID, uuid.New(), uuid.New(), uuid.New())
 	require.ErrorIs(t, err, ErrReadinessInvalid)
 }
@@ -107,7 +108,7 @@ func TestSetupConnectionFollowsTypedOffers(t *testing.T) {
 	require.NoError(t, err)
 	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
 	serverID := typedCatalogServer(t, ctx, conn, f, 1)
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	result, err := prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, f.userSessionIssuerID)
 	require.NoError(t, err)
 	require.Equal(t, "authorization_required", result.Status)
@@ -127,7 +128,7 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
 	serverID := typedCatalogServer(t, ctx, conn, f, 2)
 	f.serverID = serverID
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	clients, incomplete, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
 	require.NoError(t, err)
 	require.False(t, incomplete)

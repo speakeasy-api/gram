@@ -800,12 +800,24 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 		return nil, err
 	}
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-		return s.describeCachedMember(ctx, gate, member)
+		catalog, err := s.describeCachedMember(ctx, gate, member)
+		if err != nil {
+			return nil, err
+		}
+		// A cached catalog holds what was approved at connect time, which
+		// never includes local tools; they are offered as on a live listing.
+		return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)
 	}
-	return s.describeProxiedMember(ctx, logger, gate, member)
+	catalog, err := s.describeProxiedMember(ctx, logger, gate, member)
+	if err != nil {
+		return nil, err
+	}
+	// The member's proxy lists its local tools among its own; they are
+	// marked here, as on every other path, so consent can leave them out.
+	return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 }
 
 // describeProxiedMember pages a proxied member's tools/list into a catalog,
@@ -914,7 +926,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	if handshake := session.InitializeResult(); handshake != nil {
 		instructions = handshake.Instructions
 	}
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, local: nil, incomplete: incomplete, instructions: instructions}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

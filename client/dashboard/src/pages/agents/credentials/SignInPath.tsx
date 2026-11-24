@@ -17,10 +17,10 @@ const HOPS: Record<SignInHop, { label: string; caption: string }> = {
   agent: {
     label: "Agent sign-in",
     caption:
-      "This only gets the agent into Speakeasy. It has nothing to do with your MCP servers: Speakeasy signs in to each of them the way you set on MCP sign-in.",
+      "This only gets the agent into Speakeasy. It has nothing to do with your MCP servers: Speakeasy signs in to each of them the way you set on Server sign-in.",
   },
   mcp: {
-    label: "MCP sign-in",
+    label: "Server sign-in",
     caption:
       "This is separate from how the agent signs in to Speakeasy, which you choose next, on Agent sign-in.",
   },

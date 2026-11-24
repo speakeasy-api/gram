@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -104,6 +105,7 @@ func TestXAAReadinessContract(t *testing.T) {
 	principal := testPrincipal()
 	tools := []*mcp.Tool{{Name: a.Name}}
 	admin := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
+	live.withAICatalog(aivendorstest.NewStore())
 	require.Empty(t, live.FilterExternalTools(admin, principal, tools))
 	both := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeMCPRead, xaaServerID)})
 	require.Len(t, live.FilterExternalTools(both, principal, tools), 1)

@@ -690,7 +690,7 @@ export function RemoteMcpIdentitySectionBody({
             {orgSharedClient && orgSharedClientLocked && !sharedSource ? (
               <Alert variant="warning" dismissible={false}>
                 This server uses a client shared by every project on the
-                organization&apos;s session issuer, so it can&apos;t be changed
+                organization&apos;s MCP sign-in, so it can&apos;t be changed
                 here. An organization admin can remove it from this server on
                 the{" "}
                 <Link
@@ -702,8 +702,8 @@ export function RemoteMcpIdentitySectionBody({
                 >
                   client&apos;s MCP servers
                 </Link>
-                , or you can move this server to a project session issuer under
-                Sessions below.
+                , or you can move this server to an MCP sign-in for this project
+                in the MCP sign-in section below.
               </Alert>
             ) : null}
 
@@ -716,8 +716,8 @@ export function RemoteMcpIdentitySectionBody({
 
             {issuerError ? (
               <Alert variant="error" dismissible={false}>
-                Could not load this server's user session issuer. Identity
-                editing is disabled.
+                Could not load this server's MCP sign-in. Identity editing is
+                disabled.
               </Alert>
             ) : null}
 
@@ -928,7 +928,7 @@ export function RemoteMcpIdentitySectionBody({
             ) : null}
             {repointLookupPending ? (
               <Text small muted>
-                Checking other servers on this user session issuer…
+                Checking other servers on this MCP sign-in…
               </Text>
             ) : null}
             {staticSwitchBlocked ? (

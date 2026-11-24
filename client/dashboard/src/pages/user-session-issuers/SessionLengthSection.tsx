@@ -28,7 +28,7 @@ import {
   useSaveProviderSettings,
 } from "./providerSettings";
 
-/** How long a sign-in through this provider lasts, saved on its own. */
+/** How long a sign-in through this MCP sign-in lasts, saved on its own. */
 export function SessionLengthSection({
   issuer,
   editableProjectId,

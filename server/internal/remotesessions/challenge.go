@@ -729,6 +729,9 @@ type Client struct {
 	CredentialOwner CredentialOwner
 }
 
+// CanStartSignIn reports whether the client's authorization server can start a browser sign-in.
+func (c Client) CanStartSignIn() bool { return c.AuthorizationEndpoint != "" }
+
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
@@ -1513,7 +1516,7 @@ func (m *ChallengeManager) mintAuthorization(
 		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
 	}
 
-	if client.AuthorizationEndpoint == "" {
+	if !client.CanStartSignIn() {
 		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {

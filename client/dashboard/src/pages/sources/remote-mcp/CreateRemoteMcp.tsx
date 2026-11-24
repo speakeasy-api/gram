@@ -396,7 +396,7 @@ function CreateRemoteMcpForm() {
             {mode === "proxied" ? (
               <Stack gap={1}>
                 <label className="text-sm leading-none font-medium">
-                  User session issuer
+                  MCP sign-in
                 </label>
                 <UserSessionIssuerSelect
                   issuers={issuerQuery.organizationIssuers}
@@ -406,12 +406,13 @@ function CreateRemoteMcpForm() {
                   disabled={issuerQuery.isLoading || issuerQuery.isError}
                 />
                 <Text muted small>
-                  Organization issuers are shared across projects. Creating a
-                  project-specific issuer is available for exceptional setups.
+                  Use an organization-wide MCP sign-in if one is available, or
+                  create one for this project.
                 </Text>
                 {issuerQuery.isError ? (
                   <Alert variant="error" dismissible={false}>
-                    Failed to load organization user session issuers.
+                    Couldn&apos;t load your organization&apos;s MCP sign-ins.
+                    Refresh the page to try again.
                   </Alert>
                 ) : null}
               </Stack>

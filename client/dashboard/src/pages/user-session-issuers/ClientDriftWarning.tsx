@@ -49,7 +49,7 @@ export function ClientDriftWarning({
         <Dialog.Header>
           <Dialog.Title>Clients don&apos;t match</Dialog.Title>
           <Dialog.Description>
-            This provider binds one set of clients and its MCP servers use
+            This MCP sign-in binds one set of clients and its MCP servers use
             another. {summary(drift.unused, drift.unbound)}
           </Dialog.Description>
         </Dialog.Header>
@@ -59,7 +59,7 @@ export function ClientDriftWarning({
               <tr>
                 <th className="text-eyebrow px-4 py-2 font-normal">Client</th>
                 <th className="text-eyebrow px-4 py-2 text-center font-normal">
-                  Bound to this provider
+                  Bound here
                 </th>
                 <th className="text-eyebrow px-4 py-2 font-normal">
                   Used by MCP servers

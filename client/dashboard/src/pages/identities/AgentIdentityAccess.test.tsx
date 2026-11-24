@@ -253,7 +253,7 @@ describe("Agent profile permissions", () => {
       signal: expect.any(AbortSignal),
     });
   });
-  it("lists the servers the agent reaches first, changed on its MCP sign-in tab", async () => {
+  it("lists the servers the agent reaches first, changed on its Server sign-in tab", async () => {
     mocks.list.mockResolvedValue([
       {
         id: "read_grant",

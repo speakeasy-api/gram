@@ -67,6 +67,10 @@ const (
 
 	// ActionMcpServerUpstreamAuthRequirementUpdate records whether a server declared that its upstream needs authentication.
 	ActionMcpServerUpstreamAuthRequirementUpdate Action = "mcp-server:update-upstream-auth-requirement"
+
+	// ActionMcpServerFeedbackSettingsUpdate records a change to whether a
+	// server offers the feedback tool and how the tool is listed.
+	ActionMcpServerFeedbackSettingsUpdate Action = "mcp-server:update-feedback-settings"
 )
 
 type LogMcpServerCreateEvent struct {
@@ -316,6 +320,81 @@ func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX,
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
+}
+
+// LogMcpServerFeedbackSettingsUpdateEvent is one change to an MCP server's
+// feedback tool settings.
+type LogMcpServerFeedbackSettingsUpdateEvent struct {
+	// OrganizationID is the organization that owns the server.
+	OrganizationID string
+
+	// ProjectID is the server's project.
+	ProjectID uuid.UUID
+
+	// Actor is who changed the settings.
+	Actor urn.Principal
+
+	// ActorDisplayName is the actor's name as the audit log shows it.
+	ActorDisplayName *string
+
+	// ActorSlug is the actor's slug, when it has one.
+	ActorSlug *string
+
+	// McpServerURN identifies the server the settings belong to.
+	McpServerURN urn.McpServer
+
+	// McpServerName is the server's display name.
+	McpServerName string
+
+	// McpServerSlug is the server's slug.
+	McpServerSlug string
+
+	// McpFeedbackSettingsSnapshotBefore is the settings before the change.
+	McpFeedbackSettingsSnapshotBefore *types.McpFeedbackSettings
+
+	// McpFeedbackSettingsSnapshotAfter is the settings after the change.
+	McpFeedbackSettingsSnapshotAfter *types.McpFeedbackSettings
+}
+
+// LogMcpServerFeedbackSettingsUpdate records a change to an MCP server's
+// feedback tool settings. The subject is the server, so the entry sits in the
+// server's own history next to its other configuration changes.
+func (l *Logger) LogMcpServerFeedbackSettingsUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerFeedbackSettingsUpdateEvent) error {
+	action := ActionMcpServerFeedbackSettingsUpdate
+
+	beforeSnapshot, err := marshalAuditPayload(event.McpFeedbackSettingsSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.McpFeedbackSettingsSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.McpServerURN.ID.String(),
+		SubjectType:        string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})

@@ -71,7 +71,7 @@ vi.mock("./sections/PublicRateLimitsSection", () => ({
 }));
 vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   MCP_SESSIONS_SECTION_ID: "sessions",
-  RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
+  RemoteMcpSessionsSection: () => <h2>MCP sign-in</h2>,
 }));
 vi.mock("./sections/UpstreamUrlSection", () => ({
   MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
@@ -252,7 +252,7 @@ describe("SettingsTab", () => {
       Plugins: ["Plugins"],
       // Upstream headers are the Sign-in panel's Custom Headers disclosure,
       // not a section of their own.
-      "Sign-in": ["Sign-in method", "Sessions", "Identity chaining"],
+      "Sign-in": ["Sign-in method", "MCP sign-in", "Identity chaining"],
       Connection: ["Server URL", "Remote URL", "Network Access"],
       Tools: ["Tool Filtering"],
       "Danger zone": ["Danger Zone"],
@@ -343,7 +343,7 @@ describe("SettingsTab upstream identity gate", () => {
       "General",
       "Plugins",
       "Upstream credentials",
-      "Sessions",
+      "MCP sign-in",
       "Identity chaining",
       "Server URL",
       "Remote URL",

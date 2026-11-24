@@ -4997,6 +4997,30 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Co
 	return i, err
 }
 
+const getOrganizationRemoteSessionRegistration = `-- name: GetOrganizationRemoteSessionRegistration :one
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1
+  AND (i.organization_id = $2 OR c.organization_id = $2)
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetOrganizationRemoteSessionRegistrationParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Apply the same registration tenancy as the legacy detail view without
+// reading the issuer attachment IDs that only that view exposes.
+func (q *Queries) GetOrganizationRemoteSessionRegistration(ctx context.Context, arg GetOrganizationRemoteSessionRegistrationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionRegistration, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getPrincipalRemoteSessionBinding = `-- name: GetPrincipalRemoteSessionBinding :one
 SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM principal_remote_session_bindings AS b
@@ -9686,6 +9710,90 @@ func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg 
 	return items, nil
 }
 
+const listOrganizationMcpServersUsingRegistration = `-- name: ListOrganizationMcpServersUsingRegistration :many
+WITH affected AS (
+    SELECT offer.mcp_server_id, offer.project_id
+    FROM mcp_auth_clients AS ac
+    JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id AND c.deleted IS FALSE
+    JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+      AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+    WHERE ac.organization_id = $1::text AND ac.deleted IS FALSE
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND (ac.enabled OR $2::boolean)
+      AND ($3::uuid IS NULL OR c.id = $3)
+      AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4)
+    UNION
+    SELECT a.mcp_server_id, a.project_id
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+    WHERE $2::boolean AND a.organization_id = $1::text
+      AND a.deleted IS FALSE
+      AND ($3::uuid IS NULL OR c.id = $3)
+      AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4)
+)
+SELECT m.id, m.project_id, p.slug AS project_slug, m.name, m.slug,
+       COALESCE(rms.url, '')::text AS url
+FROM affected
+JOIN mcp_servers AS m ON m.id = affected.mcp_server_id
+  AND m.project_id = affected.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id
+  AND p.organization_id = $1::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+  AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+ORDER BY m.id DESC
+`
+
+type ListOrganizationMcpServersUsingRegistrationParams struct {
+	OrganizationID      string
+	IncludeDeleteImpact bool
+	ClientID            uuid.NullUUID
+	IssuerID            uuid.NullUUID
+}
+
+type ListOrganizationMcpServersUsingRegistrationRow struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	ProjectSlug string
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	Url         string
+}
+
+// Inventory describes live typed offers. Delete previews additionally include
+// disabled offers and concrete server associations that deletion could prune.
+// Neither derives server usage from a shared downstream sign-in issuer.
+func (q *Queries) ListOrganizationMcpServersUsingRegistration(ctx context.Context, arg ListOrganizationMcpServersUsingRegistrationParams) ([]ListOrganizationMcpServersUsingRegistrationRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpServersUsingRegistration,
+		arg.OrganizationID,
+		arg.IncludeDeleteImpact,
+		arg.ClientID,
+		arg.IssuerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMcpServersUsingRegistrationRow
+	for rows.Next() {
+		var i ListOrganizationMcpServersUsingRegistrationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.Name,
+			&i.Slug,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationRemoteSessionClientsByIssuerID = `-- name: ListOrganizationRemoteSessionClientsByIssuerID :many
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
@@ -9696,13 +9804,17 @@ SELECT
     )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
-        FROM mcp_servers AS m
-        WHERE m.deleted IS FALSE
-          AND m.user_session_issuer_id IN (
-              SELECT link.user_session_issuer_id
-              FROM remote_session_client_user_session_issuers AS link
-              WHERE link.remote_session_client_id = c.id
-          )
+        FROM mcp_auth_clients AS ac
+        JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+          AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        JOIN mcp_servers AS m ON m.id = offer.mcp_server_id
+          AND m.project_id = offer.project_id AND m.deleted IS FALSE
+        JOIN projects AS p ON p.id = m.project_id
+          AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
+        WHERE ac.remote_session_client_id = c.id
+          AND ac.organization_id = $1
+          AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+          AND ac.enabled AND ac.deleted IS FALSE
     )::bigint AS mcp_server_count,
     (
         SELECT COUNT(*)
@@ -9712,8 +9824,8 @@ SELECT
     )::bigint AS active_session_count
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE c.remote_session_issuer_id = $1
-  AND (i.organization_id = $2 OR c.organization_id = $2)
+WHERE c.remote_session_issuer_id = $2
+  AND (i.organization_id = $1 OR c.organization_id = $1)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   -- Clients left behind by a tombstoned identity provider connection are
@@ -9731,8 +9843,8 @@ LIMIT $4
 `
 
 type ListOrganizationRemoteSessionClientsByIssuerIDParams struct {
+	OrganizationID        string
 	RemoteSessionIssuerID uuid.UUID
-	OrganizationID        pgtype.Text
 	Cursor                uuid.NullUUID
 	LimitValue            int32
 }
@@ -9744,13 +9856,9 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 	ActiveSessionCount   int64
 }
 
-// Clients registered with a given issuer in the org, each with the list of
-// user_session_issuers it is attached to (from the join table), its count of
-// attached MCP servers, and its active remote_sessions. The mcp_server_count
-// counts DISTINCT mcp_servers reachable through the client's join-table
-// attachments. The active_session_count counts non-deleted remote_sessions
-// minted against the client, matching CountActiveRemoteSessionsByClientID and
-// the delete preflight.
+// Clients registered with an issuer, with the servers that offer each
+// registration and its active remote sessions. The issuer attachment IDs are
+// retained for consumers of the legacy attachment contract, not reachability.
 //
 // ORG REACHABILITY (this predicate is repeated across every org-admin client
 // and session query; change them together):
@@ -9780,8 +9888,8 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 // and stay correctly invisible to tenants; they are platform-admin owned.
 func (q *Queries) ListOrganizationRemoteSessionClientsByIssuerID(ctx context.Context, arg ListOrganizationRemoteSessionClientsByIssuerIDParams) ([]ListOrganizationRemoteSessionClientsByIssuerIDRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionClientsByIssuerID,
-		arg.RemoteSessionIssuerID,
 		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
 	)

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -85,8 +86,13 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 	_, err = repo.New(db).CreateNetworkIngress(t.Context(), repo.CreateNetworkIngressParams{
 		ID: id, OrganizationID: "history-test-org", Provider: "tailscale", Hostname: "history",
 		EndpointNamespaceKind: "platform", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Enabled: true, IdentityRequired: false, CredentialsEncrypted: conv.ToPGText(ciphertext),
+		Enabled: true, IdentityRequired: false,
 		AttestorNamespace: names.Namespace, AttestorServiceAccount: names.AttestorServiceAccount, ProviderResources: resources,
+		Runtime: conv.ToPGText(networkingress.RuntimeGateway),
+	})
+	require.NoError(t, err)
+	_, err = repo.New(db).SetNetworkIngressCredentialCopiesFixture(t.Context(), repo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: conv.ToPGText(ciphertext), OrgCopy: pgtype.Text{String: "", Valid: false}, ID: id, OrganizationID: "history-test-org",
 	})
 	require.NoError(t, err)
 	logs := &ingressHistoryLogs{}
@@ -94,7 +100,7 @@ func newIngressHistoryTest(t *testing.T, failing bool) (*NetworkIngressClient, u
 	provider := &historyIngressProvider{credentialSeen: make(chan []byte, 10), failure: failing}
 	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, logger, k8s.NewNetworkIngressMetrics(logger, testenv.NewMeterProvider(t)))
 	require.NoError(t, err)
-	executor := networkingress.NewExecutor(db, enc, registry, networkingress.ExecutorOptions{Queue: string(env.Queue()), Image: "test-image", BackendService: "backend", BackendPort: 443, CanApply: func(context.Context) error { return nil }})
+	executor := networkingress.NewExecutor(db, ingresscredentials.WithoutOrganizationEncryption(logger, db, enc), registry, networkingress.ExecutorOptions{Queue: string(env.Queue()), CanApply: func(context.Context) error { return nil }})
 	a := &networkIngressActivities{executor: executor, db: db, queue: string(env.Queue())}
 	var clientOptions client.Options
 	clientOptions.Namespace = string(env.Namespace())
