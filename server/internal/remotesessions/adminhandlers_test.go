@@ -796,12 +796,14 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 		SessionToken: nil,
 	}))
 
-	var tombstoned bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `
-		SELECT deleted_at IS NOT NULL FROM mcp_server_auth_clients
-		WHERE mcp_server_id = $1 AND project_id = $2 AND organization_id = $3 AND auth_client_id = $4
-	`, typedOnly, projectID, orgID, existingOffer[0]).Scan(&tombstoned), "registration deletion physically removed the typed offer")
-	require.True(t, tombstoned, "registration deletion did not tombstone the unmirrored typed offer")
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, typedOnly), "the retired typed offer is still active")
+	// IsServerLinked also recognizes an admin tombstone, so this cannot pass
+	// if deletion simply removed the row.
+	tombstoned, err := authclientbackfill.New(ti.conn).IsServerLinked(ctx, authclientbackfill.IsServerLinkedParams{
+		McpServerID: typedOnly, OrganizationID: orgID, AuthClientID: existingOffer[0],
+	})
+	require.NoError(t, err)
+	require.True(t, tombstoned, "registration deletion did not retain the unmirrored typed offer's tombstone")
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"the consuming organization's link goes with the global client")
