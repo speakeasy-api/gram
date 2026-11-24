@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   statuses: [] as Array<Record<string, unknown>>,
   reset: vi.fn(),
   signInReady: true,
+  orgAdmin: true,
   signInUnavailable: false,
   detailsLoading: false,
   detailsError: false,
@@ -45,7 +46,10 @@ vi.mock("@gram/client/react-query/mcpRegistriesGetServerDetails.js", () => ({
   }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true, isLoading: false }),
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "org:admin" || mocks.orgAdmin,
+    isLoading: false,
+  }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
   useAgentCredentialFields: () => ({ authorizationValue: "" }),
@@ -190,7 +194,9 @@ function renderSheet(target: object = entry) {
 /** Starts an install from the sheet, then has it finish with statuses. */
 function installWith(statuses: Array<Record<string, unknown>>) {
   const view = renderSheet();
-  fireEvent.click(screen.getByRole("button", { name: "Add and link" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Add and make official" }),
+  );
   mocks.phase = "complete";
   mocks.statuses = statuses;
   view.rerender(sheet());
@@ -208,6 +214,7 @@ describe("CatalogOfficialSheet", () => {
     mocks.fetchQuery.mockReset();
     mocks.reset.mockReset();
     mocks.signInReady = true;
+    mocks.orgAdmin = true;
     mocks.signInUnavailable = false;
     mocks.detailsLoading = false;
     mocks.detailsError = false;
@@ -227,7 +234,9 @@ describe("CatalogOfficialSheet", () => {
       },
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add and link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add and make official" }),
+    );
     expect(mocks.startInstall).toHaveBeenCalled();
 
     mocks.phase = "complete";
@@ -251,7 +260,7 @@ describe("CatalogOfficialSheet", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
@@ -284,8 +293,10 @@ describe("CatalogOfficialSheet", () => {
     expect(screen.getByText("identity settings")).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Turn on and link" }));
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Turn on and make official" }),
+    );
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.mutateUpdate).toHaveBeenCalledWith({
       request: { updateMcpServerForm: { visibility: "private" } },
     });
@@ -302,7 +313,7 @@ describe("CatalogOfficialSheet", () => {
 
     expect(await screen.findByText("Upstream refused.")).toBeTruthy();
     expect(mocks.reset).toHaveBeenCalled();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -318,13 +329,13 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     expect(await screen.findByText("Server added")).toBeTruthy();
-    expect(screen.queryByText("Official server linked")).toBeNull();
+    expect(screen.queryByText("Official server set")).toBeNull();
     expect(
-      screen.getByText("Added, but not yet linked to Tracker."),
+      screen.getByText("Added, but not yet the official version of Tracker."),
     ).toBeTruthy();
   });
 
-  it("keeps Turn on off until the sign-in is saved, and shows why setup is needed", async () => {
+  it("keeps Turn on off until a credential is set up, and shows why setup is needed", async () => {
     mocks.signInReady = false;
     installWith([
       {
@@ -339,11 +350,40 @@ describe("CatalogOfficialSheet", () => {
     expect(
       await screen.findByText("Automatic client registration is unavailable."),
     ).toBeTruthy();
-    const turnOn = screen.getByRole("button", { name: "Turn on and link" });
+    const turnOn = screen.getByRole("button", {
+      name: "Turn on and make official",
+    });
     expect((turnOn as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.getByText("Save the sign-in settings above to turn it on."),
+      screen.getByText(
+        "Add or turn on an upstream credential above to enable this server.",
+      ),
     ).toBeTruthy();
+  });
+
+  it("hands off incomplete setup to an admin without prompting project writers to add credentials", async () => {
+    mocks.orgAdmin = false;
+    mocks.signInReady = false;
+    installWith([
+      {
+        status: "failed",
+        name: "Tracker Cloud",
+        mcpServerId: "server-1",
+        mcpServerParam: "tracker",
+        setupRequired: "Automatic client registration is unavailable.",
+      },
+    ]);
+
+    expect(
+      await screen.findByText(/Ask an organization admin to open this server/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/Add or turn on an upstream credential above/),
+    ).toBeNull();
+    const turnOn = screen.getByRole("button", {
+      name: "Turn on and make official",
+    });
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows why turning the server on failed", async () => {
@@ -364,7 +404,7 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Turn on and link" }),
+      await screen.findByRole("button", { name: "Turn on and make official" }),
     );
     expect(await screen.findByText("Could not enable it.")).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
@@ -399,7 +439,7 @@ describe("CatalogOfficialSheet", () => {
     expect(
       screen.getByText(/only over a connection Speakeasy cannot add/),
     ).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -412,7 +452,7 @@ describe("CatalogOfficialSheet", () => {
         mcpServerParam: "tracker",
       },
     ]);
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.save).toHaveBeenCalledTimes(1);
 
     // The workflow keeps its complete phase while the sheet is closed.
@@ -437,29 +477,29 @@ describe("CatalogOfficialSheet", () => {
     ]);
 
     const turnOn = await screen.findByRole("button", {
-      name: "Turn on and link",
+      name: "Turn on and make official",
     });
     expect((turnOn as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText("Could not verify upstream sign-in.")).toBeTruthy();
   });
 
-  it("keeps Add and link off while the catalog entry loads", () => {
+  it("keeps Add and make official off while the catalog entry loads", () => {
     mocks.detailsLoading = true;
     renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
 
     expect(screen.getByText("Loading the catalog entry")).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("keeps Add and link off when the catalog entry cannot be loaded", () => {
+  it("keeps Add and make official off when the catalog entry cannot be loaded", () => {
     mocks.detailsError = true;
     renderSheet({ ...entry, registryId: "registry-1", remotes: undefined });
 
     expect(
       screen.getByText(/The catalog entry could not be loaded/),
     ).toBeTruthy();
-    const add = screen.getByRole("button", { name: "Add and link" });
+    const add = screen.getByRole("button", { name: "Add and make official" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 });

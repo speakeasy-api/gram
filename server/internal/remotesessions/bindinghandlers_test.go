@@ -15,19 +15,27 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -443,6 +451,59 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	require.Equal(t, second.ID.String(), attachment.RemoteSessionID)
 }
 
+func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(ti)
+	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Attachment owner agent"})
+	require.NoError(t, err)
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-sign-in")
+	provenance := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-provenance")
+	provider := createRemoteIssuer(t, ctx, ti, "fk-only-provider", "")
+	client := createRemoteClient(t, ctx, ti, provider, provenance.String(), "fk-only-registration")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), provenance.String(), client)
+	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: signIn}
+	q := repo.New(ti.conn)
+	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents)
+
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: signIn.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents, "the attachment must create its FK parent")
+
+	backend := uuid.New()
+	fixtures := authclientbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, authclientbackfill.SeedRemoteMCPServerFixtureParams{ID: backend, ProjectID: *auth.ProjectID, Url: "https://mcp.example.com/attachment-only"}))
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	server, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
+		OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, ActorUserID: auth.UserID, ActorEmail: auth.Email,
+		Name: "Attachment-only sign-in server", Visibility: mcpservers.VisibilityPrivate,
+		UserSessionIssuerID: conv.ToNullUUID(signIn), RemoteMCPServerID: conv.ToNullUUID(backend),
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	associations, err := upstreamrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.Empty(t, associations, "the physical parent is not a server association")
+	offers, err := fixtures.ListServerAuthClientsFixture(ctx, server.ID)
+	require.NoError(t, err)
+	require.Empty(t, offers, "the physical parent is not a typed upstream offer")
+	pinned, err := q.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: signIn, RemoteSessionClientID: session.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, pinned.ID)
+}
+
 // A detach names the account the connection signed in as, falling back to the
 // upstream display name when the upstream reports no email.
 func TestDetachBindingRecordsUpstreamAccount(t *testing.T) {
@@ -613,4 +674,83 @@ func TestConsentBindingsRejectDifferentAgentOrIssuer(t *testing.T) {
 		require.Error(t, err)
 		require.Error(t, svc.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: scope[0], UserSessionIssuerID: scope[1], ID: uuid.NewString()}))
 	}
+}
+
+// A platform admin previewing roles sends a scope override with every
+// dashboard request. Reading an agent's attachments under it must follow the
+// same rule as the rest of the agent's pages: the override narrows the live
+// grants and never refuses outright, nor widens them.
+func TestBindingsReadUnderScopeOverrideNarrowsLiveGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	viewer := *auth
+	viewer.IsAdmin = true
+	ctx = contextvalues.WithValidatedGramSession(ctx, &viewer, false)
+	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authorizer := agentmanagement.NewAuthorizer(engine)
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil && !write {
+			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		}
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+
+	owner := "binding-override-owner-" + uuid.NewString()
+	seedUser(t, ctx, ti.conn, owner, "override-owner@example.com", "Override owner")
+	_, err := testrepo.New(ti.conn).CreateAttachmentMembershipFixture(ctx, testrepo.CreateAttachmentMembershipFixtureParams{OrganizationID: auth.ActiveOrganizationID, UserID: pgtype.Text{String: owner, Valid: true}})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: owner, Name: "Override attachment agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-override-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-override-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-override-client")
+	owners := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(owner), config.String(), client)
+	ownerAuth := *auth
+	ownerAuth.UserID = owner
+	ownerCtx := contextvalues.WithValidatedGramSession(ctx, &ownerAuth, false)
+	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
+	require.NoError(t, err)
+
+	// The viewer owns neither the agent nor the attached connection; the
+	// live grant to manage agents is what lets them see it.
+	editGrant := authz.NewGrant(authz.ScopeAgentWrite, authz.WildcardResource)
+	selector, err := editGrant.Selector.MarshalJSON()
+	require.NoError(t, err)
+	granted, err := accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, viewer.UserID), Scope: string(editGrant.Scope), Selectors: selector})
+	require.NoError(t, err)
+
+	list := func(ctx context.Context) (*gen.ListBindingsResult, error) {
+		return ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	}
+	listed, err := list(ctx)
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+
+	previewing := contextvalues.SetRBACScopeOverride(ctx, "agent:write,mcp:read")
+	listed, err = list(previewing)
+	require.NoError(t, err, "a role preview that keeps agent management still reads the attachments")
+	require.Len(t, listed.Items, 1)
+	require.Equal(t, urn.NewUserSubject(owner).String(), listed.Items[0].RemoteSession.SubjectUrn)
+	_, err = ti.service.ListRemoteSessions(previewing, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+	require.NoError(t, err)
+
+	_, err = list(contextvalues.SetRBACScopeOverride(ctx, "mcp:read"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// Nor does an override widen: without the live grant, the same preview
+	// is refused.
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: granted.ID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	_, err = list(previewing)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

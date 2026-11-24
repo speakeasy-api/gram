@@ -44,10 +44,10 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -133,14 +133,14 @@ func (s *Service) AttachServerClientAssociation(ctx context.Context, payload *ge
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
 	clientID, err := uuid.Parse(payload.RemoteSessionClientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -420,14 +420,14 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.McpServerID)
-	if err != nil {
+	if err != nil || serverID == uuid.Nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
 	clientID, err := uuid.Parse(payload.RemoteSessionClientID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 

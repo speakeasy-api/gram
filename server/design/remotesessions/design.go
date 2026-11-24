@@ -41,7 +41,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("commitServerIdentityConfiguration", func() {
-		Description("Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
+		Description("Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and offers an existing client, creates a manual client, or automatically prefers CIMD over DCR. Requires mcp:write on the target and any servers explicitly named for replacement. Creating a provider or client also requires project:write. The commit changes server offers, not issuer-client bindings. Unsupported automatic registration returns manual_setup_required without changing local state.")
 
 		Payload(func() {
 			Extend(CommitServerIdentityConfigurationForm)
@@ -284,7 +284,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	Attribute("provider_id", String, "An existing Remote Identity Provider visible to the target project.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.")
+	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Set this to require a dedicated user session issuer for the target server. Explicitly assign a dedicated issuer before retrying.")
 	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
 	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
 		Enum("auto", "existing", "manual")
@@ -578,7 +578,7 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("remote_session_client_id", String, "The remote_session_client this session was minted against.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("access_expires_at", String, "Upstream access-token expiry. Independent of refresh_expires_at.", func() {
+	Attribute("access_expires_at", String, "Upstream access-token expiry. Independent of refresh_expires_at. Omitted when the upstream reported no expiry, which readers treat as non-expiring.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
@@ -598,7 +598,7 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "has_refresh_token", "scopes", "created_at", "updated_at")
+	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "has_refresh_token", "scopes", "created_at", "updated_at")
 })
 
 var CountRemoteSessionsResult = Type("CountRemoteSessionsResult", func() {
@@ -646,7 +646,8 @@ var ServerClientAssociationForm = Type("ServerClientAssociationForm", func() {
 
 var AttachServerClientAssociationResult = Type("AttachServerClientAssociationResult", func() {
 	Attribute("association", ServerClientAssociation, "The server's association with the client.")
-	Attribute("bound_user_session_issuer_ids", ArrayOf(String), "The issuers of gateways fronting the server that this attach bound the client to. Empty when they already held it.", func() {
+	Attribute("bound_user_session_issuer_ids", ArrayOf(String), "Deprecated: always empty. This field is retained for compatibility; attach no longer binds the client to user session issuers.", func() {
+		Meta("openapi:extension:x-speakeasy-deprecation-message", "Always empty; attach does not bind the client to user session issuers")
 		Elem(func() {
 			Format(FormatUUID)
 		})

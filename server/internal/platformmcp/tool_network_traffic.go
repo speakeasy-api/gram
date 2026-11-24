@@ -64,7 +64,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 		return MCPNetworkTrafficOutput{}, err
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != "mcp" && input.TargetKind != "gateway") {
 		return MCPNetworkTrafficOutput{}, fmt.Errorf("target_kind must be mcp or gateway and target_id must be a UUID")
 	}
 	window := input.Window
@@ -79,7 +79,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 	}
 
 	kind := telemetryrepo.MCPNetworkTrafficServerKindMCP
-	resourceID := targetID.String()
+	resourceID := targetID
 	if input.TargetKind == "mcp" {
 		server, err := mcpserversrepo.New(r.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: targetID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -89,7 +89,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load MCP server: %w", err)
 		}
 		if server.ToolsetID.Valid {
-			resourceID = server.ToolsetID.UUID.String()
+			resourceID = server.ToolsetID.UUID
 		}
 	} else {
 		kind = telemetryrepo.MCPNetworkTrafficServerKindMeta
@@ -101,7 +101,7 @@ func (r *PostgresReader) GetMCPNetworkTraffic(ctx context.Context, principal Pri
 			return MCPNetworkTrafficOutput{}, fmt.Errorf("load gateway: %w", err)
 		}
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, resourceID, project.ID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(project.ID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCPNetworkTrafficOutput{}, ErrMCPConnectionSettingsNotFound
 		}
@@ -150,7 +150,7 @@ const mcpNetworkTrafficToolName = "get_mcp_network_traffic"
 func registerMCPNetworkTrafficTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name: mcpNetworkTrafficToolName, Title: "Check MCP Network Traffic",
-		Description: "Summarize observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. Use before changing its network access mode; a quiet route is not proof all clients migrated.",
+		Description: "Read historical network traffic: public and private inbound request counts and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use for traffic and migration-impact questions; a quiet route is not proof all clients migrated.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input MCPNetworkTrafficInput) (*mcp.CallToolResult, MCPNetworkTrafficOutput, error) {
 		principal, err := principalFromToolContext(ctx)

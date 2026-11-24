@@ -53,7 +53,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
   , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
@@ -154,7 +154,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
   , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at

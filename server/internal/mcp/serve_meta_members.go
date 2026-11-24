@@ -700,7 +700,7 @@ func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID u
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
+	return authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(projectID)).Connect()
 }
 
 // findNamedMember resolves the server a call names and records the one

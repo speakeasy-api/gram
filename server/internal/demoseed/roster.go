@@ -52,8 +52,11 @@ var demoAgentOwner = demoUser{
 	hostname:   "",
 }
 
-// demoMembers is everyone with a membership: the roster plus the agent owner.
-func demoMembers() []demoUser { return slices.Concat(demoUsers, []demoUser{demoAgentOwner}) }
+// demoMembers is everyone with a membership: the roster, the agent owner and the
+// people of the connection health dataset.
+func demoMembers() []demoUser {
+	return slices.Concat(demoUsers, []demoUser{demoAgentOwner}, healthMembers())
+}
 
 // demoDirectoryPerson is a directory profile with no Speakeasy member behind
 // it, so the directory people view shows more than members. Profiles that

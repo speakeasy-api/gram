@@ -17,7 +17,9 @@ import {
   dispositionCopy,
   fuzzyMatch,
   indexServers,
+  limitAfterToggle,
   toolDisposition,
+  toolLimitReaches,
   type ServerWithProject,
   type ToolLimit,
 } from "./mcpAccessModel";
@@ -247,8 +249,11 @@ function toolLimitText(limit: ToolLimit): string {
       const labels = [...ordered, ...selected].map(
         (d) => dispositionCopy(d).label,
       );
-      if (labels.length === 0) return "No tools";
-      return `${labels.join(", ")} tools`;
+      const named = limit.tools?.length ?? 0;
+      const namedText = named === 1 ? "1 tool" : `${named} tools`;
+      if (labels.length === 0) return named === 0 ? "No tools" : namedText;
+      const kinds = labels.join(", ");
+      return named === 0 ? `${kinds} tools` : `${kinds} + ${namedText}`;
     }
   }
 }
@@ -698,7 +703,10 @@ function McpMatrix({
             );
           }}
         />
-        <span className={cn("truncate", !every && "text-muted-foreground")}>
+        <span
+          className={cn("truncate", !every && "text-muted-foreground")}
+          title={every ? undefined : toolLimitText(access.limit)}
+        >
           {every ? "All tools" : toolLimitText(access.limit)}
         </span>
       </span>
@@ -1120,13 +1128,8 @@ function ServerToolRows({
   if (tools.length === 0) return note("This server has no tools.");
 
   const { limit } = access;
-  const allowed = (tool: (typeof tools)[number]) => {
-    if (access.connect === "none") return false;
-    if (limit.kind === "all") return true;
-    if (limit.kind === "tools") return limit.tools.includes(tool.name);
-    const disposition = toolDisposition(tool);
-    return !!disposition && limit.dispositions.includes(disposition);
-  };
+  const allowed = (tool: (typeof tools)[number]) =>
+    access.connect !== "none" && toolLimitReaches(limit, tool);
   const blocked = new Set(mcpBlockedTools(grants, row));
 
   const toggle = (name: string) => {
@@ -1134,12 +1137,15 @@ function ServerToolRows({
     const next = current.includes(name)
       ? current.filter((tool) => tool !== name)
       : [...current, name];
-    const nextLimit: ToolLimit =
-      next.length === tools.length
-        ? { kind: "all" }
-        : { kind: "tools", tools: next };
     onNoTools(next.length === 0);
-    onChange((prev) => limitMcpUse(prev, row, nextLimit, serverRows));
+    onChange((prev) =>
+      limitMcpUse(
+        prev,
+        row,
+        limitAfterToggle(limit, tools, name, next),
+        serverRows,
+      ),
+    );
   };
 
   return (
@@ -1204,7 +1210,7 @@ function ServerToolRows({
                 <Text as="span" mono small className="min-w-0 truncate">
                   {tool.name}
                 </Text>
-                {disposition && (
+                {disposition !== "unannotated" && (
                   <Badge variant="neutral" size="sm">
                     {dispositionCopy(disposition).label}
                   </Badge>

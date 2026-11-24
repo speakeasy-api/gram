@@ -16,7 +16,7 @@ export function RemoteMcpSessionsSection({
 }): JSX.Element {
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
   const selectableIssuers = useSelectableUserSessionIssuers(target);
-
+  // Downstream sessions remain configurable independently of upstream offers.
   // The provider's sign-in details and session settings live on its own
   // page in MCP Sessions, which the picker opens.
   return (

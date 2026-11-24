@@ -492,7 +492,6 @@ describe("AuthenticationSectionBody", () => {
 });
 
 const standardTargetWithSessionIssuer: AuthTarget = {
-  kind: "standard",
   hosted: true,
   slug: "standard-server",
   projectId: "project-1",

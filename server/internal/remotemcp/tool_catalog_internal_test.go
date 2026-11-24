@@ -153,7 +153,9 @@ func TestToolsCallCatalog_RecordedToolDoesNotListUpstream(t *testing.T) {
 		return nil, nil
 	})
 
-	require.NoError(t, newAuthzInterceptor(t, store, catalog).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "ping")))
+	// Its class is unknown, so it could be destructive and the block on
+	// destructive tools refuses it, without listing the upstream.
+	require.Error(t, newAuthzInterceptor(t, store, catalog).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "ping")))
 }
 
 func TestToolsCallCatalog_ToolMissingFromUpstreamIsRefused(t *testing.T) {

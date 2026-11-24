@@ -426,7 +426,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       provider: {
         component: McpSessionsProvider,
         subPages: {
+          overview: {},
           connections: {},
+          connectionLogs: {},
           mcpServers: {},
           settings: {},
         },

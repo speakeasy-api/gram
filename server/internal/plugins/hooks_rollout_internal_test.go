@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -24,11 +25,12 @@ func (s staticPins) OrganizationPins(context.Context, string) (hooksrollout.Orga
 	return s.pins, s.err
 }
 
-// eligibilityService builds a publisher wired to pins and features but with no
-// database: hooksRolloutEligible touches neither, so nil deps are safe here.
+// eligibilityService builds a publisher wired to pins and features, with
+// "org-staff" as its staff organization, but with no database:
+// hooksRolloutEligible touches neither, so nil deps are safe here.
 func eligibilityService(t *testing.T, pins hooksrollout.PinReader, features feature.Provider) *Service {
 	t.Helper()
-	svc := NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features)
+	svc := NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features, staff.NewOrganization("org-staff"), nil)
 	svc.hooksPins = pins
 	return svc
 }
@@ -44,15 +46,22 @@ func currentVersion(t *testing.T) int {
 	return current
 }
 
-func TestHooksRolloutEligible_CanaryBypassesPinsAndProvider(t *testing.T) {
+func TestHooksRolloutEligible_StaffOrganizationBypassesPinsAndProvider(t *testing.T) {
 	t.Parallel()
 
-	// A failing pin reader and a nil provider prove the canary decision reads
-	// neither: a canary org is eligible even when both are unavailable.
+	// A failing pin reader and a nil provider prove the staff organization
+	// decision reads neither: it is eligible even when both are unavailable.
 	svc := eligibilityService(t, staticPins{err: errors.New("database down")}, nil)
-	for _, slug := range hooksrollout.CanaryOrganizationSlugs() {
-		require.True(t, svc.hooksRolloutEligible(t.Context(), "org-any", slug), "canary slug %q must be eligible", slug)
-	}
+	require.True(t, svc.hooksRolloutEligible(t.Context(), "org-staff", "any-slug"))
+}
+
+func TestHooksRolloutEligible_StaffSlugIsNotEnough(t *testing.T) {
+	t.Parallel()
+
+	// Eligibility follows the staff organization ID, not a slug that another
+	// partition's organization could also hold.
+	svc := eligibilityService(t, staticPins{err: errors.New("database down")}, nil)
+	require.False(t, svc.hooksRolloutEligible(t.Context(), "org-other", "speakeasy-team"))
 }
 
 func TestHooksRolloutEligible_PinReadErrorFailsClosed(t *testing.T) {

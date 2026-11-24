@@ -14,9 +14,14 @@ type Check struct {
 	ResourceKind string
 	ResourceID   string
 	Dimensions   map[string]string
-	// selectorMatch controls how allow grant selectors are matched. The zero
-	// value preserves the default permissive dimension matching.
-	selectorMatch selectorMatchMode
+	// exact refuses every grant key the check leaves out, even one its
+	// scope opens. Blocks, exemptions, containment, direct overrides of a
+	// tool call, auth client checks and risk policy bypass checks are matched
+	// exactly. One exception: a block limited to a tool or a disposition
+	// still matches a tool call that leaves that key out, because the missing
+	// value may be the one blocked (blockCoversMissingValue). Only authz
+	// constructors and engine paths set it.
+	exact bool
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
 	// probe marks a check that asks whether the caller could act on some
@@ -32,7 +37,7 @@ type Check struct {
 }
 
 // operation is what a check asks to do. The zero value is an ordinary action
-// on one resource, or a connection when the scope is the connect permission.
+// on one resource.
 type operation int
 
 const (
@@ -40,6 +45,14 @@ const (
 	// operationToolCall is calling one tool on an MCP server. It always
 	// carries the tool and its disposition.
 	operationToolCall
+	// operationConnection is connecting to an MCP server before any tool is
+	// called. It names no tool, so a grant limited to some tools still lets
+	// the caller connect.
+	operationConnection
+	// operationPolicyAudience asks whether a risk policy's audience includes
+	// the caller. It names no server, so an audience grant limited to some
+	// servers still places the caller under the policy.
+	operationPolicyAudience
 )
 
 // asToolCall marks c as a tool call. Only the tool-call constructors use it.
@@ -53,24 +66,15 @@ func (c Check) isToolCall() bool {
 	return c.operation == operationToolCall
 }
 
-type selectorMatchMode int
-
-const (
-	selectorMatchNormal selectorMatchMode = iota
-	selectorMatchStrict
-)
-
-// WithStrictSelectorMatch returns a copy that only accepts grants whose every
-// selector constraint is represented by this check. Use it when proving that
-// requested authority is no broader than a live grant.
-func (c Check) WithStrictSelectorMatch() Check {
-	c.selectorMatch = selectorMatchStrict
+// asConnection marks c as a connection. Only the connect constructors use it.
+func (c Check) asConnection() Check {
+	c.operation = operationConnection
 	return c
 }
 
 // Probe marks the check as a discovery question: could the caller act on
-// some resource matching it. A dimension the check leaves out matches any
-// value a grant names. Can and Filter accept a probe; Require refuses one,
+// some resource matching it. A grant key the check leaves out matches any
+// value the grant names. Can and Filter accept a probe; Require refuses one,
 // because gating an action needs the concrete resource.
 func (c Check) Probe() Check {
 	c.probe = true
@@ -95,7 +99,7 @@ func AnyOf(alternatives ...Check) Check {
 		ResourceKind:    first.ResourceKind,
 		ResourceID:      first.ResourceID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 		probe:           false,
 		anyOf:           append([]Check{}, alternatives...),
@@ -103,15 +107,86 @@ func AnyOf(alternatives ...Check) Check {
 	}
 }
 
-func (c Check) matchesAllowSelector(selector Selector) bool {
-	if c.selectorMatch == selectorMatchStrict || c.isAuthClientCheck() {
-		return selector.strictMatches(c.selector(), c.representedUser)
-	}
-	return selector.matches(c.selector(), c.representedUser)
+// matchesAllowSelector reports whether an allow grant's selector covers the
+// check. Every key the grant names must be carried by the check with a
+// matching value. A key the check does not carry never matches, except in the
+// cases mayOmit names: absence is not permission.
+func (c Check) matchesAllowSelector(grant Selector) bool {
+	_, matched := c.keysRefusingGrant(grant)
+	return matched
 }
 
-// isAuthClientCheck reports whether c targets an auth client. Those checks
-// always match strictly, so a grant constraint the check omits never matches.
+// keysRefusingGrant compares an allow grant's selector with the check. It
+// returns matched when the grant covers the check. Otherwise missing lists the
+// grant keys the check does not carry, when those alone are why the grant was
+// refused; it is empty when a carried value differs.
+func (c Check) keysRefusingGrant(grant Selector) (missing []string, matched bool) {
+	carried := c.selector()
+	for key, grantVal := range grant {
+		checkVal, ok := carried[key]
+		if !ok {
+			if c.blockCoversMissingValue(key) {
+				continue
+			}
+			if !c.mayOmit(key) {
+				missing = append(missing, key)
+			}
+			continue
+		}
+		if !selectorValueMatches(key, grantVal, checkVal, c.representedUser) {
+			return nil, false
+		}
+	}
+	return missing, len(missing) == 0
+}
+
+// blockCoversMissingValue reports whether a block's limit on key applies to a
+// tool call that does not carry key. Allows never match a value the call does
+// not carry (absence is not permission), so a missing value is refused either
+// way; this only decides whether a block still takes the call away.
+//
+// For example, an administrator blocks destructive tools on server X
+// (mcp:blocked_connect on X with disposition=destructive). A user calls a tool
+// on X whose annotations could not be read, so the call carries no
+// disposition. Under exact matching the block would not match, and the
+// user's allow on X would let a possibly destructive call through. Here the
+// block applies: a value we do not know may be the one blocked. The same holds
+// for a block on a named tool and a call that names no tool.
+func (c Check) blockCoversMissingValue(key string) bool {
+	return (key == SelectorKeyDisposition || key == SelectorKeyTool) && c.isToolCall() && IsBlocklistScope(c.Scope)
+}
+
+// mayOmit reports whether the check may leave out a key that a grant of its
+// scope names and still match the grant. The registry declares these open
+// keys per permission (scopeOpenKeys), for three kinds of check only:
+//
+//   - a probe, which asks about some resource and not a concrete one;
+//   - a connection, which names no tool, against a tool or disposition limit;
+//   - a risk policy audience question, which names no server, against a
+//     server limit. Matching there places the caller under the policy.
+//
+// An exact check may omit nothing, and neither may any check of another
+// kind.
+func (c Check) mayOmit(key string) bool {
+	if c.exact {
+		return false
+	}
+	open := scopeOpenKeys[c.Scope]
+	if c.probe && slices.Contains(open.Probe, key) {
+		return true
+	}
+	switch c.operation {
+	case operationConnection:
+		return slices.Contains(open.Connection, key)
+	case operationPolicyAudience:
+		return slices.Contains(open.PolicyAudience, key)
+	case operationDefault, operationToolCall:
+		return false
+	}
+	return false
+}
+
+// isAuthClientCheck reports whether c targets an auth client.
 func (c Check) isAuthClientCheck() bool {
 	return c.ResourceKind == ResourceKindMCPAuthClient || ResourceKindForScope(c.Scope) == ResourceKindMCPAuthClient
 }
@@ -152,7 +227,7 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, exact: true, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -163,12 +238,12 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
 	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation})
 	}
 	// Root administers everything but uses no auth client.
 	if c.isAuthClientCheck() {

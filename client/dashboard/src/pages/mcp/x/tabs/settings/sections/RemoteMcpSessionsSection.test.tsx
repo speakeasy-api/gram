@@ -39,4 +39,13 @@ describe("RemoteMcpSessionsSection", () => {
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
   });
+
+  it("can configure downstream sessions before an issuer is selected", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+    expect(screen.getByText("User session issuer")).toBeDefined();
+  });
 });
