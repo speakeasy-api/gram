@@ -121,28 +121,51 @@ func TestSnapshotIdenticalPatternsPreferLowerProductID(t *testing.T) {
 	}
 }
 
-func TestSnapshotDisabledDocumentsDoNotShadow(t *testing.T) {
+func TestSnapshotDisabledDocumentsKeepTheirMatch(t *testing.T) {
 	t.Parallel()
 	products := []Product{
 		{ID: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: false, Pattern: true}}},
 		{ID: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
 		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: false}}},
+		{ID: "peer", Documents: []Document{
+			{URL: "https://example.com/peer/*/a.json", Enabled: false, Pattern: true},
+			{URL: "https://example.com/peer/*/a.json", Enabled: true, Pattern: true},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: false},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: true},
+		}},
 	}
 	snapshot := NewSnapshot(products)
-	require.Len(t, snapshot.Catalog(), 3, "disabled documents are still listed")
-	cases := []struct {
+	require.Len(t, snapshot.Catalog(), 7, "disabled documents are still listed")
+	unknown := []struct {
 		name     string
 		clientID string
 	}{
 		{name: "disabled specific pattern", clientID: "https://example.com/oauth/some-client/client.json"},
 		{name: "disabled exact URL", clientID: "https://example.com/oauth/exact/client.json"},
 	}
-	for _, tc := range cases {
+	for _, tc := range unknown {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := snapshot.CatalogPreset(tc.clientID)
+			require.False(t, ok, "the client is unknown, not the broader pattern's product")
+		})
+	}
+	known := []struct {
+		name     string
+		clientID string
+		product  string
+	}{
+		{name: "broad pattern elsewhere", clientID: "https://example.com/other/some-client/client.json", product: "broad"},
+		{name: "enabled pattern beside a disabled twin", clientID: "https://example.com/peer/x/a.json", product: "peer"},
+		{name: "enabled exact URL beside a disabled twin", clientID: "https://example.com/peer/exact/b.json", product: "peer"},
+	}
+	for _, tc := range known {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got, ok := snapshot.CatalogPreset(tc.clientID)
 			require.True(t, ok)
-			require.Equal(t, "broad", got.ProductID)
+			require.Equal(t, tc.product, got.ProductID)
+			require.True(t, got.Enabled)
 		})
 	}
 }
