@@ -134,6 +134,7 @@ var chPurgeOrgTables = []string{
 	"mcp_connection_events",
 	// Target of mcp_connection_attempt_summaries_mv.
 	"mcp_connection_attempt_summaries",
+	"mcp_connection_last_served",
 	// Target of hook_install_summaries_mv.
 	"hook_install_summaries",
 }

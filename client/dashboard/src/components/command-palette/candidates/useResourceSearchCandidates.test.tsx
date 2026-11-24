@@ -381,6 +381,7 @@ describe("resource command search", () => {
 
   it("maps gateways and encoded detection-rule selectors to exact routes", () => {
     const gatewayGoTo = vi.fn();
+    const gatewayInspectGoTo = vi.fn();
     const candidates = mapResourceSearchItems(
       [
         {
@@ -398,16 +399,28 @@ describe("resource command search", () => {
       ],
       {
         environments: { environment: { goTo: mocks.goTo } },
-        mcp: { gateway: { overview: { goTo: gatewayGoTo } } },
+        mcp: {
+          gateway: {
+            overview: { goTo: gatewayGoTo },
+            inspect: { goTo: gatewayInspectGoTo },
+          },
+        },
         plugins: { detail: { goTo: mocks.goTo } },
         policyCenter: { href: () => "/guardrails" },
       } as never,
       mocks.navigate,
     );
 
+    expect(candidates.map((c) => [c.id, c.title])).toEqual([
+      ["gateway:gateway-1", "Gateway"],
+      ["gateway-inspect:gateway-1", "Gateway · Inspect"],
+      ["rule:rule-1", "Rule"],
+    ]);
     void candidates[0]?.run("open");
     expect(gatewayGoTo).toHaveBeenCalledWith("customer-gateway");
     void candidates[1]?.run("open");
+    expect(gatewayInspectGoTo).toHaveBeenCalledWith("customer-gateway");
+    void candidates[2]?.run("open");
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/guardrails?tab=detection-rules&rule=custom.rule%2Fwith%20spaces",
     );

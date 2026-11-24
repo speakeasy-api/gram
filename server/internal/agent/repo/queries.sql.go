@@ -189,7 +189,13 @@ SELECT
   pr.slug AS project_slug,
   om.slug AS organization_slug,
   om.name AS organization_name,
+  -- The marketplace token as the connection stores it. Package
+  -- marketplacetokens opens it into the install URL.
+  pgc.organization_id AS connection_organization_id,
   pgc.marketplace_token,
+  pgc.marketplace_token_hash,
+  pgc.marketplace_token_encrypted,
+  pgc.marketplace_token_org_encrypted,
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
@@ -258,7 +264,7 @@ LEFT JOIN plugins p
       AND pa.principal_urn = ANY($2::text[])
   )
 WHERE pr.organization_id = $1
-  AND pgc.marketplace_token IS NOT NULL
+  AND (pgc.marketplace_token_hash IS NOT NULL OR pgc.marketplace_token IS NOT NULL)
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
     -- always surface its marketplace + observability (when enabled), even when
@@ -286,28 +292,33 @@ type GetAgentPluginSetParams struct {
 }
 
 type GetAgentPluginSetRow struct {
-	ProjectID               uuid.UUID
-	ProjectSlug             string
-	OrganizationSlug        string
-	OrganizationName        string
-	MarketplaceToken        pgtype.Text
-	MarketplaceUpdatedAt    pgtype.Timestamptz
-	PublishedHooksConfig    []byte
-	MarketplaceNameOverride pgtype.Text
-	ObservabilityEnabled    bool
-	IsDefaultProject        bool
-	PluginID                uuid.NullUUID
-	PluginSlug              pgtype.Text
-	PluginName              pgtype.Text
-	PluginDescription       pgtype.Text
-	PluginUpdatedAt         pgtype.Timestamptz
-	PluginInstallMode       string
+	ProjectID                    uuid.UUID
+	ProjectSlug                  string
+	OrganizationSlug             string
+	OrganizationName             string
+	ConnectionOrganizationID     pgtype.Text
+	MarketplaceToken             pgtype.Text
+	MarketplaceTokenHash         pgtype.Text
+	MarketplaceTokenEncrypted    pgtype.Text
+	MarketplaceTokenOrgEncrypted pgtype.Text
+	MarketplaceUpdatedAt         pgtype.Timestamptz
+	PublishedHooksConfig         []byte
+	MarketplaceNameOverride      pgtype.Text
+	ObservabilityEnabled         bool
+	IsDefaultProject             bool
+	PluginID                     uuid.NullUUID
+	PluginSlug                   pgtype.Text
+	PluginName                   pgtype.Text
+	PluginDescription            pgtype.Text
+	PluginUpdatedAt              pgtype.Timestamptz
+	PluginInstallMode            string
 }
 
 // Returns the device agent's full plugin set for an org, marketplace-first.
 //
 // The base is the org's *published* marketplaces (plugin_github_connections rows
-// with a marketplace_token), scoped so the device agent isn't flooded with every
+// with a marketplace token: its hash, or until the marketplace token backfill
+// moves it, the plaintext column), scoped so the device agent isn't flooded with every
 // project: the org's default project always appears (marketplace + its
 // observability plugin when the project has not disabled it, synthesized in the
 // view layer) as the org-wide baseline, while a non-default project appears only
@@ -342,7 +353,11 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.ProjectSlug,
 			&i.OrganizationSlug,
 			&i.OrganizationName,
+			&i.ConnectionOrganizationID,
 			&i.MarketplaceToken,
+			&i.MarketplaceTokenHash,
+			&i.MarketplaceTokenEncrypted,
+			&i.MarketplaceTokenOrgEncrypted,
 			&i.MarketplaceUpdatedAt,
 			&i.PublishedHooksConfig,
 			&i.MarketplaceNameOverride,

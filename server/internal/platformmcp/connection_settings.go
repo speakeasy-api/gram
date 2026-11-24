@@ -156,18 +156,18 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
+	if err != nil || projectID == uuid.Nil {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	grants, ok := authz.GrantsFromContext(ctx)
 	if !ok {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
-	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	admin, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
 	}
@@ -175,7 +175,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(targetID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
 		}
