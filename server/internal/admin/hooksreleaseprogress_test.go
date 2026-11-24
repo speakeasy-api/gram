@@ -15,14 +15,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooksrollout"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 func TestSummarizeHooksPublishState(t *testing.T) {
 	t.Parallel()
-	canary := hooksrollout.CanaryOrganizationSlugs()[0]
+	staffOrg := staff.NewOrganization("org-canary")
 	rows := []repo.AdminListHooksPublishStateRow{
-		{OrganizationID: "org-canary", OrganizationSlug: canary, PublishedHooksVersion: "66"},
+		{OrganizationID: "org-canary", OrganizationSlug: "canary", PublishedHooksVersion: "66"},
 		{OrganizationID: "org-override", OrganizationSlug: "override", PublishedHooksVersion: "66"},
 		{OrganizationID: "org-override", OrganizationSlug: "override", PublishedHooksVersion: "64"},
 		{OrganizationID: "org-default", OrganizationSlug: "default", PublishedHooksVersion: "64"},
@@ -32,7 +33,7 @@ func TestSummarizeHooksPublishState(t *testing.T) {
 
 	t.Run("with a default pin", func(t *testing.T) {
 		t.Parallel()
-		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, overrides)
+		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, overrides, staffOrg)
 		require.Equal(t, int64(4), result.Organizations)
 		require.Equal(t, int64(2), result.OrganizationsCleared)
 		require.Equal(t, int64(2), result.OrganizationsHeld)
@@ -48,7 +49,7 @@ func TestSummarizeHooksPublishState(t *testing.T) {
 
 	t.Run("without a default pin", func(t *testing.T) {
 		t.Parallel()
-		result := summarizeHooksPublishState(rows, 66, nil, overrides)
+		result := summarizeHooksPublishState(rows, 66, nil, overrides, staffOrg)
 		require.Equal(t, int64(2), result.OrganizationsCleared)
 		require.Equal(t, int64(0), result.OrganizationsHeld)
 		require.Equal(t, int64(2), result.OrganizationsOnLegacyFlag)
@@ -100,7 +101,7 @@ func TestGetHooksReleaseProgress(t *testing.T) {
 			InstallationID:           int64(i + 1),
 			RepoOwner:                "example",
 			RepoName:                 slug,
-			MarketplaceToken:         pgtype.Text{String: "", Valid: false},
+			OrganizationID:           pgtype.Text{String: orgID, Valid: true},
 			PublishedMcpFingerprints: nil,
 			PublishedHooksVersion:    pgtype.Text{String: published, Valid: published != ""},
 			PublishedHooksConfig:     nil,

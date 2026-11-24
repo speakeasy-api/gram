@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -40,7 +41,7 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
 	}
 
-	result := summarizeHooksPublishState(repos, current, defaultPin, overrides)
+	result := summarizeHooksPublishState(repos, current, defaultPin, overrides, s.staffOrg)
 	if s.hookFleetVersions.Latest != nil {
 		result.CurrentBinaryVersion = new(s.hookFleetVersions.Latest.String())
 	}
@@ -58,7 +59,7 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	return result, nil
 }
 
-func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, overrides []hooksrollout.Override) *gen.AdminHooksReleaseProgress {
+func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
 	overrideByOrg := make(map[string]*hooksrollout.Pin, len(overrides))
 	for _, override := range overrides {
 		overrideByOrg[override.OrganizationID] = &override.Pin
@@ -93,7 +94,7 @@ func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, curre
 		pins := hooksrollout.OrganizationPins{Override: overrideByOrg[row.OrganizationID], Default: defaultPin}
 		pin, _ := pins.Effective()
 		switch {
-		case hooksrollout.IsCanary(row.OrganizationSlug):
+		case staffOrg.Is(row.OrganizationID):
 			result.OrganizationsCleared++
 		case pin == nil:
 			result.OrganizationsOnLegacyFlag++
