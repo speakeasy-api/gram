@@ -76,7 +76,7 @@ lib/remote-identity/
     useUpstreamProbe.ts     does this URL demand authentication
 
   components/               the shared UI of the concept
-    IdentityModeCards.tsx   User Identity / Shared credential / Manual
+    IdentityModeCards.tsx   User identity / Shared credential / Manual
     ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
     IdentityExplainer.tsx   content and inline callout
@@ -104,7 +104,7 @@ components stay free of query wiring.
 ## The rule the module exists to enforce
 
 The identity choice **owns** the `Authorization` header: a shared credential writes
-one, User Identity forbids one, Manual rejects the name outright. That
+one, User identity forbids one, Manual rejects the name outright. That
 ownership flows one direction only.
 
 ```ts

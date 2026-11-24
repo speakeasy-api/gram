@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -141,7 +142,7 @@ func TestStubProvisionerRemoveLastDisableCauseRestoresOrganizationDefault(t *tes
 		DisableCauses:  []string{string(openrouter.DisableCauseAdminLock)},
 	}))
 
-	expected, ok := openrouter.ResolveDefaultCreditLimit(ctx, testenv.NewLogger(t), ti.conn, orgID, billing.TierPayg)
+	expected, ok := openrouter.ResolveDefaultCreditLimit(ctx, testenv.NewLogger(t), ti.conn, staff.Organization{}, orgID, billing.TierPayg)
 	require.True(t, ok)
 	limit, change, err := ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
 	require.NoError(t, err)
@@ -371,7 +372,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, staff.Organization{}, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -488,7 +489,7 @@ func TestEnableKey_ReinstatesZeroTrialKeyAtTrialPolicy(t *testing.T) {
 	}))
 	setDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeInternal), []string{"admin_lock"})
 
-	expected, ok := openrouter.DefaultCreditLimit(orgID, billing.TierEnterprise, true)
+	expected, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, billing.TierEnterprise, true)
 	require.True(t, ok)
 	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{
 		SessionToken:   nil,
@@ -1443,7 +1444,7 @@ func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, staff.Organization{}, testBaseURL)
 	})
 }
 

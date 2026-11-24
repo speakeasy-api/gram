@@ -146,6 +146,10 @@ type LogUserSessionIssuerMigrateEvent struct {
 	// the consolidation did not carry to the target.
 	DroppedClientLinks []uuid.UUID
 
+	// MergedClientIDs are the OAuth client_ids both issuers held whose source
+	// client was retired in favor of the target's client for the same id.
+	MergedClientIDs []string
+
 	// ServerImpacts summarize how the consolidation changed each affected MCP
 	// server's upstream clients.
 	ServerImpacts []UserSessionIssuerMigrationServerImpact
@@ -196,6 +200,7 @@ func (l *Logger) LogUserSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX
 		"remote_sessions_migrated":       event.RemoteSessionsMigrated,
 		"pinned_associations":            event.PinnedAssociations,
 		"dropped_client_links":           event.DroppedClientLinks,
+		"merged_client_ids":              event.MergedClientIDs,
 		"server_impacts":                 event.ServerImpacts,
 	})
 	if err != nil {

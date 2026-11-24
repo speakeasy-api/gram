@@ -13,16 +13,16 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.170
+  "@ai-sdk/react": ^4.0.177
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.32.0
   "@tailwindcss/vite": ^4.3.5
   "@tanstack/react-query": 5.107.1
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
-  "@assistant-ui/react": ^0.15.33
+  "@assistant-ui/react": ^0.15.37
   "@vitejs/plugin-react": ^6.3.0
-  ai: ^7.0.166
+  ai: ^7.0.173
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.7
@@ -44,10 +44,11 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  ai: 7.0.166
-  "@ai-sdk/react": 4.0.170
-  glob@>=10.0 <10.5.0: 10.5.0
-  fast-uri@<3.1.8: 3.1.8
+  # @ai-sdk/react depends on an exact ai version. Keep both pinned together so
+  # the dashboard, @ai-sdk/react, and the ai peers of @assistant-ui/react-ai-sdk
+  # and assistant-stream all resolve to one ai instance.
+  ai: 7.0.173
+  "@ai-sdk/react": 4.0.177
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
   # 3.4.17 also fixes GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr in 3.4.16.
   dompurify@<3.4.17: 3.4.17
@@ -60,13 +61,6 @@ overrides:
   # versions mint separate Vite instances. TanStack Start checks its Vite
   # environment by identity, so keep the Vite peer set converged.
   "vite>@types/node": ^24.13.3
-  # @assistant-ui/core must resolve to a single instance: its React contexts
-  # (e.g. RuntimeAdapterProvider) are shared between @assistant-ui/react and
-  # @assistant-ui/react-ai-sdk, and pnpm mints a separate core instance per
-  # distinct peer set — splitting the context and silently breaking chat
-  # history loading (AGE-2977). Pin assistant-cloud's optional peer to a version
-  # accepted by both runtime paths so core resolves with the same peer set.
-  assistant-cloud: 0.2.1
 
 peerDependencyRules:
   allowedVersions:

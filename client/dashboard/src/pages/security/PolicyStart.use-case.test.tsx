@@ -272,7 +272,6 @@ describe("unsupported policy drafts", () => {
           review={{ suggestion, overridePresetId: null }}
           presets={[]}
           mode="presidio"
-          promptPoliciesEnabled
           onOverride={vi.fn<() => void>()}
           onBack={onBack}
           onContinue={onContinue}

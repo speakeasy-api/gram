@@ -39,7 +39,7 @@ export function ProxyCredentialsForm(): JSX.Element {
             </div>
 
             <div>
-              <Text className="mb-2 font-medium">Client Secret</Text>
+              <Text className="mb-2 font-medium">Client secret</Text>
               <Input
                 placeholder="your-client-secret"
                 value={proxy.clientSecret}

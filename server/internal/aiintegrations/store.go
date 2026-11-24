@@ -17,10 +17,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
@@ -259,7 +260,7 @@ type Store struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	repo   *repo.Queries
-	enc    *encryption.Client
+	keys   *aiproviderkeys.Keys
 }
 
 type Config struct {
@@ -314,12 +315,12 @@ type UpsertResult struct {
 	CreatedNewGeneration bool
 }
 
-func NewStore(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Store {
+func NewStore(logger *slog.Logger, db *pgxpool.Pool, keys *aiproviderkeys.Keys) *Store {
 	return &Store{
 		logger: logger.With(attr.SlogComponent("aiintegrations")),
 		db:     db,
 		repo:   repo.New(db),
-		enc:    enc,
+		keys:   keys,
 	}
 }
 
@@ -353,7 +354,7 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 		return emptyConfig(orgID, provider), nil, oops.E(oops.CodeUnexpected, err, "failed to load ai integration config")
 	}
 
-	cfg, err := s.configFromGetRow(row)
+	cfg, err := s.configFromGetRow(ctx, nil, row)
 	if err != nil {
 		return emptyConfig(orgID, provider), nil, err
 	}
@@ -420,22 +421,25 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}); err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to replace ai integration config")
 		}
-		encrypted, err := s.encryptAPIKey(apiKey)
-		if err != nil {
-			return UpsertResult{}, err
+		apiKey = strings.TrimSpace(apiKey)
+		if apiKey == "" {
+			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "api_key is required")
 		}
-		row, err = q.InsertConfig(ctx, repo.InsertConfigParams{
+		inserted, err := q.InsertConfig(ctx, repo.InsertConfigParams{
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
 			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
-			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
 			BillingMode:            conv.PtrToPGTextEmpty(billingMode),
 			Settings:               encodedSettings,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
+		}
+		row, err = s.storeAPIKey(ctx, dbtx, orgID, inserted.ID, []byte(apiKey))
+		if err != nil {
+			return UpsertResult{}, err
 		}
 	} else {
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
@@ -567,7 +571,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	cfg, err := s.configFromRows(row, syncRow)
+	cfg, err := s.configFromRows(ctx, dbtx, row, syncRow)
 	if err != nil {
 		return UpsertResult{}, err
 	}
@@ -609,7 +613,7 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 
 	configs := make([]Config, 0, len(rows))
 	for _, row := range rows {
-		cfg, err := s.configFromListRow(row)
+		cfg, err := s.configFromListRow(ctx, nil, row)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to decrypt ai integration config",
 				attr.SlogError(err),
@@ -771,7 +775,7 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll sync")
 	}
-	cfg, err := s.configFromUsagePollConfigBySyncIDRow(row)
+	cfg, err := s.configFromUsagePollConfigBySyncIDRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -789,7 +793,7 @@ func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UU
 	case err != nil:
 		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromProviderUsagePollConfigByIDRow(row)
+	cfg, err := s.configFromProviderUsagePollConfigByIDRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, "", err
 	}
@@ -810,7 +814,7 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	case err != nil:
 		return Config{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
 	}
-	cfg, err := s.configFromUsagePollConfigRow(row)
+	cfg, err := s.configFromUsagePollConfigRow(ctx, nil, row)
 	if err != nil {
 		return Config{}, err
 	}
@@ -1057,8 +1061,8 @@ func decodeRowPollCheckpoint(encoded pgtype.Text, legacy pgtype.Timestamptz) (ti
 	return checkpoint, nil
 }
 
-func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromGetRow(ctx context.Context, db repo.DBTX, row repo.GetConfigByOrgAndProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1090,8 +1094,8 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 	}, nil
 }
 
-func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromListRow(ctx context.Context, db repo.DBTX, row repo.ListEnabledConfigsByProviderRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1123,8 +1127,8 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigRow(ctx context.Context, db repo.DBTX, row repo.GetUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1156,8 +1160,8 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 	}, nil
 }
 
-func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromUsagePollConfigBySyncIDRow(ctx context.Context, db repo.DBTX, row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1189,8 +1193,8 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 	}, nil
 }
 
-func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromProviderUsagePollConfigByIDRow(ctx context.Context, db repo.DBTX, row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1222,8 +1226,8 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 	}, nil
 }
 
-func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+func (s *Store) configFromRows(ctx context.Context, db repo.DBTX, row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(ctx, db, row.OrganizationID, aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted))
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1255,27 +1259,48 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 	}, nil
 }
 
-func (s *Store) encryptAPIKey(apiKey string) (string, error) {
-	apiKey = strings.TrimSpace(apiKey)
-	if apiKey == "" {
-		return "", oops.E(oops.CodeInvalid, nil, "api_key is required")
-	}
-	ct, err := s.enc.Encrypt([]byte(apiKey))
+// storeAPIKey seals plaintext for the organization and stores it on config
+// id, in the caller's transaction.
+func (s *Store) storeAPIKey(ctx context.Context, dbtx repo.DBTX, orgID string, id uuid.UUID, plaintext []byte) (repo.AiIntegrationConfig, error) {
+	q := repo.New(dbtx)
+	var row repo.AiIntegrationConfig
+	err := s.keys.Store(ctx, dbtx, orgID, aiproviderkeys.AIIntegrationConfigs, plaintext, func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+		stored, err := q.SetConfigAPIKey(ctx, repo.SetConfigAPIKeyParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, ID: id, OrganizationID: orgID, DecidedGeneration: generation})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("set ai integration api key: %w", err)
+		}
+		row = stored
+		return true, nil
+	})
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt ai integration api key")
+		return repo.AiIntegrationConfig{}, apiKeyError(err, "encrypt ai integration api key")
 	}
-	return ct, nil
+	return row, nil
 }
 
-func (s *Store) decryptAPIKey(stored string) (string, error) {
-	if stored == "" {
+// decryptAPIKey opens a row's API key. A row whose only copy is an empty
+// platform copy has no key. db is the caller's transaction, or nil.
+func (s *Store) decryptAPIKey(ctx context.Context, db repo.DBTX, orgID string, stored orgencryption.Copies) (string, error) {
+	if !stored.Org.Valid && stored.Platform.String == "" {
 		return "", nil
 	}
-	plaintext, err := s.enc.Decrypt(stored)
+	plaintext, err := s.keys.Open(ctx, db, orgID, aiproviderkeys.AIIntegrationConfigs, stored)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "decrypt ai integration api key")
+		return "", apiKeyError(err, "decrypt ai integration api key")
 	}
-	return plaintext, nil
+	return string(plaintext), nil
+}
+
+// apiKeyError maps an aiproviderkeys error: a write that matched no row is a
+// conflict, and the rest follows aiproviderkeys.Error.
+func apiKeyError(err error, msg string) *oops.ShareableError {
+	if errors.Is(err, aiproviderkeys.ErrNotStored) {
+		return oops.E(oops.CodeConflict, err, "The integration changed while saving. Reload and try again.")
+	}
+	return aiproviderkeys.Error(err, msg)
 }
 
 func emptyConfig(orgID string, provider string) Config {
