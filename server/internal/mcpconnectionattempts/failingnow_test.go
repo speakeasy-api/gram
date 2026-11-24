@@ -1040,8 +1040,11 @@ func TestEpisode_BackingServerIDAndOnMCPServer(t *testing.T) {
 		{"an MCP server with no id", Episode{ServerKind: serverKindMCP, ServerID: ""}, "", false},
 	}
 	for _, tc := range cases {
-		require.Equal(t, tc.backing, tc.episode.BackingServerID(), tc.name)
-		require.Equal(t, tc.onMCP, tc.episode.OnMCPServer(), tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.backing, tc.episode.BackingServerID())
+			require.Equal(t, tc.onMCP, tc.episode.OnMCPServer())
+		})
 	}
 }
 
