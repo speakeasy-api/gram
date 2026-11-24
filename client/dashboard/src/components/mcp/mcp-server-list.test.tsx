@@ -255,7 +255,7 @@ describe("MCPServerCard", () => {
     expect(screen.getByText("remote-a1")).toBeTruthy();
     for (const label of [
       "Hosted by Speakeasy",
-      "Remote (by URL)",
+      "Remote",
       "Tunneled",
       "Unproxied",
     ]) {

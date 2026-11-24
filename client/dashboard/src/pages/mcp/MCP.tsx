@@ -315,7 +315,7 @@ function MCPOverview() {
     search === "" &&
     (!hasActiveMcpFilters(mcpFilters.values) || narrowedToGatewaysOnly);
   const projectGatewayCard = showProjectGateway && (
-    <ProjectGatewayCard isOff={projectGateway.isOff} />
+    <ProjectGatewayCard status={projectGateway.status} />
   );
   const showNoMatches =
     !isLoading &&
@@ -493,7 +493,7 @@ function MCPOverview() {
                 {showProjectGateway && (
                   <ProjectGatewayTableRow
                     url={projectGateway.url}
-                    isOff={projectGateway.isOff}
+                    status={projectGateway.status}
                   />
                 )}
                 {filteredGateways.map((gateway) => (

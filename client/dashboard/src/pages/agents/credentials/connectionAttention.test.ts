@@ -1,8 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
+  refreshOutcome,
   serversNeedingConnection,
 } from "./connectionAttention";
 import type { ServerConnection, ServerSignIn } from "./ownerConnections";
@@ -141,5 +143,120 @@ describe("a connection the viewer may not see", () => {
       connections({ status: "ready", sessions: [] }),
     );
     expect(displayed.get("grain")).toEqual({ status: "forbidden" });
+  });
+});
+
+describe("an existing agent with no working connection", () => {
+  const servers = [
+    { id: "linear", name: "Linear", issuerId: "issuer_linear" },
+  ] as InventoryServer[];
+  const connections = (
+    own: ServerConnection,
+    assigned: ServerConnection,
+  ): OwnerConnections => ({
+    byServer: new Map([["linear", own]]),
+    assignedByServer: new Map([["linear", assigned]]),
+    refetch: async () => {},
+  });
+  const ready: ServerConnection = { status: "ready", sessions: [] };
+
+  it.each([
+    { status: "missing" } as ServerConnection,
+    { status: "ended", sessions: [] } as ServerConnection,
+  ])(
+    "shows the $status assignment, not the editor's connection",
+    (assigned) => {
+      const view = connections(ready, assigned);
+      const displayed = displayedConnections(view);
+      expect(displayed.get("linear")).toEqual(assigned);
+      expect(
+        serversNeedingConnection(servers, displayed).map((server) => server.id),
+      ).toEqual(["linear"]);
+      expect(assignableOwnConnection(view, "linear")).toBe(true);
+    },
+  );
+
+  it("offers the editor's connection only when it works", () => {
+    expect(
+      assignableOwnConnection(
+        connections({ status: "checking" }, { status: "missing" }),
+        "linear",
+      ),
+    ).toBe(false);
+    expect(
+      assignableOwnConnection(
+        connections({ status: "missing" }, { status: "missing" }),
+        "linear",
+      ),
+    ).toBe(false);
+  });
+
+  it("offers nothing where the agent's connection works or is not visible", () => {
+    expect(assignableOwnConnection(connections(ready, ready), "linear")).toBe(
+      false,
+    );
+    expect(
+      assignableOwnConnection(
+        connections(ready, { status: "forbidden" }),
+        "linear",
+      ),
+    ).toBe(false);
+  });
+
+  it("offers nothing while an agent is being created", () => {
+    const creating: OwnerConnections = {
+      byServer: new Map([["linear", ready]]),
+      refetch: async () => {},
+    };
+    expect(displayedConnections(creating).get("linear")).toEqual(ready);
+    expect(assignableOwnConnection(creating, "linear")).toBe(false);
+  });
+});
+
+describe("refreshOutcome", () => {
+  it("confirms a working connection", () => {
+    expect(refreshOutcome("Linear", { status: "ready", sessions: [] })).toEqual(
+      { tone: "success", message: "The connection to Linear is working." },
+    );
+  });
+
+  it("tells an expired connection to reauthenticate", () => {
+    expect(refreshOutcome("Linear", { status: "ended", sessions: [] })).toEqual(
+      {
+        tone: "warning",
+        message:
+          "The connection to Linear is still expired. Reauthenticate to sign in again.",
+      },
+    );
+  });
+
+  it("says nothing is connected yet", () => {
+    expect(
+      refreshOutcome("Linear", missing(signIn("linear", "Linear"))),
+    ).toEqual({
+      tone: "info",
+      message: "No connection to Linear yet. Connect an account to add one.",
+    });
+  });
+
+  it("names what is left when some sign-ins are connected", () => {
+    expect(
+      refreshOutcome("Linear", {
+        status: "missing",
+        signIns: [signIn("stripe", "Stripe")],
+        connected: 1,
+      }),
+    ).toEqual({
+      tone: "info",
+      message:
+        "Checked Linear. This server has 2 sign-ins; 1 is connected. Still needs a connection to Stripe.",
+    });
+  });
+
+  it("says when the check failed", () => {
+    expect(refreshOutcome("Linear", { status: "error" })).toEqual({
+      tone: "error",
+      message: "Could not check the connection to Linear. Try again.",
+    });
   });
 });

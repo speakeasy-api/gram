@@ -302,7 +302,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   if (hosted) {
     sourceDescription = `${MCP_SERVER_KIND_LABEL.hosted}.`;
   } else if (mcpServer?.remoteMcpServerId) {
-    sourceDescription = `${MCP_SERVER_KIND_LABEL.remote}.`;
+    sourceDescription = "Backed by a remote MCP server.";
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = `${MCP_SERVER_KIND_LABEL.tunneled}.`;
   } else if (mcpServer?.unproxiedMcpServerId) {
@@ -519,7 +519,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   if (!mcpServer) return null;
   const kindLabel = isRemoteBacked
-    ? MCP_SERVER_KIND_LABEL.remote
+    ? "Remote MCP"
     : isTunneledBacked
       ? MCP_SERVER_KIND_LABEL.tunneled
       : isUnproxied

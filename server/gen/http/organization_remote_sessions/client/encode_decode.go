@@ -994,7 +994,7 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 		IdentitySource:         v.IdentitySource,
 		UserSessionIssuerID:    *v.UserSessionIssuerID,
 		RemoteSessionClientID:  *v.RemoteSessionClientID,
-		AccessExpiresAt:        *v.AccessExpiresAt,
+		AccessExpiresAt:        v.AccessExpiresAt,
 		RefreshExpiresAt:       v.RefreshExpiresAt,
 		AuthorizationExpiresAt: v.AuthorizationExpiresAt,
 		LastUsedAt:             v.LastUsedAt,

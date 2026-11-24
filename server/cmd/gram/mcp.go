@@ -249,13 +249,21 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	env := environments.NewEnvironmentEntries(logger, db, enc, mcpmetadata_repo.New(db))
 	auditLogger := newAuditLogger()
 
+	gcpIdentity := newGCPIdentity(ctx, logger, c)
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return err
+	}
+	aiProviderKeys := orgEncryption.AIProviderKeys(logger, enc)
+
 	// No key refresher: refreshing a provisioned key is a Temporal workflow,
 	// and provisioning tolerates its absence.
+	orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 	var openRouter openrouter.Provisioner
 	if serviceEnv == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 	}
 
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
@@ -335,14 +343,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// the Temporal-backed observers `gram start` attaches.
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	shutdown.funcs = append(shutdown.funcs, stop)
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter),
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, orEndpoints, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, orEndpoints, publishers, shadowMCPClient, toolIOLogsEnabled,
 		approvalService,
 	)
 	if err != nil {
@@ -361,18 +369,13 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
 
-	gcpIdentity := newGCPIdentity(ctx, logger, c)
 	kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 	if err != nil {
 		return fmt.Errorf("build kms signing client factory: %w", err)
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
-	if err != nil {
-		return err
-	}
-	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
 		return err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)

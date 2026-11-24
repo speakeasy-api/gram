@@ -6692,6 +6692,26 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyActivityFixture = `-- name: SetAPIKeyActivityFixture :exec
+UPDATE api_keys
+SET created_at = $1
+  , last_accessed_at = $2
+WHERE id = $3
+`
+
+type SetAPIKeyActivityFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	LastAccessedAt pgtype.Timestamptz
+	ID             uuid.UUID
+}
+
+// Backdates a key's creation and last use so the plugin key reaper sees it as
+// old or recently used.
+func (q *Queries) SetAPIKeyActivityFixture(ctx context.Context, arg SetAPIKeyActivityFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyActivityFixture, arg.CreatedAt, arg.LastAccessedAt, arg.ID)
+	return err
+}
+
 const setAPIKeyCreatorFixture = `-- name: SetAPIKeyCreatorFixture :exec
 UPDATE api_keys
 SET created_by_user_id = $1
@@ -7565,25 +7585,6 @@ type SetOpenRouterAPIKeyHashFixtureParams struct {
 // Test-only fixture: simulates key rotation between an upstream response and CAS.
 func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpenRouterAPIKeyHashFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyHashFixture, arg.KeyHash, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
-const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
-UPDATE openrouter_api_keys
-SET key = $1
-WHERE organization_id = $2
-  AND key_type = $3
-`
-
-type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
-	ProviderPayload pgtype.Text
-	OrganizationID  string
-	KeyType         string
-}
-
-// Test-only privacy sentinel in the deprecated plaintext provider payload column.
-func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
-	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
 	return err
 }
 

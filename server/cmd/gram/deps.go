@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -584,8 +585,6 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// The dashboard shows every flag on in local dev, so the server lets local
 	// orgs create tool approval policies too. A CSV row can still turn it off.
 	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
-	// Local development runs the tailnet gateway, not the operator.
-	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -980,6 +979,7 @@ func newAdminOpenRouter(
 		guardianPolicy,
 		db,
 		env,
+		PullPartition(ctx),
 		provisioningKey,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
@@ -2049,6 +2049,12 @@ func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encrypti
 // process's organization encryption and transition state.
 func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
 	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// AIProviderKeys builds the seam for AI provider and model keys over the
+// process's organization encryption.
+func (d orgEncryptionDeps) AIProviderKeys(logger *slog.Logger, platform *encryption.Client) *aiproviderkeys.Keys {
+	return aiproviderkeys.New(logger, d.Cipher(logger, platform))
 }
 
 // MarketplaceTokens builds the plugin marketplace token seam over the

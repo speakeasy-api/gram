@@ -66,6 +66,13 @@ vi.mock("@/pages/identities/useAgentKeysUseSharedCredential", () => ({
     return agentId ? agentKeys.shared : false;
   },
 }));
+const toast = vi.hoisted(() => ({
+  success: vi.fn<(message: string) => void>(),
+  warning: vi.fn<(message: string) => void>(),
+  info: vi.fn<(message: string) => void>(),
+  error: vi.fn<(message: string) => void>(),
+}));
+vi.mock("sonner", () => ({ toast }));
 
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
@@ -75,6 +82,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   agentKeys.shared = false;
   agentKeys.agentIds = [];
+  for (const tell of Object.values(toast)) tell.mockClear();
 });
 
 const server: InventoryServer = {
@@ -101,48 +109,105 @@ const expired = {
 } as RemoteSession;
 
 describe("authentication assignment warnings", () => {
-  it("shows the editor's live account when the agent's assignment has ended, since saving assigns it", () => {
+  const assignedNone = (
+    own: "ready" | "checking",
+    assigned: "missing" | "ended",
+    onAssign?: (serverId: string) => void,
+  ) =>
     render(
       <StepAuthentication
         servers={[server]}
-        allServers
+        allServers={false}
         onRemove={vi.fn<(id: string) => void>()}
+        onAssign={onAssign}
         connections={{
           byServer: new Map([
-            [server.id, { status: "ready", sessions: [mine] }],
+            [
+              server.id,
+              own === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "checking" },
+            ],
           ]),
           assignedByServer: new Map([
-            [server.id, { status: "ended", sessions: [expired] }],
+            [
+              server.id,
+              assigned === "ended"
+                ? { status: "ended", sessions: [expired] }
+                : { status: "missing" },
+            ],
           ]),
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
+
+  it("never shows the editor's own connection as one the agent has", () => {
+    assignedNone("ready", "missing", vi.fn<(serverId: string) => void>());
+    expect(screen.queryByText("Your connection")).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    ).toBeTruthy();
   });
-  it("waits for the editor's own connection before judging an ended assignment", () => {
-    render(
-      <StepAuthentication
-        servers={[server]}
-        allServers
-        onRemove={vi.fn<(id: string) => void>()}
-        connections={{
-          byServer: new Map([[server.id, { status: "checking" }]]),
-          assignedByServer: new Map([
-            [server.id, { status: "ended", sessions: [expired] }],
-          ]),
-          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-        }}
-      />,
-      { wrapper: MemoryRouter },
+
+  it("shows an ended assignment as its owner's, not the editor's", () => {
+    assignedNone("ready", "ended", vi.fn<(serverId: string) => void>());
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Expired/ }),
     );
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getByText("Another member's connection has expired"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Your connection")).toBeNull();
   });
+
+  it.each(["missing", "ended"] as const)(
+    "assigns the editor's connection only when they ask, for a %s assignment",
+    (assigned) => {
+      const onAssign = vi.fn<(serverId: string) => void>();
+      assignedNone("ready", assigned, onAssign);
+      fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+      expect(onAssign).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/The agent can use it only once you assign it/),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Use your connection" }),
+      );
+      expect(onAssign).toHaveBeenCalledWith(server.id);
+    },
+  );
+
+  it("offers nothing to assign until the editor's own connection is known", () => {
+    assignedNone("checking", "missing", vi.fn<(serverId: string) => void>());
+    fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+    expect(
+      screen.queryByRole("button", { name: "Use your connection" }),
+    ).toBeNull();
+  });
+
+  it("shows an ended assignment while the editor's own connection is still being checked", () => {
+    assignedNone("checking", "ended", vi.fn<(serverId: string) => void>());
+    expect(screen.queryByText("Checking connection…")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Expired/ }),
+    );
+    expect(
+      screen.getByText("Another member's connection has expired"),
+    ).toBeTruthy();
+  });
+
+  it("offers nothing to assign where the page cannot assign it", () => {
+    assignedNone("ready", "missing");
+    fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+    expect(
+      screen.queryByRole("button", { name: "Use your connection" }),
+    ).toBeNull();
+  });
+
   it("keeps a valid delegated assignment clear of candidate warnings", () => {
     render(
       <StepAuthentication
@@ -322,7 +387,10 @@ describe("saving after a connection", () => {
       close: () => {},
     }) as unknown as Window;
   const connectable = { ...server, connectUrl: "https://example.test/connect" };
-  function row(status: "missing" | "ready", onConnected: () => void) {
+  function row(
+    status: "missing" | "ready",
+    onConnected: (serverId: string) => void,
+  ) {
     return (
       <StepAuthentication
         servers={[connectable]}
@@ -346,7 +414,7 @@ describe("saving after a connection", () => {
 
   it("saves once the reader's connection is ready after the sign-in popup closes", async () => {
     vi.spyOn(window, "open").mockReturnValue(fakePopup());
-    const onConnected = vi.fn<() => void>();
+    const onConnected = vi.fn<(serverId: string) => void>();
     const view = render(row("missing", onConnected), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByText("Example server"));
     fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
@@ -356,11 +424,12 @@ describe("saving after a connection", () => {
       await popup.onComplete?.("popup-closed");
     });
     await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+    expect(onConnected).toHaveBeenCalledWith(connectable.id);
   });
 
   it("does not save when the popup closes without a connection", async () => {
     vi.spyOn(window, "open").mockReturnValue(fakePopup());
-    const onConnected = vi.fn<() => void>();
+    const onConnected = vi.fn<(serverId: string) => void>();
     render(row("missing", onConnected), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByText("Example server"));
     fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
@@ -506,5 +575,138 @@ describe("an agent connection the viewer may not see", () => {
         .getByText("Credential picker for Example server")
         .getAttribute("data-accounts"),
     ).toBe("true");
+  });
+});
+
+describe("refreshing a connection's status", () => {
+  const connectable = { ...server, connectUrl: "https://example.test/connect" };
+  const ownExpired = { ...expired, subjectUrn: "user:editor" } as RemoteSession;
+  function row(connection: "ended" | "ready", refetch: () => Promise<void>) {
+    return (
+      <StepAuthentication
+        servers={[connectable]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [
+              connectable.id,
+              connection === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "ended", sessions: [ownExpired] },
+            ],
+          ]),
+          refetch,
+        }}
+      />
+    );
+  }
+  const refreshButton = () =>
+    screen.getByRole("button", {
+      name: "Refresh Example server connection status",
+    });
+
+  it("shows it is checking until the re-read lands", async () => {
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(refreshButton());
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshButton().hasAttribute("disabled")).toBe(true);
+    expect(refreshButton().getAttribute("aria-busy")).toBe("true");
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(true);
+    await act(async () => finish());
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(false);
+    expect(refreshButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says a connection that is still expired needs reauthenticating", async () => {
+    const refetch = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    await act(async () => fireEvent.click(refreshButton()));
+    expect(toast.warning).toHaveBeenCalledWith(
+      "The connection to Example server is still expired. Reauthenticate to sign in again.",
+    );
+  });
+
+  it("says the connection works once the re-read finds a new one", async () => {
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const view = render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(refreshButton());
+    // Signed in again in another tab: the re-read finds the new connection.
+    view.rerender(row("ready", refetch));
+    await act(async () => finish());
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "The connection to Example server is working.",
+      ),
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("says the check failed when the re-read is rejected", async () => {
+    const refetch = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error("network"));
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    await act(async () => fireEvent.click(refreshButton()));
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not check the connection to Example server. Try again.",
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(refreshButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("holds every row's refresh until the running one lands", async () => {
+    const other = { ...connectable, id: "server_two", name: "Other server" };
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(
+      <StepAuthentication
+        servers={[connectable, other]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [connectable.id, { status: "ended", sessions: [ownExpired] }],
+            [other.id, { status: "ended", sessions: [ownExpired] }],
+          ]),
+          refetch,
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByText("Other server"));
+    fireEvent.click(refreshButton());
+    const otherRefresh = screen.getByRole("button", {
+      name: "Refresh Other server connection status",
+    });
+    expect(otherRefresh.hasAttribute("disabled")).toBe(true);
+    expect(otherRefresh.getAttribute("aria-busy")).toBe("false");
+    await act(async () => finish());
+    expect(otherRefresh.hasAttribute("disabled")).toBe(false);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -765,6 +765,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcpconnectionhealth/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpconnectionhealth/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/usersessions/queries.sql
     engine: postgresql
     gen:
@@ -1153,6 +1163,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/deviceintegrations/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aiproviderkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/aiproviderkeys/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

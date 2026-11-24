@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -120,6 +121,7 @@ type expiredTrialDemoter interface {
 type Activities struct {
 	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
+	auditLogger                      *audit.Logger
 	logger                           *slog.Logger
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
@@ -215,6 +217,7 @@ func NewActivities(
 	encryption *encryption.Client,
 	clientSecrets *clientsecrets.Secrets,
 	upstreamTokens *upstreamtokens.Tokens,
+	aiProviderKeys *aiproviderkeys.Keys,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -424,14 +427,15 @@ func NewActivities(
 
 	return &Activities{
 		db:                               db,
+		auditLogger:                      auditLogger,
 		logger:                           logger,
 		temporalEnv:                      temporalEnv,
-		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
+		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, aiProviderKeys),
 		collectOpenRouterDailySpend:      activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
 		settleStripeInvoiceAllocations:   activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:      activities.NewCollectPlatformUsageMetrics(logger, db),
-		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollAIData:                       activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
+		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, aiProviderKeys),
+		pollAIData:                       activities.NewPollAIData(logger, db, aiProviderKeys, telemetryLogger, guardianPolicy, chatWriter),
 		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter, serverURL),
 		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter, serverURL),
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),

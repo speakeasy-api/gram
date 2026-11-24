@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -372,7 +373,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, enc, staff.Organization{}, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", partition.US, "provisioning-key", nil, nil, enc, staff.Organization{}, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -1444,7 +1445,7 @@ func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context
 		require.NoError(t, err)
 		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, enc, staff.Organization{}, testBaseURL)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", partition.US, "provisioning-secret", nil, nil, enc, staff.Organization{}, testBaseURL)
 	})
 }
 

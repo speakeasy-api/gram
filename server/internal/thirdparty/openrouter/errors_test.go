@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -324,6 +325,7 @@ func newTestClientForServer(t *testing.T, server *httptest.Server) *ChatClient {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
