@@ -13,17 +13,6 @@ vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
     isError: false,
   }),
 }));
-const readiness = vi.hoisted(() => ({
-  value: {
-    upstreamAuth: "legacy",
-    isLoadingRemoteIdentity: false,
-    identityUnavailable: false,
-    remoteIdentityMode: "user",
-  },
-}));
-vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
-  useMcpServerAuthenticationReadiness: () => readiness.value,
-}));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
   UserSessionIssuerField: () => <span>User session issuer</span>,
 }));
@@ -38,17 +27,19 @@ const mcpServer = {
   updatedAt: new Date(0),
 } as McpServer;
 
-afterEach(() => {
-  cleanup();
-  readiness.value = {
-    upstreamAuth: "legacy",
-    isLoadingRemoteIdentity: false,
-    identityUnavailable: false,
-    remoteIdentityMode: "user",
-  };
-});
+afterEach(cleanup);
 
 describe("RemoteMcpSessionsSection", () => {
+  it("offers a downstream sign-in even when an issuer is not attached yet", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+
+    expect(screen.getByText("User session issuer")).toBeDefined();
+  });
+
   it("shows only the provider picker; its settings live in MCP Sessions", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
@@ -57,28 +48,5 @@ describe("RemoteMcpSessionsSection", () => {
     expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
-  });
-
-  it.each(["none", "agent"])(
-    "hides when people do not sign in as themselves (%s)",
-    (mode) => {
-      readiness.value = { ...readiness.value, remoteIdentityMode: mode };
-      render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-      expect(screen.queryByText("Sessions")).toBeNull();
-    },
-  );
-
-  it.each([
-    ["loading", { isLoadingRemoteIdentity: true }],
-    ["unavailable", { identityUnavailable: true }],
-    ["enforced", { upstreamAuth: "enforced" }],
-  ])("stays while the mode is not known (%s)", (_, override) => {
-    readiness.value = {
-      ...readiness.value,
-      remoteIdentityMode: "none",
-      ...override,
-    };
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-    expect(screen.getByText("Sessions")).toBeDefined();
   });
 });
