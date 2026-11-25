@@ -44,4 +44,28 @@ func (c *shadowDecisionVersionCodec) Match(expected string, state mcpapproval.De
 	return hmac.Equal([]byte(expected), []byte(actual))
 }
 
+// encodeSetting authenticates the state behind one Shadow MCP setting. The
+// domain keeps a token for one setting from matching another.
+func (c *shadowDecisionVersionCodec) encodeSetting(domain string, state any) (string, error) {
+	if c == nil || len(c.key) != sha256.Size || domain == "" {
+		return "", ErrShadowInventoryUnavailable
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("encode shadow mcp %s version state: %w", domain, err)
+	}
+	mac := hmac.New(sha256.New, c.key)
+	_, _ = mac.Write([]byte(domain + ":"))
+	_, _ = mac.Write(payload)
+	return domain + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func (c *shadowDecisionVersionCodec) matchSetting(domain, expected string, state any) bool {
+	actual, err := c.encodeSetting(domain, state)
+	if err != nil {
+		return false
+	}
+	return hmac.Equal([]byte(expected), []byte(actual))
+}
+
 var ErrShadowDecisionConflict = errors.New("platform mcp shadow decision conflict")

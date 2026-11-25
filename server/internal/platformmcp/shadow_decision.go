@@ -188,31 +188,14 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 }
 
 func (s *ShadowDecisionService) admit(ctx context.Context, principal Principal, project ResolvedProject) error {
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || organizationSlug == "" {
-		return shadowDecisionUnavailable(err)
-	}
-	groups := feature.OrgProjectGroups(organizationSlug, project.Slug)
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, groups)
-	if err != nil || evaluation != feature.EvaluationEnabled {
-		return shadowDecisionUnavailable(err)
-	}
-	return nil
+	return admitShadowAccessWrites(ctx, s.flags, s.organizations, principal, project)
 }
 
 // charge returns the budget charge for one decision. The receipt store runs
 // it only when no completed receipt answers the request, and outside any
 // transaction; see executeChargedMutationReceipt.
 func (s *ShadowDecisionService) charge(principal Principal) func(context.Context) error {
-	return func(ctx context.Context) error {
-		if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-			if errors.Is(err, ErrOperationRateLimited) {
-				return shadowDecisionError("rate_limited", "The Shadow MCP decision rate limit was reached.", err)
-			}
-			return shadowDecisionUnavailable(err)
-		}
-		return nil
-	}
+	return chargeShadowAccessWrite(s.budget, principal)
 }
 
 func shadowDecisionAudiences(input []PluginAssignmentSummaryResult) []ShadowDecisionAudience {
