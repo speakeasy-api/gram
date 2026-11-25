@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -16,18 +15,14 @@ import (
 )
 
 type GetUserFeedbackForChat struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	repo        *repo.Queries
-	transcripts *transcriptstore.Transcripts
+	logger *slog.Logger
+	repo   *repo.Queries
 }
 
-func NewGetUserFeedbackForChat(logger *slog.Logger, db *pgxpool.Pool, transcripts *transcriptstore.Transcripts) *GetUserFeedbackForChat {
+func NewGetUserFeedbackForChat(logger *slog.Logger, db *pgxpool.Pool) *GetUserFeedbackForChat {
 	return &GetUserFeedbackForChat{
-		logger:      logger,
-		db:          db,
-		repo:        repo.New(db),
-		transcripts: transcripts,
+		logger: logger,
+		repo:   repo.New(db),
 	}
 }
 
@@ -76,14 +71,19 @@ func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackFor
 		return nil, fmt.Errorf("list user feedback: %w", err)
 	}
 
-	messages, err := g.transcripts.ListChatMessagesByGeneration(ctx, g.db, args.ProjectID, args.ChatID, generation)
+	// Only the message order matters here, so read IDs and never a body.
+	messageIDs, err := g.repo.ListChatMessageIDsByGeneration(ctx, repo.ListChatMessageIDsByGenerationParams{
+		ChatID:     args.ChatID,
+		ProjectID:  args.ProjectID,
+		Generation: generation,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list chat messages by generation: %w", err)
+		return nil, fmt.Errorf("list chat message ids by generation: %w", err)
 	}
 
-	messageIndexMap := make(map[uuid.UUID]int, len(messages))
-	for i, msg := range messages {
-		messageIndexMap[msg.ID] = i
+	messageIndexMap := make(map[uuid.UUID]int, len(messageIDs))
+	for i, id := range messageIDs {
+		messageIndexMap[id] = i
 	}
 
 	userFeedback := make([]UserFeedback, 0, len(feedback))

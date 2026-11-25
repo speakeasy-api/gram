@@ -44,7 +44,7 @@ func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.U
 		ContentBudget: int64(budget),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("load evaluation history: %w", err)
+		return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 	return rows, nil
 }
@@ -53,7 +53,7 @@ func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.U
 func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]transcriptstore.LoadEvaluationMessagesRow, error) {
 	rows, err := r.transcripts.LoadEvaluationMessages(ctx, r.db, transcriptstore.LoadEvaluationMessagesParams{OpenShadows: false, OrganizationID: org, ProjectID: project, MessageIds: ids})
 	if err != nil {
-		return nil, fmt.Errorf("load evaluation messages: %w", err)
+		return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 
 	return rows, nil

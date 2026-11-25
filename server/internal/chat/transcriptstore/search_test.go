@@ -34,7 +34,7 @@ func TestJSONBTextMatchesPostgresJSONBText(t *testing.T) {
 	values := []string{
 		`[]`, `{}`, `null`, `[{"id":"call_a","function":{"name":"lookup","arguments":"{\"q\":1}"}}]`,
 		`{"a": [1, 2.50, true, null], "b": {"c": "d"}}`, `"<b>&amp;</b>"`, `{"html":"<a href=\"x\">&</a>"}`,
-		`["tab\tnew\nline", "quote \" back \\ slash", "\u0001 \u001f", "  é 😀", "😀", "a\/b"]`,
+		`["tab\tnew\nline", "quote \" back \\ slash", "\u0001 \u001f", "\u2028 \u00e9 😀", "\ud83d\ude00", "\u003cb\u003e", "a\/b"]`,
 		`{"key with spaces": " , : ", "k:,": ",:"}`,
 	}
 	for _, value := range values {
@@ -47,7 +47,7 @@ func TestJSONBTextMatchesPostgresJSONBText(t *testing.T) {
 		require.Equal(t, want, jsonbText(compact), "shadow layout: %s", compact)
 	}
 	require.True(t, compileLike(`%"name": "lookup"%`).matchBody("", []byte(`[{"function":{"name":"lookup"}}]`), nil))
-	require.True(t, compileLike(`%<b>%`).matchBody("", nil, []byte(`"<b>"`)))
+	require.True(t, compileLike(`%<b>%`).matchBody("", nil, []byte(`"\u003cb\u003e"`)))
 }
 
 // searchFixture is a chat of n messages, oldest first, with deterministic

@@ -62,6 +62,8 @@ WITH ordered AS (
     AND cm.project_id = $3::uuid
     AND cm.generation = $4::integer
 ),
+/* Prompts whose attachments hold an active finding. Such a finding has no
+   chat_message_id, so it flags the prompt the attachment hangs off. */
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
@@ -111,8 +113,6 @@ type GetChatEntryTotalsRow struct {
 // counts messages the caller's ClickHouse finding anchors flag
 // (@risk_message_ids), directly or through an attachment hanging off them
 // (@risk_content_part_ids).
-// Prompts whose attachments hold an active finding. Such a finding has no
-// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals,
 		arg.RiskMessageIds,
@@ -254,11 +254,10 @@ type GetJudgeMessageWindowRow struct {
 
 // Two bounded index probes around a tenant-validated anchor. Keep the target
 // even when no neighbors exist; an absent target is never a valid window.
-// Tool evidence remains valid JSON: one overflow call/rune preserves truncation
-// indicators in the renderer without transferring the full stored payload.
-// The judge reads at most 4001 characters of each body and nine tool calls;
-// transcriptstore applies those caps in Go after opening the shadows, so
-// plaintext and shadows are capped the same way.
+// The window holds at most five messages, returned whole: the judge reads at
+// most 4001 characters of each body and nine tool calls, and transcriptstore
+// applies those caps in Go after opening the shadows, so plaintext and shadows
+// are capped the same way.
 func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
 	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
 		arg.AnchorID,
@@ -494,18 +493,11 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 }
 
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
-
 SELECT organization_id FROM projects WHERE id = $1
 `
 
-// Every query that reads the plaintext transcript columns of chat_messages
-// (content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries,
-// storage_error) lives here, inside transcriptstore/internal, so the Go
-// compiler refuses to let any other package call one. Each read LEFT JOINs the
-// message's encrypted shadow when @open_shadows is true (the project keeps
-// shadows), returning the ciphertext and whether its source hash still
-// matches in the same round trip. When it is false the join is skipped by a
-// one-time filter and costs nothing.
+// The organization a listed project's shadows are sealed under. The package
+// comment in doc.go describes the queries in this file.
 func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.UUID) (string, error) {
 	row := q.db.QueryRow(ctx, getProjectOrganizationID, projectID)
 	var organization_id string
@@ -1333,6 +1325,8 @@ WITH ordered AS (
     AND cm.project_id = $4::uuid
     AND cm.generation = $5::integer
 ),
+/* Prompts whose attachments hold an active finding. Such a finding has no
+   chat_message_id, so it flags the prompt the attachment hangs off. */
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
@@ -1423,8 +1417,6 @@ type ListRiskWindowedMessagesRow struct {
 // membership. is_risk flags the seed rows (the flagged messages themselves) so
 // the caller can return the explicit risk seq list (context rows are
 // is_risk = false).
-// Prompts whose attachments hold an active finding. Such a finding has no
-// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.OpenShadows,
@@ -2164,6 +2156,9 @@ SELECT n.id, n.chat_id, n.seq, n.created_at, n.role, n.generation,
        CASE WHEN octet_length(n.content_raw::text) <= 131072 THEN n.content_raw END::jsonb AS content_raw,
        (octet_length(n.content) > 131072 OR COALESCE(octet_length(n.tool_calls::text), 0) > 131072
         OR COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS oversized,
+       (COALESCE(octet_length(n.content), 0) > 131072)::boolean AS content_oversized,
+       (COALESCE(octet_length(n.tool_calls::text), 0) > 131072)::boolean AS tool_calls_oversized,
+       (COALESCE(octet_length(n.content_raw::text), 0) > 131072)::boolean AS content_raw_oversized,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
                   'provider', CASE WHEN octet_length(cp.provider) <= 512 THEN cp.provider END, 'provider_user_id', CASE WHEN octet_length(cp.provider_user_id) <= 512 THEN cp.provider_user_id END,
@@ -2190,21 +2185,24 @@ type ReadPlatformChatMessagesParams struct {
 }
 
 type ReadPlatformChatMessagesRow struct {
-	ID               uuid.UUID
-	ChatID           uuid.UUID
-	Seq              int64
-	CreatedAt        pgtype.Timestamptz
-	Role             string
-	Generation       int32
-	Source           string
-	UserID           string
-	Content          string
-	ToolCalls        []byte
-	ContentRaw       []byte
-	Oversized        bool
-	Participants     []byte
-	ShadowCiphertext pgtype.Text
-	ShadowCurrent    bool
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	Seq                 int64
+	CreatedAt           pgtype.Timestamptz
+	Role                string
+	Generation          int32
+	Source              string
+	UserID              string
+	Content             string
+	ToolCalls           []byte
+	ContentRaw          []byte
+	Oversized           bool
+	ContentOversized    bool
+	ToolCallsOversized  bool
+	ContentRawOversized bool
+	Participants        []byte
+	ShadowCiphertext    pgtype.Text
+	ShadowCurrent       bool
 }
 
 // Capture-sequence window around one message of this chat, or its latest one,
@@ -2239,6 +2237,9 @@ func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatform
 			&i.ToolCalls,
 			&i.ContentRaw,
 			&i.Oversized,
+			&i.ContentOversized,
+			&i.ToolCallsOversized,
+			&i.ContentRawOversized,
 			&i.Participants,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
@@ -2493,6 +2494,9 @@ SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
        CASE WHEN octet_length(m.content_raw::text) <= 131072 THEN m.content_raw END::jsonb AS content_raw,
        (octet_length(m.content) > 131072 OR COALESCE(octet_length(m.tool_calls::text), 0) > 131072
         OR COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS oversized,
+       (COALESCE(octet_length(m.content), 0) > 131072)::boolean AS content_oversized,
+       (COALESCE(octet_length(m.tool_calls::text), 0) > 131072)::boolean AS tool_calls_oversized,
+       (COALESCE(octet_length(m.content_raw::text), 0) > 131072)::boolean AS content_raw_oversized,
        t.ciphertext AS shadow_ciphertext,
        COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
 FROM chat_messages m
@@ -2574,6 +2578,9 @@ type SearchPlatformChatMessagesRow struct {
 	ToolCalls            []byte
 	ContentRaw           []byte
 	Oversized            bool
+	ContentOversized     bool
+	ToolCallsOversized   bool
+	ContentRawOversized  bool
 	ShadowCiphertext     pgtype.Text
 	ShadowCurrent        bool
 }
@@ -2625,6 +2632,9 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 			&i.ToolCalls,
 			&i.ContentRaw,
 			&i.Oversized,
+			&i.ContentOversized,
+			&i.ToolCallsOversized,
+			&i.ContentRawOversized,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
 		); err != nil {

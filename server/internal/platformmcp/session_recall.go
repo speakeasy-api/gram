@@ -111,13 +111,6 @@ type SessionHandoffMinter interface {
 
 // NewSessionRecallService composes recall. A nil findings reader leaves recall
 // unavailable, since a digest cannot be masked without it.
-// WithTranscripts makes session recall open message bodies through
-// transcripts.
-func (s *SessionRecallService) WithTranscripts(transcripts *transcriptstore.Transcripts) *SessionRecallService {
-	s.transcripts = transcripts
-	return s
-}
-
 func NewSessionRecallService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
@@ -138,6 +131,13 @@ func NewSessionRecallService(
 		budget:        budget,
 		handoffMinter: nil,
 	}
+}
+
+// WithTranscripts makes session recall open message bodies through
+// transcripts.
+func (s *SessionRecallService) WithTranscripts(transcripts *transcriptstore.Transcripts) *SessionRecallService {
+	s.transcripts = transcripts
+	return s
 }
 
 func (s *SessionRecallService) WithHandoffMinter(minter SessionHandoffMinter) *SessionRecallService {

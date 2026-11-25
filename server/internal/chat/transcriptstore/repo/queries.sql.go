@@ -101,35 +101,39 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 }
 
 const deleteToolCallIDs = `-- name: DeleteToolCallIDs :exec
-DELETE FROM chat_message_transcript_tool_calls WHERE message_id = $1
+DELETE FROM chat_message_transcript_tool_calls WHERE message_id = $1 AND project_id = $2
 `
 
-func (q *Queries) DeleteToolCallIDs(ctx context.Context, messageID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteToolCallIDs, messageID)
+type DeleteToolCallIDsParams struct {
+	MessageID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteToolCallIDs(ctx context.Context, arg DeleteToolCallIDsParams) error {
+	_, err := q.db.Exec(ctx, deleteToolCallIDs, arg.MessageID, arg.ProjectID)
 	return err
 }
 
 const insertToolCallIDs = `-- name: InsertToolCallIDs :exec
 INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
-SELECT $1, ids.tool_call_id, $2, $3
-FROM unnest($4::text[]) AS ids(tool_call_id)
+SELECT t.message_id, ids.tool_call_id, m.chat_id, t.project_id
+FROM chat_message_transcripts t
+JOIN chat_messages m ON m.id = t.message_id AND m.project_id = t.project_id
+CROSS JOIN unnest($1::text[]) AS ids(tool_call_id)
+WHERE t.message_id = $2 AND t.project_id = $3
 ON CONFLICT (message_id, tool_call_id) DO NOTHING
 `
 
 type InsertToolCallIDsParams struct {
-	MessageID   uuid.UUID
-	ChatID      uuid.UUID
-	ProjectID   uuid.UUID
 	ToolCallIds []string
+	MessageID   uuid.UUID
+	ProjectID   uuid.UUID
 }
 
+// The chat and project come from the captured shadow and its message, never
+// from the caller, so a row cannot disagree with the message it describes.
 func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsParams) error {
-	_, err := q.db.Exec(ctx, insertToolCallIDs,
-		arg.MessageID,
-		arg.ChatID,
-		arg.ProjectID,
-		arg.ToolCallIds,
-	)
+	_, err := q.db.Exec(ctx, insertToolCallIDs, arg.ToolCallIds, arg.MessageID, arg.ProjectID)
 	return err
 }
 

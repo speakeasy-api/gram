@@ -36,6 +36,10 @@ import (
 // a page read already does.
 const SearchChunkMessages = 200
 
+// platformBodyBytes is the largest body field the Platform MCP chat tools
+// match or return, the 131072-byte cap SearchPlatformChatMessages applies.
+const platformBodyBytes = 131072
+
 // ErrInvalidCursor reports a search cursor that this store did not issue or
 // that belongs to another generation.
 var ErrInvalidCursor = errors.New("invalid transcript search cursor")
@@ -438,10 +442,22 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 		}
 		for i, r := range chunk {
 			m := opened[i]
-			oversized := len(m.Content) > platformBodyBytes || len(m.ToolCalls) > platformBodyBytes || len(m.ContentRaw) > platformBodyBytes
-			// Fields over the cap are neither matched nor returned, as in SQL.
-			platformShape(&m)
-			if r.TitleMatch || pattern.matchBody(m.Content, m.ToolCalls, m.ContentRaw) {
+			// Fields over the cap are neither matched nor returned, as in SQL,
+			// which measures JSON columns by their jsonb text.
+			toolCalls, contentRaw := jsonbField(m.ToolCalls), jsonbField(m.ContentRaw)
+			over := platformOversized{
+				content:    len(m.Content) > platformBodyBytes,
+				toolCalls:  toolCalls != nil && len(*toolCalls) > platformBodyBytes,
+				contentRaw: contentRaw != nil && len(*contentRaw) > platformBodyBytes,
+			}
+			platformShape(over)(&m)
+			if over.toolCalls {
+				toolCalls = nil
+			}
+			if over.contentRaw {
+				contentRaw = nil
+			}
+			if r.TitleMatch || pattern.matchFields(m.Content, toolCalls, contentRaw) {
 				if len(page.Rows) == s.Limit {
 					// A further hit proves more remain: continue after the
 					// last hit this page returns.
@@ -452,7 +468,8 @@ func (t *Transcripts) scanPlatformChats(ctx context.Context, db DBTX, s Platform
 				page.Rows = append(page.Rows, SearchPlatformChatMessagesRow{
 					ID: r.ID, ChatID: r.ChatID, Seq: r.Seq, CreatedAt: r.CreatedAt, Role: r.Role, Generation: r.Generation,
 					Source: r.Source, UserID: r.UserID, ChatTitle: r.ChatTitle, ChatTitleManuallySet: r.ChatTitleManuallySet, OwnerUserID: r.OwnerUserID,
-					Content: m.Content, ToolCalls: m.ToolCalls, ContentRaw: m.ContentRaw, Oversized: oversized,
+					Content: m.Content, ToolCalls: m.ToolCalls, ContentRaw: m.ContentRaw,
+					Oversized: over.content || over.toolCalls || over.contentRaw, ContentOversized: over.content, ToolCallsOversized: over.toolCalls, ContentRawOversized: over.contentRaw,
 					ShadowCiphertext: pgtype.Text{String: "", Valid: false}, ShadowCurrent: false,
 				})
 				if r.ShadowCiphertext.Valid {

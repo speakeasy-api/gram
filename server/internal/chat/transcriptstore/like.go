@@ -114,13 +114,29 @@ func (p likePattern) match(text string) bool {
 // matched the JSON columns as jsonb::text, so both JSON fields are matched in
 // that form whatever layout they arrive in.
 func (p likePattern) matchBody(content string, toolCalls, contentRaw []byte) bool {
+	return p.matchFields(content, jsonbField(toolCalls), jsonbField(contentRaw))
+}
+
+// matchFields is matchBody over JSON fields already laid out by jsonbField;
+// a nil field is absent and never matches.
+func (p likePattern) matchFields(content string, toolCalls, contentRaw *string) bool {
 	if p.match(content) {
 		return true
 	}
-	if toolCalls != nil && p.match(jsonbText(toolCalls)) {
+	if toolCalls != nil && p.match(*toolCalls) {
 		return true
 	}
-	return contentRaw != nil && p.match(jsonbText(contentRaw))
+	return contentRaw != nil && p.match(*contentRaw)
+}
+
+// jsonbField is a JSON field in jsonb text layout, or nil when the field is
+// absent (SQL NULL).
+func jsonbField(raw []byte) *string {
+	if raw == nil {
+		return nil
+	}
+	text := jsonbText(raw)
+	return &text
 }
 
 // jsonbText lays out a JSON value the way PostgreSQL prints jsonb as text: a

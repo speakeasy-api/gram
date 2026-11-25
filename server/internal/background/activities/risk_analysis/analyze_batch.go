@@ -324,7 +324,7 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		rows, err := a.transcripts.GetMessageContentBatch(ctx, a.db, args.ProjectID, args.MessageIDs)
 		if err != nil {
 			fetchSpan.SetStatus(codes.Error, err.Error())
-			return nil, fmt.Errorf("get message content batch: %w", err)
+			return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 		}
 		messages = append(messages, newBatchMessages(ctx, a.logger, rows)...)
 	}

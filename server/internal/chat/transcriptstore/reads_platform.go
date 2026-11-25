@@ -4,26 +4,34 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/internal/plainrepo"
 )
 
 // Readers for the Platform MCP chat tools.
 
-// platformBodyBytes is the largest body field the Platform MCP chat tools
-// return. A larger field is blanked and the row is marked oversized, in SQL
-// for plaintext and by platformShape for opened shadows.
-const platformBodyBytes = 131072
+// The Platform MCP chat tools return no body field over 128 KiB. SQL blanks a
+// larger field and flags it per field, measuring JSON columns by their jsonb
+// text, which is longer than the compact JSON a shadow holds. platformShape
+// blanks the same fields of the opened shadow by those flags, so both sides
+// agree on which field was too large.
+type platformOversized struct {
+	content, toolCalls, contentRaw bool
+}
 
-func platformShape(m *transcriptcrypto.Message) {
-	if len(m.Content) > platformBodyBytes {
-		m.Content = ""
-	}
-	if len(m.ToolCalls) > platformBodyBytes {
-		m.ToolCalls = nil
-	}
-	if len(m.ContentRaw) > platformBodyBytes {
-		m.ContentRaw = nil
+func platformShape(o platformOversized) func(*transcriptcrypto.Message) {
+	return func(m *transcriptcrypto.Message) {
+		if o.content {
+			m.Content = ""
+		}
+		if o.toolCalls {
+			m.ToolCalls = nil
+		}
+		if o.contentRaw {
+			m.ContentRaw = nil
+		}
 	}
 }
 
@@ -44,7 +52,7 @@ func (t *Transcripts) SearchPlatformChatMessages(ctx context.Context, db DBTX, p
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -69,7 +77,7 @@ func (t *Transcripts) ReadPlatformChatMessages(ctx context.Context, db DBTX, par
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape}
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -87,8 +95,12 @@ type ListOwnedChatTranscriptMessagesForRecallRow = plainrepo.ListOwnedChatTransc
 // ListOwnedChatTranscriptMessagesForRecall returns the newest messages of a
 // caller-owned chat's latest generation.
 func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, db DBTX, params ListOwnedChatTranscriptMessagesForRecallParams) ([]ListOwnedChatTranscriptMessagesForRecallRow, error) {
-	projectID := params.ProjectID.UUID
-	params.OpenShadows = params.ProjectID.Valid && t.Enabled(projectID)
+	// A recall without a project reads no shadows: uuid.Nil is never listed.
+	projectID := uuid.Nil
+	if params.ProjectID.Valid {
+		projectID = params.ProjectID.UUID
+	}
+	params.OpenShadows = t.Enabled(projectID)
 	rows, err := plainrepo.New(db).ListOwnedChatTranscriptMessagesForRecall(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("list owned chat transcript messages for recall: %w", err)
@@ -97,9 +109,6 @@ func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Conte
 	for i := range rows {
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
-	}
-	if !params.OpenShadows {
-		return rows, nil
 	}
 	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
 		return nil, err

@@ -49,9 +49,39 @@ func TestSQLReadsPlaintextTranscript(t *testing.T) {
 		"SELECT content FROM chat_summaries":                                   false,
 		"-- name: X :one\nSELECT id FROM chat_messages -- content\n":           false,
 		"SELECT sha256(convert_to(m.content, 'UTF8')) FROM chat_messages m":    true,
+
+		// Quoted identifiers.
+		`SELECT cm.content FROM "chat_messages" cm`:       true,
+		`SELECT "cm"."content" FROM "chat_messages" "cm"`: true,
+		`SELECT "content" FROM chat_messages`:             true,
+
+		// Comments and strings are masked in one pass.
+		"SELECT id FROM chat_messages WHERE role = '--' AND content = ''":                 true,
+		"SELECT id FROM chat_messages -- it's\nWHERE content IS NULL":                     true,
+		"SELECT cm.content FROM chat_messages /* recent */ cm":                            true,
+		"SELECT id FROM chat_messages /* content */ WHERE id = $1":                        false,
+		"SELECT id FROM chat_messages /* a /* nested */ content */ WHERE 1=1":             false,
+		`SELECT id FROM chat_messages WHERE role = E'it\'s content'`:                      false,
+		"SELECT id FROM chat_messages WHERE role LIKE '%x%' ESCAPE '\\' AND content = ''": true,
+
+		// SET strips only each assignment's target.
+		"UPDATE chat_messages SET role = CASE WHEN content = '' THEN 'x' ELSE role END WHERE id = $1": true,
+		"UPDATE chat_messages SET content = $1, tool_calls = $2 WHERE id = $3":                        false,
+		"UPDATE chat_messages SET x = coalesce(y, 1), tool_calls = $2 WHERE id = $3":                  false,
+		"UPDATE chat_messages SET x = left(content, 4) WHERE id = $1":                                 true,
+
+		// Stars select every column.
+		"SELECT * FROM chat_messages WHERE id = $1":                      true,
+		"SELECT cm.* FROM chat_messages cm":                              true,
+		"SELECT p.* FROM parts p JOIN chat_messages cm ON cm.id = p.mid": false,
+		"SELECT count(*) FROM chat_messages WHERE id = $1":               false,
+		"UPDATE chat_messages SET role = $1 WHERE id = $2 RETURNING *":   true,
 	}
 	for sql, want := range cases {
-		require.Equal(t, want, sqlReadsPlaintextTranscript(sql), sql)
+		t.Run(sql, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, want, sqlReadsPlaintextTranscript(sql), sql)
+		})
 	}
 }
 

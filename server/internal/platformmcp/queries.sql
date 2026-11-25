@@ -4124,7 +4124,8 @@ WHERE drm.organization_id = @organization_id
 ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
 
 -- name: GetPlatformChatSearchChat :one
--- agent_only is the shape the search predicate above admits for an owner: a NULL
+-- agent_only is the shape the own-scope predicate of SearchPlatformChatMessages
+-- (transcriptstore/internal/plainrepo/queries.sql) admits for an owner: a NULL
 -- user_id, not the empty string UpsertChat leaves on a demoted mixed session.
 SELECT c.id, COALESCE(c.user_id, '')::text AS owner_user_id, c.agent_id,
        (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id IS NOT NULL)::boolean AS agent_only,

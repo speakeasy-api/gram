@@ -1975,7 +1975,8 @@ type GetPlatformChatSearchChatRow struct {
 	TitleManuallySet bool
 }
 
-// agent_only is the shape the search predicate above admits for an owner: a NULL
+// agent_only is the shape the own-scope predicate of SearchPlatformChatMessages
+// (transcriptstore/internal/plainrepo/queries.sql) admits for an owner: a NULL
 // user_id, not the empty string UpsertChat leaves on a demoted mixed session.
 func (q *Queries) GetPlatformChatSearchChat(ctx context.Context, arg GetPlatformChatSearchChatParams) (GetPlatformChatSearchChatRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformChatSearchChat, arg.OrganizationID, arg.ChatID, arg.ProjectID)
