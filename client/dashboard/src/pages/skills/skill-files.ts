@@ -343,10 +343,22 @@ export const MAX_SKILL_ZIP_BYTES = 32 * 1024 * 1024;
  */
 export function readSkillZip(bytes: Uint8Array): SkillUploadEntry[] {
   const sizes = new Map<string, number>();
+  const normalizedNames = new Set<string>();
   let unzipped: Record<string, Uint8Array>;
   try {
     unzipSync(bytes, {
       filter: (file) => {
+        // Entries are looked up by name, so a repeated name could swap in a
+        // different (possibly oversized) entry. Reject the archive instead.
+        const normalized = file.name.replace(/\\/g, "/");
+        if (!normalized.endsWith("/")) {
+          if (normalizedNames.has(normalized)) {
+            throw new SkillUploadError(
+              `The .zip contains ${normalized} more than once.`,
+            );
+          }
+          normalizedNames.add(normalized);
+        }
         sizes.set(file.name, file.originalSize);
         return false;
       },
@@ -354,8 +366,12 @@ export function readSkillZip(bytes: Uint8Array): SkillUploadEntry[] {
     const toRead = selectEntriesToRead(
       [...sizes].map(([path, sizeBytes]) => ({ path, sizeBytes })),
     );
-    unzipped = unzipSync(bytes, { filter: (file) => toRead.has(file.name) });
-  } catch {
+    unzipped = unzipSync(bytes, {
+      filter: (file) =>
+        toRead.has(file.name) && file.originalSize <= MAX_SKILL_FILE_BYTES,
+    });
+  } catch (error) {
+    if (error instanceof SkillUploadError) throw error;
     throw new SkillUploadError(
       "The selected file is not a valid .zip archive.",
     );
@@ -391,7 +407,8 @@ async function readZipEntry(
   name: string,
 ): Promise<Uint8Array> {
   const unzipped = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-    filter: (entry) => entry.name === name,
+    filter: (entry) =>
+      entry.name === name && entry.originalSize <= MAX_SKILL_FILE_BYTES,
   });
   const bytes = unzipped[name];
   if (!bytes) throw new SkillUploadError(`Unable to read ${name}.`);

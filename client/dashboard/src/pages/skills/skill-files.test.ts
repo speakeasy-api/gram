@@ -214,6 +214,43 @@ describe("readSkillZip", () => {
     expect(read).toBe(false);
   });
 
+  // fflate cannot write duplicate names, so build two entries whose names
+  // have the same length and rewrite the second name to match the first.
+  function zipWithDuplicateName(first: string, second: string): Uint8Array {
+    const placeholder = first.replace(/.$/, "~");
+    const zip = zipSync({
+      "SKILL.md": strToU8(MANIFEST),
+      [first]: strToU8("small"),
+      [placeholder]: new Uint8Array(MAX_SKILL_FILE_BYTES + 1),
+    });
+    const from = strToU8(placeholder);
+    const to = strToU8(second);
+    for (let i = 0; i <= zip.length - from.length; i += 1) {
+      if (from.every((byte, j) => zip[i + j] === byte)) zip.set(to, i);
+    }
+    return zip;
+  }
+
+  it("rejects a zip with a duplicate entry name", async () => {
+    const zip = zipWithDuplicateName("refs/a.md", "refs/a.md");
+    expect(() => readSkillZip(zip)).toThrow(
+      "The .zip contains refs/a.md more than once.",
+    );
+    await expect(
+      readSkillZipFile({
+        size: zip.byteLength,
+        arrayBuffer: () => Promise.resolve(zip.slice().buffer),
+      }),
+    ).rejects.toThrow("The .zip contains refs/a.md more than once.");
+  });
+
+  it("treats backslash and slash names as duplicates", () => {
+    const zip = zipWithDuplicateName("refs/a.md", "refs\\a.md");
+    expect(() => readSkillZip(zip)).toThrow(
+      "The .zip contains refs/a.md more than once.",
+    );
+  });
+
   it("reports a file that is not a zip", () => {
     expect(() => readSkillZip(strToU8("not a zip"))).toThrow(
       "The selected file is not a valid .zip archive.",
