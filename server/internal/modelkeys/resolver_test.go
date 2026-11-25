@@ -22,7 +22,7 @@ func newResolverUnderTest(t *testing.T, ctx context.Context, ti *testInstance) (
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	resolver := modelkeys.NewResolver(ti.conn, ti.enc, ti.provisioner)
+	resolver := modelkeys.NewResolver(ti.conn, ti.keys, ti.provisioner)
 	return resolver, authCtx.ActiveOrganizationID, authCtx.ProjectID.String()
 }
 

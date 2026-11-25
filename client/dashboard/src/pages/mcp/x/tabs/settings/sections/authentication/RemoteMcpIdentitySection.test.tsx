@@ -305,7 +305,7 @@ function discoverUnsavedProvider(): void {
 async function recoverCorrectionForm(): Promise<void> {
   mocks.fetchMetadata.mockRejectedValueOnce(new Error("Discovery failed"));
   renderIdentity();
-  fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
   await screen.findByRole("alert");
   fireEvent.click(screen.getByRole("button", { name: "Discover" }));
   await waitFor(() =>
@@ -626,7 +626,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("names the three identity modes after the upstream service", () => {
     renderIdentity();
 
-    expect(screen.getByRole("radio", { name: /User Identity/ })).toBeDefined();
+    expect(screen.getByRole("radio", { name: /User identity/ })).toBeDefined();
     expect(
       screen.getByText(
         "Each user signs in to Linear as themselves and keeps their own permissions.",
@@ -664,7 +664,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     // One provider and a choice of how to register — no issuer, DCR or CIMD
     // wording while the provider offers only one automatic path.
@@ -725,7 +725,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
@@ -762,7 +762,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(
       (
@@ -802,7 +802,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     // The trigger renders under <PopoverTrigger asChild>, so the props Radix
     // clones onto it have to survive. aria-expanded flipping is the proof that
@@ -841,7 +841,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.tierHasMore.mockImplementation((tier: string) => tier === "platform");
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(screen.getByLabelText("Authorization server"));
 
     // Every tier is its own query, so the catalog cannot crowd out the
@@ -870,7 +870,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     // Not "Choose an identity provider": the control is about to answer its
     // own question, and a pick made now would look overwritten when the
@@ -903,7 +903,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(screen.queryByText("Will be created")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -936,7 +936,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(screen.queryByText("Will be created")).toBeNull();
     fireEvent.click(screen.getByLabelText("Authorization server"));
@@ -955,7 +955,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(screen.queryByText("Will be created")).toBeNull();
     expect(
@@ -971,7 +971,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.hostIssuers.mockImplementation(() => "error");
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(
       screen.getByText(/Couldn.t load this server.s authorization servers/),
@@ -986,7 +986,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(screen.getByText("Will be created")).toBeDefined();
     // The derived name and the host read the same for a bare issuer URL.
@@ -1008,7 +1008,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     await waitFor(() =>
       expect(
@@ -1275,7 +1275,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     it("offers no correction while discovery is healthy", async () => {
       discoverUnsavedProvider();
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
@@ -1291,7 +1291,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     it("keeps typed credentials on screen through a background refresh and holds Save", async () => {
       discoverUnsavedProvider();
       const { rerenderIdentity } = renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
@@ -1434,7 +1434,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       discoverUnsavedProvider();
       mocks.fetchMetadata.mockRejectedValueOnce(new Error("Discovery failed"));
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await screen.findByRole("alert");
       fireEvent.change(screen.getByLabelText("Issuer URL"), {
         target: { value: "https://other.example.test/" },
@@ -1528,7 +1528,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       mocks.fetchMetadata.mockResolvedValueOnce(correctedMetadata);
       mocks.fetchMetadata.mockResolvedValue(correctedMetadata);
       const { queryClient } = renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await screen.findByRole("alert");
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       expect(
@@ -1760,7 +1760,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
           }),
       );
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
       expect(screen.getByRole("status").textContent).toContain(
         "Checking OAuth metadata",
@@ -1816,7 +1816,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         ),
       );
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
       const alert = await screen.findByRole("alert");
       expect(alert.querySelector("code")?.textContent).toBe(message);
@@ -1873,7 +1873,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         discoverUnsavedProvider();
         mocks.fetchMetadata.mockRejectedValue(error);
         renderIdentity();
-        fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+        fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
         const alert = await screen.findByRole("alert");
         expect(alert.textContent).toContain(
           "Could not discover OAuth metadata. Try again.",
@@ -1918,7 +1918,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
       });
       renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await screen.findByLabelText("Client ID");
       expect(
         screen
@@ -1944,7 +1944,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     it("blocks cached metadata during refetch and failure, retaining explicit Manual input on Discover", async () => {
       discoverUnsavedProvider();
       const { queryClient } = renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+      fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
       await waitFor(() =>
         expect(
           screen
@@ -2069,7 +2069,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.getByRole("radio", {
         name: "Manual",
-        description: /keep failing — choose User Identity/,
+        description: /keep failing — choose user identity/,
       }),
     ).toBeDefined();
     expect(mocks.authenticationProbe).toHaveBeenCalledWith(
@@ -2100,7 +2100,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       (
         screen.getByRole("radio", {
-          name: /User Identity/,
+          name: /User identity/,
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
@@ -2116,7 +2116,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     addCustomHeader("X-Team", "eng");
 
     // No provider is picked, so Save would delete the credential and then
@@ -2141,7 +2141,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     autoConfigurableProvider();
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     confirmSave();
 
     await waitForHookState(() => expect(mocks.remove).toHaveBeenCalledOnce());
@@ -2164,7 +2164,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.commit.mockRejectedValue(new Error("commit refused"));
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     addCustomHeader("X-Team", "eng");
     confirmSave();
 
@@ -2569,7 +2569,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /User Identity/ })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /User identity/ })).toBeNull();
   });
 
   it("does not treat another server's client on the issuer as this server's identity", () => {
@@ -2818,7 +2818,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Elsewhere (Other project)")).toBeDefined();
     expect(
       screen.getByText(
-        /2 more servers you don't have access to share this user session issuer and may be affected/,
+        /2 more servers you don't have access to share this MCP sign-in and may be affected/,
       ),
     ).toBeDefined();
     expect(screen.queryByText(/other\s+projects may share it/)).toBeNull();
@@ -2888,7 +2888,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect.objectContaining({ refetchOnMount: "always", staleTime: 0 }),
     );
     expect(
-      screen.getByText("Checking other servers on this user session issuer…"),
+      screen.getByText("Checking other servers on this MCP sign-in…"),
     ).toBeDefined();
     const save = screen.getByRole("button", { name: "Save" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
@@ -2925,7 +2925,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect((save as HTMLButtonElement).disabled).toBe(true);
     expect(
       screen.getByText(
-        "Finish the User Identity change, or cancel it, to save.",
+        "Finish the user identity change, or cancel it, to save.",
       ),
     ).toBeDefined();
     fireEvent.click(save);
@@ -2943,14 +2943,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
     // Clearing asks for a new client, and no choice puts the old one back.
     expect(
       screen.getByText(
-        "Finish the User Identity change, or cancel it, to save.",
+        "Finish the user identity change, or cancel it, to save.",
       ),
     ).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       screen.queryByText(
-        "Finish the User Identity change, or cancel it, to save.",
+        "Finish the user identity change, or cancel it, to save.",
       ),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -3024,7 +3024,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
 
     expect(
       (
@@ -3057,7 +3057,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     fireEvent.click(screen.getByRole("button", { name: "DCR" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -3103,7 +3103,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(
       screen.getByRole("radio", {
         name: "Manual",
@@ -3181,7 +3181,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(
       screen.getByRole("radio", {
         name: "Manual",
@@ -3223,7 +3223,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(
       screen.getByRole("radio", {
         name: "Manual",
@@ -3364,7 +3364,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Requires KMS")).toBeDefined();
     const signingKey = within(
       screen.getByRole("radiogroup", { name: "Service account" }),
-    ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
+    ).getByRole("radio", { name: /^Signing client/ }) as HTMLButtonElement;
     expect(signingKey.disabled).toBe(true);
     // Still on Bearer: the option advertises KMS signing, it does not switch.
     expect(screen.getByLabelText("Token")).toBeDefined();
@@ -3536,7 +3536,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(
-      screen.getByText(/Could not load this server's user session issuer/i),
+      screen.getByText(/Could not load this server's MCP sign-in/i),
     ).toBeDefined();
   });
 
@@ -3693,7 +3693,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     autoConfigurableProvider();
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const dialog = screen.getByRole("dialog");
@@ -3724,7 +3724,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     autoConfigurableProvider();
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /User identity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const dialog = screen.getByRole("dialog");
@@ -3754,7 +3754,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(
       within(
         screen.getByRole("radiogroup", { name: "Service account" }),
-      ).getByRole("radio", { name: /^Client Secret/ }),
+      ).getByRole("radio", { name: /^Client secret/ }),
     );
     addCustomHeader("X-Team", "platform");
 
@@ -3811,7 +3811,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(
       within(
         screen.getByRole("radiogroup", { name: "Service account" }),
-      ).getByRole("radio", { name: /^Client Secret/ }),
+      ).getByRole("radio", { name: /^Client secret/ }),
     );
     addCustomHeader("X-Team", "platform");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

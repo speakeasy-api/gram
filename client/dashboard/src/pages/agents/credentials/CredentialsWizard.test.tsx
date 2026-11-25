@@ -432,7 +432,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP sign-in" });
+  await screen.findByRole("heading", { name: "Server sign-in" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -1487,6 +1487,58 @@ describe("Connecting a GKE cluster", () => {
     ).toBe(true);
   });
 
+  it("says where the chosen shared authorization server is managed", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_project",
+        userSessionIssuerSlug: "assistant-shared",
+        projectId: "project_two",
+        projectName: "Project two",
+      },
+      {
+        ...sharedServer,
+        userSessionIssuerId: "usi_inference",
+        userSessionIssuerSlug: "inference",
+        projectId: "project_two",
+        projectName: "Project two",
+      },
+    ]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    // No server uses either one, so the step does not claim they do.
+    expect(
+      await screen.findByText(/None of this agent's servers use one yet/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/most of this agent's servers/)).toBeNull();
+    // It is not on the Authorization Servers page, so the step points at the
+    // page that lists it, in the project that owns it.
+    expect(
+      screen.getByText(
+        /listed on the MCP Sign-in page, not on the Authorization/,
+      ),
+    ).toBeTruthy();
+    const link = screen.getByRole("link", {
+      name: "Open assistant-shared in MCP Sign-in",
+    });
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/project-two/mcp-sessions/usi_project/mcp-servers",
+    );
+  });
+
   it("asks for a shared authorization server when there is none", async () => {
     mocks.platforms.mockReturnValue([gke]);
     mocks.tokenEndpoints.mockReturnValue([]);
@@ -1509,6 +1561,11 @@ describe("Connecting a GKE cluster", () => {
         "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue.",
       ),
     ).toBeTruthy();
+    // With none to choose, the step gives no reason to pick one.
+    expect(
+      screen.queryByText(/None of this agent's servers use one/),
+    ).toBeNull();
+    expect(screen.queryByText(/The recommended one is/)).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
     ).toBe(true);
@@ -1584,7 +1641,7 @@ describe("Connecting a GKE cluster", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
 
@@ -2476,7 +2533,9 @@ describe("Editing an agent that already exists", () => {
       expect(
         screen.queryByRole("button", { name: /MCP Selection/ }),
       ).toBeNull();
-      expect(screen.queryByRole("button", { name: /MCP sign-in/ })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /Server sign-in/ }),
+      ).toBeNull();
       const current = screen.getByRole("button", { name: /Agent sign-in/ });
       expect(current.getAttribute("aria-current")).toBe("step");
       expect(screen.getByRole("button", { name: /Install/ })).toBeTruthy();
@@ -3808,9 +3867,9 @@ describe("Editing an agent that already exists", () => {
   });
 });
 
-// The agent page's MCP sign-in tab: the servers and their sign-in, changed in
+// The agent page's Server sign-in tab: the servers and their sign-in, changed in
 // place rather than by walking the setup wizard again.
-describe("The MCP sign-in tab", () => {
+describe("The Server sign-in tab", () => {
   const agent = {
     id: "agent_one",
     name: "Release Bot",
@@ -3887,7 +3946,9 @@ describe("The MCP sign-in tab", () => {
     expect(screen.queryByText(/Step \d of/i)).toBeNull();
     // The tab already says what it is, so the step's own heading is gone,
     // and the diagram marks the tab rather than a step.
-    expect(screen.queryByRole("heading", { name: "MCP sign-in" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Server sign-in" }),
+    ).toBeNull();
     expect(screen.getAllByText("This tab").length).toBeGreaterThan(0);
     expect(screen.queryByText("This step")).toBeNull();
   });
@@ -4054,7 +4115,7 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP sign-in" });
+    await screen.findByRole("heading", { name: "Server sign-in" });
     expect(
       (await screen.findAllByText(/Your connection|Uses your connection/))
         .length,
@@ -4215,7 +4276,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP sign-in" });
+      await screen.findByRole("heading", { name: "Server sign-in" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -4280,7 +4341,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP sign-in" });
+    await screen.findByRole("heading", { name: "Server sign-in" });
     expect(
       await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
     ).toBeTruthy();
@@ -4372,13 +4433,104 @@ describe("Servers that sign in as a person", () => {
     expect(mocks.attach).toHaveBeenCalledTimes(1);
   });
 
+  describe("on an existing agent's Server sign-in tab", () => {
+    const agent = {
+      id: "agent_one",
+      name: "Release Bot",
+      lifecycle: "active",
+      projectId: "project_one",
+      permissions: { write: true, authorize: true },
+    } as never;
+    const grants = [
+      {
+        id: "grant_linear",
+        effect: "allow",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_linear",
+          projectId: "project_one",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "grant_auth",
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as never;
+
+    function tab() {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const onDone = vi.fn();
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={client}>
+            <CredentialsWizard
+              agent={agent}
+              section
+              grants={grants}
+              onDone={(id) => {
+                onDone(id);
+              }}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      return { onDone };
+    }
+
+    it("never shows the editor's connection as the agent's, and assigns it only when asked", async () => {
+      mocks.sessions.mockResolvedValue([mine]);
+      const { onDone } = tab();
+      const row = await screen.findByRole("button", {
+        name: /Linear.*Requires connection/,
+      });
+      expect(screen.queryByText("Your connection")).toBeNull();
+
+      // Another change on the tab saves without assigning any connection.
+      const change = screen.getByRole("button", { name: "Add servers" });
+      await waitFor(() =>
+        expect((change as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(change);
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+      expect(mocks.attach).not.toHaveBeenCalled();
+
+      fireEvent.click(row);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Use your connection" }),
+      );
+      await waitFor(() => expect(mocks.attach).toHaveBeenCalledTimes(1));
+      expect(mocks.attach).toHaveBeenCalledWith(
+        {
+          gramProject: "project-one",
+          attachBindingRequestBody: {
+            principalId: "agent_one",
+            userSessionIssuerId: "issuer_linear",
+            remoteSessionId: "session_mine",
+          },
+        },
+        undefined,
+        expect.anything(),
+      );
+    });
+  });
+
   it("keeps Continue locked when a server's auth cannot be read", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     mocks.serverAuth.mockRejectedValue(new Error("network down"));
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP sign-in" });
+    await screen.findByRole("heading", { name: "Server sign-in" });
     expect(
       await screen.findByRole("button", {
         name: /Linear.*Could not check connection/,
@@ -4393,9 +4545,11 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP sign-in" });
+    await screen.findByRole("heading", { name: "Server sign-in" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
-    expect(screen.getByRole("heading", { name: "MCP sign-in" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Server sign-in" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -4407,7 +4561,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP sign-in" });
+    await screen.findByRole("heading", { name: "Server sign-in" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,

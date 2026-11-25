@@ -1,5 +1,7 @@
 package admission
 
+import "github.com/speakeasy-api/gram/server/internal/aivendors"
+
 // MaxClientIDLength caps the URL-shaped client_id that admission will
 // consider. It exists here, ahead of the resolver's own identical cap, for
 // one reason: in ModePresets a catalog miss triggers a database lookup
@@ -26,14 +28,14 @@ const MaxClientIDLength = 2048
 // outcome it records is directly comparable to what ModePresets produces.
 // The caller consults Mode.Enforces to learn that a denial should be
 // recorded and then discarded.
-func Evaluate(mode Mode, clientID string) Decision {
+func Evaluate(catalog *aivendors.Snapshot, mode Mode, clientID string) Decision {
 	switch mode {
 	case ModeOpen:
 		return admitDecision(AdmitOpen)
 	case ModeDisabled:
 		return denyDecision(DenialDisabled)
 	case ModePresets, ModeReporting:
-		if reason, ok := CatalogMatch(clientID); ok {
+		if reason, ok := CatalogMatch(catalog, clientID); ok {
 			return admitDecision(reason)
 		}
 		// Bound the input before it can become a query parameter. The
@@ -70,6 +72,6 @@ func Evaluate(mode Mode, clientID string) Decision {
 // oversized client_id refused before it could become a query parameter, and
 // it is a verdict about the measurement rather than about the client: even
 // then, the client is not to be turned away.
-func EvaluateShadow(clientID string) Decision {
-	return Evaluate(ModePresets, clientID)
+func EvaluateShadow(catalog *aivendors.Snapshot, clientID string) Decision {
+	return Evaluate(catalog, ModePresets, clientID)
 }

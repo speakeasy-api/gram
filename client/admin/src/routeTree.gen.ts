@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as EncryptionTransitionsRouteImport } from './routes/encryption-transitions'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as HooksRolloutRouteImport } from './routes/hooks-rollout'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
@@ -28,6 +29,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as TailscaleOauthMigrationRouteImport } from './routes/tailscale-oauth-migration'
 import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -48,6 +50,7 @@ import { Route as OrganizationsIdOrSlugAssistantsRouteImport } from './routes/or
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
 import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
+import { Route as OrganizationsIdOrSlugEncryptionRouteImport } from './routes/organizations.$idOrSlug.encryption'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugHooksRouteImport } from './routes/organizations.$idOrSlug.hooks'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
@@ -79,6 +82,11 @@ const CustomDomainsRoute = CustomDomainsRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EncryptionTransitionsRoute = EncryptionTransitionsRouteImport.update({
+  id: '/encryption-transitions',
+  path: '/encryption-transitions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FleetHealthRoute = FleetHealthRouteImport.update({
@@ -154,6 +162,11 @@ const SignupOffersRoute = SignupOffersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TailscaleOauthMigrationRoute = TailscaleOauthMigrationRouteImport.update({
+  id: '/tailscale-oauth-migration',
+  path: '/tailscale-oauth-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UpstreamOauthMigrationRoute = UpstreamOauthMigrationRouteImport.update({
@@ -266,6 +279,12 @@ const OrganizationsIdOrSlugCustomDomainRoute =
     path: '/custom-domain',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugEncryptionRoute =
+  OrganizationsIdOrSlugEncryptionRouteImport.update({
+    id: '/encryption',
+    path: '/encryption',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
   OrganizationsIdOrSlugFeaturesRouteImport.update({
     id: '/features',
@@ -344,6 +363,7 @@ export interface FileRoutesByFullPath {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -359,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -378,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -397,6 +419,7 @@ export interface FileRoutesByTo {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -407,6 +430,7 @@ export interface FileRoutesByTo {
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/platform-credentials/$credentialId': typeof PlatformCredentialsCredentialIdRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -423,6 +447,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -442,6 +467,7 @@ export interface FileRoutesById {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -457,6 +483,7 @@ export interface FileRoutesById {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -476,6 +503,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -497,6 +525,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -512,6 +541,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -531,6 +561,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -550,6 +581,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -560,6 +592,7 @@ export interface FileRouteTypes {
     | '/platform-mcp-feedback'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/platform-credentials/$credentialId'
     | '/projects/$idOrSlug'
@@ -576,6 +609,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/members'
@@ -594,6 +628,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -609,6 +644,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -628,6 +664,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -648,6 +685,7 @@ export interface RootRouteChildren {
   AssistantsRoute: typeof AssistantsRoute
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
+  EncryptionTransitionsRoute: typeof EncryptionTransitionsRoute
   FleetHealthRoute: typeof FleetHealthRoute
   HooksRolloutRoute: typeof HooksRolloutRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
@@ -663,6 +701,7 @@ export interface RootRouteChildren {
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  TailscaleOauthMigrationRoute: typeof TailscaleOauthMigrationRoute
   UpstreamOauthMigrationRoute: typeof UpstreamOauthMigrationRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
@@ -695,6 +734,13 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/encryption-transitions': {
+      id: '/encryption-transitions'
+      path: '/encryption-transitions'
+      fullPath: '/encryption-transitions'
+      preLoaderRoute: typeof EncryptionTransitionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fleet-health': {
@@ -800,6 +846,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tailscale-oauth-migration': {
+      id: '/tailscale-oauth-migration'
+      path: '/tailscale-oauth-migration'
+      fullPath: '/tailscale-oauth-migration'
+      preLoaderRoute: typeof TailscaleOauthMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/upstream-oauth-migration': {
@@ -942,6 +995,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugCustomDomainRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/encryption': {
+      id: '/organizations/$idOrSlug/encryption'
+      path: '/encryption'
+      fullPath: '/organizations/$idOrSlug/encryption'
+      preLoaderRoute: typeof OrganizationsIdOrSlugEncryptionRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/features': {
       id: '/organizations/$idOrSlug/features'
       path: '/features'
@@ -1053,6 +1113,7 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
+  OrganizationsIdOrSlugEncryptionRoute: typeof OrganizationsIdOrSlugEncryptionRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugHooksRoute: typeof OrganizationsIdOrSlugHooksRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -1070,6 +1131,7 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugCustomDomainRoute:
     OrganizationsIdOrSlugCustomDomainRoute,
+  OrganizationsIdOrSlugEncryptionRoute: OrganizationsIdOrSlugEncryptionRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugHooksRoute: OrganizationsIdOrSlugHooksRoute,
   OrganizationsIdOrSlugMcpServersRoute:
@@ -1195,6 +1257,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssistantsRoute: AssistantsRoute,
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
+  EncryptionTransitionsRoute: EncryptionTransitionsRoute,
   FleetHealthRoute: FleetHealthRoute,
   HooksRolloutRoute: HooksRolloutRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
@@ -1210,6 +1273,7 @@ const rootRouteChildren: RootRouteChildren = {
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  TailscaleOauthMigrationRoute: TailscaleOauthMigrationRoute,
   UpstreamOauthMigrationRoute: UpstreamOauthMigrationRoute,
   UsersRoute: UsersRouteWithChildren,
 }

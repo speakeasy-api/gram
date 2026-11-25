@@ -17,7 +17,7 @@ export function UserSessionIssuerSelect({
   onValueChange,
   includeProjectSpecific = false,
   disabled = false,
-  ariaLabel = "User session issuer",
+  ariaLabel = "MCP sign-in",
 }: {
   issuers: UserSessionIssuer[];
   value: string;
@@ -35,12 +35,12 @@ export function UserSessionIssuerSelect({
   return (
     <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger aria-label={ariaLabel} className="w-full max-w-md">
-        <SelectValue placeholder="Select a user session issuer" />
+        <SelectValue placeholder="Choose an MCP sign-in" />
       </SelectTrigger>
       <SelectContent>
         {includeProjectSpecific ? (
           <SelectItem value={PROJECT_SPECIFIC_ISSUER_VALUE}>
-            Create a project-specific issuer
+            Create one for this project
           </SelectItem>
         ) : null}
         {issuers.map((issuer) => {

@@ -94,6 +94,13 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	defer cancel()
 	ctx, span := c.confirmer.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
+	// A process built without Jev, such as one in a partition where OpenRouter
+	// serves no Decisions models, never calls it. The composition root logs
+	// that once at startup, so there is no per-message warning or call metric.
+	if _, ok := c.jev.(typesafe.Unavailable); ok {
+		span.SetAttributes(attribute.String("prefilter.outcome", "unavailable"))
+		return unavailableResult
+	}
 	questions := PrefilterQuestions()
 	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputTokens)
 	if err != nil {

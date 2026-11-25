@@ -18,6 +18,7 @@ export const DataExportRouteDataSource = {
   RiskFindings: "risk_findings",
   ToolCallLogs: "tool_call_logs",
   McpConnectionLogs: "mcp_connection_logs",
+  McpFeedback: "mcp_feedback",
 } as const;
 /**
  * Class of data exported by this route.

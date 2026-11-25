@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -548,6 +549,7 @@ func newTestOAuthHTTP(t *testing.T) *OAuthHTTP {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:     aivendorstest.NewStore(),
 		BaseURL:       base,
 		Cache:         &memoryCache{values: map[string]any{}},
 		Store:         platformoauth.NewInMemoryStore(),
@@ -601,6 +603,7 @@ func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
 			t.Parallel()
 			var callbacks []string
 			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				AICatalog:          aivendorstest.NewStore(),
 				BaseURL:            base,
 				IDPCallbackBaseURL: tc.pinned,
 				Cache:              &memoryCache{values: map[string]any{}},

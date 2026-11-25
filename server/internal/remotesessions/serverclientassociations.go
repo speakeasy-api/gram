@@ -47,7 +47,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -140,7 +140,7 @@ func (s *Service) AttachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -522,7 +522,7 @@ func (s *Service) bindClientToGatewayIssuers(ctx context.Context, logger *slog.L
 		if !slices.Contains(issuerIDs, gateway.UserSessionIssuerID) {
 			continue
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, gateway.MetaMcpServerID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(gateway.MetaMcpServerID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 			return nil, err
 		}
 	}
@@ -642,7 +642,7 @@ func (s *Service) releaseFrontingGatewayBindings(ctx context.Context, logger *sl
 	writable := map[uuid.UUID]bool{}
 	var issuerIDs []uuid.UUID
 	for _, gateway := range gateways {
-		allowed, err := s.authz.Evaluate(ctx, authz.MCPCheck(authz.ScopeMCPWrite, gateway.MetaMcpServerID.String(), projectID.String()))
+		allowed, err := s.authz.Evaluate(ctx, authz.MCPServer(authz.MCPServerIDOf(gateway.MetaMcpServerID), authz.ProjectIDOf(projectID)).Write())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check gateway write access").LogError(ctx, logger)
 		}
@@ -686,6 +686,13 @@ func (s *Service) releaseFrontingGatewayBindings(ctx context.Context, logger *sl
 			return nil, oops.E(oops.CodeUnexpected, err, "check gateway issuer consumers").LogError(ctx, logger)
 		}
 		if inUse {
+			continue
+		}
+		attached, err := lockAttachmentParentForUnlink(ctx, sessions, organizationID, clientID, issuerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+		}
+		if attached {
 			continue
 		}
 		removed, err := sessions.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
@@ -841,7 +848,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client_id").LogWarn(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 

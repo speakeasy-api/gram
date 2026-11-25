@@ -224,15 +224,16 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- twenty-six misassigned choices cannot satisfy postflight.
+-- forty-one misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
   WHERE project_id = @project_id::uuid AND deleted IS FALSE
     AND credential_kind = 'user_session'
+    AND credential_id NOT IN (SELECT id FROM user_sessions WHERE user_session_issuer_id = @health_issuer_id::uuid)
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 26
+WHERE (SELECT count(*) FROM live) = 41
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])
@@ -265,17 +266,40 @@ WHERE (SELECT count(*) FROM live) = 26
                    AND a.deleted IS FALSE))
   );
 
+-- The connection health provider's held sign-ins each record no upstream
+-- sign-in on every server of the provider.
+-- name: PostflightIDHealthUpstreamClientChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN user_sessions s ON s.id = u.credential_id AND s.project_id = u.project_id AND s.deleted IS FALSE
+JOIN mcp_servers m ON m.id = u.mcp_server_id AND m.project_id = u.project_id
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
+  AND s.user_session_issuer_id = @health_issuer_id::uuid
+  AND m.user_session_issuer_id = @health_issuer_id::uuid
+  AND u.no_auth AND u.remote_session_client_id IS NULL;
+
 -- Count live choices outside the intended set: the Example OAuth server
 -- through its main client, the Example Shared Credential server with no
 -- upstream authentication, and the organization gateway's choices of each
--- server's associated client, each on a seeded session.
+-- server's associated client, each on a seeded session. Connection health
+-- sign-ins may only choose no upstream sign-in on the provider's own servers.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'user_session'
   AND NOT (
-    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    EXISTS (SELECT 1 FROM user_sessions hs
+            JOIN mcp_servers hm ON hm.id = u.mcp_server_id AND hm.project_id = u.project_id
+            WHERE hs.id = u.credential_id AND hs.deleted IS FALSE
+              AND hs.user_session_issuer_id = @health_issuer_id::uuid
+              AND hm.user_session_issuer_id = @health_issuer_id::uuid)
+    AND u.no_auth AND u.remote_session_client_id IS NULL
+  )
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE
+            AND s.user_session_issuer_id IS DISTINCT FROM @health_issuer_id::uuid)
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
       OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
@@ -709,3 +733,8 @@ WHERE t.project_id = @project_id::uuid
   AND t.deleted IS FALSE
   AND c.deleted IS FALSE
   AND c.session_surface = 'speakeasy-slack';
+-- name: PostflightIDLinkedAITools :one
+SELECT count(*) FROM ai_scan_targets t
+JOIN ai_products p ON p.id = t.ai_product_id
+WHERE t.organization_id = @org_id::text AND t.ai_product_id = t.id
+  AND t.id IN ('claude-code', 'codex', 'hermes-agent', 'zed', 'goose');

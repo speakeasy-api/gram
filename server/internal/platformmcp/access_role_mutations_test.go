@@ -2,12 +2,17 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -220,4 +225,58 @@ func TestAccessRoleMutationOutputsExposeNoRawIdentifiersOrSelectors(t *testing.T
 		roleKeys = append(roleKeys, key)
 	}
 	require.ElementsMatch(t, []string{"name", "description", "reference", "version", "mcp_access"}, roleKeys)
+}
+
+// The Platform MCP must accept exactly the dispositions the access API
+// accepts. The API's list lives in the Goa design, so the test reads it from
+// the generated validator instead of repeating it. For example, if the design
+// gains a disposition "network", the API list holds "network" but the switch in
+// validAccessRoleDisposition rejects it, and the "network" case fails.
+func TestAccessRoleDispositionsMatchTheAccessAPI(t *testing.T) {
+	t.Parallel()
+
+	apiDispositions := accessAPIDispositions(t)
+	require.NotEmpty(t, apiDispositions)
+
+	cases := slices.Concat(apiDispositions, []string{
+		authz.DispositionReadOnly,
+		authz.DispositionDestructive,
+		authz.DispositionIdempotent,
+		authz.DispositionOpenWorld,
+		authz.DispositionUnannotated,
+		"unknown",
+	})
+	slices.Sort(cases)
+	for _, disposition := range slices.Compact(cases) {
+		t.Run(disposition, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, slices.Contains(apiDispositions, disposition), validAccessRoleDisposition(disposition))
+		})
+	}
+	require.False(t, validAccessRoleDisposition(""))
+}
+
+// accessAPIDispositions returns the dispositions the access API accepts, read
+// from the error its generated validator gives for a value it rejects:
+// `value of body.disposition must be one of "read_only", "destructive" but got
+// value "x"` gives read_only and destructive.
+func accessAPIDispositions(t *testing.T) []string {
+	t.Helper()
+
+	err := accessserver.ValidateSelectorRequestBody(&accessserver.SelectorRequestBody{
+		ResourceKind: new("mcp"),
+		ResourceID:   new("*"),
+		Disposition:  new("not-a-disposition"),
+	})
+	require.Error(t, err)
+	match := regexp.MustCompile(`must be one of (.+) but got value`).FindStringSubmatch(err.Error())
+	require.Len(t, match, 2, err.Error())
+
+	var dispositions []string
+	for quoted := range strings.SplitSeq(match[1], ", ") {
+		disposition, unquoteErr := strconv.Unquote(quoted)
+		require.NoError(t, unquoteErr, quoted)
+		dispositions = append(dispositions, disposition)
+	}
+	return dispositions
 }

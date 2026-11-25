@@ -339,7 +339,7 @@ export function CatalogOfficialSheet({
               ? shadowMCPCreatedDescription(stage.created, shadowName)
               : stage.kind === "sign-in"
                 ? `${entryTitle} is added but stays off until people can sign in. Enter the client you registered with its provider, save it, then turn the server on.`
-                : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
+                : `Speakeasy adds the catalog version of ${entryTitle} and makes it the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -532,7 +532,9 @@ export function CatalogOfficialSheet({
                     <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 ) : null}
-                <Button.Text>{busy ? "Adding" : "Add and link"}</Button.Text>
+                <Button.Text>
+                  {busy ? "Adding" : "Add and make official"}
+                </Button.Text>
               </Button>
             </>
           ) : null}
@@ -639,7 +641,9 @@ function TurnOnAndLink({
             <Spinner className="mr-0 size-4" />
           </Button.LeftIcon>
         ) : null}
-        <Button.Text>{pending ? "Turning on" : "Turn on and link"}</Button.Text>
+        <Button.Text>
+          {pending ? "Turning on" : "Turn on and make official"}
+        </Button.Text>
       </Button>
     </div>
   );

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
@@ -216,8 +217,27 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					requireStaleError(t, g.call(t, rotated.AccessToken, "source--tool_000"), staleReconnectCopy)
 
 					if !typed {
-						// The old association can stale a runtime choice, but new
-						// consent must see a native offer before it can approve it.
+						// A legacy association stales the old choice but must not
+						// authorize previewing or issuing a new one.
+						beforePreview := g.source.requests.Load()
+						stateID, _ := seedGatewayConsentChallenge(t, ctx, g.ti, g.issuer, g.client, g.gateway, g.slug)
+						inventory := gatewayInventoryFromPage(t, consentGetPageWithContext(t, ctx, g.ti, g.slug, stateID))
+						found := false
+						for _, outcome := range inventory.MemberOutcomes {
+							if outcome.Slug == "source" {
+								require.Equal(t, "not_set_up", outcome.Status)
+								found = true
+							}
+						}
+						require.True(t, found, "consent explicitly shows the member needing setup")
+						pending := g.approve(t, ctx)
+						claims, err := usersessions.NewSigner("test-jwt-secret").Validate(pending.token, urn.NewUserSessionIssuer(g.issuer).String())
+						require.NoError(t, err)
+						policy, err := usersessionsrepo.New(g.ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: g.issuer, Jti: claims.ID})
+						require.NoError(t, err)
+						_, err = authclientfixtures.New(g.ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: policy.CredentialID, McpServerID: g.serverID})
+						require.ErrorIs(t, err, pgx.ErrNoRows, "the grant must not stamp a choice from legacy setup")
+						require.Equal(t, beforePreview, g.source.requests.Load(), "no upstream requests during preview or issuance")
 						seedConsentAuthOffer(t, ctx, g.ti, g.org, g.project, g.serverID, registration, "remote_session")
 					}
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
@@ -700,8 +720,6 @@ func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
 	fixtures := authclientfixtures.New(f.ti.conn)
 	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
-	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, server.ID))
 	_, err = productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	router := goahttp.NewMuxer()
@@ -716,7 +734,34 @@ func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
 		return w
 	}
 
-	w := call(f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())))
+	issueTyped := func() (string, uuid.UUID) {
+		t.Helper()
+		subject := createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())
+		bearer, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: f.ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour})
+		require.NoError(t, err)
+		persistTestUserSession(t, f.ti, issuerID, subject, jti)
+		queries := usersessionsrepo.New(f.ti.conn)
+		policy, err := queries.GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+		require.NoError(t, err)
+		_, err = queries.RecordIssuedAuthClientChoices(ctx, usersessionsrepo.RecordIssuedAuthClientChoicesParams{UserSessionIssuerID: issuerID, CredentialID: policy.CredentialID, ScopeMcpServerIds: []uuid.UUID{server.ID}})
+		require.NoError(t, err)
+		return bearer, policy.CredentialID
+	}
+	pendingBearer, pendingID := issueTyped()
+	_, err = fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: pendingID, McpServerID: server.ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Equal(t, http.StatusUnauthorized, call(pendingBearer).Code)
+	require.Empty(t, upstream.journal(), "an incomplete connection must make zero upstream requests")
+
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, server.ID))
+	bearer, credentialID := issueTyped()
+	choice, err := fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: server.ID})
+	require.NoError(t, err)
+	require.True(t, choice.NoAuth)
+	require.False(t, choice.AuthClientID.Valid)
+	require.False(t, choice.RemoteSessionClientID.Valid)
+	w := call(bearer)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	upstream.requireToolCallAuth(t, "", "the typed session reaches the upstream with no credential")
 	toolCalls := func() int {

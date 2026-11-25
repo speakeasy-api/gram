@@ -1,5 +1,62 @@
 # dashboard
 
+## 0.155.0
+
+### Minor Changes
+
+- 715566e: Adds MCP connection health to MCP Sessions behind the `mcp-connection-health` flag: an Overview tab with the sign-in summary, denied clients and recent sign-in activity, Connection Logs beside Active Sessions with filters, reference search and an attempt's details, the same view locked to one server on its Clients and Sessions tab, and an "Ask AI to investigate" button. Suspected problems show sample data until their API ships.
+
+### Patch Changes
+
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+- 1d69491: MCP Sessions is no longer listed under In Beta.
+- bb368b3: The time range picker now shows the times of a custom range that doesn't start and end at midnight, so a range dragged across the Tool Logs timeline reads "Nov 16, 11:34 AM – Nov 17, 11:34 PM" instead of "Nov 16 – Nov 17", matching the rows below it. Picking days in the Tool Logs calendar now includes the last selected day; before, "Nov 16 – Nov 17" listed only Nov 16.
+
+## 0.154.2
+
+### Patch Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- bed51b1: Full-page Project Assistant conversations now fill the window, with the composer pinned to the bottom instead of scrolling with the transcript.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 05c5f3f: The tool narrowing dialog on an MCP server's Team Access tab now counts each tool once, under the one annotation access is checked against, so an OpenAPI GET that is also idempotent and open-world counts only as read-only. A selected annotation stays visible even when no tool carries it, so it can still be cleared.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- bed51b1: Keep the assistant's working indicator on screen for the whole turn. The chat no longer looks idle after the assistant finishes a paragraph and before its next step starts, or while it writes the heading for its first batch of tool calls.
+
+## 0.154.1
+
+### Patch Changes
+
+- 9a5d737: The MCP Authentication Provider's Connections tab button that registers a client by hand now reads "Register OAuth client" instead of "Register agent", and its sheet explains that it is for MCP clients that can't register themselves through dynamic client registration (DCR) or a client ID metadata document (CIMD). The old wording read as creating a new agent identity.
+
+## 0.154.0
+
+### Minor Changes
+
+- eacd2ef: Read deployment-specific dashboard settings (PostHog, Datadog RUM, tunnel host, custom domain target, Pylon app and first-party hosts) from runtime configuration supplied by the deployment instead of matching the browser host against a list of production hosts, so one dashboard image serves every partition. Removes the unused Elements Datadog RUM error tracking.
+
+## 0.153.0
+
+### Minor Changes
+
+- 2a23053: Roles & Permissions has an Access Requests tab listing members' pending requests. Reviewing one, or opening it from the email or Slack link, lets an administrator approve it for 1, 2 or 4 hours or until the end of the day, deny it, or assign a role. A member who has asked sees their request as pending on the page they were blocked on, and access that can't be given temporarily tells them to ask an administrator instead.
+
+### Patch Changes
+
+- a62cd80: A member waiting on an access request now sees the page open up as soon as an administrator decides it, wherever they asked: a banner, the popover on a disabled button such as Create MCP server, or a full page. Previously, closing the popover stopped the check until the page was reloaded.
+- b1c1e0c: An agent's MCP sign-in tab no longer marks every personal server "Could not check connection" for an admin previewing roles: reading an agent's attached connections now follows the same permission check as the rest of the agent's pages. A viewer who may not see the agent's attached connection is told so plainly, and that server is no longer counted on the tab.
+- a6fc982: `keys.list` can now return one page at a time. Send `limit` (1 to 100) to get a page, then pass the returned `next_cursor` as `cursor` to get the next one. Keys come newest first. Send `search` to only return keys whose name contains that text, ignoring case. Callers that send no `limit` still get every key in one response, as before. The dashboard's API Keys page now loads 50 keys at a time with a "Load more" button and searches on the server, so it stays fast for organizations with thousands of keys.
+- 427498d: Setting up Enterprise Managed Auth on an MCP Authentication Provider now asks for one thing: the identity provider's issuer URL. "Set up EMA" opens the field in place, with no choice between providers and no trip to the Okta page. An Okta org URL such as `https://acme.okta.com` works, and a pasted Okta admin console URL is read as the org URL.
+- 07717cf: On an MCP server's Team access page, giving someone connect access to a set of tool annotations, such as "Read-only", now works when they hold no connect access yet. The choice used to save as blocks on the other annotations only, which left the person with no access at all.
+- 95c9bbb: The MCP server Overview keeps its labels while usage loads, so only the figures shimmer, and coming back to the tab within a few minutes shows the last figures at once instead of reloading them.
+- e01f674: Changing the time range on the MCP server Overview shows the loading state in the top-tools lists until the new range arrives, instead of the previous range's tools.
+- a92b906: The dashboard no longer records screen sessions. PostHog session recording and Datadog session replay are switched off, and the Claire de Fermat tracking pixel is removed. Product analytics events and Datadog performance and error monitoring are unchanged.
+- cba49d7: Opening an MCP server's pages no longer creates a client session for the viewer. The readiness check only asks an issuer-gated server whether it answers after you connect your account in Inspect.
+- 8e5b454: Access requests can now be stored and decided. With the access requests rollout on, requesting access records a pending request that an organization administrator can approve as a temporary grant or deny, through the new listAccessRequests, decideAccessRequest and withdrawAccessRequest endpoints. Scopes that cannot be given temporarily can no longer be requested while the rollout is on. Administrators are still emailed.
+- b93dd41: A tool with no annotations is now classified as unannotated. A rule with no annotation limit still covers it, a rule limited to read-only tools no longer does, and a tool that says it is both read-only and destructive is treated as destructive. The access, agents and Platform MCP APIs accept `unannotated` as a rule's annotation, and the role editor classifies tools the same way the server does and keeps a rule's unannotated selectors when another annotation is edited.
+
 ## 0.152.0
 
 ### Minor Changes

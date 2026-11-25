@@ -35,7 +35,8 @@ func TestToolUsageAgentAttributionSQL(t *testing.T) {
 			}
 			agentExpr := prefix + "agent_id"
 			if !tt.grouped {
-				agentExpr = "max(agent_id) OVER (PARTITION BY multiIf(trace_id != '', 'trace_id', trigger_correlation_id != '', 'correlation_id', trigger_event_id != '', 'trigger_event_id', 'log_id'), multiIf(trace_id != '', toString(trace_id), trigger_correlation_id != '', trigger_correlation_id, trigger_event_id != '', trigger_event_id, toString(log_id)))"
+				agentExpr = "g_agent_id"
+				require.Contains(t, query, "max(agent_id) OVER log_group AS g_agent_id")
 				require.Equal(t, 1, strings.Count(query, "FROM telemetry_logs"))
 			}
 			require.Contains(t, query, "multiIf("+agentExpr+" != '', 'agent_id', "+prefix+"user_email")

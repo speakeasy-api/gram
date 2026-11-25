@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -124,6 +125,12 @@ func newTailnetGatewayCommand() *cli.Command {
 			Value:   tailnetgateway.DefaultMaxHosts,
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_MAX_HOSTS"},
 		},
+		&cli.UintFlag{
+			Name:    "tsnet-port-base",
+			Usage:   "First fixed UDP port for tailnet nodes; nodes use [base, base+max-hosts). 0 lets each node pick a random port",
+			Value:   0,
+			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE"},
+		},
 		&cli.StringFlag{
 			Name:    "control-url",
 			Usage:   "Tailscale coordination server override (tests and headscale)",
@@ -178,7 +185,7 @@ func newTailnetGatewayCommand() *cli.Command {
 			defer cancel()
 
 			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
+				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
@@ -312,6 +319,12 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		return tailnetgateway.Config{}, fmt.Errorf("configure private listener transport: %w", err)
 	}
 
+	portBase := c.Uint("tsnet-port-base")
+	if portBase > math.MaxUint16 {
+		return tailnetgateway.Config{}, fmt.Errorf("tsnet port base %d exceeds %d", portBase, math.MaxUint16)
+	}
+	tsnetPortBase := uint16(portBase)
+
 	stateDir := c.String("state-dir")
 	if stateDir == "" {
 		stateDir, err = os.MkdirTemp("", "gram-tailnet-gateway-")
@@ -340,6 +353,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		StartTimeout:       c.Duration("start-timeout"),
 		ApprovalGrace:      tailnetgateway.DefaultApprovalGrace,
 		MaxHosts:           c.Int("max-hosts"),
+		TsnetPortBase:      tsnetPortBase,
 		ReconcileTaskQueue: c.String(networkIngressQueueFlag),
 		ControlURL:         c.String("control-url"),
 	}

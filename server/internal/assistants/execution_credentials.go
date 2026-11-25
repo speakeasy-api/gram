@@ -3,7 +3,6 @@ package assistants
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -12,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -39,6 +37,7 @@ func (s *ServiceCore) executionTrigger(ctx context.Context, assistant assistantR
 // request by the live policies of the agent, its owner, and that user.
 // Identity rejections wrap ErrTurnIdentity.
 func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, identity turnIdentity) (string, error) {
+	s.repairManagedCeilings(ctx, assistant)
 	trigger, err := s.executionTrigger(ctx, assistant, event)
 	if err != nil {
 		return "", fmt.Errorf("resolve execution trigger: %w", err)
@@ -64,7 +63,7 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 		credential.AuthorizerUserID = identity.UserID
 		execCtx = executionprofiles.ContextUserBacked
 	}
-	credential.SelectionProfileVersionID, err = s.bindExecutionProfile(ctx, executionprofiles.Target{
+	versionID, err := s.bindExecutionProfile(ctx, executionprofiles.Target{
 		OrganizationID: assistant.OrganizationID,
 		ProjectID:      assistant.ProjectID,
 		AssistantID:    assistant.ID,
@@ -74,6 +73,7 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 	if err != nil {
 		return "", err
 	}
+	credential.SelectionProfileVersionID = uuid.NullUUID{UUID: versionID, Valid: true}
 	token, err := s.assistantTokens.MintTurnCredential(ctx, credential, assistanttokens.RuntimeBinding{
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
 		AssistantID: assistant.ID, ThreadID: thread.ID, ChatID: thread.ChatID,
@@ -84,26 +84,13 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 	return token, nil
 }
 
-// bindExecutionProfile returns the execution-selection profile version a turn
-// under target binds. An organization enforcing upstream auth serves every
-// proxied server from that version's choices, so a turn that cannot bind one
-// fails. Elsewhere the upstream client choice stays authoritative and a turn
-// does not depend on the version, so a failure is logged and the turn runs
-// unbound.
-func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) (uuid.NullUUID, error) {
-	unbound := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+// bindExecutionProfile returns the pinned profile version required by a turn.
+// Individual server gaps do not prevent issuance: other servers still work.
+func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) (uuid.UUID, error) {
 	logger := s.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogAssistantID(target.AssistantID.String()))
 	binding, err := executionprofiles.Bind(ctx, s.db, target, executionprofiles.SourceIssuance)
 	if err != nil {
-		logger.ErrorContext(ctx, "bind execution selection profile", attr.SlogError(err))
-		enforced, readErr := authenforcement.ReadEnforced(ctx, s.db, target.OrganizationID)
-		if readErr != nil {
-			return unbound, fmt.Errorf("bind execution selection profile: %w", errors.Join(err, readErr))
-		}
-		if enforced {
-			return unbound, fmt.Errorf("bind execution selection profile: %w", err)
-		}
-		return unbound, nil
+		return uuid.Nil, fmt.Errorf("bind execution selection profile: %w", err)
 	}
 	if len(binding.Gaps) > 0 {
 		logger.InfoContext(ctx, "execution selection profile has servers without a choice",
@@ -111,5 +98,5 @@ func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target execution
 			attr.SlogExecutionProfileGaps(len(binding.Gaps)),
 		)
 	}
-	return uuid.NullUUID{UUID: binding.VersionID, Valid: true}, nil
+	return binding.VersionID, nil
 }

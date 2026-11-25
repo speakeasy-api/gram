@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -222,7 +223,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameReadScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
@@ -256,7 +257,7 @@ func TestWorkloadAssertionReuseAPIAndMCPRequireSameWriteScope(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil, nil)
+	management := workloadpolicy.NewService(logger, testenv.NewTracerProvider(t), nil, &sessions.Manager{}, engine, nil, authserver.Hosts{}, nil)
 	ctx, p, project, issuer := assertionReuseTestContext(t)
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	service := &WorkloadAssertionReuseService{
@@ -308,6 +309,7 @@ func TestWorkloadAssertionReuseDiscoveryUsesExistingScopes(t *testing.T) {
 			grants = append(grants, authz.NewGrant(authz.ScopeOrgAdmin, p.OrganizationID))
 		}
 		ctx := authz.GrantsToContext(t.Context(), grants)
+		reg.withAICatalog(aivendorstest.NewStore())
 		visible := reg.FilterExternalTools(ctx, p, tools)
 		var names []string
 		for _, tool := range visible {

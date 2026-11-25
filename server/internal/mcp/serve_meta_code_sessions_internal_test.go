@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -44,7 +46,7 @@ func TestCodeMemberSessionWaitFailuresStayMemberScoped(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			defer cancel()
 			ctx = context.WithValue(ctx, codeMemberSessionsKey{}, scope)
-			_, session, err := (&Service{}).openMemberSession(ctx, logger, dial, nil, member)
+			_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, logger, dial, nil, member)
 			require.Nil(t, session)
 			memberErr, ok := errors.AsType[*metaMemberError](err)
 			require.True(t, ok, "listing must skip this member rather than fail the inventory: %v", err)
@@ -81,7 +83,7 @@ func TestCodeMemberSessionRequiresCallerScope(t *testing.T) {
 	for _, caller := range []*codeCallerScope{nil, {}} {
 		scope := &codeSessionScope{callerScope: caller}
 		ctx := context.WithValue(t.Context(), codeMemberSessionsKey{}, scope)
-		_, session, err := (&Service{}).openMemberSession(ctx, testenv.NewLogger(t), memberDial{}, nil, metaMember{slug: "remote"})
+		_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, testenv.NewLogger(t), memberDial{}, nil, metaMember{slug: "remote"})
 		require.Nil(t, session)
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok)
@@ -169,10 +171,43 @@ func TestCodeMemberSessionRekeysWhenRouteChangesDuringWait(t *testing.T) {
 		return rotated, nil
 	}
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, scope)
-	_, session, err := (&Service{}).openMemberSession(ctx, logger, stale, redial, member)
+	_, session, err := (&Service{aiCatalog: aivendorstest.NewStore()}).openMemberSession(ctx, logger, stale, redial, member)
 	require.NoError(t, err)
 	defer session.release(ctx, logger)
 	require.Equal(t, 1, redialed)
 	require.Same(t, rotatedSession, session.session, "a refreshed route must not lease the stale route's session")
 	require.Equal(t, rotated.sessionKey, session.dial.sessionKey)
+}
+
+// A call names the route it ran on: a recheck while waiting can move it to another credential.
+func TestCodeMemberCallNamesTheRouteItRanOn(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	logger := testenv.NewLogger(t)
+	pool := newCodeMemberSessions(logger, 0, 0, 0, 4)
+	t.Cleanup(func() { pool.close(context.WithoutCancel(ctx), true) })
+	member := metaMember{slug: "remote"}
+	stale := memberDial{sessionKey: "revoked-credential", serviceClient: uuid.New()}
+	rotated := memberDial{sessionKey: "rotated-credential", serviceClient: uuid.New()}
+	scope := &codeSessionScope{pool: pool, callerScope: &codeCallerScope{key: "caller"}, recheck: func(ctx context.Context, _ string) (context.Context, *metaGateContext, metaMember, error) {
+		return ctx, &metaGateContext{}, member, nil
+	}}
+	keyFor := func(dial memberDial) codeMemberSessionKey {
+		key, err := newCodeMemberSessionKey(scope, codeMemberDestination(member)+"\x00"+dial.sessionKey)
+		require.NoError(t, err)
+		return key
+	}
+	settled := make(chan struct{})
+	close(settled)
+	staleEntry := &codeMemberEntry{key: keyFor(stale), slot: make(chan struct{}, 1), current: &pooledMemberSession{session: newInMemoryMemberSession(t), created: time.Now(), lastUsed: time.Now(), verifying: settled}}
+	pool.entries[staleEntry.key] = staleEntry
+	rotatedEntry := &codeMemberEntry{key: keyFor(rotated), slot: make(chan struct{}, 1), current: &pooledMemberSession{session: newInMemoryMemberSession(t), created: time.Now(), lastUsed: time.Now()}}
+	pool.entries[rotatedEntry.key] = rotatedEntry
+	redial := func(context.Context, *metaGateContext, metaMember) (memberDial, error) { return rotated, nil }
+
+	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, scope)
+	call, _, err := (&Service{}).callOnMemberSession(ctx, logger, stale, redial, member, "missing", nil)
+	require.Error(t, err, "the in-memory member has no tools")
+	require.Equal(t, rotated.serviceClient, call.dial.serviceClient)
 }

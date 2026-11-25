@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -51,7 +50,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -63,7 +62,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionClientsByIssuerID(ctx, repo.ListOrganizationRemoteSessionClientsByIssuerIDParams{
 		RemoteSessionIssuerID: issuerID,
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		Cursor:                cursor,
 		LimitValue:            limit,
 	})
@@ -110,7 +109,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgclientsgen.GetClien
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -147,13 +146,13 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
 	r := repo.New(s.db)
 
-	if _, err := r.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	if _, err := r.GetOrganizationRemoteSessionRegistration(ctx, repo.GetOrganizationRemoteSessionRegistrationParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	}); err != nil {
@@ -168,18 +167,19 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
 	}
 
-	mcpRows, enforced, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
+	mcpRows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientID:            conv.ToNullUUID(clientID),
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IncludeDeleteImpact: true,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
 	names := make([]string, 0, len(mcpRows))
 	for _, row := range mcpRows {
-		fallback := row.Url
-		if enforced {
-			fallback = conv.Default(row.Url, row.Slug.String)
-		}
-		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), fallback))
+		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), conv.Default(row.Url, row.Slug.String)))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
 		RemoteSessionClientID: clientID,
@@ -227,54 +227,7 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 	}, nil
 }
 
-// serversUsingClient is every server an administrator's change to the client
-// affects, newest first, and whether the organization enforces typed auth
-// clients. Where it does, these are the organization's servers behind the
-// client's user session issuer links and those that offer it, each once.
-// Elsewhere they are the servers behind its links, whichever project owns them.
-func serversUsingClient(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) ([]repo.ListOrganizationMcpServersForClientRow, bool, error) {
-	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
-	if err != nil {
-		return nil, false, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	if !enforced {
-		linked, err := repo.New(db).ListOrganizationMcpServersForClient(ctx, clientID)
-		if err != nil {
-			return nil, false, fmt.Errorf("list mcp servers for client: %w", err)
-		}
-		return linked, false, nil
-	}
-
-	rows, err := repo.New(db).ListOrganizationMcpServersForClients(ctx, repo.ListOrganizationMcpServersForClientsParams{
-		RemoteSessionClientIds: []uuid.UUID{clientID},
-		OrganizationID:         organizationID,
-	})
-	if err != nil {
-		return nil, false, fmt.Errorf("list mcp servers for client: %w", err)
-	}
-	seen := make(map[uuid.UUID]bool, len(rows))
-	servers := make([]repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
-	for _, row := range rows {
-		if seen[row.ID] {
-			continue
-		}
-		seen[row.ID] = true
-		servers = append(servers, repo.ListOrganizationMcpServersForClientRow{
-			ID:          row.ID,
-			ProjectID:   row.ProjectID,
-			ProjectSlug: row.ProjectSlug,
-			Name:        row.Name,
-			Slug:        row.Slug,
-			Url:         row.Url,
-		})
-	}
-	slices.SortFunc(servers, func(a, b repo.ListOrganizationMcpServersForClientRow) int {
-		return strings.Compare(b.ID.String(), a.ID.String())
-	})
-	return servers, true, nil
-}
-
-// ListClientMcpServers lists the MCP servers a client is attached to in the
+// ListClientMcpServers lists the MCP servers that offer a client in the
 // caller's organization.
 func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsgen.ListClientMcpServersPayload) (*orgclientsgen.ListOrganizationMcpServersResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -289,14 +242,14 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
 	r := repo.New(s.db)
 
 	// Establish org ownership of the client before resolving its MCP servers.
-	if _, err := r.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
+	if _, err := r.GetOrganizationRemoteSessionRegistration(ctx, repo.GetOrganizationRemoteSessionRegistrationParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 	}); err != nil {
@@ -306,7 +259,12 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	rows, _, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
+	rows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ClientID:            conv.ToNullUUID(clientID),
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IncludeDeleteImpact: false,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
@@ -340,7 +298,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -519,19 +477,19 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
 		pid, err := uuid.Parse(*payloadProjectID)
 		if err != nil {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
 		}
 		if issuer.ProjectID.Valid && issuer.ProjectID.UUID != pid {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
 		}
 		if _, err := projectsrepo.New(dbtx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 			ID:             pid,
 			OrganizationID: organizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
+				return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
 			}
-			return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
 		}
 		clientProjectID = conv.ToNullUUID(pid)
 	}
@@ -551,7 +509,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -678,7 +636,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -876,7 +834,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -962,7 +920,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeBadRequest, err, "invalid remote_session_client id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -996,7 +954,7 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	// Gate the registrations those servers reach before locking the client
 	// row, so this never holds a row another transaction needs while waiting
 	// for a gate that transaction holds.
-	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers, []uuid.UUID{clientID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 	}
 	if _, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
@@ -1117,7 +1075,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp_server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -1151,7 +1109,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	// Gate the registrations those servers reach before locking the client
 	// row, so this never holds a row another transaction needs while waiting
 	// for a gate that transaction holds.
-	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers, []uuid.UUID{clientID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 	}
 
@@ -1201,6 +1159,13 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return err.LogWarn(ctx, logger)
 	}
 
+	attached, err := lockAttachmentParentForUnlink(ctx, txRepo, authCtx.ActiveOrganizationID, clientID, server.UserSessionIssuerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+	}
+	if attached {
+		return oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
 	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,

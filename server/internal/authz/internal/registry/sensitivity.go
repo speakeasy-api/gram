@@ -1,5 +1,3 @@
-// Why granting a scope deserves a warning.
-//
 // authzgen copies everything below the package line into package authz, so
 // the model and the evaluator share these names without importing each other.
 // Keep this file free of imports and of anything only the registry needs.
@@ -10,7 +8,6 @@ package registry
 type Sensitivity string
 
 const (
-	// SensitivityNone marks a scope that needs no warning before it is granted.
 	SensitivityNone Sensitivity = ""
 
 	// SensitivityConversations marks a scope that exposes other members'

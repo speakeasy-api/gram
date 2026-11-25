@@ -16,6 +16,14 @@ const ConnectionLogScope = "github.com/speakeasy-api/gram/server/internal/mcpcon
 // claim it, and it alone decides that a record is a connection log.
 const ConnectionLogSource = "mcp-connection-attempts"
 
+// FeedbackLogScope is the scope MCP server feedback is exported under.
+const FeedbackLogScope = "github.com/speakeasy-api/gram/server/internal/mcpfeedback"
+
+// FeedbackLogSource is the provenance source the feedback recorder stamps.
+// Ingest edges stamp their own source, so it alone decides that a record is
+// MCP server feedback.
+const FeedbackLogSource = "mcp-feedback"
+
 const (
 	gatewayMCPClientNameKey    = "gram.mcp.client.name"
 	gatewayToolsetSlugKey      = "gram.toolset.slug"
