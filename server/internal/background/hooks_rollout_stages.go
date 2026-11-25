@@ -93,3 +93,23 @@ func addHooksRolloutStagesSchedule(ctx context.Context, env *tenv.Environment) e
 	}
 	return nil
 }
+
+// retryScheduleRegistration registers a schedule, retrying with capped
+// exponential backoff until it succeeds or ctx ends. Each failure logs an
+// error, so a schedule that stays missing keeps showing up in the logs.
+func retryScheduleRegistration(ctx context.Context, logger *slog.Logger, name string, register func(context.Context) error, initial, maxWait time.Duration) {
+	wait := initial
+	for {
+		err := register(ctx)
+		if err == nil {
+			return
+		}
+		logger.ErrorContext(ctx, "register "+name+" schedule", attr.SlogError(err))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, maxWait)
+	}
+}

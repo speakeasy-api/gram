@@ -1043,9 +1043,9 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	}
 
 	if opts.DB != nil {
-		if err := addHooksRolloutStagesSchedule(ctx, env); err != nil {
-			logger.ErrorContext(ctx, "register hooks rollout stages schedule", attr.SlogError(err))
-		}
+		go retryScheduleRegistration(ctx, logger, "hooks rollout stages", func(ctx context.Context) error {
+			return addHooksRolloutStagesSchedule(ctx, env)
+		}, time.Second, 5*time.Minute)
 	}
 
 	if opts.HookFleetMetrics != nil {

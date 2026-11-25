@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -68,4 +69,31 @@ func TestHooksRolloutStagesSchedule(t *testing.T) {
 	preview := &temporalmocks.Client{}
 	require.NoError(t, addHooksRolloutStagesSchedule(t.Context(), tenv.NewEnvironment(preview, "test", "preview-test")))
 	preview.AssertNotCalled(t, "ScheduleClient")
+}
+
+func TestRetryScheduleRegistration_RetriesUntilRegistered(t *testing.T) {
+	t.Parallel()
+
+	attempts := 0
+	retryScheduleRegistration(t.Context(), slog.New(slog.DiscardHandler), "test", func(context.Context) error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("temporal unavailable")
+		}
+		return nil
+	}, time.Millisecond, 4*time.Millisecond)
+	require.Equal(t, 3, attempts)
+}
+
+func TestRetryScheduleRegistration_StopsWhenContextEnds(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	attempts := 0
+	retryScheduleRegistration(ctx, slog.New(slog.DiscardHandler), "test", func(context.Context) error {
+		attempts++
+		cancel()
+		return errors.New("temporal unavailable")
+	}, time.Hour, time.Hour)
+	require.Equal(t, 1, attempts)
 }
