@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -91,16 +92,27 @@ func (g *staleChoiceGateway) approve(t *testing.T, ctx context.Context) catalogC
 // attachSignIn gives the server a sign-in; typed also records it as an auth client.
 func (g *staleChoiceGateway) attachSignIn(t *testing.T, ctx context.Context, typed bool) uuid.UUID {
 	t.Helper()
-	registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
+	registration, _ := g.attachSignInClient(t, ctx, typed)
+	return registration
+}
+
+func (g *staleChoiceGateway) attachSignInClient(t *testing.T, ctx context.Context, typed bool) (registration, client uuid.UUID) {
+	t.Helper()
+	registration = createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{g.issuer})
 	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	if typed {
+		// Membership and the typed offer are common fixtures. Only the positive
+		// reconnect case grants use of the offer; the denied case must not.
+		_, err := organizationsrepo.New(g.ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: g.org, UserID: conv.ToPGText(mockidp.MockUserID)})
+		require.NoError(t, err)
 		fixtures := authclientfixtures.New(g.ti.conn)
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: g.org, ProjectID: uuid.NullUUID{UUID: g.project, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 		require.NoError(t, err)
 		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: g.project, OrganizationID: g.org, McpServerID: g.serverID, AuthClientID: id, Source: "admin"}))
+		client = id
 	}
-	return registration
+	return registration, client
 }
 
 func (g *staleChoiceGateway) call(t *testing.T, token, qualified string) *httptest.ResponseRecorder {
@@ -200,8 +212,10 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					connection := g.approve(t, ctx)
 					requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 
-					registration := g.attachSignIn(t, ctx, typed)
-					g.ti.service.SetAuthClientPermitted(true)
+					registration, client := g.attachSignInClient(t, ctx, typed)
+					if typed {
+						seedPrincipalGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, client.String())
+					}
 					before := g.source.requests.Load()
 					requireStaleError(t, g.call(t, connection.token, "source--tool_000"), `This server's `+staleReconnectCopy)
 					require.Equal(t, before, g.source.requests.Load(), "refused before any upstream request")
@@ -238,7 +252,7 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 						_, err = authclientfixtures.New(g.ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: policy.CredentialID, McpServerID: g.serverID})
 						require.ErrorIs(t, err, pgx.ErrNoRows, "the grant must not stamp a choice from legacy setup")
 						require.Equal(t, beforePreview, g.source.requests.Load(), "no upstream requests during preview or issuance")
-						seedConsentAuthOffer(t, ctx, g.ti, g.org, g.project, g.serverID, registration, "remote_session")
+						seedTypedSessionClient(t, ctx, g.ti, g.org, g.project, g.serverID, registration, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(mockidp.MockUserID))
 					}
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 					renewed := g.approve(t, ctx)
@@ -347,6 +361,8 @@ func TestValidGatewayChoiceIsUntouched(t *testing.T) {
 	registration := g.attachSignIn(t, ctx, true)
 	g.ti.service.SetAuthClientPermitted(true)
 	insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
+	authClientID := serverAuthClientID(t, ctx, g.ti, g.org, g.serverID, authz.AuthClientTypeRemoteSession)
+	seedPrincipalGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, authClientID.String())
 	connection := g.approve(t, ctx)
 	requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 	require.Equal(t, http.StatusOK, g.refresh(t, connection.refresh).Code)
@@ -688,7 +704,9 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 			server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
 			subject := createTestUser(t, ctx, f.ti, "stale-direct-"+uuid.NewString())
 			bearer := f.issue(t, ctx, slug, issuerID, subject)
-			f.associate(t, ctx, server.ID, createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "stale-direct", "", []uuid.UUID{issuerID}))
+			registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "stale-direct", "", []uuid.UUID{issuerID})
+			f.associate(t, ctx, server.ID, registration)
+			seedTypedSessionClient(t, ctx, f.ti, f.orgID, f.projectID, server.ID, registration, authz.AuthClientTypeRemoteSession, subject)
 			router := goahttp.NewMuxer()
 			mcp.Attach(router, f.ti.service.Service, nil)
 			req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
@@ -750,7 +768,9 @@ func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
 	pendingBearer, pendingID := issueTyped()
 	_, err = fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: pendingID, McpServerID: server.ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	require.Equal(t, http.StatusUnauthorized, call(pendingBearer).Code)
+	pending := call(pendingBearer)
+	require.Equal(t, http.StatusPreconditionFailed, pending.Code, pending.Body.String())
+	require.Empty(t, pending.Header().Get("WWW-Authenticate"), "a new sign-in cannot fix incomplete setup")
 	require.Empty(t, upstream.journal(), "an incomplete connection must make zero upstream requests")
 
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))

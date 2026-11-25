@@ -86,15 +86,6 @@ const (
 	// AuthClientReasonKey is why resolving a request's typed auth client did not succeed.
 	AuthClientReasonKey = attribute.Key("gram.auth_client.reason")
 
-	// AuthClientLegacyOutcomeKey is the outcome the legacy upstream client choice reached for the same request.
-	AuthClientLegacyOutcomeKey = attribute.Key("gram.auth_client.legacy_outcome")
-
-	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
-	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
-
-	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
-	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
-
 	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
 	UpstreamIssuerSurfaceKey = attribute.Key("gram.upstream_issuer.surface")
 
@@ -1494,14 +1485,6 @@ func AuthClientReason(v string) attribute.KeyValue { return AuthClientReasonKey.
 // SlogAuthClientReason is why resolving a typed auth client did not succeed.
 func SlogAuthClientReason(v string) slog.Attr { return slog.String(string(AuthClientReasonKey), v) }
 
-func AuthClientLegacyOutcome(v string) attribute.KeyValue {
-	return AuthClientLegacyOutcomeKey.String(v)
-}
-
-func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
-
-func AuthClientResolverMode(v string) attribute.KeyValue { return AuthClientResolverModeKey.String(v) }
-
 func UpstreamIssuerSurface(v string) attribute.KeyValue { return UpstreamIssuerSurfaceKey.String(v) }
 
 // SlogUpstreamIssuerSurface is the serving surface of an upstream issuer comparison.
@@ -1578,11 +1561,6 @@ func SlogMandatoryAuthzSource(v string) slog.Attr {
 func MandatoryAuthzReason(v string) attribute.KeyValue { return MandatoryAuthzReasonKey.String(v) }
 func SlogMandatoryAuthzReason(v string) slog.Attr {
 	return slog.String(string(MandatoryAuthzReasonKey), v)
-}
-
-// SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
-func SlogAuthClientLegacyOutcome(v string) slog.Attr {
-	return slog.String(string(AuthClientLegacyOutcomeKey), v)
 }
 
 // SlogSigintRequestedWindowSize records the configured message count including the target.

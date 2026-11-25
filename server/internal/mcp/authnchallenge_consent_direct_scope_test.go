@@ -15,21 +15,31 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
 func seedDirectScopeConsent(t *testing.T, enforced bool) (context.Context, consentActionFixture, *validationMember) {
+	t.Helper()
+	ctx, fx, member := seedDirectScopeConsentFixture(t, enforced)
+	fx.ti.service.SetAuthClientPermitted(true)
+	return ctx, fx, member
+}
+
+func seedDirectScopeConsentFixture(t *testing.T, enforced bool) (context.Context, consentActionFixture, *validationMember) {
 	t.Helper()
 	member := newValidationMember(t)
 	ctx, fx := standaloneConsent(t, "direct-scope", member.url, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
@@ -37,7 +47,6 @@ func seedDirectScopeConsent(t *testing.T, enforced bool) (context.Context, conse
 	})
 	fx.endpoint.IsPublic = true
 	fx.ti.service.manual = true
-	fx.ti.service.SetAuthClientPermitted(true)
 	if enforced {
 		_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 		require.NoError(t, err)
@@ -74,7 +83,7 @@ func approveDirectScope(ctx context.Context, fx consentActionFixture, id uuid.UU
 
 func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testing.T) {
 	t.Parallel()
-	ctx, fx, member := seedDirectScopeConsent(t, true)
+	ctx, fx, member := seedDirectScopeConsentFixture(t, false)
 	// An expired unrelated registration must not be refreshed to preview the selected client.
 	var refreshes atomic.Int32
 	legacyAS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +110,10 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 	require.NoError(t, err)
 	otherIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
 	id, registration := addDirectScopePersonal(t, ctx, fx, "selected-personal", otherIssuer)
+	_, err = organizationsrepo.New(fx.ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: fx.orgID, UserID: conv.ToPGText(fx.subject.ID)})
+	require.NoError(t, err)
+	grantID := seedPrincipalGrant(t, ctx, fx.ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID), authz.ScopeMCPAuth, id.String())
+
 	// Bind the real consent challenge to PKCE so its resulting code can be redeemed.
 	verifier := "verifier-" + uuid.NewString()
 	sum := sha256.Sum256([]byte(verifier))
@@ -113,13 +126,31 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 		ProjectID: fx.projectID, McpServerID: conv.ToNullUUID(fx.endpoint.McpServerID.UUID), Slug: fx.endpoint.Slug,
 	})
 	require.NoError(t, err)
+	// The retained legacy association cannot replace the detached typed
+	// offer. The browser can review a new choice without using that association.
+	serverID := fx.endpoint.McpServerID.UUID
+	fixture := selectionFixture{ti: fx.ti, projectID: fx.projectID, orgID: fx.orgID}
+	fixture.associate(t, ctx, serverID, legacy)
+	stale := mintMetaIssuerBearer(t, fx.ti, fx.endpoint.Slug, fx.shared, fx.subject, metaServingChoice{organizationID: fx.orgID, serverID: serverID, clientID: id})
+	clients := authclientsrepo.New(fx.ti.conn)
+	_, err = clients.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
+	require.NoError(t, err)
+	w, err := callTool(t, fx.ti, fx.endpoint.Slug, stale, "ping")
+	requireReconnect(t, w, err, fx.endpoint.Slug)
+	require.Empty(t, member.drain(), "refusing a stale choice must not dial upstream")
+	require.Zero(t, refreshes.Load(), "refusing a stale choice must not refresh a legacy grant")
+	_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
+	require.NoError(t, err)
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	mcp.ResetAuthEnforcementForTest(fx.ti.service.Service)
 	attempt := previewDirectScope(t, ctx, fx, id)
 	requests := member.drain()
 	require.NotEmpty(t, requests)
 	for _, request := range requests {
 		require.Equal(t, "Bearer selected-personal", request.auth)
 	}
-	w, err := approveDirectScope(ctx, fx, id, attempt)
+	w, err = approveDirectScope(ctx, fx, id, attempt)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	loc, err := url.Parse(w.Header().Get("Location"))
@@ -152,6 +183,11 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 		require.Equal(t, "Bearer selected-personal", request.auth)
 	}
 
+	_, err = accessrepo.New(fx.ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grantID, OrganizationID: fx.orgID})
+	require.NoError(t, err)
+	_, err = callTool(t, fx.ti, fx.endpoint.Slug, token.AccessToken, "ping")
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Empty(t, member.drain(), "revoked auth permission must not dial")
 }
 
 func TestConsentDirectScope_InventoryCannotApproveAnotherChoice(t *testing.T) {
@@ -182,12 +218,10 @@ func TestConsentDirectScope_InventoryCannotApproveAnotherChoice(t *testing.T) {
 
 func TestConsentDirectScope_OffAndShadowUseTypedPreview(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"off", "shadow"} {
+	for _, mode := range []string{"not_enrolled"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx, member := seedDirectScopeConsent(t, false)
-			fx.ti.features.SetFlag(feature.FlagAuthClientResolver, fx.orgID, false)
-			fx.ti.features.SetFlag(feature.FlagAuthClientResolverShadow, fx.orgID, mode == "shadow")
 			legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "legacy-connected", "", []uuid.UUID{fx.shared})
 			issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, legacy)
 			err := authclientfixtures.New(fx.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer), ID: fx.endpoint.McpServerID.UUID})

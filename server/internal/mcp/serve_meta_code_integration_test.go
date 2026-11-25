@@ -442,7 +442,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
 	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+	_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}})
 	require.NoError(t, err)
 	execute := func(code string, restricted bool) codemode.ExecutionResult {
 		t.Helper()
@@ -633,25 +633,18 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			}
 			recordChoice := func(serverID uuid.UUID) {
 				t.Helper()
-				if tc.typedAuth {
-					rows, err := usersessionsrepo.New(ti.conn).RecordIssuedAuthClientChoices(ctx, usersessionsrepo.RecordIssuedAuthClientChoicesParams{
-						UserSessionIssuerID: issuer, CredentialID: sessionPolicy.CredentialID, ScopeMcpServerIds: []uuid.UUID{serverID}, ExcludeMcpServerIds: nil,
-						PickedMcpServerIds: []uuid.UUID{serverID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}, PickedExplicit: []bool{true}, AllowSoleOffer: false,
-					})
-					require.NoError(t, err)
-					require.EqualValues(t, 1, rows)
-					return
-				}
-				_, err := usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{serverID}, PickedClientIds: []uuid.UUID{client}})
+				rows, err := usersessionsrepo.New(ti.conn).RecordIssuedAuthClientChoices(ctx, usersessionsrepo.RecordIssuedAuthClientChoicesParams{
+					UserSessionIssuerID: issuer, CredentialID: sessionPolicy.CredentialID, ScopeMcpServerIds: []uuid.UUID{serverID}, ExcludeMcpServerIds: nil,
+					PickedMcpServerIds: []uuid.UUID{serverID}, PickedClientIds: []uuid.UUID{client}, PickedAuthClientIds: []uuid.UUID{authClientID}, PickedExplicit: []bool{true}, AllowSoleOffer: false,
+				})
 				require.NoError(t, err)
+				require.EqualValues(t, 1, rows)
 			}
 			recordChoice(member.mcpServerID)
 			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
 			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection.associate(t, ctx, unrelated.mcpServerID, client)
-			if tc.typedAuth {
-				require.NoError(t, authclientfixtures.New(ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: unrelated.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
-			}
+			require.NoError(t, authclientfixtures.New(ti.conn).SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: unrelated.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
 			recordChoice(unrelated.mcpServerID)
 			execute := func(code string, restricted bool) codemode.ExecutionResult {
 				t.Helper()

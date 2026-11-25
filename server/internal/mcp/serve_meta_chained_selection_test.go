@@ -248,7 +248,9 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, response.Body.String(), memberSlug+"--note")
 	require.Equal(t, before, chainer.acquireCount(), "cached discovery never exchanges")
-	require.NotContains(t, callGatewayTool(t, ti, slug, tokens.AccessToken, memberSlug+"--note", map[string]any{}), `"isError":true`)
+	reply := callGatewayTool(t, ti, slug, tokens.AccessToken, memberSlug+"--note", map[string]any{})
+	require.NotContains(t, reply, `"error":`, reply)
+	require.NotContains(t, reply, `"isError":true`, reply)
 	require.Equal(t, 1, upstream.toolCalls())
 	require.Greater(t, chainer.acquireCount(), before, "execution resolves current identity")
 }

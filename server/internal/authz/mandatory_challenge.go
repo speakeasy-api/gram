@@ -68,7 +68,7 @@ func mandatoryChallengeReason(authorization MandatoryAuthorization, decision Man
 		return authzrepo.ReasonDenyGrant, true
 	case MandatoryDenyReasonNoPolicy, MandatoryDenyReasonNotGranted:
 		owner := check.Dimensions[SelectorKeyConnectionOwner]
-		if check.isAuthClientCheck() && owner != "" && owner != authorization.RepresentedUserID() {
+		if check.isAuthClientCheck() && owner != "" && owner != authorization.authClientRepresentedUserID() {
 			return authzrepo.ReasonConnectionOwnerMismatch, true
 		}
 		if decision.Reason == MandatoryDenyReasonNoPolicy {

@@ -1,25 +1,11 @@
 // Typed auth client resolution for issuer-gated servers and gateway consent.
 //
 // A credential's choice for a server names a typed auth client
-// (mcp_auth_clients). When the auth-client-resolver flag is on for the
-// organization for a direct server, or a gateway has a consent catalogue,
-// that client decides how the request authenticates upstream:
-// a personal connection or a service account through its OAuth registration,
-// a static credential or a forwarded header through the client's own headers,
-// or no upstream authentication at all. A client that is gone, disabled,
-// detached from the server or outside its tenant is a gap the caller fixes by
-// reconnecting, never an implied no-auth and never another client.
-//
-// Some choices are on a compatibility path the resolver does not serve
-// itself: EMA clients, choices not yet mapped onto auth clients, header
-// copies that no longer match the server's headers, a registration that may
-// still be served by identity chaining, and headers-only clients on tunneled
-// servers. Before enforcement the upstream client choice keeps serving them.
-// Once the organization enforces, a choice that names no auth client is a
-// gap, and a named client is served from the registration the resolver
-// checked or by the server's own headers, never by the upstream client
-// choice. With the flag off, the shadow flag runs the resolver beside the
-// choice and reports disagreement, without acquiring credentials.
+// (mcp_auth_clients). The client decides whether the request uses an OAuth
+// registration, configured headers, or explicitly no upstream authentication.
+// Missing or stale choices require reconnect, never implicit no-auth or a
+// different client. Named EMA and header compatibility may use only the
+// registration or server headers validated by the resolver.
 
 package mcp
 
@@ -39,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -79,9 +64,6 @@ const (
 	// authClientLegacy: the upstream client choice serves the request.
 	authClientLegacy authClientOutcome = "legacy"
 )
-
-// authClientParityError is the parity outcome of a resolver that failed.
-const authClientParityError = "error"
 
 // Reasons for an outcome. They are a closed set: the parity metric carries
 // them as a label.
@@ -479,15 +461,11 @@ func (u *upstreamSelector) resolveAuthClient(ctx context.Context, serverID uuid.
 }
 
 func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []uuid.UUID) (map[uuid.UUID]authClientResolution, error) {
-	enforced, err := u.service.authEnforcement.Enforced(ctx, u.organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
 	rows, err := upstreamclientsrepo.New(u.service.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          false, ProposedNoAuth: false, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		CredentialKind: u.credentialKindOrDefault(), CredentialID: u.credentialID,
-		McpServerIds: serverIDs, OrganizationID: u.organizationID, TypedOnly: enforced,
+		McpServerIds: serverIDs, OrganizationID: u.organizationID, TypedOnly: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load auth client choices: %w", err)
@@ -516,7 +494,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 		CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject,
 		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
-	return s.prepareAuthClient(ctx, req, res, func(permit authClientPermitRequest, _ bool) {
+	return s.prepareAuthClient(ctx, req, res, true, func(permit authClientPermitRequest, _ bool) {
 		if resolved {
 			// The shadow compares the mandatory check with the
 			// connect-equivalent rule served before it, whichever of the two
@@ -554,6 +532,10 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
+	return s.resolveProposedAuthClientWithPolicy(ctx, organizationID, serverID, projectID, registrationID, authClientID, subject, enforced)
+}
+
+func (s *Service) resolveProposedAuthClientWithPolicy(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject, enforced bool) (authClientResolution, error) {
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
@@ -573,21 +555,17 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, enforced, nil)
 }
 
 // resolveNoAuthChoice decides a no-auth choice for a server as a recorded one
 // is decided, so the server's own credential headers still make it a setup
 // gap. The query must not infer a client whose headers the choice will not send.
 func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string, serverID uuid.UUID) (authClientResolution, error) {
-	enforced, err := s.typedConsentAuth(ctx, organizationID)
-	if err != nil {
-		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
-		Proposed:          true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
+		Proposed:          true, ProposedNoAuth: true, ProposedRegistrationID: none, ProposedAuthClientID: none, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: true,
 	})
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("resolve no-auth choice: %w", err)
@@ -598,8 +576,8 @@ func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string
 	return decideAuthClient(rows[0]), nil
 }
 
-func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
-	res, err := s.checkAuthClientPermission(ctx, permit, res, observe)
+func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory bool, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
+	res, err := s.checkAuthClientPermission(ctx, permit, res, mandatory, observe)
 	if err != nil {
 		return res, err
 	}
@@ -620,15 +598,15 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 
 // observe, when set, receives the permit request, with its connection owner
 // resolved, and the decision before it is applied.
-func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
+func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClientPermitRequest, res authClientResolution, mandatory bool, observe func(permit authClientPermitRequest, permitted bool)) (authClientResolution, error) {
 	// A mapped client keeps its permit even when serving falls back to the
 	// registration or current server headers.
 	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
-		permitter, err := s.authClientPermitFor(ctx, permit.OrganizationID)
+		permitter, err := s.authClientPermitFor(mandatory)
 		if err != nil {
 			return res, err
 		}
-		connection, err := s.authClientConnection(ctx, permit)
+		connection, err := s.authClientConnection(ctx, permit, mandatory)
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
@@ -745,46 +723,42 @@ func applyAuthClientHeaders(res authClientResolution, headers []proxy.Configured
 	return res
 }
 
-// refuseForeignCaller refuses, once the organization enforces, a caller
-// authenticated to another organization, before any upstream credential is
-// used. Public servers otherwise admit such a caller, so every public serving
-// path runs it: the ungated identity probes and the issuer gate. The caller is
-// never served as anonymous instead. A caller with no organization (an
-// organization-less session) carries no other tenant's identity or grants and
-// is served as anonymous callers are. Before enforcement a foreign caller is
-// served as today, with no project context.
+// refuseForeignCaller rejects a foreign authenticated identity rather than
+// treating it as anonymous. An organization-less caller carries no tenant grants.
 func (s *Service) refuseForeignCaller(ctx context.Context, organizationID string) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ActiveOrganizationID == organizationID {
 		return nil
 	}
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
-	}
-	if mode != feature.AuthClientResolverEnforced {
-		return nil
-	}
 	return oops.E(oops.CodeForbidden, nil, "this credential belongs to another organization, and this MCP server only accepts its own organization's credentials").LogWarn(ctx, s.logger, attr.SlogOrganizationID(organizationID))
 }
 
-// authClientPermitFor is how use of a resolved client is decided for
-// organizationID. Interactive typed choices always require mcp:auth. Runtime
-// callers still follow the organization's enforcement state. A test override
-// applies in either case.
-func (s *Service) authClientPermitFor(ctx context.Context, organizationID string) (authClientPermitter, error) {
+// Hosted admission is outside the typed serving path.
+// Preserve their existing foreign-caller policy.
+func (s *Service) refuseForeignCallerOutsideTypedServing(ctx context.Context, organizationID string) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ActiveOrganizationID == organizationID {
+		return nil
+	}
+	enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
+	}
+	if !enforced {
+		return nil
+	}
+	return s.refuseForeignCaller(ctx, organizationID)
+}
+
+// Serving always uses mandatory mcp:auth. Browser consent also uses it;
+// other proposed choices retain their eligibility policy.
+func (s *Service) authClientPermitFor(mandatory bool) (authClientPermitter, error) {
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil
 	}
-	typed, err := s.typedConsentAuth(ctx, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	if !typed {
+	if !mandatory {
 		return connectPermitter{}, nil
 	}
-	// An enforcing organization never falls back to the connect-equivalent
-	// rule: without the engine its clients are refused.
 	if s.authz == nil {
 		return nil, errors.New("upstream auth enforcement needs the authorization engine")
 	}
@@ -893,8 +867,8 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 
 // serveAuthClient applies a resolution to a direct proxied endpoint's
 // request: the client's own material, none, or the registration or server
-// headers of a compatibility path. A gap writes the reconnect challenge and a
-// refused client a request-access error.
+// headers of a compatibility path. A gap asks for setup or reconnect; a
+// refused client returns a request-access error.
 func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, res authClientResolution) (upstreamChoice, error) {
 	var none upstreamChoice
 	// The connection the permit was decided for binds every token path,
@@ -918,6 +892,13 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
+		needsSetup, err := s.directReconnectNeedsSetup(ctx, authentication)
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
+		}
+		if needsSetup {
+			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
+		}
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
@@ -941,6 +922,28 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	authentication.chosenClient = res.choice.clientID
 	authentication.chosenNoAuth = false
 	return res.choice, nil
+}
+
+// directReconnectNeedsSetup detects upstream setup that a new consent
+// cannot turn into a typed serving choice. It inspects only
+// configuration; it never resolves credentials. Typed browser consent can
+// issue explicit no-auth after a typed offer has been detached.
+func (s *Service) directReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
+	endpoint := authentication.endpoint
+	if endpoint.UserSessionIssuerID == uuid.Nil ||
+		(authentication.subject.Kind != urn.SessionSubjectKindUser && authentication.subject.Kind != urn.SessionSubjectKindAnonymous) {
+		return false, nil
+	}
+	serverID := endpoint.McpServerID.UUID
+	offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	if err != nil {
+		return false, err
+	}
+	offer, known := offers[serverID]
+	if !known || len(offer.clients) != 0 {
+		return false, nil
+	}
+	return offer.pending, nil
 }
 
 // authClientNoAccessError refuses a caller the chosen client, with a link to
@@ -971,11 +974,11 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 	if !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid {
 		return false, none, false, nil
 	}
-	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
 	if err != nil {
 		return false, none, false, err
 	}
-	if mode != feature.AuthClientResolverEnforced {
+	if !enforced {
 		return false, none, false, nil
 	}
 	selector, err := s.refreshSelector(ctx, endpoint, jti)
@@ -1010,118 +1013,4 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 		return true, res.choice, true, nil
 	}
 	return reconnect, none, true, nil
-}
-
-// legacyChoiceOutcome names the upstream client choice's outcome in the
-// resolver's terms, for shadow comparison.
-func legacyChoiceOutcome(choice upstreamChoice, err error) authClientOutcome {
-	switch {
-	case err != nil:
-		return authClientGap
-	case choice.noAuth():
-		return authClientNoAuth
-	default:
-		return authClientResolved
-	}
-}
-
-// shadowAuthClient compares the resolver with the upstream client choice for
-// the same request and reports disagreement. It never changes the request and
-// never asks the permitter.
-func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelector, serverID, projectID uuid.UUID, subject urn.SessionSubject, choice upstreamChoice, choiceErr error) {
-	res, err := selector.resolveAuthClient(ctx, serverID)
-	if err != nil {
-		s.metrics.RecordAuthClientParity(ctx, false, authClientParityError, string(legacyChoiceOutcome(choice, choiceErr)), authClientReasonNone)
-		s.logger.WarnContext(ctx, "auth client resolver shadow failed", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
-		return
-	}
-	// Compare only a legacy decision: a missing or unusable choice refuses
-	// the request, any other error is not a decision.
-	legacyDenied := errors.Is(choiceErr, errUpstreamSelectionMissing) || errors.Is(choiceErr, errUpstreamSelectionUnusable)
-	if res.outcome == authClientResolved && (choiceErr == nil || legacyDenied) {
-		permit := authClientPermitRequest{
-			OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
-			CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject, UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
-			AttachedConsent: authz.AttachedConnectionConsent{},
-		}
-		connection, err := s.authClientConnection(ctx, permit)
-		if err != nil {
-			s.logger.WarnContext(ctx, "auth client shadow could not resolve the connection owner", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
-		} else {
-			permit.ConnectionOwner = connection.owner
-			permit.AttachedConsent = connection.consent
-			s.shadowAuthClientUse(ctx, choiceErr == nil, permit)
-		}
-	}
-	annotateAuthClient(ctx, s.logger, res)
-	s.reportAuthClientParity(ctx, selector.organizationID, serverID, res, choice, choiceErr)
-}
-
-// reportAuthClientParity counts one shadow comparison and logs a
-// disagreement, ids and outcomes only. A choice the resolver hands back to the
-// upstream client choice is compared only when that hand-back hides a
-// difference; an unmapped choice is counted without a warning.
-func (s *Service) reportAuthClientParity(ctx context.Context, organizationID string, serverID uuid.UUID, res authClientResolution, choice upstreamChoice, choiceErr error) {
-	if choiceErr != nil && !errors.Is(choiceErr, errUpstreamSelectionMissing) && !errors.Is(choiceErr, errUpstreamSelectionUnusable) {
-		return
-	}
-	legacy := legacyChoiceOutcome(choice, choiceErr)
-	var agreed bool
-	warn := true
-	switch {
-	case res.outcome == authClientLegacy && (res.reason == authClientReasonUnmapped || res.reason == authClientReasonNoAuthDeclared):
-		agreed, warn = false, false
-	case res.outcome == authClientLegacy && (res.reason == authClientReasonHeadersStale || res.reason == authClientReasonLegacyMayChain):
-		agreed = false
-	case res.outcome == authClientLegacy:
-		return
-	default:
-		// The upstream client choice serves a headers-only client as no-auth.
-		expected := res.outcome
-		if res.headersOnly() {
-			expected = authClientNoAuth
-		}
-		agreed = legacy == expected
-		if agreed && expected == authClientResolved {
-			agreed = res.choice.clientID == choice.clientID
-		}
-	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AuthClientLegacyOutcome(string(legacy)), attr.AuthClientParityAgreed(agreed))
-	reason := res.reason
-	if reason == "" {
-		reason = authClientReasonNone
-	}
-	s.metrics.RecordAuthClientParity(ctx, agreed, string(res.outcome), string(legacy), reason)
-	if agreed || !warn {
-		return
-	}
-	s.logger.WarnContext(ctx, "auth client resolver parity mismatch",
-		attr.SlogMcpServerID(serverID.String()),
-		attr.SlogOrganizationID(organizationID),
-		attr.SlogAuthClientID(res.clientID.String()),
-		attr.SlogAuthClientType(res.clientType),
-		attr.SlogAuthClientOutcome(string(res.outcome)),
-		attr.SlogAuthClientReason(res.reason),
-		attr.SlogAuthClientLegacyOutcome(string(legacy)),
-		attr.SlogRemoteSessionClientID(choice.clientID.UUID.String()),
-	)
-}
-
-// authClientMode is the organization's resolver mode. The resolver is
-// authoritative only for an organization staff enabled enforcement for, after
-// its coverage was checked, and until they disable it; the flags alone only
-// shadow. A state that cannot be read is an error, so the request is refused
-// rather than served without the mandatory check.
-func (s *Service) authClientMode(ctx context.Context, organizationID string) (feature.AuthClientResolverMode, error) {
-	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
-	if err != nil {
-		return feature.AuthClientResolverOff, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	if enforced {
-		return feature.AuthClientResolverEnforced, nil
-	}
-	if feature.AuthClientResolver(ctx, s.features, organizationID) == feature.AuthClientResolverOff {
-		return feature.AuthClientResolverOff, nil
-	}
-	return feature.AuthClientResolverShadow, nil
 }

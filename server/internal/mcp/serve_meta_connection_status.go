@@ -350,10 +350,17 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 	}
 }
 
+type memberNotConnectedError struct{ memberCredentialError }
+
+func (e memberNotConnectedError) Unwrap() error { return e.memberCredentialError }
+
 // memberFailureSignIn keeps an outage from reading as a broken sign-in. On an
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+	if _, notConnected := errors.AsType[memberNotConnectedError](err); notConnected {
+		return signInRow(metamcp.SignInNotConnected, "", nil)
+	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
 		if gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)

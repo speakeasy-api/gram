@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -40,18 +41,19 @@ const chainedRefreshResourceIssuer = "https://as.chained-refresh.example.test"
 // naming the endpoint's upstream, the binding's resource client attached with
 // no interactive session, and a human holding a refreshable MCP grant.
 type chainedRefreshFixture struct {
-	ti           *testInstance
-	org          string
-	human        string
-	idpIssuer    uuid.UUID
-	idpClient    uuid.UUID
-	configHash   string
-	slug         string
-	clientID     string
-	refreshToken string
-	resourceKey  string
-	userIssuer   uuid.UUID
-	serverID     uuid.UUID
+	ti             *testInstance
+	org            string
+	human          string
+	idpIssuer      uuid.UUID
+	idpClient      uuid.UUID
+	configHash     string
+	slug           string
+	clientID       string
+	refreshToken   string
+	resourceKey    string
+	userIssuer     uuid.UUID
+	serverID       uuid.UUID
+	resourceClient uuid.UUID
 }
 
 func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixture) {
@@ -143,7 +145,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 		ti: ti, org: org, human: human, idpIssuer: idpIssuer, idpClient: idpClient,
 		configHash: remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient),
 		slug:       slug, clientID: client.ClientID, refreshToken: refreshToken, resourceKey: resourceKey,
-		userIssuer: userIssuer.ID, serverID: serverID,
+		userIssuer: userIssuer.ID, serverID: serverID, resourceClient: resourceClient.ID,
 	}
 }
 
@@ -304,6 +306,9 @@ func (f chainedRefreshFixture) callEndpoint(t *testing.T, ctx context.Context) (
 	})
 	require.NoError(t, err)
 	persistTestUserSession(t, f.ti, f.userIssuer, subject, jti)
+	project := *requireProjectAuthContext(t, ctx).ProjectID
+	client := seedTypedSessionClient(t, ctx, f.ti, f.org, project, f.serverID, f.resourceClient, authz.AuthClientTypeEMA, subject)
+	seedTypedSessionChoice(t, ctx, f.ti, f.org, f.userIssuer, jti, f.serverID, client)
 	return servePublicHTTP(t, context.Background(), f.ti, f.slug, makeInitializeBody(), token, nil)
 }
 

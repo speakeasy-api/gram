@@ -666,7 +666,7 @@ func (s *Service) metaValidationTarget(
 	case endpoint.IsOrganizationGateway():
 		// The SQL placement already pins the issuer, tenant, and member.
 		// Use the authorized member snapshot without reading browser inventory.
-		ctx, members, _, err = s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, scope.projectID, scope)
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshotWithRecheck(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, scope.projectID, false, scope)
 	default:
 		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	}

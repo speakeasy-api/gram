@@ -541,8 +541,8 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- server's credential headers must be carried by it. A client or association
 -- an administrator created is authoritative and mirrors nothing, so those
 -- checks do not apply to it.
--- With typed_only, which the caller sets for an organization enforcing upstream
--- auth, auth client links alone say what a server offers: an offered client's
+-- With typed_only (always for serving, enrollment-dependent for consent),
+-- auth client links alone say what a server offers: an offered client's
 -- registration counts as attached, and an upstream OAuth client association
 -- does not give the server an OAuth client. upstream_auth_pending still reads
 -- associations, so a server no auth client was ever linked to stays

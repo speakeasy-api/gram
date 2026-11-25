@@ -91,8 +91,13 @@ func unassignWorkloadAgent(t *testing.T, ctx context.Context, ti *testInstance, 
 // carrying the endpoint-scoped ceiling and no authorizer.
 func seedWorkloadSession(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, subject urn.SessionSubject) usersessionsrepo.UserSession {
 	t.Helper()
+	return seedWorkloadSessionWithVersion(t, ctx, ti, fx, subject, runtimepolicy.CurrentDelegatedPolicyVersion)
+}
 
-	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
+func seedWorkloadSessionWithVersion(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, subject urn.SessionSubject, version runtimepolicy.DelegatedPolicyVersion) usersessionsrepo.UserSession {
+	t.Helper()
+
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, []authz.Grant{{
 		PrincipalUrn: "",
 		Scope:        authz.ScopeMCPConnect,
 		Selector: authz.Selector{
@@ -102,7 +107,7 @@ func seedWorkloadSession(t *testing.T, ctx context.Context, ti *testInstance, fx
 		},
 	}})
 	require.NoError(t, err)
-	delegatedGrants, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
+	delegatedGrants, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
 	require.NoError(t, err)
 
 	refreshHash := sha256.Sum256([]byte("workload-refresh-" + uuid.NewString()))
@@ -114,7 +119,7 @@ func seedWorkloadSession(t *testing.T, ctx context.Context, ti *testInstance, fx
 		// No authorizer: a workload records no approving human.
 		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
 		DelegatedGrants:        delegatedGrants,
-		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(version), Valid: true},
 		Jti:                    base64.RawURLEncoding.EncodeToString(jtiHash[:]),
 		RefreshTokenHash:       conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
