@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { ServiceProblemsNote, SuspectedProblems } from "./SuspectedProblems";
 import type {
@@ -9,9 +9,33 @@ import type {
   SuspectedProblemDetail,
 } from "./types";
 
+// Pin the zone and locale before the formatters are built at import.
+const pinned = vi.hoisted(() => {
+  const tz = process.env.TZ;
+  const Original = Intl.DateTimeFormat;
+  process.env.TZ = "UTC";
+  const Pinned = function (
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return new Original(locales ?? "en-GB", options);
+  } as unknown as typeof Intl.DateTimeFormat;
+  Pinned.supportedLocalesOf = (locales, options) =>
+    Original.supportedLocalesOf(locales, options);
+  Intl.DateTimeFormat = Pinned;
+  return { tz, Original };
+});
+
+afterAll(() => {
+  Intl.DateTimeFormat = pinned.Original;
+  if (pinned.tz === undefined) delete process.env.TZ;
+  else process.env.TZ = pinned.tz;
+});
+
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   investigation: undefined as { question: string; context: string } | undefined,
+  tooltips: [] as string[],
 }));
 
 vi.mock("./api", async (original) => ({
@@ -39,7 +63,12 @@ vi.mock("./AskAiButton", () => ({
     return null;
   },
 }));
-vi.mock("./HealthBarChart", () => ({ HealthBarChart: () => null }));
+vi.mock("./HealthBarChart", () => ({
+  HealthBarChart: ({ tooltipLabels }: { tooltipLabels: string[] }) => {
+    state.tooltips = tooltipLabels;
+    return null;
+  },
+}));
 
 const NOW = new Date("2026-11-20T12:00:00Z");
 const noop = (): void => {};
@@ -54,6 +83,7 @@ const PROBLEM: SuspectedProblem = {
   scope: { kind: "server", id: "srv_1", name: "Linear" },
   rule: "same_server",
   part: "service",
+  whoFixes: "admin",
   filters: {
     from: "2026-11-20T09:45:00Z",
     outcomes: ["failed"],
@@ -132,13 +162,13 @@ const DETAIL: SuspectedProblemDetail = {
   ],
 };
 
-function renderSheet() {
+function renderSheet(now: Date = NOW) {
   render(
     <MemoryRouter>
       <ProblemDetailSheet
         id="abc"
         providerId="prov_1"
-        now={NOW}
+        now={now}
         onClose={noop}
       />
     </MemoryRouter>,
@@ -147,17 +177,10 @@ function renderSheet() {
 
 describe("SuspectedProblems", () => {
   afterEach(cleanup);
-  const EMPTY = "No suspected problems signing in right now.";
 
   it("lists API problems with the rule and no sample badge", () => {
     render(
-      <SuspectedProblems
-        query={listed([PROBLEM])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+      <SuspectedProblems query={listed([PROBLEM])} now={NOW} onOpen={noop} />,
     );
     expect(
       screen.getByText(/2 people can't connect to Linear since/),
@@ -172,8 +195,6 @@ describe("SuspectedProblems", () => {
         query={listed([PROBLEM], { problemsTotal: 140 })}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText("Suspected problems · 140")).toBeTruthy();
@@ -186,24 +207,38 @@ describe("SuspectedProblems", () => {
         query={listed([{ ...PROBLEM, peopleOnServerCount: 1 }])}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText(/1 on this server · 2 in all/)).toBeTruthy();
   });
 
-  it("says when there is nothing", () => {
-    render(
-      <SuspectedProblems
-        query={listed([])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+  it("renders nothing, not even the note, when there are no problems", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([])}
+          now={NOW}
+          onOpen={noop}
+          note={<ServiceProblemsNote serversHref="/servers" />}
+        />
+      </MemoryRouter>,
     );
-    expect(screen.getByText(EMPTY)).toBeTruthy();
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows the note only under a panel that lists problems", () => {
+    render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([PROBLEM])}
+          now={NOW}
+          onOpen={noop}
+          note={<ServiceProblemsNote serversHref="/servers" />}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
+    expect(screen.getByText(/Problems with a service show/)).toBeTruthy();
   });
 
   it("shows nothing with logging off or to someone who reads only their own logs", () => {
@@ -216,8 +251,6 @@ describe("SuspectedProblems", () => {
           query={listed([PROBLEM], more)}
           now={NOW}
           onOpen={noop}
-          empty={EMPTY}
-          expectVisible
         />,
       );
       expect(container.textContent).toBe("");
@@ -225,74 +258,79 @@ describe("SuspectedProblems", () => {
     }
   });
 
-  it("reserves space while loading only when the page already knew the panel will show", () => {
+  it("reserves no space while loading, so an empty result moves nothing", () => {
     const pending = {
       data: undefined,
       isPending: true,
       isError: false,
       error: null,
     };
-    // Unknown viewer: nothing while loading, even if the viewer becomes known mid-load.
-    const unknown = render(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible={false}
-      />,
+    const note = <ServiceProblemsNote serversHref="/servers" />;
+    // First visit without problems: nothing while loading, nothing after.
+    const first = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={pending}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
-    expect(unknown.container.innerHTML).toBe("");
-    unknown.rerender(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+    expect(first.container.innerHTML).toBe("");
+    first.rerender(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([])}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
-    expect(unknown.container.innerHTML).toBe("");
-    // Settled: the panel in one move.
-    unknown.rerender(
-      <SuspectedProblems
-        query={listed([PROBLEM])}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
+    expect(first.container.innerHTML).toBe("");
+    cleanup();
+    // First visit with problems: nothing while loading, then the panel in one move.
+    const second = render(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={pending}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
+    );
+    expect(second.container.innerHTML).toBe("");
+    second.rerender(
+      <MemoryRouter>
+        <SuspectedProblems
+          query={listed([PROBLEM])}
+          now={NOW}
+          onOpen={noop}
+          note={note}
+        />
+      </MemoryRouter>,
     );
     expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
-    cleanup();
-    // Known viewer: the panel's header and one row hold its place.
-    render(
-      <SuspectedProblems
-        query={pending}
-        now={NOW}
-        onOpen={noop}
-        empty={EMPTY}
-        expectVisible
-      />,
-    );
-    expect(screen.getByText("Suspected problems")).toBeTruthy();
-    expect(screen.getByLabelText("Loading suspected problems")).toBeTruthy();
+    expect(screen.queryByLabelText("Loading suspected problems")).toBeNull();
   });
 
-  it("does not point someone who reads only their own logs at server pages", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <ServiceProblemsNote viewerScope="own" serversHref="/servers" />
-      </MemoryRouter>,
+  it("shows a cached list at once and nothing for a cached empty one", () => {
+    // A revisit is not pending: the cached result renders while it refreshes.
+    const cached = (problems: SuspectedProblem[]) => ({
+      ...listed(problems),
+      isPending: false,
+    });
+    const withProblems = render(
+      <SuspectedProblems query={cached([PROBLEM])} now={NOW} onOpen={noop} />,
     );
-    expect(container.textContent).toBe("");
-    cleanup();
-    render(
-      <MemoryRouter>
-        <ServiceProblemsNote viewerScope="all" serversHref="/servers" />
-      </MemoryRouter>,
+    expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
+    withProblems.unmount();
+    const empty = render(
+      <SuspectedProblems query={cached([])} now={NOW} onOpen={noop} />,
     );
-    expect(screen.getByText(/Problems with a service show/)).toBeTruthy();
+    expect(empty.container.innerHTML).toBe("");
   });
 
   it("says when it could not load", () => {
@@ -306,8 +344,6 @@ describe("SuspectedProblems", () => {
         }}
         now={NOW}
         onOpen={noop}
-        empty={EMPTY}
-        expectVisible
       />,
     );
     expect(screen.getByText("Couldn't load suspected problems")).toBeTruthy();
@@ -317,6 +353,7 @@ describe("SuspectedProblems", () => {
 describe("ProblemDetailSheet", () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     state.query = {};
   });
 
@@ -386,6 +423,136 @@ describe("ProblemDetailSheet", () => {
     expect(
       screen.getByText(/Failed attempts in the last 24 hours/),
     ).toBeTruthy();
+  });
+
+  it("says in a sentence where the failures came from", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...DETAIL, source: "speakeasy_setting" },
+      },
+    };
+    renderSheet();
+    expect(
+      screen.getByText("A Speakeasy admin should look into these failures."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/a speakeasy setting/)).toBeNull();
+  });
+
+  it("dates times from another day and shows only the time today", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          since: "2026-11-18T09:00:00Z",
+          lastFailedAt: "2026-11-19T22:05:00Z",
+          people: [
+            { ...person("old"), firstFailedAt: "2026-11-18T10:00:00Z" },
+            { ...person("new"), firstFailedAt: "2026-11-20T10:00:00Z" },
+          ],
+        },
+      },
+    };
+    renderSheet();
+    const started = screen
+      .getAllByText(/^started /)
+      .map((el) => el.textContent);
+    expect(started).toEqual(["started 18 Nov, 10:00", "started 10:00"]);
+    expect(screen.getByText(/latest failure 19 Nov, 22:05/)).toBeTruthy();
+  });
+
+  it("dates against the day the sheet renders, not the day the page opened", () => {
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-20T00:30:00Z"),
+    });
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          since: "2026-11-19T21:00:00Z",
+          lastFailedAt: "2026-11-19T22:00:00Z",
+          failedPer10Minutes: [
+            { start: "2026-11-19T23:50:00Z", attempts: 2 },
+            { start: "2026-11-20T00:10:00Z", attempts: 1 },
+          ],
+        },
+      },
+    };
+    renderSheet(new Date("2026-11-19T23:00:00Z"));
+    expect(
+      screen.getByText(/Since 19 Nov, 21:00 · latest failure 19 Nov, 22:00/),
+    ).toBeTruthy();
+    expect(state.tooltips).toEqual(["19 Nov, 23:50", "00:10"]);
+  });
+
+  it("names the app only when every person is listed and shows it", () => {
+    const app = {
+      ...DETAIL,
+      source: "app" as const,
+      people: [person("a"), person("b")],
+    };
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...app, peopleTotal: 2 },
+      },
+    };
+    renderSheet();
+    expect(
+      screen.getByText("These failures point to the app (Claude Code 2.1.4)."),
+    ).toBeTruthy();
+    cleanup();
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...app, peopleTotal: 3 },
+      },
+    };
+    renderSheet();
+    expect(screen.getByText("These failures point to the app.")).toBeTruthy();
+  });
+
+  it("does not name an app when two people use different apps", () => {
+    const unlisted = (appKey: string) => ({
+      ...person(appKey),
+      apps: [{ family: "", name: "Unlisted app", appKey }],
+    });
+    for (const people of [
+      [
+        person("a"),
+        {
+          ...person("b"),
+          apps: [{ family: "cursor", name: "Cursor", version: "2.0.1" }],
+        },
+      ],
+      [unlisted("one"), unlisted("two")],
+    ]) {
+      state.query = {
+        data: {
+          loggingEnabled: true,
+          viewerScope: "all",
+          found: true,
+          problem: { ...DETAIL, source: "app", people, peopleTotal: 2 },
+        },
+      };
+      renderSheet();
+      expect(screen.getByText("These failures point to the app.")).toBeTruthy();
+      cleanup();
+    }
   });
 
   it("says the counts are wider when the filters had to be", () => {

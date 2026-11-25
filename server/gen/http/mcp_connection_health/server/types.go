@@ -189,7 +189,8 @@ type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool   `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
 	ViewerScope    string `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
-	// At most 100, most people first.
+	// At most 100. Problems each person fixes themselves come last; most people
+	// first within each group.
 	Problems []*SuspectedProblemResponseBody `form:"problems" json:"problems" xml:"problems"`
 	// Problems before the cap.
 	ProblemsTotal int64 `form:"problems_total" json:"problems_total" xml:"problems_total"`
@@ -1901,10 +1902,11 @@ type ConnectionDeniedClientResponseBody struct {
 type SuspectedProblemResponseBody struct {
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    string                             `form:"id" json:"id" xml:"id"`
-	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
-	Part  string                             `form:"part" json:"part" xml:"part"`
-	Scope *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
+	ID       string                             `form:"id" json:"id" xml:"id"`
+	Rule     string                             `form:"rule" json:"rule" xml:"rule"`
+	Part     string                             `form:"part" json:"part" xml:"part"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
+	Scope    *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
 	// When its earliest failure ended.
 	Since        string `form:"since" json:"since" xml:"since"`
 	LastFailedAt string `form:"last_failed_at" json:"last_failed_at" xml:"last_failed_at"`
@@ -1983,10 +1985,11 @@ type SuspectedProblemDetailResponseBody struct {
 	CountsWidened bool `form:"counts_widened" json:"counts_widened" xml:"counts_widened"`
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    string                             `form:"id" json:"id" xml:"id"`
-	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
-	Part  string                             `form:"part" json:"part" xml:"part"`
-	Scope *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
+	ID       string                             `form:"id" json:"id" xml:"id"`
+	Rule     string                             `form:"rule" json:"rule" xml:"rule"`
+	Part     string                             `form:"part" json:"part" xml:"part"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
+	Scope    *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
 	// When its earliest failure ended.
 	Since        string `form:"since" json:"since" xml:"since"`
 	LastFailedAt string `form:"last_failed_at" json:"last_failed_at" xml:"last_failed_at"`

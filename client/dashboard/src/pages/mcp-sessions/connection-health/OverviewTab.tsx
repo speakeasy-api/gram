@@ -23,7 +23,6 @@ import {
   useConnectionAttempts,
   useDeniedClients,
   useRangeClock,
-  useKnownViewer,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -104,7 +103,6 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
-  const known = useKnownViewer();
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -123,23 +121,19 @@ export function OverviewTab({
 
   return (
     <div className="space-y-10 pb-8">
-      <div className="space-y-3">
-        <SuspectedProblems
-          query={problems}
-          now={now}
-          onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-          rule={SIGN_IN_PROBLEMS_RULE}
-          empty="No suspected problems signing in right now."
-          expectVisible={
-            known?.loggingEnabled === true && known.viewerScope === "all"
-          }
-        />
-
-        <ServiceProblemsNote
-          viewerScope={problems.data?.viewerScope ?? known?.viewerScope}
-          serversHref={routes.mcpSessions.provider.mcpServers.href(providerId)}
-        />
-      </div>
+      <SuspectedProblems
+        query={problems}
+        now={now}
+        onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+        rule={SIGN_IN_PROBLEMS_RULE}
+        note={
+          <ServiceProblemsNote
+            serversHref={routes.mcpSessions.provider.mcpServers.href(
+              providerId,
+            )}
+          />
+        }
+      />
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 

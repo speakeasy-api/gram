@@ -36,6 +36,15 @@ export const SIGN_IN_STEPS: readonly StepGroup[] = [
 /** Signing in to Speakeasy, or connecting to the service behind a server. */
 export type ProblemPart = "speakeasy" | "service";
 
+/** Who has to fix a suspected problem, unknown when that is not known. */
+export type WhoFixes =
+  | "person"
+  | "admin"
+  | "provider"
+  | "app"
+  | "speakeasy"
+  | "unknown";
+
 /** The party that returned a failure. */
 export type Source =
   | "service"
@@ -271,6 +280,8 @@ export interface SuspectedProblem {
   rule: ProblemRule;
   /** Whether the failures are signing in to Speakeasy or connecting to the service. */
   part: ProblemPart;
+  /** Older servers do not send it. */
+  whoFixes?: WhoFixes;
   /** Opens Connection Logs with exactly this item's rows. */
   filters: { from: string } & AttemptFilters;
 }
@@ -278,7 +289,7 @@ export interface SuspectedProblem {
 export interface ListSuspectedProblemsResponse {
   loggingEnabled: boolean;
   viewerScope: ViewerScope;
-  /** At most 100, most people first. */
+  /** At most 100. Problems each person fixes themselves come last; most people first within each group. */
   problems: SuspectedProblem[];
   /** Problems before the cap. */
   problemsTotal: number;

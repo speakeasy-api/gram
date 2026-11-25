@@ -463,6 +463,12 @@ var ProblemRule = Type("SuspectedProblemRule", String, func() {
 	Meta("openapi:extension:x-speakeasy-name-override", "SuspectedProblemRule")
 })
 
+var ProblemWhoFixes = Type("SuspectedProblemWhoFixes", String, func() {
+	Description("Who has to fix it, unknown when that is not known.")
+	Enum("person", "admin", "provider", "app", "speakeasy", "unknown")
+	Meta("openapi:extension:x-speakeasy-name-override", "SuspectedProblemWhoFixes")
+})
+
 var ProblemScope = Type("SuspectedProblemScope", func() {
 	Attribute("kind", String, func() { Enum("server", "service", "app_version", "person") })
 	Attribute("id", String, "The server id, service host, family@version or subject URN.")
@@ -481,6 +487,7 @@ var Problem = Type("SuspectedProblem", func() {
 	Attribute("id", String, "Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.")
 	Attribute("rule", ProblemRule)
 	Attribute("part", ProblemPart)
+	Attribute("who_fixes", ProblemWhoFixes)
 	Attribute("scope", ProblemScope)
 	Attribute("since", String, "When its earliest failure ended.", func() { Format(FormatDateTime) })
 	Attribute("last_failed_at", String, func() { Format(FormatDateTime) })
@@ -549,7 +556,7 @@ var ProblemDetail = Type("SuspectedProblemDetail", func() {
 
 var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
 	loggingEnabled()
-	Attribute("problems", ArrayOf(Problem), "At most 100, most people first.")
+	Attribute("problems", ArrayOf(Problem), "At most 100. Problems each person fixes themselves come last; most people first within each group.")
 	Attribute("problems_total", Int64, "Problems before the cap.")
 	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })

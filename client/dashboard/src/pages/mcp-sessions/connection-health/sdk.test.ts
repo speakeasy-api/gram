@@ -1,6 +1,7 @@
 // @vitest-environment node
 import type { GramCore } from "@gram/client/core.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { suspectedProblemFromJSON } from "@gram/client/models/components/suspectedproblem.js";
 import { listAttempts } from "./sdk";
 
 const call = vi.hoisted(() => ({ request: undefined as unknown }));
@@ -67,5 +68,25 @@ describe("listAttempts", () => {
       source: "server",
       member: { name: "Linear" },
     });
+  });
+});
+
+describe("suspected problems from a server that does not send who fixes them", () => {
+  it("still decode", () => {
+    const older = {
+      id: "p1",
+      rule: "same_server",
+      part: "speakeasy",
+      scope: { kind: "server", id: "srv_1", name: "Linear" },
+      since: "2026-11-20T10:00:00Z",
+      last_failed_at: "2026-11-20T11:50:00Z",
+      people_count: 2,
+      headline: "2 people can't sign in to Linear",
+      fact: "The app's sign-in to Speakeasy fails.",
+      filters: { from: "2026-11-20T09:45:00Z" },
+    };
+    const parsed = suspectedProblemFromJSON(JSON.stringify(older));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value.suspectedProblemWhoFixes).toBeUndefined();
   });
 });

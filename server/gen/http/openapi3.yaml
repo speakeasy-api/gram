@@ -124918,7 +124918,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblem'
-                    description: At most 100, most people first.
+                    description: At most 100. Problems each person fixes themselves come last; most people first within each group.
                 problems_total:
                     type: integer
                     description: Problems before the cap.
@@ -140757,6 +140757,17 @@ components:
                     type: string
                     description: When its earliest failure ended.
                     format: date-time
+                who_fixes:
+                    description: Who has to fix it, unknown when that is not known.
+                    enum:
+                        - person
+                        - admin
+                        - provider
+                        - app
+                        - speakeasy
+                        - unknown
+                    type: string
+                    x-speakeasy-name-override: SuspectedProblemWhoFixes
             required:
                 - id
                 - rule
@@ -140879,6 +140890,17 @@ components:
                         - speakeasy
                     type: string
                     x-speakeasy-name-override: ConnectionFailureSource
+                who_fixes:
+                    description: Who has to fix it, unknown when that is not known.
+                    enum:
+                        - person
+                        - admin
+                        - provider
+                        - app
+                        - speakeasy
+                        - unknown
+                    type: string
+                    x-speakeasy-name-override: SuspectedProblemWhoFixes
             required:
                 - failed_per_10_minutes
                 - other_failures_on_service
