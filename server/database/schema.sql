@@ -2353,8 +2353,10 @@ COMMENT ON COLUMN functions_access.project_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.deployment_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.function_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.organization_id IS '@access: confidential';
-COMMENT ON COLUMN functions_access.encryption_key IS '@access: secret-restricted';
-COMMENT ON COLUMN functions_access.encryption_key_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN functions_access.encryption_key IS 'Function runner key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is encryption_key_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN functions_access.encryption_key_org_encrypted IS 'Function runner key, encrypted with the organization''s data encryption key (DEK) for the ''function-runner-keys'' use case. SQL cannot read it. The platform-key copy is encryption_key.
+@access: secret-restricted';
 COMMENT ON COLUMN functions_access.bearer_format IS '@access: confidential';
 COMMENT ON COLUMN functions_access.created_at IS '@access: confidential';
 COMMENT ON COLUMN functions_access.updated_at IS '@access: confidential';
@@ -2703,7 +2705,8 @@ CREATE TABLE IF NOT EXISTS environment_entries (
 );
 
 COMMENT ON COLUMN environment_entries.name IS '@access: confidential';
-COMMENT ON COLUMN environment_entries.value IS '@access: secret-restricted';
+COMMENT ON COLUMN environment_entries.value IS 'Environment entry value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
+@access: secret-restricted';
 COMMENT ON COLUMN environment_entries.is_secret IS '@access: confidential';
 COMMENT ON COLUMN environment_entries.environment_id IS '@access: confidential';
 COMMENT ON COLUMN environment_entries.created_at IS '@access: confidential';
@@ -2901,8 +2904,10 @@ COMMENT ON COLUMN network_ingresses.endpoint_namespace_kind IS '@access: confide
 COMMENT ON COLUMN network_ingresses.custom_domain_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.enabled IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.identity_required IS '@access: confidential';
-COMMENT ON COLUMN network_ingresses.credentials_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN network_ingresses.credentials_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingresses.credentials_encrypted IS 'Tailscale OAuth client credential document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is credentials_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN network_ingresses.credentials_org_encrypted IS 'Tailscale OAuth client credential document, encrypted with the organization''s data encryption key (DEK) for the ''tailscale-oauth-clients'' use case. SQL cannot read it. The platform-key copy is credentials_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN network_ingresses.attestor_namespace IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.attestor_service_account IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.provider_resources IS '@access: confidential';
@@ -2969,7 +2974,7 @@ CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   -- Last gateway pod that heartbeated this slot. Informational only.
   pod_name TEXT,
   -- One-shot, preauthorized, tagged auth key minted by the reconciler and
-  -- encrypted by the application. Cleared once the node has persisted state.
+  -- encrypted with the organization's key. Cleared once the node has persisted state.
   auth_key_encrypted TEXT,
   auth_key_expires_at timestamptz,
   -- pending | starting | online | draining | error | stopped | needs_login | awaiting_approval | awaiting_certificate (app-validated)
@@ -2998,7 +3003,8 @@ COMMENT ON COLUMN network_ingress_nodes.network_ingress_id IS '@access: confiden
 COMMENT ON COLUMN network_ingress_nodes.organization_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_nodes.slot IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_nodes.pod_name IS '@access: confidential';
-COMMENT ON COLUMN network_ingress_nodes.auth_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingress_nodes.auth_key_encrypted IS 'Tailscale auth key for the gateway node, encrypted with the organization''s data encryption key (DEK) for the ''tailscale-gateway-state'' use case. SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN network_ingress_nodes.auth_key_expires_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_nodes.status IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_nodes.node_id IS '@access: restricted';
@@ -3018,7 +3024,7 @@ ON network_ingress_nodes (organization_id);
 
 -- Persisted tsnet node state (machine key, node key, profiles) for one
 -- (ingress, slot), so gateway pods reconnect as the same device instead of
--- registering a new one. Values are encrypted by the application.
+-- registering a new one. Values are encrypted with the organization's key.
 CREATE TABLE IF NOT EXISTS network_ingress_node_states (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   network_ingress_id uuid NOT NULL,
@@ -3040,7 +3046,8 @@ COMMENT ON COLUMN network_ingress_node_states.network_ingress_id IS '@access: co
 COMMENT ON COLUMN network_ingress_node_states.organization_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_node_states.slot IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_node_states.state_key IS '@access: confidential';
-COMMENT ON COLUMN network_ingress_node_states.value_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingress_node_states.value_encrypted IS 'Tailscale node state value, encrypted with the organization''s data encryption key (DEK) for the ''tailscale-gateway-state'' use case. SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN network_ingress_node_states.created_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_node_states.updated_at IS '@access: confidential';
 
@@ -3070,7 +3077,7 @@ COMMENT ON COLUMN network_ingress_certificate_states.network_ingress_id IS '@acc
 COMMENT ON COLUMN network_ingress_certificate_states.organization_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_certificate_states.state_key IS 'tsnet certificate state key: "<domain>.crt", "<domain>.key" or the ACME account key name.
 @access: confidential';
-COMMENT ON COLUMN network_ingress_certificate_states.value_encrypted IS 'Certificate, private key or ACME account key, encrypted under the organization''s key.
+COMMENT ON COLUMN network_ingress_certificate_states.value_encrypted IS 'Certificate, private key or ACME account key, encrypted with the organization''s data encryption key (DEK) for the ''tailscale-gateway-state'' use case. SQL cannot read it.
 @access: secret-restricted';
 COMMENT ON COLUMN network_ingress_certificate_states.created_at IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_certificate_states.updated_at IS '@access: confidential';
@@ -3795,7 +3802,8 @@ COMMENT ON COLUMN data_encryption_key_wraps.organization_id IS '@access: confide
 COMMENT ON COLUMN data_encryption_key_wraps.data_encryption_key_id IS '@access: confidential';
 COMMENT ON COLUMN data_encryption_key_wraps.external_key_id IS '@access: confidential';
 COMMENT ON COLUMN data_encryption_key_wraps.external_key_version IS '@access: restricted';
-COMMENT ON COLUMN data_encryption_key_wraps.wrapped_key IS '@access: secret-restricted';
+COMMENT ON COLUMN data_encryption_key_wraps.wrapped_key IS 'The organization''s data encryption key (DEK), wrapped by the KMS key encryption key (KEK) named in external_key_id. Only that KMS key can unwrap it; SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN data_encryption_key_wraps.last_unwrapped_at IS '@access: confidential';
 COMMENT ON COLUMN data_encryption_key_wraps.created_at IS '@access: confidential';
 COMMENT ON COLUMN data_encryption_key_wraps.updated_at IS '@access: confidential';
@@ -4519,8 +4527,10 @@ COMMENT ON COLUMN remote_session_clients.attachment_scope IS '@access: confident
 COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
 COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
-COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN remote_session_clients.client_secret_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS 'Upstream OAuth client secret, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is client_secret_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN remote_session_clients.client_secret_org_encrypted IS 'Upstream OAuth client secret, encrypted with the organization''s data encryption key (DEK) for the ''oauth-client-secrets'' use case. SQL cannot read it. The platform-key copy is client_secret_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN remote_session_clients.client_secret_generation IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
@@ -6251,21 +6261,29 @@ COMMENT ON COLUMN trusted_issuer_sessions.remote_session_client_id IS '@access: 
 COMMENT ON COLUMN trusted_issuer_sessions.organization_id IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.project_id IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.subject_urn IS '@access: confidential';
-COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_encrypted IS 'Upstream identity assertion, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is identity_assertion_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_org_encrypted IS 'Upstream identity assertion, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is identity_assertion_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_expires_at IS '@access: confidential';
-COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_encrypted IS 'Upstream refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_org_encrypted IS 'Upstream refresh token, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.last_refresh_attempt_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.offline_access_refused_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.offline_access_request_config_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.credential_generation IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.refresh_claim_id IS '@access: confidential';
-COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_org_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN trusted_issuer_sessions.nonce_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN trusted_issuer_sessions.nonce_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_encrypted IS 'Upstream subject, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is upstream_subject_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_org_encrypted IS 'Upstream subject, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is upstream_subject_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.nonce_encrypted IS 'Original login nonce, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is nonce_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.nonce_org_encrypted IS 'Original login nonce, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is nonce_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.credential_config_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.observation_status IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.observed_at IS '@access: confidential';
@@ -6420,11 +6438,15 @@ COMMENT ON COLUMN remote_sessions.subject_urn IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.remote_session_client_id IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.organization_id IS '@access: confidential';
-COMMENT ON COLUMN remote_sessions.access_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN remote_sessions.access_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.access_token_encrypted IS 'Upstream OAuth access token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is access_token_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.access_token_org_encrypted IS 'Upstream OAuth access token, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is access_token_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN remote_sessions.access_expires_at IS '@access: confidential';
-COMMENT ON COLUMN remote_sessions.refresh_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN remote_sessions.refresh_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.refresh_token_encrypted IS 'Upstream OAuth refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.refresh_token_org_encrypted IS 'Upstream OAuth refresh token, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN remote_sessions.authorization_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.scopes IS '@access: opaque-restricted';
@@ -6725,8 +6747,10 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
 COMMENT ON COLUMN openrouter_api_keys.organization_id IS '@access: confidential';
 COMMENT ON COLUMN openrouter_api_keys.key_type IS '@access: confidential';
 COMMENT ON COLUMN openrouter_api_keys.key IS '@access: secret-restricted';
-COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN openrouter_api_keys.key_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS 'Upstream OpenRouter API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is key_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_org_encrypted IS 'Upstream OpenRouter API key, encrypted with the organization''s data encryption key (DEK) for the ''ai-provider-keys'' use case. SQL cannot read it. The platform-key copy is key_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.monthly_credits IS '@access: restricted';
 COMMENT ON COLUMN openrouter_api_keys.disabled IS '@access: confidential';
@@ -7231,18 +7255,22 @@ COMMENT ON COLUMN chat_messages.seq IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.chat_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.project_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.role IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.content IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.content_raw IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.content IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.content_raw IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_asset_url IS 'Asset path of the stored message content; its file name is a digest of that content.
 @access: restricted';
 COMMENT ON COLUMN chat_messages.model IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.message_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.finish_reason IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.tool_calls IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.tool_calls IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.prompt_tokens IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.completion_tokens IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.total_tokens IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.storage_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.storage_error IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.user_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.external_user_id IS '@access: confidential-pii';
 COMMENT ON COLUMN chat_messages.external_message_id IS '@access: confidential';
@@ -7253,8 +7281,10 @@ COMMENT ON COLUMN chat_messages.source IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_call_id IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_urn IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.tool_outcome IS '@access: confidential';
-COMMENT ON COLUMN chat_messages.tool_outcome_notes IS '@access: opaque-restricted';
-COMMENT ON COLUMN chat_messages.tool_call_summaries IS '@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.tool_outcome_notes IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_messages.tool_call_summaries IS 'Projects on the transcript shadow allowlist also get an organization-key encrypted copy in chat_message_transcripts.ciphertext; during shadow mode this plaintext column stays the source.
+@access: opaque-restricted';
 COMMENT ON COLUMN chat_messages.content_hash IS 'SHA-256 digest of the message content. Reveals when two messages have equal content.
 @access: restricted';
 COMMENT ON COLUMN chat_messages.generation IS '@access: confidential';
@@ -7293,9 +7323,9 @@ COMMENT ON COLUMN chat_message_transcripts.project_id IS 'Owning project identit
 @access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organization identity.
 @access: confidential';
-COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
+COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Encrypted copy of one chat_messages row: content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and storage_error, encrypted with the organization''s data encryption key (DEK) for the ''chat-transcripts'' use case and bound to the project, chat and message ids. SQL cannot read it; during shadow mode the plaintext chat_messages columns stay the source.
 @access: opaque-restricted';
-COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed SHA-256 digest of the mirrored chat_messages fields, used to detect a stale copy. Not ciphertext: anyone with the plaintext can recompute it.
 @access: opaque-restricted';
 COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
@@ -8413,7 +8443,8 @@ COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.organization_id IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.slack_team_id IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.slack_team_name IS '@access: confidential';
-COMMENT ON COLUMN slack_directory_connections.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN slack_directory_connections.credentials_encrypted IS 'Versioned Slack token bundle, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN slack_directory_connections.granted_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN slack_directory_connections.generation IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.health IS '@access: confidential';
@@ -9692,7 +9723,8 @@ COMMENT ON COLUMN otel_forwarding_configs.created_at IS '@access: confidential';
 COMMENT ON COLUMN otel_forwarding_configs.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN otel_forwarding_configs.updated_at IS '@access: confidential';
 COMMENT ON COLUMN otel_forwarding_configs.endpoint_url IS '@access: restricted';
-COMMENT ON COLUMN otel_forwarding_configs.headers_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN otel_forwarding_configs.headers_encrypted IS 'Named for encrypted headers, but no Speakeasy code reads or writes this table. Treat any value as unreadable secret material.
+@access: secret-restricted';
 COMMENT ON COLUMN otel_forwarding_configs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN otel_forwarding_configs.project_id IS '@access: confidential';
 COMMENT ON COLUMN otel_forwarding_configs.enabled IS '@access: confidential';
@@ -9736,7 +9768,8 @@ COMMENT ON COLUMN otel_destinations.organization_id IS '@access: confidential';
 COMMENT ON COLUMN otel_destinations.project_id IS '@access: confidential';
 COMMENT ON COLUMN otel_destinations.name IS '@access: confidential';
 COMMENT ON COLUMN otel_destinations.endpoint_url IS '@access: restricted';
-COMMENT ON COLUMN otel_destinations.headers_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN otel_destinations.headers_encrypted IS 'Destination request headers as JSON, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN otel_destinations.sensitive_data IS '@access: confidential';
 COMMENT ON COLUMN otel_destinations.created_at IS '@access: confidential';
 COMMENT ON COLUMN otel_destinations.updated_at IS '@access: confidential';
@@ -9868,8 +9901,10 @@ COMMENT ON COLUMN ai_integration_configs.organization_id IS '@access: confidenti
 COMMENT ON COLUMN ai_integration_configs.provider IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.project_id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.external_organization_id IS '@access: restricted';
-COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN ai_integration_configs.api_key_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS 'AI provider API key or webhook signing-secret JSON, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is api_key_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_org_encrypted IS 'AI provider API key or webhook signing-secret JSON, encrypted with the organization''s data encryption key (DEK) for the ''ai-provider-keys'' use case. SQL cannot read it. The platform-key copy is api_key_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
@@ -10445,7 +10480,8 @@ COMMENT ON COLUMN remote_mcp_server_headers.name IS '@access: confidential';
 COMMENT ON COLUMN remote_mcp_server_headers.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_mcp_server_headers.is_required IS '@access: confidential';
 COMMENT ON COLUMN remote_mcp_server_headers.is_secret IS '@access: confidential';
-COMMENT ON COLUMN remote_mcp_server_headers.value IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_mcp_server_headers.value IS 'Static header value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
+@access: secret-restricted';
 COMMENT ON COLUMN remote_mcp_server_headers.value_from_request_header IS '@access: confidential';
 COMMENT ON COLUMN remote_mcp_server_headers.created_at IS '@access: confidential';
 COMMENT ON COLUMN remote_mcp_server_headers.updated_at IS '@access: confidential';
@@ -10840,7 +10876,8 @@ COMMENT ON COLUMN mcp_auth_client_github_apps.organization_id IS '@access: confi
 COMMENT ON COLUMN mcp_auth_client_github_apps.instance_url IS '@access: restricted';
 COMMENT ON COLUMN mcp_auth_client_github_apps.app_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_github_apps.installation_id IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_client_github_apps.private_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN mcp_auth_client_github_apps.private_key_encrypted IS 'Named for an encrypted GitHub App private key, but no Speakeasy code writes this table yet. Treat any value as unreadable secret material.
+@access: secret-restricted';
 COMMENT ON COLUMN mcp_auth_client_github_apps.upstream_origin IS '@access: restricted';
 COMMENT ON COLUMN mcp_auth_client_github_apps.credential_version IS '@access: confidential';
 
@@ -10906,7 +10943,8 @@ COMMENT ON COLUMN mcp_auth_client_headers.name IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_headers.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN mcp_auth_client_headers.is_required IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_headers.is_secret IS '@access: confidential';
-COMMENT ON COLUMN mcp_auth_client_headers.value IS '@access: secret-restricted';
+COMMENT ON COLUMN mcp_auth_client_headers.value IS 'Static header value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
+@access: secret-restricted';
 COMMENT ON COLUMN mcp_auth_client_headers.value_from_request_header IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_headers.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_auth_client_headers.updated_at IS '@access: confidential';
@@ -11709,7 +11747,8 @@ COMMENT ON COLUMN assistant_mcp_oauth_clients.assistant_id IS '@access: confiden
 COMMENT ON COLUMN assistant_mcp_oauth_clients.oauth_server_issuer IS '@access: restricted';
 COMMENT ON COLUMN assistant_mcp_oauth_clients.redirect_uri IS '@access: confidential';
 COMMENT ON COLUMN assistant_mcp_oauth_clients.client_id IS '@access: restricted';
-COMMENT ON COLUMN assistant_mcp_oauth_clients.client_secret_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN assistant_mcp_oauth_clients.client_secret_encrypted IS 'Client secret from MCP OAuth dynamic client registration, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN assistant_mcp_oauth_clients.client_secret_expires_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_mcp_oauth_clients.client_id_metadata_uri IS '@access: confidential';
 COMMENT ON COLUMN assistant_mcp_oauth_clients.registration_owner IS '@access: confidential';
@@ -11964,8 +12003,10 @@ COMMENT ON COLUMN plugin_github_connections.repo_name IS '@access: confidential'
 COMMENT ON COLUMN plugin_github_connections.marketplace_token IS '@access: secret-restricted';
 COMMENT ON COLUMN plugin_github_connections.organization_id IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.marketplace_token_hash IS '@access: secret-restricted';
-COMMENT ON COLUMN plugin_github_connections.marketplace_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN plugin_github_connections.marketplace_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_encrypted IS 'Plugin marketplace token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is marketplace_token_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_org_encrypted IS 'Plugin marketplace token, encrypted with the organization''s data encryption key (DEK) for the ''marketplace-tokens'' use case. SQL cannot read it. The platform-key copy is marketplace_token_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN plugin_github_connections.published_fingerprint IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_mcp_fingerprints IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access: confidential';
@@ -12547,7 +12588,8 @@ CREATE TABLE IF NOT EXISTS risk_finding_evidence (
 COMMENT ON COLUMN risk_finding_evidence.finding_id IS '@access: confidential';
 COMMENT ON COLUMN risk_finding_evidence.organization_id IS '@access: confidential';
 COMMENT ON COLUMN risk_finding_evidence.project_id IS '@access: confidential';
-COMMENT ON COLUMN risk_finding_evidence.match_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_finding_evidence.match_encrypted IS 'Matched text of an MCP risk finding, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN risk_finding_evidence.created_at IS '@access: confidential';
 COMMENT ON COLUMN risk_finding_evidence.updated_at IS '@access: confidential';
 COMMENT ON COLUMN risk_finding_evidence.expires_at IS '@access: confidential';
@@ -12575,7 +12617,8 @@ COMMENT ON COLUMN risk_execution_evidence.organization_id IS '@access: confident
 COMMENT ON COLUMN risk_execution_evidence.project_id IS '@access: confidential';
 COMMENT ON COLUMN risk_execution_evidence.execution_id IS '@access: confidential';
 COMMENT ON COLUMN risk_execution_evidence.phase IS '@access: confidential';
-COMMENT ON COLUMN risk_execution_evidence.payload_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_execution_evidence.payload_encrypted IS 'MCP execution payload, truncated, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN risk_execution_evidence.created_at IS '@access: confidential';
 COMMENT ON COLUMN risk_execution_evidence.updated_at IS '@access: confidential';
 COMMENT ON COLUMN risk_execution_evidence.expires_at IS '@access: confidential';
@@ -13937,8 +13980,10 @@ COMMENT ON COLUMN model_provider_keys.organization_id IS '@access: confidential'
 COMMENT ON COLUMN model_provider_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.slot IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.provider IS '@access: confidential';
-COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN model_provider_keys.api_key_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS 'Model provider API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is api_key_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.api_key_org_encrypted IS 'Model provider API key, encrypted with the organization''s data encryption key (DEK) for the ''ai-provider-keys'' use case. SQL cannot read it. The platform-key copy is api_key_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN model_provider_keys.enabled IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.created_at IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.updated_at IS '@access: confidential';
@@ -14170,7 +14215,8 @@ CREATE TABLE IF NOT EXISTS device_integration_configs (
 COMMENT ON COLUMN device_integration_configs.id IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.provider IS '@access: confidential';
-COMMENT ON COLUMN device_integration_configs.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN device_integration_configs.credentials_encrypted IS 'Provider-specific credential JSON document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN device_integration_configs.settings IS '@access: opaque-restricted';
 COMMENT ON COLUMN device_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN device_integration_configs.created_at IS '@access: confidential';
@@ -14803,7 +14849,8 @@ CREATE TABLE IF NOT EXISTS admin_mcp_connections (
 COMMENT ON COLUMN admin_mcp_connections.id IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_connections.subject_urn IS '@access: confidential-pii';
 COMMENT ON COLUMN admin_mcp_connections.oauth_client_id IS '@access: confidential';
-COMMENT ON COLUMN admin_mcp_connections.admin_session_id_enc IS '@access: secret-restricted';
+COMMENT ON COLUMN admin_mcp_connections.admin_session_id_enc IS 'Linked admin browser session ID, encrypted with the admin app key (GRAM_ADMIN_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN admin_mcp_connections.scopes IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_connections.resource_uri IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_connections.active_generation IS '@access: confidential';
@@ -16466,8 +16513,10 @@ COMMENT ON COLUMN remote_session_ema_credentials.auth_client_id IS '@access: con
 COMMENT ON COLUMN remote_session_ema_credentials.auth_client_attachment_scope IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.requested_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.granted_scopes IS '@access: opaque-restricted';
-COMMENT ON COLUMN remote_session_ema_credentials.access_token_encrypted IS '@access: secret-restricted';
-COMMENT ON COLUMN remote_session_ema_credentials.access_token_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_ema_credentials.access_token_encrypted IS 'Upstream access token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is access_token_org_encrypted.
+@access: secret-restricted';
+COMMENT ON COLUMN remote_session_ema_credentials.access_token_org_encrypted IS 'Upstream access token, encrypted with the organization''s data encryption key (DEK) for the ''oauth-session-tokens'' use case. SQL cannot read it. The platform-key copy is access_token_encrypted.
+@access: secret-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.access_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.downstream_refresh_token_observed IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.last_used_at IS '@access: confidential';
@@ -17407,7 +17456,8 @@ COMMENT ON COLUMN assistant_kit_gateway_credentials.id IS '@access: confidential
 COMMENT ON COLUMN assistant_kit_gateway_credentials.project_id IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.assistant_id IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.runtime_id IS '@access: confidential';
-COMMENT ON COLUMN assistant_kit_gateway_credentials.token_ciphertext IS '@access: secret-restricted';
+COMMENT ON COLUMN assistant_kit_gateway_credentials.token_ciphertext IS 'Kit gateway credential, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
+@access: secret-restricted';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_kit_gateway_credentials.updated_at IS '@access: confidential';
 
