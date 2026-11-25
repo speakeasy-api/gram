@@ -96,7 +96,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	return transcripts, nil
 }
 
-// checkTranscriptShadowSchema checks only the sidecar contract used by the store.
+// checkTranscriptShadowSchema checks the tables the store writes: the sidecar
+// and its tool-call ID table, including the metadata columns capture fills.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
 // The table is looked up through the connection's search_path, the same way
 // the store's queries resolve it: deployed databases keep it outside public.
@@ -155,11 +156,13 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
   WHERE a.attname = metadata.name AND a.atttypid = 'integer'::regtype AND NOT a.attisdropped
  ))
  AND NOT EXISTS (
- SELECT 1 FROM (VALUES ('message_id'), ('tool_call_id'), ('chat_id'), ('project_id')) AS tool_call(name)
+ SELECT 1 FROM (VALUES ('message_id', 'uuid'::regtype), ('tool_call_id', 'text'::regtype), ('chat_id', 'uuid'::regtype), ('project_id', 'uuid'::regtype)) AS tool_call(name, type_oid)
  WHERE NOT EXISTS (
   SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_class r ON r.oid = a.attrelid AND r.relkind IN ('r', 'p')
   WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
-    AND a.attname = tool_call.name AND NOT a.attisdropped
+    AND a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
+    AND a.attnotnull AND NOT a.attisdropped
  ))`).Scan(&compatible)
 	if err != nil {
 		return fmt.Errorf("check chat transcript shadow schema: %w", err)

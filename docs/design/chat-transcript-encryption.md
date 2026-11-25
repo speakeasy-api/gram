@@ -103,7 +103,7 @@ rollout, migrate those writes too and establish a fenced plaintext-removal proto
 
 `transcriptstore.Transcripts` holds the store and the capture allowlist, and is
 the one place that decides per project whether a write captures a shadow and a
-read opens one. Every method is a no-op for a project off the list, and a nil
+read opens one. `Capture` and `Open` do nothing for a project off the list, and a nil
 `Transcripts` serves no project. The writer captures through
 `Transcripts.Capture`, and readers open a page of any sqlc row type with
 `transcriptstore.OpenRows`, which maps each row to a `Body` of pointers at its

@@ -13,7 +13,7 @@ import (
 // Transcripts is the one entry point for the bodies of chat messages in
 // projects that keep encrypted shadows. It owns the decision a caller would
 // otherwise repeat: whether a project captures shadows on write and opens them
-// on read. Every other project keeps plaintext, and every method is a no-op for
+// on read. Every other project keeps plaintext: Capture and Open do nothing for
 // it. A nil *Transcripts means no project keeps shadows.
 type Transcripts struct {
 	store    *Store
@@ -37,15 +37,6 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 	}
 	_, ok := t.projects[projectID]
 	return ok
-}
-
-// Store returns the underlying store, for the backfill and other operations
-// that act on one explicit project.
-func (t *Transcripts) Store() *Store {
-	if t == nil {
-		return nil
-	}
-	return t.store
 }
 
 // Capture seals shadows for messages the caller just wrote, inside the
