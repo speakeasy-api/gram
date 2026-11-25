@@ -217,7 +217,12 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("support").String()}, People: people("ana", "mei"), Servers: serverIDs("support")},
 	}, listedProblems, "an app version takes only servers where another app worked: Claude Code on GitHub and on Notion")
 
-	// The Project Overview reads the whole project and lists the same problems, the daily refusals still none.
+	// The Project Overview lists what the seed's MCP sign-ins list between them: the health
+	// stories, and the failed refreshes of the saved Linear connection, which record its MCP sign-in.
+	linear, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.det("issuer-linear"), IssuerServerIDs: []string{s.det("mcpserver-linear").String()},
+	}, time.Time{}, now)
+	require.NoError(t, err)
 	projectWide, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
 		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false,
 	}, time.Time{}, now)
@@ -229,5 +234,5 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		}
 		return out
 	}
-	require.ElementsMatch(t, ids(got), ids(projectWide))
+	require.ElementsMatch(t, append(ids(got), ids(linear)...), ids(projectWide))
 }

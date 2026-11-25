@@ -14,13 +14,13 @@ import {
   SuspectedProblemFilters$inboundSchema,
 } from "./suspectedproblemfilters.js";
 import {
-  SuspectedProblemLinkServer,
-  SuspectedProblemLinkServer$inboundSchema,
-} from "./suspectedproblemlinkserver.js";
-import {
   SuspectedProblemScope,
   SuspectedProblemScope$inboundSchema,
 } from "./suspectedproblemscope.js";
+import {
+  SuspectedProblemServerLink,
+  SuspectedProblemServerLink$inboundSchema,
+} from "./suspectedproblemserverlink.js";
 
 /**
  * speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
@@ -105,13 +105,13 @@ export type ProjectSuspectedProblem = {
   /**
    * An MCP server whose Sessions tab lists the problem.
    */
-  server?: SuspectedProblemLinkServer | undefined;
+  server?: SuspectedProblemServerLink | undefined;
   /**
    * When its earliest failure ended.
    */
   since: Date;
   /**
-   * The MCP sign-in whose Overview and Connection Logs list the problem. Missing when no page in the project does.
+   * The MCP sign-in whose list has this problem: set only when every failure in it belongs to that one MCP sign-in, so its Overview or Connection Logs show the same problem.
    */
   userSessionIssuerId?: string | undefined;
   /**
@@ -156,7 +156,7 @@ export const ProjectSuspectedProblem$inboundSchema: z.ZodMiniType<
     people_on_server_count: z.optional(z.int()),
     rule: ProjectSuspectedProblemSuspectedProblemRule$inboundSchema,
     scope: SuspectedProblemScope$inboundSchema,
-    server: z.optional(SuspectedProblemLinkServer$inboundSchema),
+    server: z.optional(SuspectedProblemServerLink$inboundSchema),
     since: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

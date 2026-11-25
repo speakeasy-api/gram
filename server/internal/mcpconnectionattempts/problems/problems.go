@@ -626,5 +626,18 @@ func compareEpisodes(a, b mcpconnectionattempts.FailingPerson) int {
 		cmp.Compare(a.Failures, b.Failures),
 		cmp.Compare(a.ProjectID.String(), b.ProjectID.String()),
 		a.ServerLastAnsweredAt.Compare(b.ServerLastAnsweredAt),
+		slices.Compare(a.Issuers, b.Issuers),
+		compareBool(a.Unrecorded, b.Unrecorded),
 	)
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
 }

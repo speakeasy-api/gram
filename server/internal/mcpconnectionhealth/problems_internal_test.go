@@ -414,3 +414,35 @@ func TestPastDeadline_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
 	require.ErrorAs(t, s.pastDeadline(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code, "inside the budget nothing changes")
 }
+
+// Running out of time, or a read over its limits, answers unavailable once, and the deadline check keeps that answer.
+func TestUnexpected_AnswersUnavailableOncePastTheBudgetOrLimits(t *testing.T) {
+	t.Parallel()
+	s := &Service{logger: testenv.NewLogger(t)}
+	tooLarge := fmt.Errorf("read: %w", mcpconnectionattempts.ErrReadTooLarge)
+	for _, tc := range []struct {
+		name    string
+		expired bool
+		err     error
+		code    oops.Code
+	}{
+		{"past the budget", true, errors.New("stalled"), oops.CodeUnavailable},
+		{"over the read's limits", false, tooLarge, oops.CodeUnavailable},
+		{"anything else", false, errors.New("broken"), oops.CodeUnexpected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			if tc.expired {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+				t.Cleanup(cancel)
+			}
+			err := s.unexpected(ctx, tc.err, "read")
+			var shareable *oops.ShareableError
+			require.ErrorAs(t, err, &shareable)
+			require.Equal(t, tc.code, shareable.Code)
+			require.Same(t, err, s.pastDeadline(ctx, err), "not wrapped or logged again")
+		})
+	}
+}

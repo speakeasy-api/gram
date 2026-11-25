@@ -21890,7 +21890,7 @@ func mcpApprovalRecordDecisionUsage() {
 // mcpConnectionHealthUsage displays the usage of the mcp-connection-health
 // command and its subcommands.
 func mcpConnectionHealthUsage() {
-	fmt.Fprintln(os.Stderr, `Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.`)
+	fmt.Fprintln(os.Stderr, `Read MCP connection attempts, sign-in activity, sessions and suspected problems for one MCP sign-in in a project, and a project's suspected problems across its MCP sign-ins.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-connection-health COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-attempts: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.`)
@@ -21901,7 +21901,7 @@ func mcpConnectionHealthUsage() {
 	fmt.Fprintln(os.Stderr, `    list-denied-clients: List apps refused at sign-in through a provider, with the reason and the last time.`)
 	fmt.Fprintln(os.Stderr, `    list-suspected-problems: List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
 	fmt.Fprintln(os.Stderr, `    get-suspected-problem: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
-	fmt.Fprintln(os.Stderr, `    list-project-suspected-problems: List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `    list-project-suspected-problems: List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-connection-health COMMAND --help\n", os.Args[0])
@@ -22109,7 +22109,7 @@ func mcpConnectionHealthListProjectSuspectedProblemsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

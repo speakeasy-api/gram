@@ -32,7 +32,7 @@ var ViewerScope = Type("ConnectionViewerScope", String, func() {
 })
 
 var _ = Service("mcpConnectionHealth", func() {
-	Description("Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.")
+	Description("Read MCP connection attempts, sign-in activity, sessions and suspected problems for one MCP sign-in in a project, and a project's suspected problems across its MCP sign-ins.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -237,7 +237,7 @@ var _ = Service("mcpConnectionHealth", func() {
 	})
 
 	Method("listProjectSuspectedProblems", func() {
-		Description("List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.")
+		Description("List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.")
 		Payload(func() {
 			Attribute("limit", Int, "Return at most this many problems, default 100.", func() {
 				Minimum(1)
@@ -585,20 +585,20 @@ var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
 	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })
 
-var ProblemLinkServer = Type("SuspectedProblemLinkServer", func() {
+var ProblemServerLink = Type("SuspectedProblemServerLink", func() {
 	Description("An MCP server whose Sessions tab lists the problem.")
 	Attribute("id", String, func() { Format(FormatUUID) })
-	Attribute("slug", String)
-	Attribute("name", String)
+	Attribute("slug", String, "Missing when the MCP server has none.")
+	Attribute("name", String, "Missing when the MCP server has no name or slug.")
 	Required("id")
 })
 
 var ProjectProblem = Type("ProjectSuspectedProblem", func() {
 	Extend(Problem)
-	Attribute("user_session_issuer_id", String, "The MCP sign-in whose Overview and Connection Logs list the problem. Missing when no page in the project does.", func() {
+	Attribute("user_session_issuer_id", String, "The MCP sign-in whose list has this problem: set only when every failure in it belongs to that one MCP sign-in, so its Overview or Connection Logs show the same problem.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("server", ProblemLinkServer, "The first MCP server its people fail on directly. Missing when they fail only on gateways, toolsets or before reaching a server.")
+	Attribute("server", ProblemServerLink, "The MCP server whose Sessions tab lists this problem: set only when every failure in it was on that one MCP server, reached directly, and it is on the MCP sign-in above.")
 })
 
 var ListProjectSuspectedProblemsResult = Type("ListProjectSuspectedProblemsResult", func() {

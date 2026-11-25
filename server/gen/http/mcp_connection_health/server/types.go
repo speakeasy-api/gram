@@ -2267,12 +2267,14 @@ type SuspectedProblemServerResponseBody struct {
 // ProjectSuspectedProblemResponseBody is used to define fields on response
 // body types.
 type ProjectSuspectedProblemResponseBody struct {
-	// The MCP sign-in whose Overview and Connection Logs list the problem. Missing
-	// when no page in the project does.
+	// The MCP sign-in whose list has this problem: set only when every failure in
+	// it belongs to that one MCP sign-in, so its Overview or Connection Logs show
+	// the same problem.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// The first MCP server its people fail on directly. Missing when they fail
-	// only on gateways, toolsets or before reaching a server.
-	Server *SuspectedProblemLinkServerResponseBody `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
+	// The MCP server whose Sessions tab lists this problem: set only when every
+	// failure in it was on that one MCP server, reached directly, and it is on the
+	// MCP sign-in above.
+	Server *SuspectedProblemServerLinkResponseBody `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
 	ID       string                             `form:"id" json:"id" xml:"id"`
@@ -2293,11 +2295,13 @@ type ProjectSuspectedProblemResponseBody struct {
 	Filters *SuspectedProblemFiltersResponseBody `form:"filters" json:"filters" xml:"filters"`
 }
 
-// SuspectedProblemLinkServerResponseBody is used to define fields on response
+// SuspectedProblemServerLinkResponseBody is used to define fields on response
 // body types.
-type SuspectedProblemLinkServerResponseBody struct {
-	ID   string  `form:"id" json:"id" xml:"id"`
+type SuspectedProblemServerLinkResponseBody struct {
+	ID string `form:"id" json:"id" xml:"id"`
+	// Missing when the MCP server has none.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Missing when the MCP server has no name or slug.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -74,7 +73,7 @@ func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names,
 	if len(ids.servers) > 0 {
 		rows, err := queries.ListServerNames(ctx, repo.ListServerNamesParams{ProjectID: c.projectID, Ids: slices.Collect(maps.Keys(ids.servers)), OrganizationID: c.organizationID})
 		if err != nil {
-			return out, oops.E(oops.CodeUnexpected, err, "load server names").LogError(ctx, s.logger)
+			return out, s.unexpected(ctx, err, "load server names")
 		}
 		for _, row := range rows {
 			out.servers[row.ID.String()] = append(out.servers[row.ID.String()], row)
@@ -83,7 +82,7 @@ func (s *Service) resolve(ctx context.Context, c caller, ids *collector) (names,
 	if len(ids.users) > 0 {
 		rows, err := queries.ListMemberNames(ctx, repo.ListMemberNamesParams{OrganizationID: c.organizationID, Ids: slices.Collect(maps.Keys(ids.users))})
 		if err != nil {
-			return out, oops.E(oops.CodeUnexpected, err, "load people").LogError(ctx, s.logger)
+			return out, s.unexpected(ctx, err, "load people")
 		}
 		for _, row := range rows {
 			out.people[row.ID] = person{name: row.DisplayName, email: row.Email}

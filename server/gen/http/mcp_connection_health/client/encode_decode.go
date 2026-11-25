@@ -2989,7 +2989,7 @@ func unmarshalProjectSuspectedProblemResponseBodyToMcpconnectionhealthProjectSus
 		res.WhoFixes = &whoFixes
 	}
 	if v.Server != nil {
-		res.Server = unmarshalSuspectedProblemLinkServerResponseBodyToMcpconnectionhealthSuspectedProblemLinkServer(v.Server)
+		res.Server = unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink(v.Server)
 	}
 	res.Scope = unmarshalSuspectedProblemScopeResponseBodyToMcpconnectionhealthSuspectedProblemScope(v.Scope)
 	res.Filters = unmarshalSuspectedProblemFiltersResponseBodyToMcpconnectionhealthSuspectedProblemFilters(v.Filters)
@@ -2997,14 +2997,14 @@ func unmarshalProjectSuspectedProblemResponseBodyToMcpconnectionhealthProjectSus
 	return res
 }
 
-// unmarshalSuspectedProblemLinkServerResponseBodyToMcpconnectionhealthSuspectedProblemLinkServer
-// builds a value of type *mcpconnectionhealth.SuspectedProblemLinkServer from
-// a value of type *SuspectedProblemLinkServerResponseBody.
-func unmarshalSuspectedProblemLinkServerResponseBodyToMcpconnectionhealthSuspectedProblemLinkServer(v *SuspectedProblemLinkServerResponseBody) *mcpconnectionhealth.SuspectedProblemLinkServer {
+// unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink
+// builds a value of type *mcpconnectionhealth.SuspectedProblemServerLink from
+// a value of type *SuspectedProblemServerLinkResponseBody.
+func unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink(v *SuspectedProblemServerLinkResponseBody) *mcpconnectionhealth.SuspectedProblemServerLink {
 	if v == nil {
 		return nil
 	}
-	res := &mcpconnectionhealth.SuspectedProblemLinkServer{
+	res := &mcpconnectionhealth.SuspectedProblemServerLink{
 		ID:   *v.ID,
 		Slug: v.Slug,
 		Name: v.Name,
