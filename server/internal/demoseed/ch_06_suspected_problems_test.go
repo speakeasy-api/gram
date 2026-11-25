@@ -12,9 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
+	healthrepo "github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -45,6 +50,54 @@ func TestSeededConnectionHealthListsTheIntendedProblems(t *testing.T) {
 			seededProblems(t, c.seeded, c.seeded.Add(c.readAfter))
 		})
 	}
+}
+
+// The problems read counts failures only from when logs were last turned on, so a fresh
+// seed must not hide its own problems behind the logs feature it just created.
+func TestSeededProblemsShowRightAfterAFreshSeed(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	spec := DefaultSpec()
+	spec.OrgID = "org-fresh-" + uuid.NewString()
+	spec.UUIDPrefix = strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
+	s, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
+	require.NoError(t, err)
+
+	rows, served, err := s.connectionHealthRows()
+	require.NoError(t, err)
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	func() {
+		otherTenantWrites.RLock()
+		defer otherTenantWrites.RUnlock()
+		require.NoError(t, mcpconnectionattempts.AppendRows(ctx, ch, rows))
+		require.NoError(t, mcpconnectionattempts.AppendServed(ctx, ch, served))
+	}()
+
+	since, err := healthrepo.New(db).GetLogsOnSince(ctx, healthrepo.GetLogsOnSinceParams{OrganizationID: s.orgID(), FeatureName: string(productfeatures.FeatureLogs)})
+	require.NoError(t, err)
+	servers := []string{s.healthGateway().String()}
+	for _, id := range s.healthServerIDs() {
+		servers = append(servers, id.String())
+	}
+	got, err := problems.Read(ctx, ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.healthIssuer(), IssuerServerIDs: servers,
+	}, since.Time, s.now.Add(time.Minute))
+	require.NoError(t, err)
+	scopes := make([]string, 0, len(got))
+	for _, p := range got {
+		scopes = append(scopes, p.Scope.Key)
+	}
+	require.ElementsMatch(t, []string{
+		mcpconnectionattempts.FamilyCursor + "@2.0.1",
+		s.healthServerID("wiki").String(),
+		s.healthServerID("support").String(),
+		urn.NewUserSubject(s.userID("dana_reyes")).String(),
+	}, scopes, "logs on since %s", since.Time)
 }
 
 func seededProblems(t *testing.T, seeded, now time.Time) {
