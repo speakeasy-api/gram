@@ -244,14 +244,15 @@ type GetToolCallSummaryContextRow = plainrepo.GetToolCallSummaryContextRow
 func (t *Transcripts) GetToolCallSummaryContext(ctx context.Context, db DBTX, c ToolCallSummaryContext) (GetToolCallSummaryContextRow, error) {
 	row, err := plainrepo.New(db).GetToolCallSummaryContext(ctx, plainrepo.GetToolCallSummaryContextParams{OpenShadows: t.Enabled(c.ProjectID), ToolCallID: pgtype.Text{String: c.ToolCallID, Valid: true}, MessageID: c.MessageID, ChatID: c.ChatID, ProjectID: c.ProjectID})
 	if err != nil {
-		return row, fmt.Errorf("get tool call summary context: %w", err)
+		return GetToolCallSummaryContextRow{}, fmt.Errorf("get tool call summary context: %w", err)
 	}
 	joined := []joinedRow{
 		{body: Body{MessageID: c.MessageID, Content: nil, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: &row.ToolCallSummaries, StorageError: nil}, chatID: row.ChatID, ciphertext: row.CallsShadowCiphertext, current: row.CallsShadowCurrent, shape: nil},
 		{body: Body{MessageID: row.ResultMessageID, Content: &row.ResultContent, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ResultShadowCiphertext, current: row.ResultShadowCurrent, shape: nil},
 	}
 	if err := t.openJoined(ctx, db, c.ProjectID, joined); err != nil {
-		return row, err
+		// Never hand back the plaintext that failed the check.
+		return GetToolCallSummaryContextRow{}, err
 	}
 	return row, nil
 }

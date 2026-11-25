@@ -281,14 +281,16 @@ func parseSqlcQueries(filename string) map[string]bool {
 }
 
 var (
-	sqlLineComment     = regexp.MustCompile(`--[^\n]*`)
-	sqlStringLiteral   = regexp.MustCompile(`'(?:[^']|'')*'`)
 	sqlChatMessagesRef = regexp.MustCompile(`\bchat_messages\b`)
 	sqlChatMessagesAs  = regexp.MustCompile(`\bchat_messages\s+(?:as\s+)?([a-z_][a-z0-9_]*)`)
-	sqlInsertColumns   = regexp.MustCompile(`\binsert\s+into\s+[a-z0-9_."]+\s*(?:as\s+[a-z_][a-z0-9_]*\s*)?\([^)]*\)`)
+	sqlInsertColumns   = regexp.MustCompile(`\binsert\s+into\s+[a-z0-9_.]+\s*(?:as\s+[a-z_][a-z0-9_]*\s*)?\([^)]*\)`)
 	sqlSetClause       = regexp.MustCompile(`\bset\b(?s:(.*?))(\bwhere\b|\bfrom\b|\breturning\b|;|$)`)
-	sqlSetTarget       = regexp.MustCompile(`([a-z_][a-z0-9_]*)\s*=`)
+	sqlSetTarget       = regexp.MustCompile(`^\s*[a-z_][a-z0-9_]*\s*=`)
 	sqlColumnRef       = regexp.MustCompile(`(\bas\s+)?(?:([a-z_][a-z0-9_]*)\s*\.\s*)?\b(` + strings.Join(plaintextTranscriptColumns, "|") + `)\b`)
+	// sqlQualifiedStar matches "alias.*"; sqlBareStar matches a bare "*" in a
+	// select or returning list, but not count(*).
+	sqlQualifiedStar = regexp.MustCompile(`\b([a-z_][a-z0-9_]*)\s*\.\s*\*`)
+	sqlBareStar      = regexp.MustCompile(`(?:\bselect\s+(?:distinct\s+)?|\breturning\s+|,\s*)\*`)
 )
 
 // sqlKeywordsAfterTable are words that can follow a table name without being
@@ -305,11 +307,15 @@ var sqlKeywordsAfterTable = map[string]bool{
 // transcript column of chat_messages: selecting, returning, filtering, joining
 // or hashing it. Writing one (an INSERT column list or a SET target) is not a
 // read. A column counts when it is qualified by a chat_messages alias or left
-// unqualified in a query that touches chat_messages.
+// unqualified in a query that touches chat_messages; a star counts the same
+// way, since it selects every column.
+//
+// This is a lexical check, not a SQL parser. It does not follow a column
+// through a derived table or CTE alias ("FROM (SELECT ... FROM chat_messages)
+// t" then "t.content"); sqlc expands stars in the SQL it generates, and the
+// compiler boundary of transcriptstore/internal is the real guard.
 func sqlReadsPlaintextTranscript(sql string) bool {
-	s := strings.ToLower(sql)
-	s = sqlLineComment.ReplaceAllString(s, " ")
-	s = sqlStringLiteral.ReplaceAllString(s, "''")
+	s := stripSQLCommentsAndStrings(strings.ToLower(sql))
 	if !sqlChatMessagesRef.MatchString(s) {
 		return false
 	}
@@ -322,9 +328,16 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 	}
 
 	s = sqlInsertColumns.ReplaceAllString(s, " ")
-	s = sqlSetClause.ReplaceAllStringFunc(s, func(clause string) string {
-		return sqlSetTarget.ReplaceAllString(clause, " ")
-	})
+	s = sqlSetClause.ReplaceAllStringFunc(s, stripSetTargets)
+
+	if sqlBareStar.MatchString(s) {
+		return true
+	}
+	for _, m := range sqlQualifiedStar.FindAllStringSubmatch(s, -1) {
+		if aliases[m[1]] {
+			return true
+		}
+	}
 
 	for _, m := range sqlColumnRef.FindAllStringSubmatch(s, -1) {
 		if m[1] != "" && m[2] == "" {
@@ -336,4 +349,135 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 		}
 	}
 	return false
+}
+
+// stripSetTargets blanks the target of each assignment in a SET clause, so
+// "SET content = $1" is not a read, while a column on the right-hand side
+// ("SET x = CASE WHEN content = ” ...") still is.
+func stripSetTargets(clause string) string {
+	body := strings.TrimPrefix(clause, "set")
+	parts := splitTopLevel(body, ',')
+	for i, part := range parts {
+		parts[i] = sqlSetTarget.ReplaceAllString(part, " ")
+	}
+	return "set" + strings.Join(parts, ",")
+}
+
+// splitTopLevel splits s at sep outside parentheses.
+func splitTopLevel(s string, sep byte) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case sep:
+			if depth == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, s[start:])
+}
+
+// stripSQLCommentsAndStrings walks the query once, left to right: comments
+// become a space, string literals become ”, and double-quoted identifiers
+// lose their quotes. One pass means a quote inside a comment, or "--" inside
+// a string, cannot hide the text after it.
+func stripSQLCommentsAndStrings(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		switch {
+		case strings.HasPrefix(s[i:], "--"):
+			i = lineCommentEnd(s, i)
+			b.WriteByte(' ')
+		case strings.HasPrefix(s[i:], "/*"):
+			i = blockCommentEnd(s, i)
+			b.WriteByte(' ')
+		case s[i] == '\'':
+			i = stringLiteralEnd(s, i, isEscapeStringPrefix(s, i))
+			b.WriteString("''")
+		case s[i] == '"':
+			end := strings.IndexByte(s[i+1:], '"')
+			if end < 0 {
+				b.WriteString(s[i+1:])
+				i = len(s)
+				continue
+			}
+			b.WriteString(s[i+1 : i+1+end])
+			i += end + 2
+		default:
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}
+
+func lineCommentEnd(s string, i int) int {
+	end := strings.IndexByte(s[i:], '\n')
+	if end < 0 {
+		return len(s)
+	}
+	return i + end
+}
+
+// blockCommentEnd returns the index after the comment that opens at i.
+// PostgreSQL block comments nest.
+func blockCommentEnd(s string, i int) int {
+	depth := 0
+	for i < len(s) {
+		if strings.HasPrefix(s[i:], "/*") {
+			depth++
+			i += 2
+			continue
+		}
+		if strings.HasPrefix(s[i:], "*/") {
+			depth--
+			i += 2
+			if depth == 0 {
+				return i
+			}
+			continue
+		}
+		i++
+	}
+	return len(s)
+}
+
+// stringLiteralEnd returns the index after the literal that opens at i. A
+// doubled quote is an escaped quote; in an E” string a backslash escapes
+// the next character too.
+func stringLiteralEnd(s string, i int, backslashEscapes bool) int {
+	for j := i + 1; j < len(s); j++ {
+		if backslashEscapes && s[j] == '\\' {
+			j++
+			continue
+		}
+		if s[j] != '\'' {
+			continue
+		}
+		if j+1 < len(s) && s[j+1] == '\'' {
+			j++
+			continue
+		}
+		return j + 1
+	}
+	return len(s)
+}
+
+// isEscapeStringPrefix reports whether the quote at i opens an E” string.
+func isEscapeStringPrefix(s string, i int) bool {
+	if i == 0 || s[i-1] != 'e' {
+		return false
+	}
+	if i == 1 {
+		return true
+	}
+	c := s[i-2]
+	return c != '_' && (c < 'a' || c > 'z') && (c < '0' || c > '9')
 }

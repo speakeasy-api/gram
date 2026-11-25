@@ -116,13 +116,6 @@ type Publisher struct {
 // NewPublisher constructs a Publisher over the given judge roster. events may
 // be nil, which disables work-units score event emission (scores still
 // publish).
-// WithTranscripts makes the publisher read judged transcripts through
-// transcripts, opening encrypted shadows for the projects that keep them.
-func (p *Publisher) WithTranscripts(transcripts *transcriptstore.Transcripts) *Publisher {
-	p.chats = efficacy.NewTranscriptSource(p.db, transcripts)
-	return p
-}
-
 func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, events ScoreEventSink, judges *Judges) *Publisher {
 	return &Publisher{
 		logger:            logger.With(attr.SlogComponent("chat-analysis-publisher")),
@@ -134,6 +127,13 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		judges:            judges,
 		evaluationTimeout: publishEvaluationTimeout,
 	}
+}
+
+// WithTranscripts makes the publisher read judged transcripts through
+// transcripts, opening encrypted shadows for the projects that keep them.
+func (p *Publisher) WithTranscripts(transcripts *transcriptstore.Transcripts) *Publisher {
+	p.chats = efficacy.NewTranscriptSource(p.db, transcripts)
+	return p
 }
 
 // Publish judges the given reserved evaluations and writes their verdicts.

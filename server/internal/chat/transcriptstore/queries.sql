@@ -59,12 +59,17 @@ JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.proj
 WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.organization_id = @organization_id;
 
 -- name: DeleteToolCallIDs :exec
-DELETE FROM chat_message_transcript_tool_calls WHERE message_id = @message_id;
+DELETE FROM chat_message_transcript_tool_calls WHERE message_id = @message_id AND project_id = @project_id;
 
 -- name: InsertToolCallIDs :exec
+-- The chat and project come from the captured shadow and its message, never
+-- from the caller, so a row cannot disagree with the message it describes.
 INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
-SELECT @message_id, ids.tool_call_id, @chat_id, @project_id
-FROM unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
+SELECT t.message_id, ids.tool_call_id, m.chat_id, t.project_id
+FROM chat_message_transcripts t
+JOIN chat_messages m ON m.id = t.message_id AND m.project_id = t.project_id
+CROSS JOIN unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
+WHERE t.message_id = @message_id AND t.project_id = @project_id
 ON CONFLICT (message_id, tool_call_id) DO NOTHING;
 
 -- name: FindIndexedToolCallMessageID :one

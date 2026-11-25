@@ -155,13 +155,13 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		}
 		// Tool-call IDs are rewritten with the shadow, inside the same
 		// transaction, so they never describe an older version of the message.
-		if err := q.DeleteToolCallIDs(ctx, id); err != nil {
+		if err := q.DeleteToolCallIDs(ctx, repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: projectID}); err != nil {
 			return safe(err)
 		}
 		if len(meta.toolCallIDs) == 0 {
 			continue
 		}
-		if err := q.InsertToolCallIDs(ctx, repo.InsertToolCallIDsParams{MessageID: id, ChatID: row.ChatID, ProjectID: projectID, ToolCallIds: meta.toolCallIDs}); err != nil {
+		if err := q.InsertToolCallIDs(ctx, repo.InsertToolCallIDsParams{MessageID: id, ProjectID: projectID, ToolCallIds: meta.toolCallIDs}); err != nil {
 			return safe(err)
 		}
 	}

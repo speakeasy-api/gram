@@ -77,6 +77,8 @@ WITH ordered AS (
     AND cm.project_id = $4::uuid
     AND cm.generation = $5::integer
 ),
+/* Prompts whose attachments hold an active finding. Such a finding has no
+   chat_message_id, so it flags the prompt the attachment hangs off. */
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
@@ -131,8 +133,6 @@ type GetChatEntryTotalsRow struct {
 // For a project that keeps shadows (@open_shadows) the tool-call count comes
 // from the shadow's metadata, so the plaintext tool_calls column is consulted
 // only for a message with no shadow or one captured before the count existed.
-// Prompts whose attachments hold an active finding. Such a finding has no
-// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals,
 		arg.RiskMessageIds,
@@ -312,11 +312,10 @@ type GetJudgeMessageWindowRow struct {
 
 // Two bounded index probes around a tenant-validated anchor. Keep the target
 // even when no neighbors exist; an absent target is never a valid window.
-// Tool evidence remains valid JSON: one overflow call/rune preserves truncation
-// indicators in the renderer without transferring the full stored payload.
-// The judge reads at most 4001 characters of each body and nine tool calls;
-// transcriptstore applies those caps in Go after opening the shadows, so
-// plaintext and shadows are capped the same way.
+// The window holds at most five messages, returned whole: the judge reads at
+// most 4001 characters of each body and nine tool calls, and transcriptstore
+// applies those caps in Go after opening the shadows, so plaintext and shadows
+// are capped the same way.
 func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
 	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
 		arg.AnchorID,
@@ -552,18 +551,11 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 }
 
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
-
 SELECT organization_id FROM projects WHERE id = $1
 `
 
-// Every query that reads the plaintext transcript columns of chat_messages
-// (content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries,
-// storage_error) lives here, inside transcriptstore/internal, so the Go
-// compiler refuses to let any other package call one. Each read LEFT JOINs the
-// message's encrypted shadow when @open_shadows is true (the project keeps
-// shadows), returning the ciphertext and whether its source hash still
-// matches in the same round trip. When it is false the join is skipped by a
-// one-time filter and costs nothing.
+// The organization a listed project's shadows are sealed under. The package
+// comment in doc.go describes the queries in this file.
 func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.UUID) (string, error) {
 	row := q.db.QueryRow(ctx, getProjectOrganizationID, projectID)
 	var organization_id string
@@ -1430,6 +1422,8 @@ WITH ordered AS (
     AND cm.project_id = $4::uuid
     AND cm.generation = $5::integer
 ),
+/* Prompts whose attachments hold an active finding. Such a finding has no
+   chat_message_id, so it flags the prompt the attachment hangs off. */
 attachment_risk_prompts AS (
   SELECT ccp.parent_chat_message_id AS id
   FROM chat_content_parts ccp
@@ -1520,8 +1514,6 @@ type ListRiskWindowedMessagesRow struct {
 // membership. is_risk flags the seed rows (the flagged messages themselves) so
 // the caller can return the explicit risk seq list (context rows are
 // is_risk = false).
-// Prompts whose attachments hold an active finding. Such a finding has no
-// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.OpenShadows,

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -32,6 +33,7 @@ func TestMetadataOf(t *testing.T) {
 		{name: "mixed shapes", toolCalls: `[{"id":"call_a"},"text",{"id":7},null,{"id":"call_b"}]`, count: 5, ids: []string{"call_a", "call_b"}},
 		{name: "double encoded mixed shapes", toolCalls: `"[{\"id\":\"call_a\"},1]"`, count: 2, ids: []string{"call_a"}},
 		{name: "json null", toolCalls: `null`, count: 0, ids: []string{}},
+		{name: "array of non-objects", toolCalls: `["call_a",1,{"id":"call_b"}]`, count: 3, ids: []string{"call_b"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -154,4 +156,20 @@ func TestOpenRowsServesShadowsFallsBackAndFailsStale(t *testing.T) {
 	stale := []openRow{{id: shadowed, content: "changed", notes: pgtype.Text{String: "", Valid: false}}}
 	err = OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody)
 	require.ErrorIs(t, err, ErrStale, "a stale shadow fails the read instead of serving plaintext")
+}
+
+func TestToolCallIDsStayWithTheirProject(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	id := uuid.New()
+	f.add(t, id)
+	f.capture(t, id)
+
+	// A caller naming another project neither deletes nor adds rows.
+	q := repo.New(f.db)
+	require.NoError(t, q.DeleteToolCallIDs(t.Context(), repo.DeleteToolCallIDsParams{MessageID: id, ProjectID: uuid.New()}))
+	require.NoError(t, q.InsertToolCallIDs(t.Context(), repo.InsertToolCallIDsParams{MessageID: id, ProjectID: uuid.New(), ToolCallIds: []string{"forged"}}))
+	ids, err := fixturerepo.New(f.db).ShadowToolCallIDs(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, []string{"example"}, ids)
 }

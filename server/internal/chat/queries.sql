@@ -1201,6 +1201,27 @@ WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages
 WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
+-- name: ListChatMessageIDsByGeneration :many
+-- The IDs of one generation's messages in transcript order, for readers that
+-- index messages and never read their bodies.
+SELECT id FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid AND generation = @generation::integer
+ORDER BY created_at ASC, seq ASC;
+
+-- name: GetLastChatMessageID :one
+-- The newest message of the chat's latest generation, without its body.
+SELECT m.id FROM chat_messages m
+WHERE m.chat_id = @chat_id AND m.project_id = @project_id::uuid
+  AND m.generation = (SELECT MAX(latest.generation) FROM chat_messages latest WHERE latest.chat_id = @chat_id AND latest.project_id = @project_id::uuid)
+ORDER BY m.created_at DESC, m.seq DESC
+LIMIT 1;
+
+-- name: GetChatMessageChatAndRole :one
+-- The chat and role of one message, for correlation checks that never read
+-- its body.
+SELECT chat_id, role FROM chat_messages
+WHERE project_id = @project_id::uuid AND id = @id;
+
 -- name: SetMessageCaptureLineage :exec
 UPDATE chat_messages m
 SET capture_kind = (@kinds::text[])[input.ordinality],

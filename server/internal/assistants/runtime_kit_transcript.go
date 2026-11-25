@@ -130,7 +130,8 @@ func (p *KitTranscriptProjector) Handle(ctx context.Context, b KitTranscriptBind
 		}
 		if echo, ok := b.UserEchoes[key]; ok && u.SessionUpdate == "user_message" {
 			err := p.guarded(ctx, b, func(tx pgx.Tx) error {
-				row, err := p.writer.Transcripts().GetKitProjectionMessage(ctx, tx, b.ProjectID, echo)
+				// The check needs the chat and role only, so it reads no body.
+				row, err := chatrepo.New(tx).GetChatMessageChatAndRole(ctx, chatrepo.GetChatMessageChatAndRoleParams{ProjectID: b.ProjectID, ID: echo})
 				if err != nil {
 					return fmt.Errorf("get correlated user message: %w", err)
 				}
