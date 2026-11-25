@@ -113,6 +113,7 @@ func TestCreateAssistantKeepsInitialAttachmentsOnDefaultRuntime(t *testing.T) {
 		{name: "Remote server", servers: []*types.AssistantMCPServerRef{{McpServerSlug: "remote"}}, wantID: f.remote.ID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			created, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", tc.name, "openai/gpt-4o-mini", "", tc.toolsets, tc.servers, 300, 1, StatusActive, true, allowAllMCPEnable, nil)
 			require.NoError(t, err)
 			require.EqualValues(t, 2, created.RuntimeVersion)

@@ -178,7 +178,8 @@ func TestMigrateOrganizationAssistantIdentitiesPreservesKitConnectPolicy(t *test
 		}
 		projectMCP := authz.NewSelector(authz.ScopeMCPRead, authz.WildcardResource)
 		projectMCP[authz.SelectorKeyProjectID] = org.project.String()
-		expected := map[authz.Scope]authz.Selector{authz.ScopeMCPRead: projectMCP}
+		expected := make(map[authz.Scope]authz.Selector)
+		expected[authz.ScopeMCPRead] = projectMCP
 		if id == legacy {
 			expected[authz.ScopeMCPConnect] = projectMCP
 		}
