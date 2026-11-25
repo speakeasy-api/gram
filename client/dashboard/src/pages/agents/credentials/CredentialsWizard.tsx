@@ -995,11 +995,12 @@ export function CredentialsWizard({
       listedServers.some(usesTypedOwnerConnections)
     : selected.some(({ server }) => usesTypedOwnerConnections(server));
   const includeAuthGrant = !authRefused || requiresAuthGrant;
-  const authStop = !authRefused || !requiresAuthGrant
-    ? null
-    : authCheck.data?.limitedBy === "owner"
-      ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
-      : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
+  const authStop =
+    !authRefused || !requiresAuthGrant
+      ? null
+      : authCheck.data?.limitedBy === "owner"
+        ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
+        : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
   // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
   const connectionServers = [

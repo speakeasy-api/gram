@@ -861,7 +861,9 @@ describe("Provisioning a new agent", () => {
     await waitFor(() => expect(mocks.checkAuthGrant).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await continueFromAuthentication();
-    fireEvent.click(await screen.findByRole("button", { name: "Create agent" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     const { policyGrants } =
       mocks.createAgent.mock.calls[0]![0].createAgentForm;
