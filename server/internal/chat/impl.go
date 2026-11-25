@@ -3049,23 +3049,20 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	messages, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, *authCtx.ProjectID, chatID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").LogError(ctx, s.logger)
-	}
-
-	var lastMessageID uuid.NullUUID
-	if len(messages) > 0 {
-		lastMessageID = uuid.NullUUID{UUID: messages[len(messages)-1].ID, Valid: true}
-	} else {
+	// Feedback attaches to the newest message; its body is never read.
+	lastMessageID, err := s.repo.GetLastChatMessageID(ctx, repo.GetLastChatMessageIDParams{ChatID: chatID, ProjectID: *authCtx.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeInvalid, nil, "no messages found for chat")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to find the last message").LogError(ctx, s.logger)
 	}
 
 	// Insert user feedback
 	_, err = s.repo.InsertUserFeedback(ctx, repo.InsertUserFeedbackParams{
 		ProjectID:           *authCtx.ProjectID,
 		ChatID:              chatID,
-		MessageID:           lastMessageID.UUID,
+		MessageID:           lastMessageID,
 		UserResolution:      payload.Feedback,
 		UserResolutionNotes: conv.ToPGTextEmpty(""),
 		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},

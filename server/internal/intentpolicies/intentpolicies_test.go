@@ -9,7 +9,11 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/intent_policies"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicy"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -101,6 +105,32 @@ func TestUploadAndAnalyzeWithGemini(t *testing.T) {
 	require.Equal(t, 1, res.Totals.Blocked)
 	require.InDelta(t, 0.004, res.Totals.CostUsd, 1e-9)
 	require.False(t, res.LimitHit)
+}
+
+func TestAnalyzeReadsThroughEncryptedShadows(t *testing.T) {
+	t.Parallel()
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagIntentPolicies, feature.AnyDistinctID, true)
+	ctx, svc, conn := newTestServiceWithShadows(t, classifier.Noop{}, flags, true)
+
+	up, err := svc.UploadTranscript(ctx, &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "upload.json", Content: transcript})
+	require.NoError(t, err)
+	res, err := svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
+	require.NoError(t, err)
+	require.Len(t, res.Assessments, 2, "the opened shadows carry the tool calls")
+
+	// Analysis reads the shadow, not the plaintext row: plaintext edited
+	// behind it fails the analysis instead of being judged.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := uuid.MustParse(up.ChatID)
+	last, err := chatrepo.New(conn).GetLastChatMessageID(ctx, chatrepo.GetLastChatMessageIDParams{ChatID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	_, err = fixturerepo.New(conn).ChangeContent(ctx, last, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
+	require.NoError(t, err)
+	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.ErrorIs(t, err, transcriptstore.ErrStale)
 }
 
 func TestAnalyzeInBatches(t *testing.T) {

@@ -110,7 +110,7 @@ func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, 
 	}
 	messages, err := transcripts.ListChatMessagesByGeneration(ctx, db, projectID, chatID, expectedGeneration)
 	if err != nil {
-		return nil, fmt.Errorf("list chat messages by generation: %w", err)
+		return nil, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 	return messages, nil
 }

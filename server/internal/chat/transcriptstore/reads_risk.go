@@ -80,8 +80,8 @@ func (t *Transcripts) GetChatMessageForUnmask(ctx context.Context, db DBTX, proj
 
 // JudgeWindowParams selects the evidence around a judged message: the
 // anchor and two neighbors on each side, or the latest four messages of the
-// chat when AnchorID is nil.
-type JudgeWindowParams = struct {
+// chat when AnchorID is uuid.Nil.
+type JudgeWindowParams struct {
 	AnchorID       uuid.UUID
 	ChatID         uuid.UUID
 	ProjectID      uuid.UUID

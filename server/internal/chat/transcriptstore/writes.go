@@ -85,9 +85,12 @@ type beginner interface {
 }
 
 // withCapture runs a write that changes a shadowed field, then recaptures
-// the message's shadow, in one transaction. It joins the caller's
-// transaction, opens one on a pool or connection, and adds nothing for a
-// project that does not keep shadows.
+// the message's shadow, as one unit. On a pool or connection it opens a
+// transaction. Inside a caller's transaction Begin opens a savepoint, so a
+// failed write or recapture rolls back both and leaves the caller's
+// transaction usable: a caller that logs the error and continues never
+// commits the write without its recapture. It adds nothing for a project
+// that does not keep shadows.
 func (t *Transcripts) withCapture(ctx context.Context, db DBTX, projectID, messageID uuid.UUID, write func(DBTX) error) error {
 	if !t.Enabled(projectID) {
 		return write(db)
@@ -101,9 +104,6 @@ func (t *Transcripts) withCapture(ctx context.Context, db DBTX, projectID, messa
 			return err
 		}
 		return t.Capture(ctx, db, organizationID, projectID, []uuid.UUID{messageID})
-	}
-	if _, ok := db.(pgx.Tx); ok {
-		return capture(db)
 	}
 	b, ok := db.(beginner)
 	if !ok {

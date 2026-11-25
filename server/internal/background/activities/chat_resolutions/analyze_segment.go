@@ -126,11 +126,13 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 				ToolOutcome:      conv.ToPGText(tc.Outcome),
 				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
 			}); err != nil {
+				// For a project that keeps shadows, the outcome write and its
+				// shadow recapture run under one savepoint, so a failure
+				// rolled both back and never commits a stale shadow.
 				a.logger.WarnContext(ctx, "failed to update tool call outcome",
 					attr.SlogError(err),
 					attr.SlogMessageID(msgID.String()),
 				)
-				// Continue with other updates
 			}
 		}
 	}

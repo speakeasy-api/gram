@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -74,6 +74,14 @@ type ChatSearchService struct {
 
 // NewChatSearchService composes the external-only transcript tools. Missing
 // dependencies leave stable unavailable tools registered on the server.
+func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, budget OperationBudget, keyMaterial string) *ChatSearchService {
+	codec, err := newSubjectReferenceCodec(keyMaterial)
+	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
+		return nil
+	}
+	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
+}
+
 // WithTranscripts makes chat search and read open message bodies through
 // transcripts. Nil-safe.
 func (s *ChatSearchService) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatSearchService {
@@ -82,14 +90,6 @@ func (s *ChatSearchService) WithTranscripts(transcripts *transcriptstore.Transcr
 	}
 	s.transcripts = transcripts
 	return s
-}
-
-func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, budget OperationBudget, keyMaterial string) *ChatSearchService {
-	codec, err := newSubjectReferenceCodec(keyMaterial)
-	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
-		return nil
-	}
-	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
 }
 
 func (s *ChatSearchService) valid() bool {

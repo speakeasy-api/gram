@@ -639,7 +639,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, nil
 	}
 	if err != nil {
-		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
+		return 0, err //nolint:wrapcheck // transcriptstore already names the query in the error.
 	}
 	param.ID = stored.ID
 	param.Content = stored.Content
