@@ -301,7 +301,12 @@ export function useGatewayMemberStates(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
   rows: MemberRow[],
-  options: { checkTools?: "fetch" | "cache"; onConnected?: () => void } = {},
+  options: {
+    checkTools?: "fetch" | "cache";
+    onConnected?: () => void;
+    /** Inspect must read status with the same reviewed session it runs tools with. */
+    reviewedSession?: { accessToken: string; progressive: boolean };
+  } = {},
 ): GatewayMemberStates {
   const { mcpUrl, loading } = useResolvedMcpServerUrl(
     endpoints,
@@ -315,21 +320,24 @@ export function useGatewayMemberStates(
     // in Progressive, whatever mode the gateway is saved in.
     target: {
       kind: "metaMcpServer",
-      id: live ? metaMcpServer.id : undefined,
+      id: live && !options.reviewedSession ? metaMcpServer.id : undefined,
       discoveryMode: "progressive",
       connectionVersion: "member-status",
     },
     userSessionIssuerId: metaMcpServer?.userSessionIssuerId,
     throwOnError: false,
   });
+  const accessToken = options.reviewedSession?.accessToken ?? token.accessToken;
   const headers = useMemo(
     () =>
-      token.accessToken
-        ? { Authorization: `Bearer ${token.accessToken}` }
-        : undefined,
-    [token.accessToken],
+      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    [accessToken],
   );
-  const sessionReady = live && !loading && (!hasIssuer || !!headers);
+  const sessionReady =
+    live &&
+    !loading &&
+    (!hasIssuer || !!headers) &&
+    (!options.reviewedSession || options.reviewedSession.progressive);
   const signIn = useGatewayMemberSignIn(connectUrl, headers, {
     enabled: sessionReady,
     onConnected: options.onConnected,
@@ -410,9 +418,15 @@ export function useGatewayMemberStates(
       if (row.classification !== "hosted" && row.classification !== "proxied")
         return undefined;
       if (!live) return undefined;
-      if (!sessionReady || signIn.isLoading || token.isLoading)
+      if (options.reviewedSession && !options.reviewedSession.progressive)
+        return undefined;
+      if (
+        !sessionReady ||
+        signIn.isLoading ||
+        (!options.reviewedSession && token.isLoading)
+      )
         return { kind: "checking" };
-      if (signIn.isError || token.error) {
+      if (signIn.isError || (!options.reviewedSession && token.error)) {
         return {
           kind: "unavailable",
           why: "Couldn't check this server for you.",

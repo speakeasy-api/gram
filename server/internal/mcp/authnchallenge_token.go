@@ -30,7 +30,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -40,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -160,10 +158,6 @@ type mintSessionParams struct {
 	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
-	// TypedOnly records a new credential's choices from the auth clients each
-	// server offers, for an organization enforcing upstream auth. The caller
-	// reads it before consuming anything a failed read could not give back.
-	TypedOnly bool
 }
 
 type mintedSession struct {
@@ -721,14 +715,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(tokenParamUpstreamAuthClient))
 		return err
 	}
-	// Read once, so the picks and the choices recorded beside them follow the
-	// same enforcement state.
-	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
-	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true}, requested, enforced)
+	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true, workloadServers: nil}, requested)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 			err = withConnectPage(endpoint, canonicalResource, err)
@@ -766,7 +753,6 @@ func (s *Service) handleTokenJWTBearerGrant(
 		AuthClientPicks:        authClientPicks,
 		DeferredServerIDs:      deferred,
 		Catalog:                nil,
-		TypedOnly:              enforced,
 	}, logger)
 	if err != nil {
 		// The issuer was retired after the assertion was checked.
@@ -961,12 +947,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return rejectGrant(mcpconnectionattempts.CodeInternalError, "agent authorization handoff is missing", mcpconnectionattempts.Detail("agent_handoff_missing"))
 	}
 	subject := grant.Subject
-	// Read while a failure still leaves the code available for retry.
-	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-		return oops.E(oops.CodeUnavailable, err, "read upstream auth enforcement").LogError(ctx, logger)
-	}
 	var admissionTx pgx.Tx
 	admissionQueries := usersessions_repo.New(s.db)
 	defer func() {
@@ -1145,7 +1125,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		AuthClientPicks:        grant.AuthClientPicks,
 		DeferredServerIDs:      nil,
 		Catalog:                catalog,
-		TypedOnly:              enforced,
 	}, logger)
 	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
@@ -1673,8 +1652,6 @@ func (s *Service) rotateRefreshToken(
 		AuthClientPicks:        nil,
 		DeferredServerIDs:      nil,
 		Catalog:                nil,
-		// A rotated session records no choices.
-		TypedOnly: false,
 	}, logger)
 	if err != nil {
 		return true, err
@@ -2284,7 +2261,6 @@ func (s *Service) mintSession(
 		AuthClientPicks:        params.AuthClientPicks,
 		DeferredServerIDs:      params.DeferredServerIDs,
 		Catalog:                params.Catalog,
-		TypedOnly:              params.TypedOnly,
 	}, logger)
 }
 
@@ -2367,10 +2343,6 @@ type sessionIssuance struct {
 	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
-	// TypedOnly records a new credential's choices from the auth clients each
-	// server offers, for an organization enforcing upstream auth. issueSession
-	// runs inside the caller's transaction and does not read it itself.
-	TypedOnly bool
 }
 
 // issueSession mints the access token of an issuance and persists its session
@@ -2487,26 +2459,26 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
+		picks := usersessions_repo.RecordIssuedAuthClientChoicesParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
-			CredentialKind:      upstreamclients.CredentialKindUserSession,
 			CredentialID:        session.ID,
-			Source:              upstreamclients.SelectionSourceIssuance,
 			ScopeMcpServerIds:   nil,
 			ExcludeMcpServerIds: issuance.DeferredServerIDs,
 			PickedMcpServerIds:  nil,
 			PickedClientIds:     nil,
 			PickedAuthClientIds: nil,
-			TypedOnly:           issuance.TypedOnly,
+			PickedExplicit:      nil,
+			AllowSoleOffer:      false,
 		}
 		if issuance.Catalog != nil {
-			picks = issuance.Catalog.upstreamChoices(session.ID, issuance.TypedOnly)
+			picks = issuance.Catalog.upstreamChoices(session.ID)
 		} else {
 			for serverID, clientID := range issuance.UpstreamClientPicks {
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
 				picks.PickedClientIds = append(picks.PickedClientIds, clientID)
 				// The zero id is read as no typed pick.
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, issuance.AuthClientPicks[serverID])
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 			for serverID, authClientID := range issuance.AuthClientPicks {
 				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
@@ -2516,9 +2488,10 @@ func (s *Service) issueSession(
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
 				picks.PickedClientIds = append(picks.PickedClientIds, uuid.Nil)
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, authClientID)
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 		}
-		if _, err := queries.RecordUpstreamClientSelections(ctx, picks); err != nil {
+		if _, err := queries.RecordIssuedAuthClientChoices(ctx, picks); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
 	}

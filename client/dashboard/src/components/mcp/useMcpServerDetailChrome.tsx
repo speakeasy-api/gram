@@ -13,7 +13,6 @@ import {
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { UNKNOWN_STATUS, UPSTREAM_AUTH_STATUS } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
-import type { IdentityMode } from "@/lib/remote-identity";
 import {
   type McpServerReachability,
   useMcpServerReachability,
@@ -515,7 +514,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           <span className="flex items-center gap-1.5">
             Settings
             <SimpleTooltip
-              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Sign-in.`}
+              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Connection.`}
             >
               <AlertTriangle
                 className="text-warning h-3.5 w-3.5 shrink-0"
@@ -584,18 +583,7 @@ const SETUP_PROVIDER_NAME: Record<SetupProvider, string> = {
   okta: "Okta",
 };
 
-// The identity modes' names, as Settings' identity cards call them.
-const IDENTITY_LABEL: Record<IdentityMode, string> = {
-  user: "User identity",
-  agent: "Shared credential",
-  none: "Manual",
-};
-
-/**
- * Whose account the server acts as, in the words Settings uses. Under
- * enforced upstream auth that is the credentials status, as in Settings'
- * credentials section; otherwise the identity mode. Nothing until settled.
- */
+/** Summarize the credentials offered by this proxied server. */
 function identitySummary(
   signsInUpstream: boolean,
   auth: McpServerAuthenticationReadiness,
@@ -615,59 +603,37 @@ function identitySummary(
   // The header always shows this row, so every state has words: one that
   // can't be settled yet says so rather than dropping the row.
   if (!signsInUpstream) return { label: "Not used", href };
-  // Under enforcement only the server's credentials decide it; the legacy
-  // identity queries must not hold it at "Checking…" or fail it.
-  if (auth.upstreamAuth === "enforced") {
-    const { data, isError } = auth.upstreamAuthQuery;
-    if (isError)
-      return { label: "Couldn't check", href, warn: true, tone: "warning" };
-    if (!data) return { label: "Checking…", href };
-    if (data.status === "configured") {
-      // The credentials turned on, as Settings' Credentials list shows them.
-      const count = data.clients.filter((client) => client.enabled).length;
-      if (count > 0) {
-        return {
-          label:
-            count === 1
-              ? "1 credential configured"
-              : `${count} credentials configured`,
-          href,
-          tone: "success",
-        };
-      }
-    }
-    if (setupPending) return setupPending;
-    const presentation = enumPresentation(
-      UPSTREAM_AUTH_STATUS,
-      data.status,
-      UNKNOWN_STATUS,
-    );
-    return {
-      label: presentation.label,
-      href,
-      warn: presentation.tone === "warning",
-      // No credential turned on, so callers reach the upstream without one.
-      tone: presentation.tone === "warning" ? "warning" : "destructive",
-    };
-  }
-  if (auth.loading || auth.isLoadingRemoteIdentity) {
-    return { label: "Checking…", href };
-  }
-  if (auth.unavailable || auth.identityUnavailable) {
+  const { data, isError } = auth.upstreamAuthQuery;
+  if (isError)
     return { label: "Couldn't check", href, warn: true, tone: "warning" };
+  if (!data) return { label: "Checking…", href };
+  if (data.status === "configured") {
+    // The credentials turned on, as Settings' Credentials list shows them.
+    const count = data.clients.filter((client) => client.enabled).length;
+    if (count > 0) {
+      return {
+        label:
+          count === 1
+            ? "1 credential configured"
+            : `${count} credentials configured`,
+        href,
+        tone: "success",
+      };
+    }
   }
-  if (setupPending && !auth.passThroughAuthorization) return setupPending;
+  if (auth.hasLegacyForwardedAuthorization)
+    return { label: "Add a credential", href, warn: true, tone: "warning" };
+  if (setupPending) return setupPending;
+  const presentation = enumPresentation(
+    UPSTREAM_AUTH_STATUS,
+    data.status,
+    UNKNOWN_STATUS,
+  );
   return {
-    label: auth.passThroughAuthorization
-      ? "Needs cleanup"
-      : IDENTITY_LABEL[auth.remoteIdentityMode],
+    label: presentation.label,
     href,
-    warn: !!auth.passThroughAuthorization,
-    tone: auth.passThroughAuthorization
-      ? "warning"
-      : auth.remoteIdentityMode === "none"
-        ? "neutral"
-        : "success",
+    warn: presentation.tone === "warning",
+    tone: presentation.tone,
   };
 }
 

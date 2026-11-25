@@ -56,6 +56,13 @@ const state = vi.hoisted(() => ({
   }[],
   unconnected: [] as string[],
   connect: vi.fn(),
+  approve: vi.fn(),
+  reviewedToken: undefined as string | undefined,
+  choiceRequired: false,
+  inspect: vi.fn(),
+  memberStatus: vi.fn(),
+  workbench: vi.fn(),
+  runTool: vi.fn(),
 }));
 vi.mock("./GatewayCodeExecution", () => ({
   GatewayCodeExecution: ({
@@ -86,21 +93,52 @@ vi.mock("./useGatewayMemberTools", () => ({
 }));
 vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useGatewayMemberStates")>()),
-  useGatewayMemberStates: () => ({
-    stateFor: () => undefined,
-    signIn: {
-      needsSignIn: (slug: string | undefined) =>
-        !!slug && state.unconnected.includes(slug),
-      connect: state.connect,
-    },
-  }),
+  useGatewayMemberStates: (...args: unknown[]) => {
+    state.memberStatus(args[4]);
+    return {
+      stateFor: () => undefined,
+      signIn: {
+        needsSignIn: (slug: string | undefined) =>
+          !!slug && state.unconnected.includes(slug),
+        connect: state.connect,
+        statusFor: (slug: string) =>
+          state.choiceRequired &&
+          slug === "oauth" &&
+          state.unconnected.includes(slug)
+            ? { status: "needs_consent" }
+            : undefined,
+      },
+    };
+  },
 }));
+vi.mock("../inspect/InspectWorkbench", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../inspect/InspectWorkbench")>();
+  return {
+    ...original,
+    InspectWorkbench: (
+      props: React.ComponentProps<typeof original.InspectWorkbench>,
+    ) => {
+      state.workbench(props);
+      return <original.InspectWorkbench {...props} />;
+    },
+  };
+});
+vi.mock("../inspect/runMcpTool", () => ({ runMcpTool: state.runTool }));
 vi.mock("@/pages/mcp/inspect-chat/InspectChat", () => ({
   InspectChat: () => <div data-testid="inspect-chat" />,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
   useSession: () => ({ user: { id: "user-test" } }),
+}));
+vi.mock("@/hooks/useInspectOAuth", () => ({
+  useInspectOAuth: () => ({
+    accessToken: state.reviewedToken,
+    connect: state.approve,
+    isConnecting: false,
+    error: false,
+  }),
 }));
 vi.mock("@/hooks/useUserSessionToken", () => ({
   useUserSessionToken: (input: {
@@ -153,14 +191,17 @@ vi.mock("./useGatewayMemberRows", () => ({
   useGatewayMemberRows: () => ({ rows: [] }),
 }));
 vi.mock("./useGatewayInspection", () => ({
-  useGatewayInspection: () => ({
-    data: state.data,
-    isLoading: state.loading,
-    isError: false,
-    needsAuth: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
+  useGatewayInspection: (_url: string, options: unknown) => {
+    state.inspect(options);
+    return {
+      data: state.data,
+      isLoading: state.loading,
+      isError: false,
+      needsAuth: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+  },
   useGatewayDescribeServer: () => ({ data: undefined }),
 }));
 vi.mock("@/components/page-layout", () => {
@@ -189,6 +230,13 @@ afterEach(() => {
   state.accessToken = undefined;
   state.members = [];
   state.unconnected = [];
+  state.reviewedToken = undefined;
+  state.choiceRequired = false;
+  state.inspect.mockClear();
+  state.memberStatus.mockClear();
+  state.workbench.mockClear();
+  state.runTool.mockClear();
+  state.approve.mockClear();
 });
 it("applies discovery choices to the URL and the minted connection", async () => {
   state.mint.mockClear();
@@ -499,4 +547,106 @@ it("offers Connect for a member that needs the viewer's account", () => {
   expect(screen.getByText(/Linear isn't connected/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Connect" }));
   expect(screen.getByText("Connect your accounts")).toBeTruthy();
+});
+
+it("reviews a missing choice and inspects with the approved session", async () => {
+  state.accessToken = "dashboard-mint";
+  state.data = {
+    discoveryMode: "progressive",
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    tools: [],
+    servers: [
+      { slug: "oauth", name: "OAuth server" },
+      { slug: "other", name: "Other server" },
+    ],
+  };
+  state.members = [
+    {
+      slug: "oauth",
+      name: "OAuth server",
+      tools: [],
+      error: "no connection chosen",
+      isLoading: false,
+      refetch: vi.fn<() => void>(),
+    },
+    {
+      slug: "other",
+      name: "Other server",
+      tools: [],
+      error: "not connected",
+      isLoading: false,
+      refetch: vi.fn<() => void>(),
+    },
+  ];
+  state.unconnected = ["oauth", "other"];
+  state.choiceRequired = true;
+  const tab = (
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              userSessionIssuerId: "issuer-test",
+              discoveryMode: "progressive",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>
+  );
+  const view = render(tab);
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Choose a connection for OAuth server",
+    }),
+  );
+  expect(state.approve).toHaveBeenCalledOnce();
+  state.connect.mockClear();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect your Other server account" }),
+  );
+  expect(state.connect).toHaveBeenCalledOnce();
+  expect(state.approve).toHaveBeenCalledOnce();
+  expect(screen.queryByText(/Couldn't read OAuth server's tools/)).toBeNull();
+
+  // The callback has returned with the reviewed bearer, not a second mint.
+  state.reviewedToken = "approved-inspect-bearer";
+  state.unconnected = [];
+  state.members = [];
+  view.rerender(<div>{tab}</div>);
+  expect(state.inspect).toHaveBeenCalledWith(
+    expect.objectContaining({
+      headers: { Authorization: "Bearer approved-inspect-bearer" },
+      configurationKey: expect.not.stringContaining(":catalog"),
+      enabled: true,
+    }),
+  );
+  expect(state.memberStatus).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      reviewedSession: {
+        accessToken: "approved-inspect-bearer",
+        progressive: true,
+      },
+    }),
+  );
+  const props = state.workbench.mock.lastCall?.[0] as React.ComponentProps<
+    typeof import("../inspect/InspectWorkbench").InspectWorkbench
+  >;
+  expect(props.runTool).toBeDefined();
+  await props.runTool?.(
+    { name: "list_servers", inputSchema: { type: "object" } },
+    {},
+  );
+  expect(state.runTool).toHaveBeenCalledWith(
+    expect.objectContaining({
+      headers: { Authorization: "Bearer approved-inspect-bearer" },
+      name: "list_servers",
+    }),
+  );
+  expect(screen.queryByText("Choose connections")).toBeNull();
 });

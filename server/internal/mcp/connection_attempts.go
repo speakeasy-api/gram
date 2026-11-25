@@ -994,8 +994,6 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
 		case errChoiceNotNamed:
 			return mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail
-		case errChoiceNotAccepted:
-			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
 		case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
 			return mcpconnectionattempts.CodeCredentialChoiceInvalid, detail
 		}
