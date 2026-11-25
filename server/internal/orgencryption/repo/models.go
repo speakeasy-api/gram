@@ -47,6 +47,7 @@ type DataEncryptionKeyWrap struct {
 	ExternalKeyID uuid.UUID
 	// @access: restricted
 	ExternalKeyVersion pgtype.Text
+	// The organization's data encryption key (DEK), wrapped by the KMS key encryption key (KEK) named in external_key_id. Only that KMS key can unwrap it; SQL cannot read it.
 	// @access: secret-restricted
 	WrappedKey []byte
 	// @access: confidential

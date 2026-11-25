@@ -13,8 +13,10 @@ type OpenrouterApiKey struct {
 	OrganizationID string
 	// @access: confidential
 	KeyType string
+	// Upstream OpenRouter API key, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is key_org_encrypted.
 	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// Upstream OpenRouter API key, encrypted with the organization's data encryption key (DEK) for the 'ai-provider-keys' use case. SQL cannot read it. The platform-key copy is key_encrypted.
 	// @access: secret-restricted
 	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted

@@ -26,8 +26,10 @@ type NetworkIngress struct {
 	Enabled bool
 	// @access: confidential
 	IdentityRequired bool
+	// Tailscale OAuth client credential document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is credentials_org_encrypted.
 	// @access: secret-restricted
 	CredentialsEncrypted pgtype.Text
+	// Tailscale OAuth client credential document, encrypted with the organization's data encryption key (DEK) for the 'tailscale-oauth-clients' use case. SQL cannot read it. The platform-key copy is credentials_encrypted.
 	// @access: secret-restricted
 	CredentialsOrgEncrypted pgtype.Text
 	// @access: confidential

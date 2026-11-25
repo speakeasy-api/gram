@@ -155,8 +155,10 @@ type RemoteSessionClient struct {
 	RemoteSessionIssuerID uuid.UUID
 	// @access: restricted
 	ClientID string
+	// Upstream OAuth client secret, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is client_secret_org_encrypted.
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// Upstream OAuth client secret, encrypted with the organization's data encryption key (DEK) for the 'oauth-client-secrets' use case. SQL cannot read it. The platform-key copy is client_secret_encrypted.
 	// @access: secret-restricted
 	ClientSecretOrgEncrypted pgtype.Text
 	// @access: confidential

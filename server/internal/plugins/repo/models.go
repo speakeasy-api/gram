@@ -75,8 +75,10 @@ type PluginGithubConnection struct {
 	OrganizationID pgtype.Text
 	// @access: secret-restricted
 	MarketplaceTokenHash pgtype.Text
+	// Plugin marketplace token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is marketplace_token_org_encrypted.
 	// @access: secret-restricted
 	MarketplaceTokenEncrypted pgtype.Text
+	// Plugin marketplace token, encrypted with the organization's data encryption key (DEK) for the 'marketplace-tokens' use case. SQL cannot read it. The platform-key copy is marketplace_token_encrypted.
 	// @access: secret-restricted
 	MarketplaceTokenOrgEncrypted pgtype.Text
 	// @access: confidential

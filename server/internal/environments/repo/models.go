@@ -35,6 +35,7 @@ type Environment struct {
 type EnvironmentEntry struct {
 	// @access: confidential
 	Name string
+	// Environment entry value. When is_secret is true, a non-empty value is encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM) and SQL cannot read it. Otherwise it is plaintext.
 	// @access: secret-restricted
 	Value string
 	// @access: confidential

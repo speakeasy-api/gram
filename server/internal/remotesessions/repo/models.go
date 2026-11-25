@@ -54,14 +54,18 @@ type RemoteSession struct {
 	RemoteSessionClientID uuid.UUID
 	// @access: confidential
 	OrganizationID pgtype.Text
+	// Upstream OAuth access token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is access_token_org_encrypted.
 	// @access: secret-restricted
 	AccessTokenEncrypted pgtype.Text
+	// Upstream OAuth access token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is access_token_encrypted.
 	// @access: secret-restricted
 	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
+	// Upstream OAuth refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// Upstream OAuth refresh token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
 	// @access: secret-restricted
 	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -117,8 +121,10 @@ type RemoteSessionClient struct {
 	RemoteSessionIssuerID uuid.UUID
 	// @access: restricted
 	ClientID string
+	// Upstream OAuth client secret, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is client_secret_org_encrypted.
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// Upstream OAuth client secret, encrypted with the organization's data encryption key (DEK) for the 'oauth-client-secrets' use case. SQL cannot read it. The platform-key copy is client_secret_encrypted.
 	// @access: secret-restricted
 	ClientSecretOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -326,14 +332,18 @@ type TrustedIssuerSession struct {
 	ProjectID uuid.NullUUID
 	// @access: confidential
 	SubjectUrn string
+	// Upstream identity assertion, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is identity_assertion_org_encrypted.
 	// @access: secret-restricted
 	IdentityAssertionEncrypted pgtype.Text
+	// Upstream identity assertion, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is identity_assertion_encrypted.
 	// @access: secret-restricted
 	IdentityAssertionOrgEncrypted pgtype.Text
 	// @access: confidential
 	IdentityAssertionExpiresAt pgtype.Timestamptz
+	// Upstream refresh token, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is refresh_token_org_encrypted.
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// Upstream refresh token, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is refresh_token_encrypted.
 	// @access: secret-restricted
 	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -348,12 +358,16 @@ type TrustedIssuerSession struct {
 	CredentialGeneration pgtype.Int8
 	// @access: confidential
 	RefreshClaimID uuid.NullUUID
+	// Upstream subject, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is upstream_subject_org_encrypted.
 	// @access: secret-restricted
 	UpstreamSubjectEncrypted pgtype.Text
+	// Upstream subject, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is upstream_subject_encrypted.
 	// @access: secret-restricted
 	UpstreamSubjectOrgEncrypted pgtype.Text
+	// Original login nonce, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it. The organization-key copy is nonce_org_encrypted.
 	// @access: secret-restricted
 	NonceEncrypted pgtype.Text
+	// Original login nonce, encrypted with the organization's data encryption key (DEK) for the 'oauth-session-tokens' use case. SQL cannot read it. The platform-key copy is nonce_encrypted.
 	// @access: secret-restricted
 	NonceOrgEncrypted pgtype.Text
 	// @access: secret-restricted

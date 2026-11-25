@@ -16,6 +16,7 @@ type DeviceIntegrationConfig struct {
 	OrganizationID string
 	// @access: confidential
 	Provider string
+	// Provider-specific credential JSON document, encrypted with the app-wide platform key (GRAM_ENCRYPTION_KEY, AES-256-GCM). SQL cannot read it.
 	// @access: secret-restricted
 	CredentialsEncrypted string
 	// @access: opaque-restricted
