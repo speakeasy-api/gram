@@ -13,7 +13,7 @@ import (
 )
 
 const backfillSightings = `-- name: BackfillSightings :execrows
-WITH input AS (
+WITH batch AS (
   -- Set-returning functions in one select list advance together.
   SELECT
     unnest($1::text[]) AS url,
@@ -21,6 +21,12 @@ WITH input AS (
     unnest($3::timestamptz[]) AS first_seen_at,
     unnest($4::timestamptz[]) AS last_seen_at,
     unnest($5::uuid[]) AS user_session_issuer_id
+),
+input AS (
+  SELECT batch.url, batch.client_name, batch.first_seen_at, batch.last_seen_at, batch.user_session_issuer_id, iss.organization_id
+  FROM batch
+  JOIN user_session_issuers AS iss ON iss.id = batch.user_session_issuer_id
+  WHERE iss.deleted IS FALSE
 ),
 per_url AS (
   SELECT
@@ -36,17 +42,21 @@ candidate AS (
   SELECT per_url.url, per_url.client_name, per_url.first_seen_at, per_url.last_seen_at
   FROM per_url
   ON CONFLICT (url) DO UPDATE SET
-    client_name = CASE WHEN c.status = 'pending' THEN COALESCE(EXCLUDED.client_name, c.client_name) ELSE c.client_name END,
+    client_name = CASE
+      WHEN c.status <> 'pending' THEN c.client_name
+      WHEN c.client_name IS NULL THEN EXCLUDED.client_name
+      WHEN EXCLUDED.client_name IS NOT NULL AND EXCLUDED.last_seen_at >= c.last_seen_at THEN EXCLUDED.client_name
+      ELSE c.client_name
+    END,
     first_seen_at = CASE WHEN c.status = 'pending' THEN LEAST(c.first_seen_at, EXCLUDED.first_seen_at) ELSE c.first_seen_at END,
     last_seen_at = GREATEST(c.last_seen_at, EXCLUDED.last_seen_at),
     updated_at = clock_timestamp()
   RETURNING c.id, c.url
 )
 INSERT INTO cimd_client_candidate_sightings AS s (candidate_id, user_session_issuer_id, organization_id, last_seen_at)
-SELECT candidate.id, iss.id, iss.organization_id, input.last_seen_at
+SELECT candidate.id, input.user_session_issuer_id, input.organization_id, input.last_seen_at
 FROM input
 JOIN candidate ON candidate.url = input.url
-JOIN user_session_issuers AS iss ON iss.id = input.user_session_issuer_id
 ON CONFLICT (candidate_id, user_session_issuer_id) DO UPDATE SET
   last_seen_at = GREATEST(s.last_seen_at, EXCLUDED.last_seen_at),
   updated_at = clock_timestamp()
@@ -62,7 +72,8 @@ type BackfillSightingsParams struct {
 
 // Upserts one backfill batch with the same rules as RecordSighting, minus the
 // cap, which the caller applies. Rows are positional across the arrays; each
-// (url, issuer) pair appears once. Returns the sightings written.
+// (url, issuer) pair appears once. Rows of an issuer that is gone write
+// nothing. Returns the sightings written.
 func (q *Queries) BackfillSightings(ctx context.Context, arg BackfillSightingsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillSightings,
 		arg.Urls,
@@ -180,25 +191,30 @@ func (q *Queries) ListCIMDClientsForBackfill(ctx context.Context, arg ListCIMDCl
 	return items, nil
 }
 
-const listExistingCandidateURLs = `-- name: ListExistingCandidateURLs :many
-SELECT c.url
+const listExistingCandidates = `-- name: ListExistingCandidates :many
+SELECT c.url, c.status
 FROM cimd_client_candidates AS c
 WHERE c.url = ANY($1::text[])
 `
 
-func (q *Queries) ListExistingCandidateURLs(ctx context.Context, urls []string) ([]string, error) {
-	rows, err := q.db.Query(ctx, listExistingCandidateURLs, urls)
+type ListExistingCandidatesRow struct {
+	Url    string
+	Status string
+}
+
+func (q *Queries) ListExistingCandidates(ctx context.Context, urls []string) ([]ListExistingCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listExistingCandidates, urls)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListExistingCandidatesRow
 	for rows.Next() {
-		var url string
-		if err := rows.Scan(&url); err != nil {
+		var i ListExistingCandidatesRow
+		if err := rows.Scan(&i.Url, &i.Status); err != nil {
 			return nil, err
 		}
-		items = append(items, url)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -246,9 +262,55 @@ func (q *Queries) ListIssuersForBackfill(ctx context.Context, arg ListIssuersFor
 	return items, nil
 }
 
+const listSightingsForBackfill = `-- name: ListSightingsForBackfill :many
+SELECT c.url, s.user_session_issuer_id
+FROM cimd_client_candidates AS c
+JOIN cimd_client_candidate_sightings AS s ON s.candidate_id = c.id
+WHERE c.url = ANY($1::text[])
+  AND s.user_session_issuer_id = ANY($2::uuid[])
+`
+
+type ListSightingsForBackfillParams struct {
+	Urls                 []string
+	UserSessionIssuerIds []uuid.UUID
+}
+
+type ListSightingsForBackfillRow struct {
+	Url                 string
+	UserSessionIssuerID uuid.UUID
+}
+
+// Existing sightings among the given URLs and issuers; the caller keeps the
+// pairs it asked about.
+func (q *Queries) ListSightingsForBackfill(ctx context.Context, arg ListSightingsForBackfillParams) ([]ListSightingsForBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listSightingsForBackfill, arg.Urls, arg.UserSessionIssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSightingsForBackfillRow
+	for rows.Next() {
+		var i ListSightingsForBackfillRow
+		if err := rows.Scan(&i.Url, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordSighting = `-- name: RecordSighting :execrows
 
-WITH existing AS (
+WITH live_issuer AS (
+  SELECT iss.id, iss.organization_id
+  FROM user_session_issuers AS iss
+  WHERE iss.id = $2::uuid
+    AND iss.deleted IS FALSE
+),
+existing AS (
   SELECT c.id
   FROM cimd_client_candidates AS c
   WHERE c.url = $3::text
@@ -267,19 +329,26 @@ issuer_pending AS (
 candidate AS (
   INSERT INTO cimd_client_candidates AS c (url, client_name, first_seen_at, last_seen_at)
   SELECT $3::text, $5::text, $6::timestamptz, $1::timestamptz
-  WHERE EXISTS (SELECT 1 FROM existing)
-    OR (SELECT n FROM issuer_pending) < $4::bigint
+  WHERE EXISTS (SELECT 1 FROM live_issuer)
+    AND (
+      EXISTS (SELECT 1 FROM existing)
+      OR (SELECT n FROM issuer_pending) < $4::bigint
+    )
   ON CONFLICT (url) DO UPDATE SET
-    client_name = CASE WHEN c.status = 'pending' THEN COALESCE(EXCLUDED.client_name, c.client_name) ELSE c.client_name END,
+    client_name = CASE
+      WHEN c.status <> 'pending' THEN c.client_name
+      WHEN c.client_name IS NULL THEN EXCLUDED.client_name
+      WHEN EXCLUDED.client_name IS NOT NULL AND EXCLUDED.last_seen_at >= c.last_seen_at THEN EXCLUDED.client_name
+      ELSE c.client_name
+    END,
     first_seen_at = CASE WHEN c.status = 'pending' THEN LEAST(c.first_seen_at, EXCLUDED.first_seen_at) ELSE c.first_seen_at END,
     last_seen_at = GREATEST(c.last_seen_at, EXCLUDED.last_seen_at),
     updated_at = clock_timestamp()
   RETURNING c.id
 )
 INSERT INTO cimd_client_candidate_sightings AS s (candidate_id, user_session_issuer_id, organization_id, last_seen_at)
-SELECT candidate.id, iss.id, iss.organization_id, $1::timestamptz
-FROM candidate
-JOIN user_session_issuers AS iss ON iss.id = $2::uuid
+SELECT candidate.id, live_issuer.id, live_issuer.organization_id, $1::timestamptz
+FROM candidate, live_issuer
 ON CONFLICT (candidate_id, user_session_issuer_id) DO UPDATE SET
   last_seen_at = GREATEST(s.last_seen_at, EXCLUDED.last_seen_at),
   updated_at = clock_timestamp()
@@ -296,11 +365,13 @@ type RecordSightingParams struct {
 
 // Candidates are global staff review data; sightings carry the issuer's tenancy.
 // Upserts the candidate and the issuer's sighting. Status is never written, so
-// a decided candidate keeps its decision; only a pending one takes a newer
-// client name or an earlier first sighting. A URL that is not yet a candidate
-// is created only while the issuer has fewer than max_pending_per_issuer
-// pending sightings. Affects no rows when that cap skips it or the issuer no
-// longer exists. The cap is soft: concurrent writes can overshoot it slightly.
+// a decided candidate keeps its decision; only a pending one takes an earlier
+// first sighting, or a client name from an observation at least as recent as
+// its last sighting (a missing name is always filled). A URL that is not yet a
+// candidate is created only while the issuer has fewer than
+// max_pending_per_issuer pending sightings. Writes nothing when that cap skips
+// it or the issuer is gone. The cap is soft: concurrent writes can overshoot
+// it slightly.
 func (q *Queries) RecordSighting(ctx context.Context, arg RecordSightingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordSighting,
 		arg.LastSeenAt,

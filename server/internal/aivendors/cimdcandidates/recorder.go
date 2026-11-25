@@ -109,8 +109,8 @@ func NewRecorder(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *s
 
 // Record starts the write and returns at once. The write keeps the request's
 // context values but not its cancellation, so a client hanging up does not
-// lose it. A failed or dropped write is forgotten, so the next sighting tries
-// again. A nil Recorder records nothing.
+// lose it. A write that fails, is dropped or writes nothing is forgotten, so
+// the next sighting tries again. A nil Recorder records nothing.
 func (r *Recorder) Record(ctx context.Context, logger *slog.Logger, sighting Sighting) {
 	if r == nil {
 		return
@@ -163,6 +163,9 @@ func (r *Recorder) write(ctx context.Context, logger *slog.Logger, key recentKey
 		r.count(ctx, writeFailed)
 		logger.ErrorContext(ctx, "record cimd client candidate", attr.SlogError(err))
 	case written == 0:
+		// Forgotten so a later fetch can attach the sighting once another
+		// issuer has created the candidate.
+		r.release(key)
 		r.count(ctx, writeCapped)
 		logger.InfoContext(ctx, "cimd client candidate not recorded: issuer at the pending cap or no longer exists")
 	default:

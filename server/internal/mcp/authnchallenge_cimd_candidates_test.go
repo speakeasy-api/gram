@@ -45,9 +45,21 @@ func TestCIMDCandidates_RecordsUncoveredClientOncePerIssuer(t *testing.T) {
 			setIssuerAdmissionMode(t, ctx, ti, toolset, mode)
 			other := seedOpenToolset(t, ctx, ti, mode)
 
-			for _, slug := range []string{toolset.McpSlug.String, toolset.McpSlug.String, other.McpSlug.String} {
-				authorizeAndWait(t, ti, slug, ds.clientID)
-			}
+			authorizeAndWait(t, ti, toolset.McpSlug.String, ds.clientID)
+			first, err := testrepo.New(ti.conn).ListCimdClientCandidateSightingsFixture(ctx)
+			require.NoError(t, err)
+			require.Len(t, first, 1)
+			fetches := ds.requests.Load()
+
+			// With the dedup cleared, only the cache keeps a repeat from writing.
+			ti.service.ForgetCIMDCandidateSightings(t)
+			authorizeAndWait(t, ti, toolset.McpSlug.String, ds.clientID)
+			require.Equal(t, fetches, ds.requests.Load(), "the repeat is a cache hit")
+			repeat, err := testrepo.New(ti.conn).ListCimdClientCandidateSightingsFixture(ctx)
+			require.NoError(t, err)
+			require.Equal(t, first[0].LastSeenAt, repeat[0].LastSeenAt, "a cache hit records nothing")
+
+			authorizeAndWait(t, ti, other.McpSlug.String, ds.clientID)
 
 			candidates, err := testrepo.New(ti.conn).ListCimdClientCandidatesFixture(ctx)
 			require.NoError(t, err)

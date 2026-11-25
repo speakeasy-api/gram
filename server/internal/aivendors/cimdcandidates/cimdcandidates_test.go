@@ -16,8 +16,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/cimdcandidates/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -245,6 +247,110 @@ func TestRecorder_PendingCapSkipsOnlyNewCandidates(t *testing.T) {
 	}
 	require.True(t, flooderSawExisting, "an existing candidate is still sighted past the cap")
 	require.Equal(t, map[string]int64{"recorded": 2, "capped": 1}, writeOutcomes(t, reader))
+
+	// The capped write was forgotten, so once another issuer creates the URL
+	// the same recorder attaches the flooded issuer's sighting.
+	overURL := "https://flood-over.example.test/client.json"
+	recorder.Record(ctx, logger, cimdcandidates.Sighting{URL: overURL, ClientName: "", UserSessionIssuerID: other.id})
+	recorder.Wait()
+	recorder.Record(ctx, logger, cimdcandidates.Sighting{URL: overURL, ClientName: "", UserSessionIssuerID: flooded.id})
+	recorder.Wait()
+	sightings, err = testrepo.New(conn).ListCimdClientCandidateSightingsFixture(ctx)
+	require.NoError(t, err)
+	var reach []uuid.UUID
+	for _, s := range sightings {
+		if s.Url == overURL {
+			reach = append(reach, s.UserSessionIssuerID)
+		}
+	}
+	require.ElementsMatch(t, []uuid.UUID{other.id, flooded.id}, reach)
+}
+
+func TestRecordSighting_GoneIssuerWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t, "cimd_candidates_gone_issuer")
+	issuer := seedIssuer(t, conn, "issuer", admission.ModeOpen)
+	_, err := usersessionsrepo.New(conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{ID: issuer.id, ProjectID: issuer.projectID})
+	require.NoError(t, err)
+
+	recorder, reader := newRecorder(t, conn)
+	recorder.Record(ctx, testenv.NewLogger(t), cimdcandidates.Sighting{URL: uncoveredURL, ClientName: "", UserSessionIssuerID: issuer.id})
+	recorder.Wait()
+	require.Equal(t, map[string]int64{"capped": 1}, writeOutcomes(t, reader))
+
+	now := conv.ToPGTimestamptz(time.Now())
+	n, err := repo.New(conn).BackfillSightings(ctx, repo.BackfillSightingsParams{
+		Urls:                 []string{uncoveredURL},
+		ClientNames:          []string{""},
+		FirstSeenAts:         []pgtype.Timestamptz{now},
+		LastSeenAts:          []pgtype.Timestamptz{now},
+		UserSessionIssuerIds: []uuid.UUID{issuer.id},
+	})
+	require.NoError(t, err)
+	require.Zero(t, n)
+
+	candidates, err := testrepo.New(conn).ListCimdClientCandidatesFixture(ctx)
+	require.NoError(t, err)
+	require.Empty(t, candidates, "no candidate without a live issuer to sight it")
+}
+
+func TestRecordSighting_NameFollowsTheNewestObservation(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t, "cimd_candidates_name")
+	issuer := seedIssuer(t, conn, "issuer", admission.ModeOpen)
+	older := conv.ToPGTimestamptz(time.Now().Add(-time.Hour))
+	newer := conv.ToPGTimestamptz(time.Now())
+	record := func(clientURL, name string, seen pgtype.Timestamptz) {
+		_, err := repo.New(conn).RecordSighting(ctx, repo.RecordSightingParams{
+			Url:                 clientURL,
+			ClientName:          conv.ToPGTextEmpty(name),
+			FirstSeenAt:         seen,
+			LastSeenAt:          seen,
+			UserSessionIssuerID: issuer.id,
+			MaxPendingPerIssuer: cimdcandidates.MaxPendingPerIssuer,
+		})
+		require.NoError(t, err)
+	}
+	backfill := func(clientURL, name string, seen pgtype.Timestamptz) {
+		_, err := repo.New(conn).BackfillSightings(ctx, repo.BackfillSightingsParams{
+			Urls:                 []string{clientURL},
+			ClientNames:          []string{name},
+			FirstSeenAts:         []pgtype.Timestamptz{seen},
+			LastSeenAts:          []pgtype.Timestamptz{seen},
+			UserSessionIssuerIds: []uuid.UUID{issuer.id},
+		})
+		require.NoError(t, err)
+	}
+	names := func() map[string]string {
+		candidates, err := testrepo.New(conn).ListCimdClientCandidatesFixture(ctx)
+		require.NoError(t, err)
+		out := map[string]string{}
+		for _, c := range candidates {
+			out[c.Url] = c.ClientName.String
+		}
+		return out
+	}
+
+	const liveURL = "https://live.example.test/client.json"
+	const backfillURL = "https://backfill.example.test/client.json"
+
+	record(liveURL, "", newer)
+	backfill(backfillURL, "", newer)
+	record(liveURL, "Filled", older)
+	backfill(backfillURL, "Filled", older)
+	require.Equal(t, map[string]string{liveURL: "Filled", backfillURL: "Filled"}, names(), "a missing name is filled from any observation")
+
+	record(liveURL, "Stale", older)
+	backfill(backfillURL, "Stale", older)
+	require.Equal(t, map[string]string{liveURL: "Filled", backfillURL: "Filled"}, names(), "an older observation does not replace a name")
+
+	record(liveURL, "Current", newer)
+	backfill(backfillURL, "Current", newer)
+	require.Equal(t, map[string]string{liveURL: "Current", backfillURL: "Current"}, names(), "an observation as recent as the last sighting does")
 }
 
 // holdCandidateInsert inserts url in an open transaction, so any other insert
@@ -384,4 +490,107 @@ func TestBackfill(t *testing.T) {
 		}
 	}
 	require.ElementsMatch(t, []uuid.UUID{open.id, reporting.id, capped.id}, reach, "an issuer at the cap still sights an existing candidate")
+}
+
+// seedClient writes a live CIMD client row for issuer.
+func seedClient(t *testing.T, conn *pgxpool.Pool, issuer testIssuer, clientID string) usersessionsrepo.UserSessionClient {
+	t.Helper()
+	row, err := usersessionsrepo.New(conn).UpsertUserSessionClientFromCIMD(t.Context(), usersessionsrepo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuer.id,
+		ClientID:                clientID,
+		ClientName:              "Seeded",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		CacheTtlSeconds:         time.Hour.Seconds(),
+		ClientIDMetadataEtag:    pgtype.Text{},
+		TokenEndpointAuthMethod: "none",
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{},
+	})
+	require.NoError(t, err)
+	return row
+}
+
+// candidateState is the candidates and sightings without their write times.
+func candidateState(t *testing.T, conn *pgxpool.Pool) []string {
+	t.Helper()
+	candidates, err := testrepo.New(conn).ListCimdClientCandidatesFixture(t.Context())
+	require.NoError(t, err)
+	sightings, err := testrepo.New(conn).ListCimdClientCandidateSightingsFixture(t.Context())
+	require.NoError(t, err)
+	var out []string
+	for _, c := range candidates {
+		out = append(out, fmt.Sprintf("candidate %s %s %q %s %s", c.Url, c.Status, c.ClientName.String, c.FirstSeenAt.Time, c.LastSeenAt.Time))
+	}
+	for _, s := range sightings {
+		out = append(out, fmt.Sprintf("sighting %s %s %s", s.Url, s.UserSessionIssuerID, s.LastSeenAt.Time))
+	}
+	return out
+}
+
+func TestBackfill_ConvergesAcrossPages(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t, "cimd_candidates_backfill_pages")
+	logger := testenv.NewLogger(t)
+	first := seedIssuer(t, conn, "first", admission.ModeOpen)
+	second := seedIssuer(t, conn, "second", admission.ModeOpen)
+	// Issuers page by id; the earlier one is at its cap.
+	capped, creator := first, second
+	if creator.id.String() < capped.id.String() {
+		capped, creator = creator, capped
+	}
+	fillPendingCap(t, conn, capped)
+	seedClient(t, conn, capped, uncoveredURL)
+	seedClient(t, conn, creator, uncoveredURL)
+
+	counts, err := cimdcandidates.BackfillWithPageSizes(ctx, logger, conn, testCatalog(), testOrigin(t), 1, 1)
+	require.NoError(t, err)
+	require.Equal(t, cimdcandidates.BackfillCounts{Scanned: 2, Recorded: 2, Skipped: 0}, counts)
+	after := candidateState(t, conn)
+	require.Contains(t, after, fmt.Sprintf("sighting %s %s %s", uncoveredURL, capped.id, sightingTime(t, conn, uncoveredURL, capped.id)), "the capped issuer joins the URL a later page created")
+
+	_, err = cimdcandidates.BackfillWithPageSizes(ctx, logger, conn, testCatalog(), testOrigin(t), 1, 1)
+	require.NoError(t, err)
+	require.Equal(t, after, candidateState(t, conn), "a second run changes nothing")
+}
+
+// sightingTime is the last_seen_at of one sighting; it fails when absent.
+func sightingTime(t *testing.T, conn *pgxpool.Pool, clientURL string, issuerID uuid.UUID) time.Time {
+	t.Helper()
+	sightings, err := testrepo.New(conn).ListCimdClientCandidateSightingsFixture(t.Context())
+	require.NoError(t, err)
+	for _, s := range sightings {
+		if s.Url == clientURL && s.UserSessionIssuerID == issuerID {
+			return s.LastSeenAt.Time
+		}
+	}
+	t.Fatalf("no sighting of %s by %s", clientURL, issuerID)
+	return time.Time{}
+}
+
+func TestBackfill_JoiningSpendsTheBudget(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t, "cimd_candidates_backfill_budget")
+	logger := testenv.NewLogger(t)
+	issuer := seedIssuer(t, conn, "issuer", admission.ModeOpen)
+	other := seedIssuer(t, conn, "other", admission.ModeOpen)
+
+	recorder, _ := newRecorder(t, conn)
+	for i := range cimdcandidates.MaxPendingPerIssuer - 1 {
+		recorder.Record(ctx, logger, cimdcandidates.Sighting{URL: fmt.Sprintf("https://flood-%d.example.test/client.json", i), ClientName: "", UserSessionIssuerID: issuer.id})
+		recorder.Wait()
+	}
+	recorder.Record(ctx, logger, cimdcandidates.Sighting{URL: uncoveredURL, ClientName: "", UserSessionIssuerID: other.id})
+	recorder.Wait()
+
+	seedClient(t, conn, issuer, uncoveredURL)
+	seedClient(t, conn, issuer, "https://one-too-many.example.test/client.json")
+
+	counts, err := cimdcandidates.Backfill(ctx, logger, conn, testCatalog(), testOrigin(t))
+	require.NoError(t, err)
+	require.Equal(t, cimdcandidates.BackfillCounts{Scanned: 2, Recorded: 1, Skipped: 1}, counts, "joining the existing candidate spends the last unit of budget")
+	sightingTime(t, conn, uncoveredURL, issuer.id)
 }
