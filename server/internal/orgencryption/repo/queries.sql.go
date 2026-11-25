@@ -945,6 +945,78 @@ func (q *Queries) ListDataEncryptionKeyWrapsForKey(ctx context.Context, arg List
 	return items, nil
 }
 
+const listEncryptionBackfillCandidates = `-- name: ListEncryptionBackfillCandidates :many
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE state = 'dual_write'
+  AND use_case = ANY($1::text[])
+  AND (last_backfill_started_at IS NULL OR last_backfill_started_at < $2::timestamptz)
+  AND (COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case)
+    > ($3::timestamptz, $4::text, $5::text)
+ORDER BY COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case
+LIMIT $6
+`
+
+type ListEncryptionBackfillCandidatesParams struct {
+	UseCases            []string
+	Cutoff              pgtype.Timestamptz
+	AfterStarted        pgtype.Timestamptz
+	AfterOrganizationID string
+	AfterUseCase        string
+	LimitValue          int32
+}
+
+// Lists a page of the dual_write transitions of the given use cases across
+// organizations that may be due a backfill, least recently attempted first: a
+// transition that never started a backfill sorts as -infinity. It leaves out
+// transitions whose last backfill started at or after cutoff, the start of
+// the pass, so a transition backfilled during the pass is not offered again.
+// after_started, after_organization_id and after_use_case are the sort key of
+// the previous page's last row; the first page passes -infinity, ” and ”.
+func (q *Queries) ListEncryptionBackfillCandidates(ctx context.Context, arg ListEncryptionBackfillCandidatesParams) ([]OrganizationEncryptionTransition, error) {
+	rows, err := q.db.Query(ctx, listEncryptionBackfillCandidates,
+		arg.UseCases,
+		arg.Cutoff,
+		arg.AfterStarted,
+		arg.AfterOrganizationID,
+		arg.AfterUseCase,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationEncryptionTransition
+	for rows.Next() {
+		var i OrganizationEncryptionTransition
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UseCase,
+			&i.State,
+			&i.Generation,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillConvertedCount,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEncryptionConfigsDueForCheck = `-- name: ListEncryptionConfigsDueForCheck :many
 SELECT c.organization_id
 FROM organization_encryption_configs AS c
@@ -1052,6 +1124,75 @@ ORDER BY use_case
 
 func (q *Queries) ListEncryptionTransitions(ctx context.Context, organizationID string) ([]OrganizationEncryptionTransition, error) {
 	rows, err := q.db.Query(ctx, listEncryptionTransitions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationEncryptionTransition
+	for rows.Next() {
+		var i OrganizationEncryptionTransition
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UseCase,
+			&i.State,
+			&i.Generation,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillConvertedCount,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEncryptionTransitionsInOrgKMSForSweep = `-- name: ListEncryptionTransitionsInOrgKMSForSweep :many
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE state = 'org_kms'
+  AND use_case = ANY($1::text[])
+  AND (
+    (platform_copies_cleared_at IS NULL AND state_changed_at < clock_timestamp() - $2::interval)
+    OR (platform_copies_cleared_at IS NOT NULL AND state_changed_at > clock_timestamp() - $3::interval)
+  )
+ORDER BY (platform_copies_cleared_at IS NOT NULL), random()
+LIMIT $4
+`
+
+type ListEncryptionTransitionsInOrgKMSForSweepParams struct {
+	UseCases          []string
+	StalledClearGrace pgtype.Interval
+	StragglerWindow   pgtype.Interval
+	LimitValue        int32
+}
+
+// Lists the org_kms transitions of the given use cases that may still need
+// work: a clear that never finished and was entered more than
+// stalled_clear_grace ago (so it is not racing the finalize that just
+// started it), or a clear that finished but whose state was entered within
+// straggler_window, when a write decided before the move could still land.
+// Stalled clears come first, in random order: a failed clear records nothing,
+// so a fixed order would offer the same failing clears first every run.
+func (q *Queries) ListEncryptionTransitionsInOrgKMSForSweep(ctx context.Context, arg ListEncryptionTransitionsInOrgKMSForSweepParams) ([]OrganizationEncryptionTransition, error) {
+	rows, err := q.db.Query(ctx, listEncryptionTransitionsInOrgKMSForSweep,
+		arg.UseCases,
+		arg.StalledClearGrace,
+		arg.StragglerWindow,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1426,7 +1567,7 @@ func (q *Queries) RecordEncryptionKeyCheck(ctx context.Context, arg RecordEncryp
 	return err
 }
 
-const recordEncryptionTransitionBackfillCompleted = `-- name: RecordEncryptionTransitionBackfillCompleted :exec
+const recordEncryptionTransitionBackfillCompleted = `-- name: RecordEncryptionTransitionBackfillCompleted :execrows
 UPDATE organization_encryption_transitions
 SET last_backfill_completed_at = clock_timestamp(),
     last_backfill_converted_count = $1::bigint,
@@ -1436,6 +1577,8 @@ SET last_backfill_completed_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $5
   AND use_case = $6
+  AND last_backfill_started_at = $7::timestamptz
+  AND last_backfill_completed_at IS NULL
 `
 
 type RecordEncryptionTransitionBackfillCompletedParams struct {
@@ -1445,21 +1588,28 @@ type RecordEncryptionTransitionBackfillCompletedParams struct {
 	Error           pgtype.Text
 	OrganizationID  string
 	UseCase         string
+	StartedAt       pgtype.Timestamptz
 }
 
-func (q *Queries) RecordEncryptionTransitionBackfillCompleted(ctx context.Context, arg RecordEncryptionTransitionBackfillCompletedParams) error {
-	_, err := q.db.Exec(ctx, recordEncryptionTransitionBackfillCompleted,
+// Records the end of the run that holds the claim started at started_at. No
+// rows means another run took the claim over.
+func (q *Queries) RecordEncryptionTransitionBackfillCompleted(ctx context.Context, arg RecordEncryptionTransitionBackfillCompletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordEncryptionTransitionBackfillCompleted,
 		arg.ConvertedCount,
 		arg.RemainingCount,
 		arg.UnreadableCount,
 		arg.Error,
 		arg.OrganizationID,
 		arg.UseCase,
+		arg.StartedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const recordEncryptionTransitionBackfillStarted = `-- name: RecordEncryptionTransitionBackfillStarted :exec
+const recordEncryptionTransitionBackfillStarted = `-- name: RecordEncryptionTransitionBackfillStarted :one
 UPDATE organization_encryption_transitions
 SET last_backfill_started_at = clock_timestamp(),
     last_backfill_completed_at = NULL,
@@ -1467,16 +1617,38 @@ SET last_backfill_started_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND use_case = $2
+  AND state = 'dual_write'
+  AND generation = $3
+  AND (
+    last_backfill_started_at IS NULL
+    OR last_backfill_completed_at IS NOT NULL
+    OR last_backfill_started_at < clock_timestamp() - $4::interval
+  )
+RETURNING last_backfill_started_at
 `
 
 type RecordEncryptionTransitionBackfillStartedParams struct {
 	OrganizationID string
 	UseCase        string
+	Generation     int64
+	Lease          pgtype.Interval
 }
 
-func (q *Queries) RecordEncryptionTransitionBackfillStarted(ctx context.Context, arg RecordEncryptionTransitionBackfillStartedParams) error {
-	_, err := q.db.Exec(ctx, recordEncryptionTransitionBackfillStarted, arg.OrganizationID, arg.UseCase)
-	return err
+// Claims a backfill run and returns its start, which identifies the claim. It
+// lands only while the use case is still in dual_write at the generation the
+// run decided under, and no other run holds the claim: no run started yet,
+// the last run completed, or the last run started more than lease ago and so
+// can no longer be running. No rows means one of those does not hold.
+func (q *Queries) RecordEncryptionTransitionBackfillStarted(ctx context.Context, arg RecordEncryptionTransitionBackfillStartedParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, recordEncryptionTransitionBackfillStarted,
+		arg.OrganizationID,
+		arg.UseCase,
+		arg.Generation,
+		arg.Lease,
+	)
+	var last_backfill_started_at pgtype.Timestamptz
+	err := row.Scan(&last_backfill_started_at)
+	return last_backfill_started_at, err
 }
 
 const recordEncryptionTransitionVerified = `-- name: RecordEncryptionTransitionVerified :execrows
@@ -1665,6 +1837,36 @@ func (q *Queries) RollbackEncryptionConfigSwitch(ctx context.Context, arg Rollba
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setEncryptionTransitionRunTimesFixture = `-- name: SetEncryptionTransitionRunTimesFixture :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = $1,
+    last_backfill_completed_at = $2,
+    last_verified_at = $3
+WHERE organization_id = $4
+  AND use_case = $5
+`
+
+type SetEncryptionTransitionRunTimesFixtureParams struct {
+	LastBackfillStartedAt   pgtype.Timestamptz
+	LastBackfillCompletedAt pgtype.Timestamptz
+	LastVerifiedAt          pgtype.Timestamptz
+	OrganizationID          string
+	UseCase                 string
+}
+
+// Test fixture: sets the last backfill's start and end and the last clean
+// verification, so tests can place a run in the past without waiting.
+func (q *Queries) SetEncryptionTransitionRunTimesFixture(ctx context.Context, arg SetEncryptionTransitionRunTimesFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEncryptionTransitionRunTimesFixture,
+		arg.LastBackfillStartedAt,
+		arg.LastBackfillCompletedAt,
+		arg.LastVerifiedAt,
+		arg.OrganizationID,
+		arg.UseCase,
+	)
+	return err
 }
 
 const setEncryptionTransitionStateChangedAt = `-- name: SetEncryptionTransitionStateChangedAt :exec
@@ -1871,6 +2073,42 @@ type TouchDataEncryptionKeyWrapUnwrappedParams struct {
 func (q *Queries) TouchDataEncryptionKeyWrapUnwrapped(ctx context.Context, arg TouchDataEncryptionKeyWrapUnwrappedParams) error {
 	_, err := q.db.Exec(ctx, touchDataEncryptionKeyWrapUnwrapped, arg.ID, arg.OrganizationID)
 	return err
+}
+
+const tryLockEncryptionClear = `-- name: TryLockEncryptionClear :one
+SELECT pg_try_advisory_lock(hashtextextended('orgencryption-clear:' || $1::text || ':' || $2::text, 0))::boolean AS locked
+`
+
+type TryLockEncryptionClearParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Takes the session advisory lock that serializes clearing one organization's
+// platform-key copies for a use case, without waiting. The caller holds its
+// connection until it unlocks.
+func (q *Queries) TryLockEncryptionClear(ctx context.Context, arg TryLockEncryptionClearParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockEncryptionClear, arg.OrganizationID, arg.UseCase)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
+}
+
+const unlockEncryptionClear = `-- name: UnlockEncryptionClear :one
+SELECT pg_advisory_unlock(hashtextextended('orgencryption-clear:' || $1::text || ':' || $2::text, 0))::boolean AS unlocked
+`
+
+type UnlockEncryptionClearParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Releases the lock TryLockEncryptionClear took on the same connection.
+func (q *Queries) UnlockEncryptionClear(ctx context.Context, arg UnlockEncryptionClearParams) (bool, error) {
+	row := q.db.QueryRow(ctx, unlockEncryptionClear, arg.OrganizationID, arg.UseCase)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const updateEncryptionTransitionState = `-- name: UpdateEncryptionTransitionState :one

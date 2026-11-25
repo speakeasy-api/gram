@@ -1,12 +1,10 @@
 // Package upstreamclients records which upstream OAuth clients (remote
 // session clients) each MCP server uses.
 //
-// An association is a configuration fact about one server, unlike a client's
-// binding to a user session issuer, which every server sharing that issuer
-// inherits. Associations are written ahead of the serving path that will read
-// them: until then they are kept to the combinations the issuer bindings would
-// serve, so an association never names a client the current runtime would
-// refuse for that server.
+// An association is scoped to one server. Reconciliation prunes retired
+// servers or registrations, not compatibility rows that exist only for
+// principal attachments. Changing that junction must neither grant nor revoke
+// a server's independent typed offer.
 package upstreamclients
 
 import (

@@ -268,16 +268,26 @@ JOIN mcp_auth_clients AS client
  AND client.organization_id = binding.organization_id
  AND client.remote_session_client_id = binding.remote_session_client_id
 WHERE binding.id = $2::uuid
+  AND binding.organization_id = $3::text
+  AND binding.project_id = $4::uuid
+  AND client.project_id = binding.project_id
   AND binding.state = 'ready'
 `
 
 type ServersInsertAuthClientEMAParams struct {
 	AuthClientID uuid.UUID
 	BindingID    uuid.UUID
+	OrgID        string
+	ProjectID    uuid.UUID
 }
 
 func (q *Queries) ServersInsertAuthClientEMA(ctx context.Context, arg ServersInsertAuthClientEMAParams) (int64, error) {
-	result, err := q.db.Exec(ctx, serversInsertAuthClientEMA, arg.AuthClientID, arg.BindingID)
+	result, err := q.db.Exec(ctx, serversInsertAuthClientEMA,
+		arg.AuthClientID,
+		arg.BindingID,
+		arg.OrgID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}

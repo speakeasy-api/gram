@@ -25,8 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -436,6 +440,52 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	attachment, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: second.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, second.ID.String(), attachment.RemoteSessionID)
+}
+
+func TestBindingsCompatibilityParentDoesNotConfigureServerOAuth(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(ti)
+	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Attachment owner agent"})
+	require.NoError(t, err)
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-sign-in")
+	provenance := createUserSessionIssuer(t, ctx, ti.conn, "fk-only-provenance")
+	provider := createRemoteIssuer(t, ctx, ti, "fk-only-provider", "")
+	client := createRemoteClient(t, ctx, ti, provider, provenance.String(), "fk-only-registration")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), provenance.String(), client)
+	q := repo.New(ti.conn)
+
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: signIn.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+
+	backend := uuid.New()
+	fixtures := authclientbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, authclientbackfill.SeedRemoteMCPServerFixtureParams{ID: backend, ProjectID: *auth.ProjectID, Url: "https://mcp.example.com/attachment-only"}))
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	server, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
+		OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, ActorUserID: auth.UserID, ActorEmail: auth.Email,
+		Name: "Attachment-only sign-in server", Visibility: mcpservers.VisibilityPrivate,
+		UserSessionIssuerID: conv.ToNullUUID(signIn), RemoteMCPServerID: conv.ToNullUUID(backend),
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server.ID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.Empty(t, associations, "the physical parent is not a server association")
+	offers, err := fixtures.ListServerAuthClientsFixture(ctx, server.ID)
+	require.NoError(t, err)
+	require.Empty(t, offers, "the physical parent is not a typed upstream offer")
+	pinned, err := q.GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: signIn, RemoteSessionClientID: session.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, pinned.ID)
 }
 
 // A detach names the account the connection signed in as, falling back to the

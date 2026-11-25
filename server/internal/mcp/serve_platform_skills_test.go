@@ -32,7 +32,7 @@ import (
 )
 
 // platformSkillsFixture is a project whose managed assistant can reach the
-// managed-assistant platform toolset, with the Skills extension flag on for
+// Platform MCP read toolset, with the Skills extension flag on for
 // the owning organization.
 type platformSkillsFixture struct {
 	authCtx *contextvalues.AuthContext
@@ -58,7 +58,7 @@ func newPlatformSkillsFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	return &platformSkillsFixture{
 		authCtx: authCtx,
 		token:   mintAssistantToken(t, ti, authCtx, managedID),
-		slug:    platformtools.ManagedAssistantPlatformToolsetSlug,
+		slug:    platformtools.PlatformMCPReadToolsetSlug,
 	}
 }
 
@@ -280,10 +280,9 @@ func TestServePlatformToolset_Skills_ResourcesListIsEmpty(t *testing.T) {
 func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
-	grantProjectLogRead(t, ti, f.authCtx)
 	name := slices.Sorted(maps.Keys(embeddedPlatformSkills(t)))[0]
 	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)
 
@@ -296,5 +295,5 @@ func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T)
 	w, err := servePlatformHTTP(t, ti, f.slug, toolsListBody(), f.token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "tools stay served with the extension off: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
+	require.Contains(t, w.Body.String(), `"get_platform_context"`)
 }

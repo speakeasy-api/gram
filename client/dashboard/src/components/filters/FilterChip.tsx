@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
@@ -81,13 +81,15 @@ export function FilterChip({
   onClick?: () => void;
   onRemove?: () => void;
 }): JSX.Element {
+  const body = useRef<HTMLButtonElement>(null);
   return (
     <span
+      onClick={(e) => clickOwnArea(e, body.current)}
       // Colour is set here and inherited, never merged onto the label beside
       // `text-eyebrow`: tailwind-merge files both under its `text-*` group and
       // drops the earlier one, which silently cost the chip its mono uppercase.
       className={cn(
-        "bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pl-3 transition-colors",
+        "bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 border pl-3 transition-colors",
         active
           ? "border-foreground text-foreground"
           : "border-border text-muted-foreground",
@@ -95,6 +97,7 @@ export function FilterChip({
       )}
     >
       <button
+        ref={body}
         type="button"
         aria-label={ariaLabel}
         onClick={onClick}
@@ -121,6 +124,14 @@ export function FilterChip({
       )}
     </span>
   );
+}
+
+// Padding and gaps belong to the chip, so a click there acts as the body button.
+function clickOwnArea(
+  event: MouseEvent<HTMLElement>,
+  body: HTMLButtonElement | null,
+): void {
+  if (event.target === event.currentTarget) body?.click();
 }
 
 /** Standard filter-chip treatment with a direct, searchable selection popover. */
@@ -236,12 +247,17 @@ export function CustomFilterChip({
   };
 
   const valuePlaceholder = op === Operator.In ? "value1, value2, ..." : "value";
+  const body = useRef<HTMLButtonElement>(null);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors">
+      <span
+        onClick={(e) => clickOwnArea(e, body.current)}
+        className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors"
+      >
         <PopoverTrigger asChild>
           <button
+            ref={body}
             type="button"
             aria-label={`Edit filter ${filter.path}`}
             className="hover:text-foreground cursor-pointer transition-colors"

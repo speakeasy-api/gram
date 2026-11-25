@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 const (
@@ -222,7 +223,7 @@ func New[R any](
 	redisOptions := cfg.RedisOptions
 	redisOptions.PoolSize = defaultPoolSize
 	redisOptions.DisableIdentity = true
-	client := redis.NewClient(&redisOptions)
+	client := redisswitch.Wrap(&redisOptions)
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
 		return nil, fmt.Errorf("ping reply inbox redis: %w", err)

@@ -72,10 +72,9 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
-	want := []uuid.UUID{ownRegistration}
 	registrations, err := authclientbackfill.New(ti.conn).ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{movedServer}})
 	require.NoError(t, err)
-	assert.Equal(t, want, registrations)
+	assert.Equal(t, []uuid.UUID{ownRegistration}, registrations)
 }
 
 func leftoverEnableEnforcement(t *testing.T, ctx context.Context, ti *testInstance, enforced bool) {

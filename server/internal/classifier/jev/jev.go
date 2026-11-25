@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	model            = "jev-latest"
+	defaultModel     = "jev-latest"
 	endpoint         = "https://openrouter.ai/api/v1/systemone"
 	maxResponseBytes = 8 << 20
 )
@@ -32,6 +32,7 @@ type Classifier struct {
 	client   *guardian.HTTPClient
 	key      conv.Secret
 	endpoint string
+	model    string
 	slots    chan struct{}
 }
 
@@ -47,6 +48,16 @@ func WithEndpoint(url string) Option {
 	return func(c *Classifier) {
 		if url != "" {
 			c.endpoint = url
+		}
+	}
+}
+
+// WithModel pins a concrete Jev model version instead of the moving default
+// alias. An empty model leaves the default unchanged.
+func WithModel(model string) Option {
+	return func(c *Classifier) {
+		if model != "" {
+			c.model = model
 		}
 	}
 }
@@ -67,6 +78,7 @@ func New(guardianPolicy *guardian.Policy, key conv.Secret, options ...Option) (*
 		),
 		key:      conv.NewSecret(bytes.Clone(key.Reveal())),
 		endpoint: endpoint,
+		model:    defaultModel,
 		slots:    make(chan struct{}, 4),
 	}
 	for _, option := range options {
@@ -97,7 +109,7 @@ func (c *Classifier) Classify(ctx context.Context, req *classifier.Request) clas
 
 func (c *Classifier) classify(ctx context.Context, req *classifier.Request) (classifier.Result, error) {
 	var result classifier.Result
-	result.Metadata = classifier.Metadata{Provider: "openrouter", Model: model, CompilerVersion: "1", AccountingVersion: "provider-usage-v1"}
+	result.Metadata = classifier.Metadata{Provider: "openrouter", Model: c.model, CompilerVersion: "1", AccountingVersion: "provider-usage-v1"}
 	result.Usage.Complete = true
 
 	if err := ctx.Err(); err != nil {
@@ -230,7 +242,7 @@ func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions
 	case <-ctx.Done():
 		return response, failure(classifier.FailureProviderUnavailable, "Provider admission wait interrupted", true), false, false
 	}
-	request := wireRequest{Model: model, State: state, Questions: make(map[string]wireQuestion, len(questions))}
+	request := wireRequest{Model: c.model, State: state, Questions: make(map[string]wireQuestion, len(questions))}
 	for _, q := range questions {
 		request.Questions[strconv.Itoa(q.index)] = q.wire
 	}

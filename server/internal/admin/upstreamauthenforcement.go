@@ -62,9 +62,6 @@ func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, _ *gen.Dis
 // never falling back to another client.
 func (s *Service) upstreamAuthEnforcement(ctx context.Context, status *gen.AdminUpstreamOAuthMigrationStatus) *gen.AdminUpstreamAuthEnforcement {
 	blockers := []string{}
-	if !status.Migrated {
-		blockers = append(blockers, "The upstream OAuth migration is incomplete.")
-	}
 	switch a := status.AuthClients; {
 	case a == nil:
 		blockers = append(blockers, "Typed auth clients couldn't be checked.")

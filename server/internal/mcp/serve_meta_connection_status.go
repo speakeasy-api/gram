@@ -233,7 +233,17 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		tokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
-			return memberFailureSignIn(ctx, *gate, member, err)
+			switch {
+			case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+				errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+				return memberFailureSignIn(ctx, *gate, member, metaMemberClientCredentialError(member, err))
+			case errors.Is(err, remotesessions.ErrChosenClientUnbound), errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
+				return signInRow(metamcp.SignInActionRequired, "Ask an administrator to check this server's upstream registration.", nil)
+			case errors.Is(err, remotesessions.ErrNoValidToken):
+				return notConnectedRow(gate, true)
+			default:
+				return memberFailureSignIn(ctx, *gate, member, err)
+			}
 		}
 		entry, ok := assignedHostedToken(tokens, registrationID)
 		if ok && entry.ClientCredentialErr != nil {

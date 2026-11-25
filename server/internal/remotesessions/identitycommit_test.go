@@ -135,6 +135,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Reused)
 	require.Equal(t, clientID, res.Client.ID)
+	require.Equal(t, []uuid.UUID{userIssuerID}, res.Bindings, "only the live scoped placement is reported")
 }
 
 // seedLiveAgentBinding attaches a new agent to the caller's remote session

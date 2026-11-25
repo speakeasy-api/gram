@@ -418,7 +418,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions)
-	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
+	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta, memberToolAnyDisposition)
 	if err != nil {
 		failure := invocation.failure()
 		if refusal, ok := errors.AsType[*codemode.DispatchError](err); ok {

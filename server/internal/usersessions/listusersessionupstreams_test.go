@@ -17,6 +17,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -252,8 +255,8 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// Inventory attributes upstream grants to the sign-in that minted them.
-func TestListUserSessionsDoesNotAttributeUpstreamsToAnotherIssuer(t *testing.T) {
+// A sibling issuer can reuse the same user grant via a live typed offer.
+func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -290,7 +293,7 @@ func TestListUserSessionsDoesNotAttributeUpstreamsToAnotherIssuer(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
+	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -306,6 +309,92 @@ func TestListUserSessionsDoesNotAttributeUpstreamsToAnotherIssuer(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
 	require.Empty(t, res.Items[0].Upstreams, "the sibling sign-in did not mint this grant")
+
+	projectID := *authCtx.ProjectID
+	source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ProjectID: projectID, Name: conv.ToPGText("Shared upstream"), Slug: conv.ToPGText("shared-upstream"),
+		TransportType: "streamable-http", Url: "https://shared-upstream.example.test/mcp",
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Sibling server"), Slug: conv.ToPGText("sibling-server"),
+		UserSessionIssuerID: conv.ToNullUUID(siblingID), RemoteMcpServerID: conv.ToNullUUID(source.ID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	offerClientID := seedInventoryOAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, server.ID, clientID)
+
+	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1)
+	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
+
+	require.NoError(t, authclientbackfill.New(ti.conn).SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: offerClientID, Enabled: false}))
+	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Empty(t, res.Items[0].Upstreams, "disabling the offer removes sibling reach")
+}
+
+func seedInventoryOAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, clientID uuid.UUID) uuid.UUID {
+	t.Helper()
+	typed := authclientbackfill.New(ti.conn)
+	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID),
+		ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID),
+	})
+	require.NoError(t, err)
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: authClient, Source: "admin",
+	}))
+	return authClient
+}
+
+// A client detached from the issuer that minted the grant keeps live upstream
+// tokens, and revoking the Speakeasy session still destroys them. The page has to
+// keep listing them or an admin reads an empty page as "nothing to revoke".
+func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "detached-upstream-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	issuerID := uuid.MustParse(issuer.ID)
+	subject := urn.NewUserSubject("detached-upstream-subject")
+	_, err = seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	_ = seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"a grant minted through this issuer stays listed after its client is detached")
+	require.Equal(t, "mcp.detached.example", res.Items[0].Upstreams[0].IssuerSlug)
 }
 
 // An agent's upstream is the exact, still-authorized owner attachment, not

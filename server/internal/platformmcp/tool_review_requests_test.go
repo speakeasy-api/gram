@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
@@ -93,6 +94,7 @@ func TestMCPReviewRequestToolsRemainDiscoverableWithoutProjectGrant(t *testing.T
 	registrar := liveReviewRequestRegistrar(&stubMCPReviewRequests{}, stubMCPReviewProjects{})
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 	ctx := authz.GrantsToContext(t.Context(), []authz.Grant{})
+	registrar.withAICatalog(aivendorstest.NewStore())
 	visible := registrar.FilterExternalTools(ctx, principal, []*mcp.Tool{{Name: "request_mcp_review"}, {Name: "get_my_mcp_review_request"}})
 	require.Len(t, visible, 2)
 	require.Equal(t, "request_mcp_review", visible[0].Name)

@@ -1,8 +1,6 @@
 package assistants
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
@@ -52,85 +49,18 @@ func platformSlugsFixture(t *testing.T) (*Service, assistantRecord, assistantRec
 	return svc, managedRecord, otherRecord
 }
 
-// The platformmcp variant REPLACES the legacy managed toolset rather than
-// adding to it: an org on one variant must never see the other's tools.
-func TestAssistantPlatformSlugsManagedPlatformMCPVariantReplacesLegacy(t *testing.T) {
+// The managed assistant gets the Platform MCP read toolset on top of the base
+// assistants toolset.
+func TestAssistantPlatformSlugsManagedGetsPlatformMCP(t *testing.T) {
 	t.Parallel()
 
 	svc, managedRecord, _ := platformSlugsFixture(t)
 
-	flags := &feature.InMemory{}
-	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
-	svc.core.SetFeatureProvider(flags)
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
 		platformtools.PlatformMCPReadToolsetSlug,
-	}, slugs)
-}
-
-func TestAssistantPlatformSlugsManagedLegacyVariantUnchanged(t *testing.T) {
-	t.Parallel()
-
-	svc, managedRecord, _ := platformSlugsFixture(t)
-
-	flags := &feature.InMemory{}
-	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsLegacy)
-	svc.core.SetFeatureProvider(flags)
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}, slugs)
-}
-
-// An unrecognized variant key (e.g. a PostHog variant renamed out from under
-// the server) must land on legacy, not on no toolset at all.
-func TestAssistantPlatformSlugsUnknownVariantFallsBackToLegacy(t *testing.T) {
-	t.Parallel()
-
-	svc, managedRecord, _ := platformSlugsFixture(t)
-
-	flags := &feature.InMemory{}
-	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.Variant("control"))
-	svc.core.SetFeatureProvider(flags)
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}, slugs)
-}
-
-func TestAssistantPlatformSlugsNoVariantUnchanged(t *testing.T) {
-	t.Parallel()
-
-	svc, managedRecord, _ := platformSlugsFixture(t)
-	svc.core.SetFeatureProvider(&feature.InMemory{})
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}, slugs)
-}
-
-func TestAssistantPlatformSlugsNilProviderFallsBackToLegacy(t *testing.T) {
-	t.Parallel()
-
-	svc, managedRecord, _ := platformSlugsFixture(t)
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
 	}, slugs)
 }
 
@@ -139,33 +69,7 @@ func TestAssistantPlatformSlugsNonManagedNeverGetsPlatformToolset(t *testing.T) 
 
 	svc, _, otherRecord := platformSlugsFixture(t)
 
-	flags := &feature.InMemory{}
-	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
-	svc.core.SetFeatureProvider(flags)
-
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord, false)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord)
 	require.NoError(t, err)
 	require.Equal(t, []string{platformtools.AssistantsPlatformToolsetSlug}, slugs)
-}
-
-type failingVariantFlags struct{ *feature.InMemory }
-
-func (failingVariantFlags) FlagVariant(context.Context, feature.Flag, string, map[string]string) (feature.Variant, error) {
-	return "", errors.New("flag provider unavailable")
-}
-
-func TestAssistantPlatformSlugsStrictVariantSurfacesLookupFailure(t *testing.T) {
-	t.Parallel()
-
-	svc, managedRecord, _ := platformSlugsFixture(t)
-	svc.core.SetFeatureProvider(failingVariantFlags{&feature.InMemory{}})
-
-	_, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, true)
-	require.ErrorContains(t, err, "flag provider unavailable", "a strict lookup must not fall back to a different tool set")
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}, slugs)
 }

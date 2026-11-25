@@ -215,7 +215,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
 	if member.backend != metaMemberBackendProxied {
-		tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), gate.organizationID, member.projectID, member.serverID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), true)
+		tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), gate.organizationID, member.projectID, member.serverID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), true)
 		if err != nil {
 			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
 		}
@@ -304,13 +304,16 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		Subject:             subject,
 		RegistrationID:      clientID,
 		SkipUnusable:        false,
-		Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request),
+		Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).FromRequest(gate.request),
 	})
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
 	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
+	}
+	if err == nil && len(resolved) == 0 {
+		err = remotesessions.ErrNoValidToken
 	}
 	// A service account's credential is the server's, shared by every
 	// caller: the agent's sign-in step does not set it.
@@ -325,9 +328,6 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
-	if err == nil && len(resolved) == 0 {
-		err = remotesessions.ErrNoValidToken
-	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
@@ -484,11 +484,5 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 			return none, noCredential, agentServerAccessError(target.slug)
 		}
 	}
-	// A gap leaves the registration serving its token without the auth client
-	// it named, so that client did not sign the call in.
-	servedClientID := res.clientID
-	if res.outcome == authClientGap {
-		servedClientID = uuid.Nil
-	}
-	return connection, servedCredential(servedClientID, permit.ClientType, connection.owner), nil
+	return connection, servedCredential(res.clientID, permit.ClientType, connection.owner), nil
 }

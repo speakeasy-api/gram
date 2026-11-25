@@ -108,7 +108,10 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
-import { connectionSelectable } from "./ownerConnections";
+import {
+  connectionSelectable,
+  usesTypedOwnerConnections,
+} from "./ownerConnections";
 import { missingSignInsSentence } from "./connectionAttention";
 import { attachOwnerConnections } from "./ownerConnections";
 import {
@@ -939,6 +942,14 @@ export function CredentialsWizard({
             ? "Could not check that you can reach the servers you chose. Check again above the list."
             : "Checking that you can reach the servers you chose…"
           : null;
+  // The rows the picker offers. Under "All servers" they are the ones those
+  // wildcards reach, so an organization-wide one shows every project's;
+  // otherwise it is the project the agent is bound to.
+  const listedServers = inventory.servers.filter((server) =>
+    allServers
+      ? reachCoversProject(allServersProjectIDs, server.projectId)
+      : scopedProjectID === undefined || server.projectId === scopedProjectID,
+  );
   // The blanket sign-in grant is written only for an agent that reaches a
   // server: one that reaches nothing has no auth client to use. A new agent
   // gets it when created, an edited one when it holds no mcp:auth yet.
@@ -976,19 +987,20 @@ export function CredentialsWizard({
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
-  const authStop = !authRefused
-    ? null
-    : authCheck.data?.limitedBy === "owner"
-      ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
-      : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
-  // The rows the picker offers. Under "All servers" they are the ones those
-  // wildcards reach, so an organization-wide one shows every project's;
-  // otherwise it is the project the agent is bound to.
-  const listedServers = inventory.servers.filter((server) =>
-    allServers
-      ? reachCoversProject(allServersProjectIDs, server.projectId)
-      : scopedProjectID === undefined || server.projectId === scopedProjectID,
-  );
+  // Hosted servers can still use the issuer-registration path without this
+  // grant. A proxied target needs it to use its typed upstream credentials.
+  const requiresAuthGrant = allServers
+    ? inventory.isLoading ||
+      inventory.isError ||
+      listedServers.some(usesTypedOwnerConnections)
+    : selected.some(({ server }) => usesTypedOwnerConnections(server));
+  const includeAuthGrant = !authRefused || requiresAuthGrant;
+  const authStop =
+    !authRefused || !requiresAuthGrant
+      ? null
+      : authCheck.data?.limitedBy === "owner"
+        ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
+        : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
   // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
   const connectionServers = [
@@ -1183,7 +1195,7 @@ export function CredentialsWizard({
         // the server refuses a request that names a grant twice.
         policyGrants: uniqueGrants([
           ...agentPolicyGrantsFromDraft(draft),
-          ...(reachesServers ? [AUTH_GRANT] : []),
+          ...(includeAuthGrant && reachesServers ? [AUTH_GRANT] : []),
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -1338,6 +1350,7 @@ export function CredentialsWizard({
         });
       }
       if (
+        includeAuthGrant &&
         reachesServers &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
@@ -1916,7 +1929,11 @@ export function CredentialsWizard({
                         allServers
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
-                        `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
+                        ...(includeAuthGrant
+                          ? [
+                              `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
+                            ]
+                          : []),
                         ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
                         // What the platform's runtime needs beyond the
                         // servers, such as a device agent's plugin sync.

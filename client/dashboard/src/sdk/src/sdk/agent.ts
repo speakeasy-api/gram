@@ -11,15 +11,19 @@ import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentHideMcpServer } from "../funcs/agentHideMcpServer.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
+import { agentListPendingAccessRequests } from "../funcs/agentListPendingAccessRequests.js";
+import { agentListRequestableAccess } from "../funcs/agentListRequestableAccess.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportCrash } from "../funcs/agentReportCrash.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentReportState } from "../funcs/agentReportState.js";
+import { agentRequestAccess } from "../funcs/agentRequestAccess.js";
 import { agentUnhideMcpServer } from "../funcs/agentUnhideMcpServer.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AgentRequestAccessResult } from "../models/components/agentrequestaccessresult.js";
 import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
 import { CreateSessionHandoffResult } from "../models/components/createsessionhandoffresult.js";
 import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
@@ -28,9 +32,15 @@ import { GetMyConnectionsResult } from "../models/components/getmyconnectionsres
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
+import { ListPendingAccessRequestsResult } from "../models/components/listpendingaccessrequestsresult.js";
+import { ListRequestableAccessResult } from "../models/components/listrequestableaccessresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import { ReportCrashResult } from "../models/components/reportcrashresult.js";
 import { ReportStateResult } from "../models/components/reportstateresult.js";
+import {
+  AgentRequestAccessRequest,
+  AgentRequestAccessSecurity,
+} from "../models/operations/agentrequestaccess.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
@@ -64,6 +74,14 @@ import {
   HideAgentMcpServerRequest,
   HideAgentMcpServerSecurity,
 } from "../models/operations/hideagentmcpserver.js";
+import {
+  ListAgentPendingAccessRequestsRequest,
+  ListAgentPendingAccessRequestsSecurity,
+} from "../models/operations/listagentpendingaccessrequests.js";
+import {
+  ListAgentRequestableAccessRequest,
+  ListAgentRequestableAccessSecurity,
+} from "../models/operations/listagentrequestableaccess.js";
 import {
   ListAiScanTargetsRequest,
   ListAiScanTargetsSecurity,
@@ -275,6 +293,44 @@ export class Agent extends ClientSDK {
   }
 
   /**
+   * listPendingAccessRequests agent
+   *
+   * @remarks
+   * List the organization's pending access requests for an organization administrator, newest first, at most 50, each with a link that opens it in the dashboard to decide. Decisions are made in the dashboard or Slack, never from the device agent. A user who is not an administrator gets an empty list. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+   */
+  async listPendingAccessRequests(
+    request?: ListAgentPendingAccessRequestsRequest | undefined,
+    security?: ListAgentPendingAccessRequestsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListPendingAccessRequestsResult> {
+    return unwrapAsync(agentListPendingAccessRequests(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listRequestableAccess agent
+   *
+   * @remarks
+   * List the permissions the enrolled user can ask for as temporary access from the device agent, and their own pending requests. Only permissions that can be given temporarily are listed, and a permission the user already holds on every resource is left out. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+   */
+  async listRequestableAccess(
+    request?: ListAgentRequestableAccessRequest | undefined,
+    security?: ListAgentRequestableAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListRequestableAccessResult> {
+    return unwrapAsync(agentListRequestableAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listSyncedUsers agent
    *
    * @remarks
@@ -362,6 +418,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ReportStateResult> {
     return unwrapAsync(agentReportState(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * requestAccess agent
+   *
+   * @remarks
+   * File an access request for the enrolled user from the device agent. The request is stored and administrators are notified by email and Slack, the same as a request from the dashboard; decisions are made there, never from the device agent. Only permissions that can be given temporarily are accepted. Asking again while a request for the same access is pending returns that request without notifying anyone again. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+   */
+  async requestAccess(
+    request: AgentRequestAccessRequest,
+    security?: AgentRequestAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AgentRequestAccessResult> {
+    return unwrapAsync(agentRequestAccess(
       this,
       request,
       security,

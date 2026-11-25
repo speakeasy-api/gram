@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -40,7 +41,7 @@ func TestAgentMemberSelectedResolution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), projectID: uuid.New(), slug: "selected-member", backend: metaMemberBackendProxied,
 				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, upstreamUnavailable: tc.unavailable}
 			calls := 0
@@ -73,7 +74,7 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 	for _, clientType := range []string{"", authClientTypeStaticCredential, authClientTypePassThrough} {
 		t.Run("no-oauth/"+clientType, func(t *testing.T) {
 			t.Parallel()
-			s := &Service{}
+			s := &Service{aiCatalog: aivendorstest.NewStore()}
 			member := metaMember{serverID: uuid.New(), backend: metaMemberBackendProxied}
 			resolution := authClientResolution{outcome: authClientNoAuth}
 			if clientType != "" {
@@ -95,45 +96,38 @@ func TestAgentMemberSelectedHeaderAndNoAuth(t *testing.T) {
 
 func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 	t.Parallel()
-	for _, typed := range []bool{false, true} {
-		for _, replaced := range []bool{false, true} {
-			name := "legacy"
-			if typed {
-				name = "typed"
-			}
-			if replaced {
-				name += "/replaced"
-			} else {
-				name += "/unchanged"
-			}
-			t.Run(name, func(t *testing.T) {
-				t.Parallel()
-				checked := uuid.New()
-				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
-				s := &Service{upstreamTokens: source}
-				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
-				agent := uuid.New()
-				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
-					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-					authClient:     &authClientResolution{attachedSession: checked}}
-				choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), member)
-				}}
-				// Simulate replacing the attachment after permission checked its
-				// exact session, but before the credential lookup reads it.
-				if replaced {
-					source.bound = uuid.New()
-				}
-				tokens, err := s.resolveMemberTokens(t.Context(), &metaGateContext{agentID: agent, memberChoices: choices}, member)
-				if replaced {
-					require.Error(t, err)
-					require.Empty(t, tokens)
-				} else {
-					require.NoError(t, err)
-					require.Equal(t, checked, tokens[source.issuerID].RemoteSessionID)
-				}
-			})
+	for _, replaced := range []bool{false, true} {
+		name := "unchanged"
+		if replaced {
+			name = "replaced"
 		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			checked := uuid.New()
+			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
+			endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
+			agent := uuid.New()
+			member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
+				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				authClient:     &authClientResolution{attachedSession: checked}}
+			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), member)
+			}}
+			// Simulate replacing the attachment after permission checked its
+			// exact session, but before the credential lookup reads it.
+			if replaced {
+				source.bound = uuid.New()
+			}
+			tokens, err := s.resolveMemberTokens(t.Context(), &metaGateContext{agentID: agent, memberChoices: choices}, member)
+			if replaced {
+				require.Error(t, err)
+				require.Empty(t, tokens)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, checked, tokens[source.issuerID].RemoteSessionID)
+			}
+		})
 	}
 }
 
@@ -324,7 +318,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 					want = urn.NewUserSubject(owner)
 				}
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
-				s := &Service{upstreamTokens: source}
+				s := &Service{aiCatalog: aivendorstest.NewStore(), upstreamTokens: source}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},

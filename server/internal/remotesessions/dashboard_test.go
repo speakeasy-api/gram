@@ -1117,7 +1117,7 @@ func TestCommitServerIdentityConfigurationReplacesProjectClientOnOrgIssuer(t *te
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "org-project-issuer")
 	targetID := createServerIdentityTargetOnIssuer(t, ctx, ti, "org-project-target", userIssuerID)
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-project-current", "", false, []string{"none"})
-	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, targetID, true)
+	projectClientID := bindServerIdentityClient(t, ctx, ti, "org-project-client", currentProviderID, targetID, false)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:       nil,
@@ -1226,7 +1226,7 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "same-provider-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "same-provider", "", false, []string{"none"})
-	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, targetID, true)
+	currentClientID := bindServerIdentityClient(t, ctx, ti, "same-provider-current-client", providerID, targetID, false)
 
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualExistingProviderIdentityPayload(targetID, providerID, "same-provider-next-client"))
 	require.NoError(t, err)

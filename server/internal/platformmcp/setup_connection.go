@@ -41,11 +41,11 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	if err := validateRemoteOfferTarget(ctx, p.db, projectID, mcpServerID, remoteServerID, userSessionIssuerID); err != nil {
 		return nil, err
 	}
-	clients, _, err := p.offeredRegistrations(ctx, organizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession})
+	clients, incomplete, err := p.offeredRegistrations(ctx, organizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession})
 	if err != nil {
 		return nil, err
 	}
-	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+	if incomplete || len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf || clients[0].UpstreamRejectedAt != nil {
 		return setupConnectionResult("configuration_required", "user_identity_client_required"), nil
 	}
 	subject := urn.NewUserSubject(userID)

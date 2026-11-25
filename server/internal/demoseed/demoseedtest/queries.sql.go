@@ -37,6 +37,8 @@ JOIN remote_session_ema_bindings seed
  AND seed.project_id = c.project_id AND seed.organization_id = c.organization_id
  AND seed.state = 'ready' AND seed.resource NOT LIKE 'https://visitor.example.com/%'
 JOIN user_session_issuers u ON u.id = seed.user_session_issuer_id AND NOT u.deleted
+ AND u.organization_id = seed.organization_id
+ AND (u.project_id = seed.project_id OR u.project_id IS NULL)
 WHERE c.organization_id = $1 AND c.project_id = $2::text::uuid
 ORDER BY c.id, u.id LIMIT 1
 `
@@ -114,6 +116,8 @@ JOIN remote_session_ema_bindings seed
  AND seed.project_id = c.project_id AND seed.organization_id = c.organization_id
  AND seed.state = 'ready' AND seed.resource NOT LIKE 'https://visitor.example.com/%'
 JOIN user_session_issuers u ON u.id = seed.user_session_issuer_id AND NOT u.deleted
+ AND u.organization_id = seed.organization_id
+ AND (u.project_id = seed.project_id OR u.project_id IS NULL)
 WHERE c.organization_id = $2 AND c.project_id = $3::text::uuid
 ORDER BY c.id, u.id
 LIMIT 1

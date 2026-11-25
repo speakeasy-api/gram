@@ -93,6 +93,15 @@ func TestFallbackResourceForClient_SharedIssuerUsesAssociationsWithoutFlag(t *te
 	require.Equal(t, fx.ownURL, resource, "only the explicitly associated server counts")
 }
 
+func TestFallbackResourceForClient_DoesNotInferTenantFromPlacement(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedSharedIssuerFixture(t, "fallback-missing-tenant")
+	mgr := newFlaggedResolveManager(t, fx, true)
+	resource, err := mgr.FallbackResourceForClient(ctx, "", fx.clientID)
+	require.NoError(t, err)
+	require.Empty(t, resource, "placements must not supply a resource without a trusted tenant")
+}
+
 func TestFallbackResourceForClient_SharedIssuerFromAssociations(t *testing.T) {
 	t.Parallel()
 

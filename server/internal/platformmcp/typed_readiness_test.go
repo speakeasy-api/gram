@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -95,7 +97,7 @@ func TestCatalogReadinessRejectsStaleRegisteredTarget(t *testing.T) {
 	require.NoError(t, err)
 	f := seedChainedCatalogFixtureClient(t, ctx, conn)
 	serverID := typedCatalogServer(t, ctx, conn, f, 1)
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	_, err = prober.ProbeCatalogReadiness(ctx, f.principal, f.projectID, f.registrationID, serverID, f.remoteID, uuid.New(), uuid.New(), uuid.New())
 	require.ErrorIs(t, err, ErrReadinessInvalid)
 }
@@ -107,7 +109,7 @@ func TestSetupConnectionFollowsTypedOffers(t *testing.T) {
 	require.NoError(t, err)
 	f := seedChainedCatalogFixtureClient(t, ctx, conn)
 	serverID := typedCatalogServer(t, ctx, conn, f, 1)
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	result, err := prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, f.userSessionIssuerID)
 	require.NoError(t, err)
 	require.Equal(t, "authorization_required", result.Status)
@@ -115,6 +117,16 @@ func TestSetupConnectionFollowsTypedOffers(t *testing.T) {
 
 	_, err = prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, uuid.New())
 	require.ErrorIs(t, err, ErrReadinessInvalid, "stale sign-in target must not use an offered credential")
+
+	clients, _, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	_, err = remotesessionsrepo.New(conn).MarkRemoteSessionClientUpstreamRejected(ctx, remotesessionsrepo.MarkRemoteSessionClientUpstreamRejectedParams{ID: clients[0].ID, ClientID: clients[0].ExternalClientID})
+	require.NoError(t, err)
+	result, err = prober.TestUserConnection(ctx, f.principal.OrganizationID, f.principal.UserID, f.projectID, serverID, f.remoteID, f.userSessionIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_required", result.Status)
+	require.Equal(t, "user_identity_client_required", result.Code)
 }
 
 // A missing grant on the first offer must not hide a usable second offer or
@@ -127,7 +139,7 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	f := seedChainedCatalogFixtureClient(t, ctx, conn)
 	serverID := typedCatalogServer(t, ctx, conn, f, 2)
 	f.serverID = serverID
-	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	prober := NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
 	clients, incomplete, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, serverID, []string{authz.AuthClientTypeRemoteSession})
 	require.NoError(t, err)
 	require.False(t, incomplete)
@@ -139,8 +151,10 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	require.NoError(t, err)
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "typed-offer-target", Version: "1.0.0"}, nil)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, nil)
+	var allowAnonymous atomic.Bool
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer usable-offer-token" {
+		authorization := r.Header.Get("Authorization")
+		if authorization != "Bearer usable-offer-token" && (authorization != "" || !allowAnonymous.Load()) {
 			http.Error(w, "authorization required", http.StatusUnauthorized)
 			return
 		}
@@ -166,4 +180,13 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	result = f.probe(t, conn, nil)
 	require.Equal(t, ReadinessNeedsConfiguration, result.State)
 	require.Equal(t, "upstream_identity_provider_not_configured", result.EvidenceCode)
+
+	// The same offer-free target can still check readiness when the upstream
+	// accepts anonymous requests; it must not borrow the sibling's grant.
+	allowAnonymous.Store(true)
+	result = f.probe(t, conn, nil)
+	require.Equal(t, ReadinessReady, result.State)
+	require.Equal(t, "tools_list_ok", result.EvidenceCode)
+	require.Equal(t, "anonymous", result.AuthorizationIdentity.Absence)
+	require.Equal(t, uuid.Nil, result.AuthorizationIdentity.RemoteSessionClientID)
 }

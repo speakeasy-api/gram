@@ -527,6 +527,7 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 // are not recorded as authorization checks, so viewing such a page adds no
 // failed checks the person did not trigger.
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	ctx = authz.WithoutChallenges(ctx)
 	enforced, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
@@ -535,7 +536,6 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 }
 
 func (s *Service) resolveProposedAuthClientWithPolicy(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject, enforced bool) (authClientResolution, error) {
-	ctx = authz.WithoutChallenges(ctx)
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          true, ProposedNoAuth: false, ProposedRegistrationID: registrationID, ProposedAuthClientID: authClientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{serverID}, OrganizationID: organizationID, TypedOnly: enforced,
@@ -733,7 +733,7 @@ func (s *Service) refuseForeignCaller(ctx context.Context, organizationID string
 	return oops.E(oops.CodeForbidden, nil, "this credential belongs to another organization, and this MCP server only accepts its own organization's credentials").LogWarn(ctx, s.logger, attr.SlogOrganizationID(organizationID))
 }
 
-// Hosted and ordinary ungated admission are outside the typed serving path.
+// Hosted admission is outside the typed serving path.
 // Preserve their existing foreign-caller policy.
 func (s *Service) refuseForeignCallerOutsideTypedServing(ctx context.Context, organizationID string) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -750,7 +750,8 @@ func (s *Service) refuseForeignCallerOutsideTypedServing(ctx context.Context, or
 	return s.refuseForeignCaller(ctx, organizationID)
 }
 
-// Typed serving and typed consent use mandatory mcp:auth.
+// Serving always uses mandatory mcp:auth. Browser consent also uses it;
+// other proposed choices retain their eligibility policy.
 func (s *Service) authClientPermitFor(mandatory bool) (authClientPermitter, error) {
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil
@@ -866,8 +867,8 @@ func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, 
 
 // serveAuthClient applies a resolution to a direct proxied endpoint's
 // request: the client's own material, none, or the registration or server
-// headers of a compatibility path. A gap writes the reconnect challenge and a
-// refused client a request-access error.
+// headers of a compatibility path. A gap asks for setup or reconnect; a
+// refused client returns a request-access error.
 func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, res authClientResolution) (upstreamChoice, error) {
 	var none upstreamChoice
 	// The connection the permit was decided for binds every token path,
@@ -891,10 +892,17 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
+		needsSetup, err := s.directReconnectNeedsSetup(ctx, authentication)
+		if err != nil {
+			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
+		}
+		if needsSetup {
+			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
+		}
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
-		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
+		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
 			mcpconnectionattempts.Detail(res.reason), mcpconnectionattempts.Subject(&authentication.subject),
 			s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		return none, s.authClientNoAccessError(ctx, endpoint.McpServerID.UUID, res)
@@ -914,6 +922,28 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	authentication.chosenClient = res.choice.clientID
 	authentication.chosenNoAuth = false
 	return res.choice, nil
+}
+
+// directReconnectNeedsSetup detects upstream setup that a new consent
+// cannot turn into a typed serving choice. It inspects only
+// configuration; it never resolves credentials. Typed browser consent can
+// issue explicit no-auth after a typed offer has been detached.
+func (s *Service) directReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
+	endpoint := authentication.endpoint
+	if endpoint.UserSessionIssuerID == uuid.Nil ||
+		(authentication.subject.Kind != urn.SessionSubjectKindUser && authentication.subject.Kind != urn.SessionSubjectKindAnonymous) {
+		return false, nil
+	}
+	serverID := endpoint.McpServerID.UUID
+	offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	if err != nil {
+		return false, err
+	}
+	offer, known := offers[serverID]
+	if !known || len(offer.clients) != 0 {
+		return false, nil
+	}
+	return offer.pending, nil
 }
 
 // authClientNoAccessError refuses a caller the chosen client, with a link to
@@ -984,6 +1014,3 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 	}
 	return reconnect, none, true, nil
 }
-
-// legacyChoiceOutcome names the upstream client choice's outcome in the
-// resolver's terms, for shadow comparison.

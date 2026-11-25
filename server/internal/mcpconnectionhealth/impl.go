@@ -52,6 +52,9 @@ type Service struct {
 	features    feature.Provider
 	logsEnabled LogsEnabled
 	now         func() time.Time
+
+	// problemsDeadline bounds one suspected problems request.
+	problemsDeadline time.Duration
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,6 +81,8 @@ func NewService(
 		features:    features,
 		logsEnabled: logsEnabled,
 		now:         time.Now,
+
+		problemsDeadline: defaultProblemsDeadline,
 	}
 }
 
@@ -197,25 +202,9 @@ func (s *Service) attemptScope(ctx context.Context, c caller, q rangeQuery, now 
 		}
 		serverID = parsed.String()
 	}
-	ids, err := repo.New(s.db).ListIssuerServerIDs(ctx, repo.ListIssuerServerIDsParams{
-		ProjectID:      c.projectID,
-		IssuerID:       uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		OrganizationID: c.organizationID,
-	})
+	serverIDs, err := s.issuerServerIDs(ctx, c, issuer.ID)
 	if err != nil {
-		return none, oops.E(oops.CodeUnexpected, err, "list provider servers").LogError(ctx, s.logger)
-	}
-	// The organization gateway's project view records no issuer on some rows.
-	gatewayIssuer, _, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), c.organizationID)
-	if err != nil {
-		return none, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, s.logger)
-	}
-	if gatewayIssuer == issuer.ID {
-		ids = append(ids, orggateway.ProjectGatewayID(c.organizationID, c.projectID))
-	}
-	serverIDs := make([]string, len(ids))
-	for i, id := range ids {
-		serverIDs[i] = id.String()
+		return none, err
 	}
 	return attemptlog.Scope{
 		OrganizationID:  c.organizationID,
@@ -228,6 +217,31 @@ func (s *Service) attemptScope(ctx context.Context, c caller, q rangeQuery, now 
 		To:              to,
 		OwnSubjects:     c.ownSubjects,
 	}, nil
+}
+
+// issuerServerIDs are the servers and gateways in the project attached to the issuer.
+func (s *Service) issuerServerIDs(ctx context.Context, c caller, issuerID uuid.UUID) ([]string, error) {
+	ids, err := repo.New(s.db).ListIssuerServerIDs(ctx, repo.ListIssuerServerIDsParams{
+		ProjectID:      c.projectID,
+		IssuerID:       uuid.NullUUID{UUID: issuerID, Valid: true},
+		OrganizationID: c.organizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list provider servers").LogError(ctx, s.logger)
+	}
+	// The organization gateway's project view records no issuer on some rows.
+	gatewayIssuer, _, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), c.organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, s.logger)
+	}
+	if gatewayIssuer == issuerID {
+		ids = append(ids, orggateway.ProjectGatewayID(c.organizationID, c.projectID))
+	}
+	serverIDs := make([]string, len(ids))
+	for i, id := range ids {
+		serverIDs[i] = id.String()
+	}
+	return serverIDs, nil
 }
 
 func (s *Service) parseRange(ctx context.Context, fromValue, toValue string, now time.Time) (time.Time, time.Time, error) {

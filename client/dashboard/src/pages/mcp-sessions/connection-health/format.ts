@@ -27,9 +27,9 @@ export function outcomeLabel(outcome: string): string {
 
 export const STEP_LABELS: Record<StepGroup, string> = {
   connect: "Connect",
-  sign_in: "MCP sign-in",
+  sign_in: "Sign-in",
   service_sign_in: "Service sign-in",
-  sign_in_renewal: "MCP sign-in renewal",
+  sign_in_renewal: "Sign-in renewal",
   service_renewal: "Service sign-in renewal",
   listing_tools: "Listing tools",
   request: "Request",
@@ -73,6 +73,25 @@ export const SOURCE_LABELS: Record<Source, string> = {
   speakeasy_setting: "A Speakeasy setting",
   speakeasy: "Speakeasy",
 };
+
+/** Where a problem's failures came from, in one sentence true for every reason with that source; name is the service or app when known. */
+export function sourceSentence(source: Source, name?: string): string {
+  const named = (what: string) => (name ? `${what} (${name})` : what);
+  switch (source) {
+    case "service":
+      return `These failures came from ${named("the service")}.`;
+    case "server":
+      return "These failures came from the MCP server.";
+    case "app":
+      return `These failures point to ${named("the app")}.`;
+    case "identity_provider":
+      return "These failures came from the identity provider, or it could not be reached.";
+    case "speakeasy_setting":
+      return "A Speakeasy admin should look into these failures.";
+    case "speakeasy":
+      return "Speakeasy should look into these failures.";
+  }
+}
 
 const UNNAMED_SERVER: Record<string, string> = {
   authorization_server: "Shared sign-in",
@@ -171,6 +190,29 @@ export const formatClockMinutes = (iso: string): string =>
   TIME_MINUTES.format(new Date(iso));
 export const formatFull = (iso: string): string => FULL.format(new Date(iso));
 
+/**
+ * Axis labels for evenly spaced bucket starts: about `ticks` labels spread over the
+ * window, "HH:mm", with the day added only where it changes in a window that crosses midnight.
+ */
+export function axisLabels(starts: string[], ticks = 5): string[] {
+  if (starts.length === 0) return [];
+  const step = Math.max(1, Math.ceil(starts.length / ticks));
+  const crossesMidnight = !sameDay(
+    new Date(starts[0]!),
+    new Date(starts[starts.length - 1]!),
+  );
+  let lastDay = "";
+  return starts.map((iso, i) => {
+    if (i % step !== 0) return "";
+    const date = new Date(iso);
+    const day = DAY_MONTH.format(date);
+    const time = TIME_MINUTES.format(date);
+    if (!crossesMidnight || day === lastDay) return time;
+    lastDay = day;
+    return `${day} ${time}`;
+  });
+}
+
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -181,8 +223,14 @@ function sameDay(a: Date, b: Date): boolean {
 
 /** "09:48 today", or "16 Nov, 16:05" on another day. */
 export function formatSince(iso: string, now: Date): string {
+  const at = formatAt(iso, now);
+  return sameDay(new Date(iso), now) ? `${at} today` : at;
+}
+
+/** "09:48" today, or "16 Nov, 16:05" on another day. */
+export function formatAt(iso: string, now: Date): string {
   const date = new Date(iso);
-  if (sameDay(date, now)) return `${TIME_MINUTES.format(date)} today`;
+  if (sameDay(date, now)) return TIME_MINUTES.format(date);
   return `${DAY_MONTH.format(date)}, ${TIME_MINUTES.format(date)}`;
 }
 
@@ -233,25 +281,25 @@ export const SERVICE_DEFINITION =
   "An MCP server is what the AI app connects to in Speakeasy. A service is the outside system that server works with for the person, like Linear. Each has its own sign-in.";
 
 const PROBLEM_RULES: Record<ProblemRule, string> = {
-  three_people_same_service:
-    "3 or more people got the same kind of failure from one service and have not connected since.",
-  three_people_same_server:
-    "3 or more people got the same kind of failure on one server and have not connected since.",
-  three_people_same_app_version:
-    "3 or more people on one app version got the same kind of failure and have not connected since.",
-  one_person_24_hours:
+  same_service:
+    "2 or more people got the same kind of failure from one service and have not connected since.",
+  same_server:
+    "2 or more people got the same kind of failure on one server and have not connected since.",
+  same_app_version:
+    "2 or more people on one app version got the same kind of failure and have not connected since.",
+  one_person:
     "One person got the same kind of failure for 24 hours and has not connected since.",
 };
 
 /** Rules for problems signing in to Speakeasy, where success is signing in. */
 const SIGN_IN_PROBLEM_RULES: Record<ProblemRule, string> = {
-  three_people_same_service:
-    "3 or more people got the same kind of failure from one service and have not signed in since.",
-  three_people_same_server:
-    "3 or more people got the same kind of failure on one server and have not signed in since.",
-  three_people_same_app_version:
-    "3 or more people on one app version got the same kind of failure and have not signed in since.",
-  one_person_24_hours:
+  same_service:
+    "2 or more people got the same kind of failure from one service and have not signed in since.",
+  same_server:
+    "2 or more people got the same kind of failure on one server and have not signed in since.",
+  same_app_version:
+    "2 or more people on one app version got the same kind of failure and have not signed in since.",
+  one_person:
     "One person got the same kind of failure for 24 hours and has not signed in since.",
 };
 
@@ -265,7 +313,7 @@ export function problemRule(problem: SuspectedProblem): string {
 /** The headline with when it started, as the panel lists it. */
 export function problemHeadline(problem: SuspectedProblem, now: Date): string {
   const since =
-    problem.rule === "one_person_24_hours"
+    problem.rule === "one_person"
       ? formatDayMonth(problem.since)
       : formatSince(problem.since, now);
   return `${problem.headline} since ${since}`;

@@ -14,6 +14,10 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// testSchema is the schema test databases keep application tables in. It
+// matches the search_path every deployed environment connects with.
+const testSchema = "gram"
+
 type PostgresDBCloneFunc func(t *testing.T, name string) (*pgxpool.Pool, error)
 
 func nextPostgresCloneSuffix() string {
@@ -63,7 +67,12 @@ func NewTestPostgres(ctx context.Context) (_ *postgres.PostgresContainer, _ Post
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
-		postgres.WithInitScripts(filepath.Join(root, "server", "database", "schema.sql")),
+		// The first script moves the template into the gram schema, as in
+		// deployed databases; schema.sql then creates every object there.
+		postgres.WithOrderedInitScripts(
+			filepath.Join(root, "server", "internal", "testenv", "postgres_gram_schema.sql"),
+			filepath.Join(root, "server", "database", "schema.sql"),
+		),
 		testcontainers.WithWaitStrategy(
 			// The log appears twice because postgres restarts itself after
 			// the init-script bootstrap run.
@@ -137,7 +146,9 @@ func newPostgresCloneFunc(uri string, maintenance *pgxpool.Pool) PostgresDBClone
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
-		cloneURI := uri[:len(uri)-len("postgres?sslmode=disable")] + cloneName + "?sslmode=disable"
+		// A clone does not inherit the template's database-level settings, so
+		// each connection sets the search_path deployed databases use.
+		cloneURI := uri[:len(uri)-len("postgres?sslmode=disable")] + cloneName + "?sslmode=disable&search_path=" + testSchema
 		pool, err := pgxpool.New(ctx, cloneURI)
 		if err != nil {
 			return nil, fmt.Errorf("create pgx pool: %w", err)

@@ -79,8 +79,8 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	require.NotNil(t, auth.ProjectID)
 	orgID := auth.ActiveOrganizationID
 	issuerID := seedIssuer(t, ctx, ti, "mint-enforced-issuer")
-	servers := make([]mcpserversrepo.McpServer, 0, 3)
-	for _, slug := range []string{"mint-offered", "mint-detached", "mint-ema"} {
+	servers := make([]mcpserversrepo.McpServer, 0, 4)
+	for _, slug := range []string{"mint-offered", "mint-detached", "mint-ema", "mint-pending"} {
 		source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 			ID:            uuid.New(),
 			ProjectID:     *auth.ProjectID,
@@ -116,6 +116,13 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	_, err = fixtures.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: detached.ID, RemoteSessionClientID: associated})
 	require.NoError(t, err)
 
+	// A past typed offer makes the leftover association historical. A server
+	// that never had a typed offer is incomplete, not explicitly no-auth.
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: detached.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, detached.ID))
+	_, err = fixtures.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: servers[3].ID, RemoteSessionClientID: associated})
+	require.NoError(t, err)
+
 	// An EMA offer is never chosen implicitly by dashboard minting.
 	ema, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "ema", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
 	require.NoError(t, err)
@@ -142,6 +149,9 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 
 	_, err = fixtures.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: session.ID, McpServerID: servers[2].ID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = fixtures.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: session.ID, McpServerID: servers[3].ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "incomplete typed setup is not an explicit no-auth choice")
 
 }
 

@@ -4,16 +4,20 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -264,7 +268,8 @@ func TestBackfillVerifyAndFinalizeMoveTokensToTheOrganizationKey(t *testing.T) {
 	for _, store := range remoteSessionStores(ti.conn) {
 		counts, err := store.Count(t.Context(), ti.orgID)
 		require.NoError(t, err)
-		require.Equal(t, orgencryption.CopyCounts{Waiting: 2, Unreadable: 0, Unattributed: 0, PlatformCopies: 2}, counts, store.Columns().PlatformColumn)
+		require.False(t, counts.LastWrittenAt.IsZero(), store.Columns().PlatformColumn)
+		require.Equal(t, orgencryption.CopyCounts{Waiting: 2, Unreadable: 0, Unattributed: 0, PlatformCopies: 2, Values: 2, LastWrittenAt: counts.LastWrittenAt}, counts, store.Columns().PlatformColumn)
 	}
 
 	ti.enroll(t)
@@ -322,7 +327,234 @@ func TestCopyStoreCountsUnreadableTokens(t *testing.T) {
 
 	counts, err := stores[0].Count(t.Context(), ti.orgID)
 	require.NoError(t, err)
-	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1}, counts)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 1, Unattributed: 0, PlatformCopies: 1, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts)
+}
+
+func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	unattributed := ti.createUnattributedSession(t)
+	sealed := ti.createSession(t)
+
+	// Rows written before access_token_encrypted became nullable store ''
+	// for a session without an access token. The sealed session also holds
+	// an organization-key copy, so only the '' filter keeps verification
+	// from comparing the two: the copy is not a ciphertext and would count
+	// as unopenable if it were listed.
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: session, orgCopy: nullText()},
+		{session: unattributed, orgCopy: nullText()},
+		{session: sealed, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(""),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	stores := upstreamtokens.CopyStores(ti.conn)
+	access := stores[0]
+	require.Equal(t, upstreamtokens.RemoteSessionAccessToken, access.Columns())
+
+	counts, err := access.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.False(t, counts.LastWrittenAt.IsZero())
+	require.Equal(t, orgencryption.CopyCounts{Waiting: 0, Unreadable: 0, Unattributed: 0, PlatformCopies: 0, Values: 1, LastWrittenAt: counts.LastWrittenAt}, counts, "'' is neither waiting, unreadable, unattributed nor a platform-key copy; only the sealed session's organization-key copy is a value")
+
+	waiting, err := access.ListWaiting(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, waiting)
+
+	listed, err := access.ListSealed(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, listed, "'' beside an organization-key copy is not a pair to verify")
+
+	ti.enroll(t)
+	result, err := ti.runner(t).Run(t.Context(), ti.orgID, orgencryption.UseCaseOAuthSessionTokens, stores)
+	require.NoError(t, err)
+	require.Zero(t, result.Converted)
+	require.Zero(t, result.Unreadable)
+	require.Zero(t, result.Mismatched)
+	require.Zero(t, result.Unopenable)
+	require.True(t, result.VerificationPassed)
+
+	ti.finalize(t)
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "clearing still removes ''")
+	require.False(t, ti.stored(t, sealed.ID).AccessTokenEncrypted.Valid, "clearing still removes '' beside an organization-key copy")
+}
+
+func TestCopyStoreClearReportsWhatItDestroyedByKind(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	alone := ti.createSession(t)
+	beside := ti.createSession(t)
+
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: alone, orgCopy: nullText()},
+		{session: beside, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	access := upstreamtokens.CopyStores(ti.conn)[0]
+	cleared, err := access.ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}, cleared)
+	require.False(t, ti.stored(t, alone.ID).AccessTokenEncrypted.Valid)
+	require.True(t, ti.stored(t, beside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy stays")
+}
+
+func TestCopyStoreClearDoesNotCountACopyAConcurrentClearDestroyed(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+		AccessPlatformCopy:  conv.ToPGText("platform-key copy"),
+		AccessOrgCopy:       nullText(),
+		ReplaceRefreshToken: false,
+		RefreshPlatformCopy: nullText(),
+		RefreshOrgCopy:      nullText(),
+		ID:                  session.ID,
+		OrganizationID:      session.OrganizationID,
+		DecidedGeneration:   0,
+	})
+	require.NoError(t, err)
+
+	// The first clear runs in a transaction that holds the row's lock.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	first, err := repo.New(tx).ClearRemoteSessionAccessTokenPlatformCopies(t.Context(), repo.ClearRemoteSessionAccessTokenPlatformCopiesParams{OrganizationID: ti.orgID, LimitValue: 10, DecidedGeneration: 0})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), first.PlatformOnly)
+
+	// The second clear picked the same row before the first committed, and
+	// waits for its lock.
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	second := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		second <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-second
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 0, BesideOrgCopy: 0}, result.cleared, "the copy the first clear destroyed is not counted again")
+}
+
+func TestCopyStoreClearCountsAnEmptyPlatformCopyApart(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	emptyAlone := ti.createSession(t)
+	emptyBeside := ti.createSession(t)
+	valueAlone := ti.createSession(t)
+
+	for _, row := range []struct {
+		session  repo.RemoteSession
+		platform string
+		orgCopy  pgtype.Text
+	}{
+		{session: emptyAlone, platform: "", orgCopy: nullText()},
+		{session: emptyBeside, platform: "", orgCopy: conv.ToPGText("organization-key copy")},
+		{session: valueAlone, platform: "platform-key copy", orgCopy: nullText()},
+	} {
+		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(row.platform),
+			AccessOrgCopy:       row.orgCopy,
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 2}, cleared, "'' is cleared but never reported as a platform-only straggler")
+	for _, session := range []repo.RemoteSession{emptyAlone, emptyBeside, valueAlone} {
+		require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "every platform-key copy is cleared")
+	}
+	require.True(t, ti.stored(t, emptyBeside.ID).AccessTokenOrgEncrypted.Valid, "the organization-key copy beside an empty one stays")
+}
+
+func TestCopyStoreClearClassifiesTheVersionItClears(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	session := ti.createSession(t)
+	setAccess := func(db repo.DBTX, platform string) {
+		t.Helper()
+
+		_, err := repo.New(db).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+			AccessPlatformCopy:  conv.ToPGText(platform),
+			AccessOrgCopy:       nullText(),
+			ReplaceRefreshToken: false,
+			RefreshPlatformCopy: nullText(),
+			RefreshOrgCopy:      nullText(),
+			ID:                  session.ID,
+			OrganizationID:      session.OrganizationID,
+			DecidedGeneration:   0,
+		})
+		require.NoError(t, err)
+	}
+	setAccess(ti.conn, "")
+
+	// A writer replaces the empty copy with a value in a transaction that
+	// holds the row's lock while the clear runs.
+	tx := testenv.BeginTx(t, t.Context(), ti.conn)
+	setAccess(tx, "platform-key copy")
+
+	type clearResult struct {
+		cleared orgencryption.ClearedCopies
+		err     error
+	}
+	done := make(chan clearResult, 1)
+	go func() {
+		cleared, err := upstreamtokens.CopyStores(ti.conn)[0].ClearPlatformCopies(t.Context(), ti.orgID, 0, 10)
+		done <- clearResult{cleared: cleared, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, t.Context(), ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	result := <-done
+	require.NoError(t, result.err)
+	require.Equal(t, orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 0, Empty: 0}, result.cleared, "the value the clear destroyed is reported, not taken for the empty copy it replaced")
+	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid)
 }
 
 // remoteSessionStores are the CopyStores of the remote session columns.
@@ -428,4 +660,278 @@ func TestSessionOrganizationOfAProjectClientWithoutOrganization(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToPGText(organization), session.OrganizationID, "the same organization the session row records")
+}
+
+// setSessionTokens stores a session's access and refresh tokens as the given
+// copies, under generation 0.
+func (ti *testInstance) setSessionTokens(t *testing.T, session repo.RemoteSession, accessPlatform pgtype.Text, accessOrg pgtype.Text, refreshPlatform pgtype.Text, refreshOrg pgtype.Text) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
+		AccessPlatformCopy:  accessPlatform,
+		AccessOrgCopy:       accessOrg,
+		ReplaceRefreshToken: true,
+		RefreshPlatformCopy: refreshPlatform,
+		RefreshOrgCopy:      refreshOrg,
+		ID:                  session.ID,
+		OrganizationID:      session.OrganizationID,
+		DecidedGeneration:   0,
+	})
+	require.NoError(t, err)
+}
+
+// createTrustedIssuerSession creates a trusted issuer session of the test
+// organization storing every value as the given copies, under generation 0.
+func (ti *testInstance) createTrustedIssuerSession(t *testing.T, platform pgtype.Text, org pgtype.Text) repo.TrustedIssuerSession {
+	t.Helper()
+
+	session, err := repo.New(ti.conn).CreateTrustedIssuerSessionFixture(t.Context(), repo.CreateTrustedIssuerSessionFixtureParams{
+		OrganizationID:        ti.orgID,
+		RemoteSessionClientID: ti.createClient(t).ID,
+		SubjectUrn:            "user:" + uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	row, err := repo.New(ti.conn).SetTrustedIssuerSessionTokens(t.Context(), repo.SetTrustedIssuerSessionTokensParams{
+		ReplaceIdentityAssertion:      true,
+		IdentityAssertionPlatformCopy: platform,
+		IdentityAssertionOrgCopy:      org,
+		ReplaceRefreshToken:           true,
+		RefreshTokenPlatformCopy:      platform,
+		RefreshTokenOrgCopy:           org,
+		ReplaceUpstreamSubject:        true,
+		UpstreamSubjectPlatformCopy:   platform,
+		UpstreamSubjectOrgCopy:        org,
+		ReplaceNonce:                  true,
+		NoncePlatformCopy:             platform,
+		NonceOrgCopy:                  org,
+		ID:                            session.ID,
+		OrganizationID:                session.OrganizationID,
+		DecidedGeneration:             0,
+	})
+	require.NoError(t, err)
+
+	return row
+}
+
+// plantEMACredential plants an EMA credential slot written at updatedAt. A
+// live slot holds a platform-key copy of its access token; a retired one
+// holds none. A slot without organization_id has no project either.
+func (ti *testInstance) plantEMACredential(t *testing.T, organizationID pgtype.Text, retired bool, updatedAt time.Time) uuid.UUID {
+	t.Helper()
+
+	project := uuid.NullUUID{UUID: ti.projectID, Valid: organizationID.Valid}
+	client := ti.createClient(t)
+	id, err := repo.New(ti.conn).PlantEMACredentialFixture(t.Context(), repo.PlantEMACredentialFixtureParams{
+		OrganizationID:          organizationID,
+		ProjectID:               project,
+		UserSessionIssuerID:     uuid.NullUUID{UUID: ti.userSessionIssuer, Valid: true},
+		RemoteSessionIssuerID:   uuid.NullUUID{UUID: ti.remoteIssuerID, Valid: true},
+		RemoteSessionClientID:   uuid.NullUUID{UUID: client.ID, Valid: true},
+		Resource:                "https://resource.example.test",
+		SubjectUrn:              urn.NewUserSubject("user_" + uuid.NewString()).String(),
+		BindingGeneration:       pgtype.Int8{Int64: 0, Valid: false},
+		EmaProvider:             "external",
+		InternalSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedIssuerSessionID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Retired:                 retired,
+		UpdatedAt:               pgtype.Timestamptz{Time: updatedAt, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return id
+}
+
+// setEMACredentialAccessToken stores an EMA credential's access token as the
+// given copies, under generation 0.
+func (ti *testInstance) setEMACredentialAccessToken(t *testing.T, id uuid.UUID, platform pgtype.Text, org pgtype.Text) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).SetEMACredentialAccessToken(t.Context(), repo.SetEMACredentialAccessTokenParams{
+		PlatformCopy:      platform,
+		OrgCopy:           org,
+		ID:                id,
+		OrganizationID:    ti.org(),
+		DecidedGeneration: 0,
+	})
+	require.NoError(t, err)
+}
+
+// valuesFor returns the organization's entry in organizations.
+func valuesFor(t *testing.T, organizations []orgencryption.OrganizationValues, organizationID string) orgencryption.OrganizationValues {
+	t.Helper()
+
+	for _, entry := range organizations {
+		if entry.OrganizationID == organizationID {
+			return entry
+		}
+	}
+	require.Failf(t, "organization not listed", "%s holds values but is not listed", organizationID)
+
+	return orgencryption.OrganizationValues{}
+}
+
+// latest returns the latest of times.
+func latest(times ...time.Time) time.Time {
+	var last time.Time
+	for _, at := range times {
+		if at.After(last) {
+			last = at
+		}
+	}
+	return last
+}
+
+func TestCopyStoresValuesCountAValueUnderEitherKey(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	platform := conv.ToPGText("platform-key copy")
+	org := conv.ToPGText("organization-key copy")
+	empty := conv.ToPGText("")
+
+	// Each column holds two values in the test organization: one under a
+	// single key, and one under the other key or both, on a soft-deleted row
+	// where the table has a fixture for it. The rows written after them hold
+	// only '' or nothing, or have no organization_id, so they count nowhere
+	// and leave LastWrittenAt alone.
+	platformOnly := ti.createSession(t)
+	ti.setSessionTokens(t, platformOnly, platform, nullText(), nullText(), org)
+	revoked := ti.createSession(t)
+	ti.setSessionTokens(t, revoked, platform, org, platform, org)
+	require.NoError(t, repo.New(ti.conn).SoftDeleteRemoteSessionFixture(t.Context(), revoked.ID))
+	unattributed := ti.createUnattributedSession(t)
+	ti.setSessionTokens(t, unattributed, platform, nullText(), platform, nullText())
+	ti.setSessionTokens(t, ti.createSession(t), empty, nullText(), empty, nullText())
+
+	trustedPlatformOnly := ti.createTrustedIssuerSession(t, platform, nullText())
+	trustedDeleted := ti.createTrustedIssuerSession(t, nullText(), org)
+	deletedRows, err := repo.New(ti.conn).SoftDeleteTrustedIssuerSessionFixture(t.Context(), repo.SoftDeleteTrustedIssuerSessionFixtureParams{ID: trustedDeleted.ID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deletedRows)
+	ti.createTrustedIssuerSession(t, empty, nullText())
+
+	base := time.Now().Add(-time.Hour)
+	emaPlatformOnly := ti.plantEMACredential(t, ti.org(), false, base.Add(-2*time.Hour))
+	emaOrgOnly := ti.plantEMACredential(t, ti.org(), false, base.Add(-time.Hour))
+	ti.setEMACredentialAccessToken(t, emaOrgOnly, nullText(), org)
+	ti.plantEMACredential(t, ti.org(), true, base)
+	emaEmpty := ti.plantEMACredential(t, ti.org(), false, base.Add(time.Hour))
+	ti.setEMACredentialAccessToken(t, emaEmpty, empty, nullText())
+	ti.plantEMACredential(t, nullText(), false, base.Add(2*time.Hour))
+
+	ema, err := repo.New(ti.conn).ListEMACredentialsFixture(t.Context(), uuid.NullUUID{UUID: ti.projectID, Valid: true})
+	require.NoError(t, err)
+	var emaWrites []time.Time
+	for _, credential := range ema {
+		if credential.ID == emaPlatformOnly || credential.ID == emaOrgOnly {
+			emaWrites = append(emaWrites, credential.UpdatedAt.Time)
+		}
+	}
+	require.Len(t, emaWrites, 2)
+
+	lastWrittenAt := map[string]time.Time{
+		"remote_sessions":                latest(ti.stored(t, platformOnly.ID).UpdatedAt.Time, ti.stored(t, revoked.ID).UpdatedAt.Time),
+		"trusted_issuer_sessions":        latest(trustedPlatformOnly.UpdatedAt.Time, trustedDeleted.UpdatedAt.Time),
+		"remote_session_ema_credentials": latest(emaWrites...),
+	}
+
+	stores := upstreamtokens.CopyStores(ti.conn)
+	require.Len(t, stores, 7)
+	for _, store := range stores {
+		column := store.Columns().PlatformColumn
+		table, _, _ := strings.Cut(column, ".")
+		want, ok := lastWrittenAt[table]
+		require.True(t, ok, "%s: unexpected table", column)
+
+		counted, err := store.Count(t.Context(), ti.orgID)
+		require.NoError(t, err, column)
+		require.Equal(t, int64(2), counted.Values, "%s: a value under either key counts, soft-deleted rows included, and '' or a row without organization_id does not", column)
+		require.True(t, want.Equal(counted.LastWrittenAt), "%s: want %s, got %s", column, want, counted.LastWrittenAt)
+
+		organizations, err := store.ListOrganizationsWithValues(t.Context())
+		require.NoError(t, err, column)
+		listed := valuesFor(t, organizations, ti.orgID)
+		require.Equal(t, int64(2), listed.Values, column)
+		require.True(t, want.Equal(listed.LastWrittenAt), "%s: want %s, got %s", column, want, listed.LastWrittenAt)
+		for _, entry := range organizations {
+			require.NotEmpty(t, entry.OrganizationID, "%s: a row without organization_id is never listed", column)
+		}
+	}
+}
+
+func TestCopyStoresValuesListEachOrganizationApart(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	access := upstreamtokens.CopyStores(ti.conn)[0]
+	require.Equal(t, upstreamtokens.RemoteSessionAccessToken, access.Columns())
+
+	ti.setSessionTokens(t, ti.createSession(t), conv.ToPGText("platform-key copy"), nullText(), nullText(), nullText())
+
+	other := ti.createOrganization(t)
+	for range 2 {
+		ti.setSessionTokens(t, ti.createOrganizationSession(t, other), nullText(), conv.ToPGText("organization-key copy"), nullText(), nullText())
+	}
+
+	// An organization whose only access token is a legacy '' holds nothing.
+	empty := ti.createOrganization(t)
+	ti.setSessionTokens(t, ti.createOrganizationSession(t, empty), conv.ToPGText(""), nullText(), nullText(), nullText())
+
+	organizations, err := access.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, int64(1), valuesFor(t, organizations, ti.orgID).Values)
+	require.Equal(t, int64(2), valuesFor(t, organizations, other).Values)
+	for _, entry := range organizations {
+		require.NotEqual(t, empty, entry.OrganizationID, "an organization with only '' is not listed")
+	}
+
+	for _, organizationID := range []string{empty, "org_" + uuid.NewString()} {
+		counted, err := access.Count(t.Context(), organizationID)
+		require.NoError(t, err)
+		require.Zero(t, counted.Values)
+		require.True(t, counted.LastWrittenAt.IsZero(), "an organization without values has no last write")
+	}
+}
+
+// createOrganization creates another organization and returns its id.
+func (ti *testInstance) createOrganization(t *testing.T) string {
+	t.Helper()
+
+	orgID := "org_" + uuid.NewString()
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        "Session Tokens Other Org",
+		Slug:        "session-tokens-" + uuid.NewString(),
+		WorkosID:    conv.ToPGText(orgID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	return orgID
+}
+
+// createOrganizationSession creates a session with no tokens under a new
+// organization client of organizationID.
+func (ti *testInstance) createOrganizationSession(t *testing.T, organizationID string) repo.RemoteSession {
+	t.Helper()
+
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+		ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:          conv.ToPGText(organizationID),
+		RemoteSessionIssuerID:   ti.remoteIssuerID,
+		ClientID:                "client-" + uuid.NewString(),
+		TokenEndpointAuthMethod: conv.ToPGText("none"),
+	})
+	require.NoError(t, err)
+
+	session, err := repo.New(ti.conn).CreateRemoteSessionFixture(t.Context(), repo.CreateRemoteSessionFixtureParams{
+		SubjectUrn:            urn.NewUserSubject("user_" + uuid.NewString()),
+		UserSessionIssuerID:   ti.userSessionIssuer,
+		RemoteSessionClientID: client.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText(organizationID), session.OrganizationID)
+
+	return session
 }

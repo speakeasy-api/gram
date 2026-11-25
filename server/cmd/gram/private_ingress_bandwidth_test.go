@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -34,7 +35,7 @@ func newPrivateBandwidthTestHandler(t *testing.T, publisher *capturingMeterPubli
 
 	logger := testenv.NewLogger(t)
 	telemetry := netingress.NewTelemetry(logger, testenv.NewMeterProvider(t))
-	return newPrivateIngressHandler(logger, telemetry, admittingWorkloadVerifier{ingress: ingress}, publisher, func(mux goahttp.Muxer) {
+	return newPrivateIngressHandler(logger, telemetry, admittingWorkloadVerifier{ingress: ingress}, publisher, aivendorstest.NewStore(), func(mux goahttp.Muxer) {
 		mux.Handle(http.MethodPost, "/mcp/{mcpSlug}", runtime)
 	})
 }

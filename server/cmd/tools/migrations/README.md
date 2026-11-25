@@ -23,14 +23,15 @@ only with `-apply` (or its own explicit write flag) plus confirmation of the
 target environment and any other confirmations that backfill requires. Its
 guide documents the flags, output, and recovery.
 
-| Backfill                                                                    | Doc                                                                                    |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Pro organization enterprise-access entitlements                             | [PRO_ENTITLEMENTS_BACKFILL.md](./PRO_ENTITLEMENTS_BACKFILL.md)                         |
-| OpenRouter key disable causes for legacy rows                               | [OPENROUTER_DISABLE_CAUSES_MIGRATION.md](./OPENROUTER_DISABLE_CAUSES_MIGRATION.md)     |
-| Stored assistant grants for legacy built-in Admin and Member roles          | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md)               |
-| Kit runtime workload admission audit entries moved to `security_audit_logs` | [AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md)     |
-| `remote_sessions.organization_id` from each session's client                | [REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md](./REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md) |
-| Plaintext plugin marketplace tokens moved to their hash and sealed copy     | [MARKETPLACE_TOKENS_BACKFILL.md](./MARKETPLACE_TOKENS_BACKFILL.md)                     |
+| Backfill                                                                    | Doc                                                                                      |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Pro organization enterprise-access entitlements                             | [PRO_ENTITLEMENTS_BACKFILL.md](./PRO_ENTITLEMENTS_BACKFILL.md)                           |
+| OpenRouter key disable causes for legacy rows                               | [OPENROUTER_DISABLE_CAUSES_MIGRATION.md](./OPENROUTER_DISABLE_CAUSES_MIGRATION.md)       |
+| Stored assistant grants for legacy built-in Admin and Member roles          | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md)                 |
+| Kit runtime workload admission audit entries moved to `security_audit_logs` | [AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md)       |
+| `remote_sessions.organization_id` from each session's client                | [REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md](./REMOTE_SESSIONS_ORGANIZATION_BACKFILL.md)   |
+| Plaintext plugin marketplace tokens moved to their hash and sealed copy     | [MARKETPLACE_TOKENS_BACKFILL.md](./MARKETPLACE_TOKENS_BACKFILL.md)                       |
+| `functions_access.organization_id` from each runner key's project           | [FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md](./FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md) |
 
 The rest of this document covers the pipeline.
 

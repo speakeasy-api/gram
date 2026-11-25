@@ -271,6 +271,18 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		if err != nil {
 			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read exact hosted authorization status: %w", err)
 		}
+		if clients[0].CredentialOwner != remotesessions.CredentialOwnerSelf {
+			statuses, err := s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, []uuid.UUID{clients[0].ID})
+			if err != nil {
+				return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read hosted grant state: %w", err)
+			}
+			if status, ok := statuses[clients[0].ID]; ok && status.Resource == "" && (needsReconnect || status.SignInUnreadable) {
+				output.State = MCPConnectionStateReauthorizationRequired
+				output.Reason = memberMCPReauthorizationReason(status, s.now())
+				output.NextAction = "reconnect"
+				return output, nil
+			}
+		}
 		if !needsReconnect {
 			output.State = MCPConnectionStateActive
 			if clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {

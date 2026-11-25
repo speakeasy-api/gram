@@ -16,6 +16,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -48,7 +49,7 @@ func callChangedMember(t *testing.T, s *Service, gate *metaGateContext, member m
 	t.Helper()
 	gate.execute = true
 	approveChangedMember(gate, &member, toolfilter.CatalogModeLive, signInChanged)
-	body, err := s.executeMetaMemberTool(t.Context(), testenv.NewLogger(t), gate, []metaMember{member}, &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call"}, member.slug+"--tool", json.RawMessage(`{}`), nil)
+	body, err := s.executeMetaMemberTool(t.Context(), testenv.NewLogger(t), gate, []metaMember{member}, &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call"}, member.slug+"--tool", json.RawMessage(`{}`), nil, memberToolAnyDisposition)
 	require.NoError(t, err)
 	return string(body)
 }
@@ -148,7 +149,7 @@ func TestCatalogConsentCallNamesTheServerAndRecordsTheRemedy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
 			serverID := uuid.New()
 			body := callChangedMember(t, s, tc.gate(s, serverID), changedMember(serverID, tc.hosted), tc.signInChanged)
 			want, err := json.Marshal(tc.text)
@@ -170,7 +171,7 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
 			member := changedMember(serverID, tc.hosted)
 			gate := tc.gate(s, serverID)
@@ -220,7 +221,7 @@ func TestCatalogConsentCodeModeServersConnectAndCallAgree(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
 			member := changedMember(serverID, tc.hosted)
 			gate := tc.gate(s, serverID)
@@ -342,7 +343,7 @@ func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	s := &Service{logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
+	s := &Service{aiCatalog: aivendorstest.NewStore(), logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
 	serverID := uuid.New()
 	member := changedMember(serverID, false)
 	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{serverID: true})

@@ -18,7 +18,9 @@ export type AttachServerClientAssociationResult = {
    */
   association: ServerClientAssociation;
   /**
-   * The issuers of gateways fronting the server that this attach bound the client to. Empty when they already held it.
+   * Deprecated: always empty. This field is retained for compatibility; attach no longer binds the client to user session issuers.
+   *
+   * @deprecated field: Always empty; attach does not bind the client to user session issuers.
    */
   boundUserSessionIssuerIds: Array<string>;
 };

@@ -22,6 +22,9 @@ import {
   openSafeExternalUrl,
   safeExternalHttpUrl,
 } from "@/lib/safe-external-url";
+import { RetryButton } from "@/components/retry-button";
+import { describeApiError } from "@/lib/api-error";
+import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
@@ -79,6 +82,8 @@ export function ApprovalReview({
     undefined,
     {
       enabled: requestId.length > 0 && project.slug.length > 0,
+      // The failure renders inline with its reason and a Retry.
+      throwOnError: false,
       // A running research report resolves server-side; poll until it does
       // so the report appears without a manual refresh.
       refetchInterval: (query) =>
@@ -112,15 +117,13 @@ export function ApprovalReview({
         <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
           <p className="text-sm font-medium">The review could not be loaded</p>
           <p className="text-muted-foreground mt-1 max-w-md text-sm">
-            It may be a temporary problem — try again.
+            {describeApiError(detailQuery.error).message}
           </p>
-          <Button
+          <RetryButton
             className="mt-3"
-            variant="secondary"
-            onClick={() => void detailQuery.refetch()}
-          >
-            <Button.Text>Retry</Button.Text>
-          </Button>
+            isRetrying={detailQuery.isFetching}
+            onRetry={() => void detailQuery.refetch()}
+          />
         </div>
       </div>
     );
@@ -269,15 +272,19 @@ export function RefreshEvidenceButton({
   ready: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const refresh = useRefreshMcpApprovalEvidenceMutation();
+  const refresh = useRefreshMcpApprovalEvidenceMutation({ onError: () => {} });
 
   const run = async () => {
     try {
       await refresh.mutateAsync({
         request: { id: requestId, gramProject: projectSlug },
       });
-    } catch {
-      toast.error("Evidence refresh failed — the stored evidence is unchanged");
+    } catch (err) {
+      handleError(err, {
+        title:
+          "Couldn't refresh the evidence. The stored evidence is unchanged.",
+        customAction: { label: "Retry", onClick: () => void run() },
+      });
       return;
     }
     await Promise.all([
@@ -298,7 +305,7 @@ export function RefreshEvidenceButton({
         <RefreshCw className={refresh.isPending ? "animate-spin" : undefined} />
       </Button.LeftIcon>
       <Button.Text>
-        {refresh.isPending ? "Refreshing" : "Refresh evidence"}
+        {refresh.isPending ? "Refreshing…" : "Refresh evidence"}
       </Button.Text>
     </Button>
   );
@@ -562,6 +569,12 @@ function reportStatusLabel(status: string): string {
   }
 }
 
+function researchButtonLabel(running: boolean, starting: boolean): string {
+  if (starting) return "Starting…";
+  if (running) return "Researching…";
+  return "Run research";
+}
+
 function ResearchReports({
   reports,
   requestId,
@@ -577,8 +590,10 @@ function ResearchReports({
         { id: requestId, gramProject: project.slug },
       ]);
     },
-    onError: () => {
-      toast.error("Starting the research run failed — nothing was spent");
+    onError: (err) => {
+      handleError(err, {
+        title: "Couldn't start the research run. Nothing was spent.",
+      });
     },
   });
 
@@ -605,12 +620,14 @@ function ResearchReports({
           })
         }
       >
-        {running && (
+        {(running || startResearch.isPending) && (
           <Button.LeftIcon>
             <Spinner className="mr-0" />
           </Button.LeftIcon>
         )}
-        <Button.Text>{running ? "Researching…" : "Run research"}</Button.Text>
+        <Button.Text>
+          {researchButtonLabel(running, startResearch.isPending)}
+        </Button.Text>
       </Button>
     </RequireScope>
   );

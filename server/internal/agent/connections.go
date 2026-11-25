@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -100,10 +101,16 @@ func (s *Service) GetMyConnections(ctx context.Context, payload *gen.GetMyConnec
 	// The device agent holds no Platform MCP connection, so the principal carries
 	// none and reads no acting surface.
 	principal := platformmcp.Principal{UserID: member.userID, OrganizationID: member.organizationID, ConnectionID: "", Generation: "", ClientID: "", Surface: ""}
+	// Only a per-user key can file the request a no_access server names, and
+	// only while access requests are on.
+	canRequest := s.deviceCanRequestAccess(ctx)
 	for _, row := range serverRows {
 		entry, ok := s.serverConnection(ctx, principal, grants, row, *pluginServerID(row))
 		if !ok {
 			continue
+		}
+		if !canRequest {
+			entry.RequestAccess = nil
 		}
 		if row.McpServerID.Valid && hidden[row.McpServerID.UUID] {
 			entry.Hidden = new(true)
@@ -188,9 +195,25 @@ type agentMember struct {
 
 // resolveMember resolves the user the way GetPlugins does (the per-user key's
 // owner, or the email an org install key vouches) and charges the member's
+// getMyConnections budget. Agent identities are refused; what names the
+// personal data they have none of.
+func (s *Service) resolveMember(ctx context.Context, vouchedEmail *string, what string) (agentMember, error) {
+	member, err := s.memberFor(ctx, vouchedEmail, what)
+	if err != nil || member.userID == "" {
+		return member, err
+	}
+	// Charged per member after the membership check, so addresses outside
+	// the organization never create limiter state.
+	if err := allowMemberCall(ctx, s.logger, s.connectionsLimiter, member, what); err != nil {
+		return agentMember{}, err
+	}
+	return member, nil
+}
+
+// memberFor resolves the user the way GetPlugins does without charging any
 // budget. Agent identities are refused; what names the personal data they
 // have none of.
-func (s *Service) resolveMember(ctx context.Context, vouchedEmail *string, what string) (agentMember, error) {
+func (s *Service) memberFor(ctx context.Context, vouchedEmail *string, what string) (agentMember, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return agentMember{}, oops.C(oops.CodeUnauthorized)
@@ -208,16 +231,7 @@ func (s *Service) resolveMember(ctx context.Context, vouchedEmail *string, what 
 	if err != nil {
 		return agentMember{}, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
-	member := agentMember{organizationID: organizationID, userID: memberUserID(principals), principals: principals}
-	if member.userID == "" {
-		return member, nil
-	}
-	// Charged per member after the membership check, so addresses outside
-	// the organization never create limiter state.
-	if err := s.allowConnectionsRead(ctx, organizationID, member.userID); err != nil {
-		return agentMember{}, err
-	}
-	return member, nil
+	return agentMember{organizationID: organizationID, userID: memberUserID(principals), principals: principals}, nil
 }
 
 // memberServers lists the distinct servers in the plugins delivered to the
@@ -266,19 +280,20 @@ func (s *Service) memberServers(ctx context.Context, member agentMember) ([]repo
 	return distinct, nil
 }
 
-// allowConnectionsRead charges one read to the member's budget. A limiter
-// store outage fails open: it isn't a throttle.
-func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, userID string) error {
-	if s.connectionsLimiter == nil {
+// allowMemberCall charges one call to the member's budget on limiter. A nil
+// limiter is unlimited, and a limiter store outage fails open: it isn't a
+// throttle. what names what the calls read or change, for the refusal.
+func allowMemberCall(ctx context.Context, logger *slog.Logger, limiter *ratelimit.Limiter, member agentMember, what string) error {
+	if limiter == nil {
 		return nil
 	}
-	res, err := s.connectionsLimiter.Allow(ctx, organizationID+":"+userID)
+	res, err := limiter.Allow(ctx, member.organizationID+":"+member.userID)
 	switch {
 	case err != nil:
-		s.logger.WarnContext(ctx, "getMyConnections rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		logger.WarnContext(ctx, "agent member rate limit unavailable", attr.SlogError(err), attr.SlogOrganizationID(member.organizationID))
 		return nil
 	case !res.Allowed:
-		return oops.E(oops.CodeRateLimitExceeded, nil, "too many sign-in state reads; retry shortly")
+		return oops.E(oops.CodeRateLimitExceeded, nil, "too many requests for %s; retry shortly", what)
 	}
 	return nil
 }
@@ -287,7 +302,7 @@ func (s *Service) allowConnectionsRead(ctx context.Context, organizationID, user
 // read or connect is omitted; trouble reading one server reports it as
 // unknown rather than failing the rest.
 func (s *Service) serverConnection(ctx context.Context, principal platformmcp.Principal, grants []authz.Grant, row repo.ListAgentPluginServersRow, id string) (*gen.AgentServerConnection, bool) {
-	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil, Hidden: nil}
+	entry := &gen.AgentServerConnection{ID: id, State: connectionUnknown, ConnectURL: nil, RequestAccessURL: nil, Hidden: nil, RequestAccess: nil}
 	// A gateway's members sign in separately; its own connect page covers them.
 	if !row.McpServerID.Valid || s.connectionStatuses == nil {
 		return entry, true
@@ -315,6 +330,13 @@ func (s *Service) serverConnection(ctx context.Context, principal platformmcp.Pr
 		if status.Reason == platformmcp.MCPConnectionReasonPermissionRequired {
 			entry.State = connectionNoAccess
 			entry.RequestAccessURL = conv.PtrEmpty(status.RequestAccessURL)
+			if status.RequiredScope != "" && status.MCPID != "" {
+				entry.RequestAccess = &gen.AgentAccessRequestTarget{
+					Scope:        status.RequiredScope,
+					ResourceID:   status.MCPID,
+					ResourceName: conv.PtrEmpty(status.MCPName),
+				}
+			}
 		}
 	case platformmcp.MCPConnectionStateSetupRequired:
 		entry.State = connectionSetupRequired

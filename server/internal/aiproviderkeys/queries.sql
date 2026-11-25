@@ -46,6 +46,9 @@ LIMIT @limit_value;
 
 -- name: CountAIIntegrationConfigAPIKeyCopies :one
 -- Every row has an organization, so nothing is unattributed.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.api_key_encrypted IS NOT NULL
@@ -57,7 +60,13 @@ SELECT
           AND c.api_key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM ai_integration_configs AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -67,22 +76,34 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.api_key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :execrows
-UPDATE ai_integration_configs AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM ai_integration_configs AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
+WITH cleared AS (
+    UPDATE ai_integration_configs AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM ai_integration_configs AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND c.api_key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListModelProviderKeyWaiting :many
 SELECT c.id, c.api_key_encrypted::text AS platform_copy
@@ -121,6 +142,9 @@ LIMIT @limit_value;
 
 -- name: CountModelProviderKeyCopies :one
 -- Every row has an organization, so nothing is unattributed.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.api_key_encrypted IS NOT NULL
@@ -132,7 +156,13 @@ SELECT
           AND c.api_key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.api_key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM model_provider_keys AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -142,22 +172,34 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.api_key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearModelProviderKeyPlatformCopies :execrows
-UPDATE model_provider_keys AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM model_provider_keys AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearModelProviderKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
+WITH cleared AS (
+    UPDATE model_provider_keys AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM model_provider_keys AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND c.api_key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: ListOpenRouterAPIKeyWaiting :many
 SELECT c.key_type, c.key_encrypted::text AS platform_copy
@@ -196,6 +238,9 @@ LIMIT @limit_value;
 
 -- name: CountOpenRouterAPIKeyCopies :one
 -- Every row has an organization, so nothing is unattributed.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.key_encrypted IS NOT NULL
@@ -207,7 +252,13 @@ SELECT
           AND c.key_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
-    COUNT(*) FILTER (WHERE c.key_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.key_encrypted IS NOT NULL)::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM openrouter_api_keys AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -217,19 +268,71 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.key_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearOpenRouterAPIKeyPlatformCopies :execrows
-UPDATE openrouter_api_keys AS c
-SET key_encrypted = NULL
-WHERE c.key_type IN (
-    SELECT target.key_type FROM openrouter_api_keys AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.key_encrypted IS NOT NULL
-    ORDER BY target.key_type
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- name: ClearOpenRouterAPIKeyPlatformCopies :one
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
+WITH cleared AS (
+    UPDATE openrouter_api_keys AS c
+    SET key_encrypted = NULL
+    WHERE c.key_type IN (
+        SELECT target.key_type FROM openrouter_api_keys AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.key_encrypted IS NOT NULL
+        ORDER BY target.key_type
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND c.key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
+
+-- name: ListOrganizationsWithAIIntegrationConfigAPIKeys :many
+-- Every organization storing an AI integration API key under either key (an
+-- empty platform copy stores no key),
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM ai_integration_configs AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;
+
+-- name: ListOrganizationsWithModelProviderKeys :many
+-- Every organization storing a model provider key under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM model_provider_keys AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.api_key_encrypted <> '' OR c.api_key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;
+
+-- name: ListOrganizationsWithOpenRouterAPIKeys :many
+-- Every organization storing an OpenRouter API key under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM openrouter_api_keys AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.key_encrypted <> '' OR c.key_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;

@@ -14,10 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -245,7 +243,6 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, choices, 1)
 	require.Equal(t, uuid.NullUUID{UUID: typedClientID, Valid: true}, choices[0].AuthClientID)
-	seedPrincipalGrant(t, ctx, ti, auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, typedClientID.String())
 	before := chainer.acquireCount()
 	response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), tokens.AccessToken, nil)
 	require.NoError(t, err)

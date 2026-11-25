@@ -64,15 +64,12 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	if err != nil {
 		s.logger.ErrorContext(ctx, "read upstream auth enforcement", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 	} else {
-		status.AuthClients = s.authClientMigrationStatus(ctx, organizationID)
+		status.AuthClients, status.ReconnectCredentials = s.authClientMigrationStatus(ctx, organizationID)
 		status.ExecutionProfiles = s.executionProfileMigrationStatus(ctx, organizationID, enforced)
 		if clients := status.AuthClients; clients != nil {
-			status.Migrated = clients.Complete
+			status.Migrated = clients.Complete && clients.PendingSelectionMappings != nil && *clients.PendingSelectionMappings == 0
 			if clients.PendingSelectionMappings != nil {
 				status.PendingSelections = *clients.PendingSelectionMappings
-			}
-			if clients.SelectionGapCount != nil {
-				status.ReconnectCredentials = *clients.SelectionGapCount
 			}
 		}
 	}
@@ -82,7 +79,7 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 
 // authClientMigrationStatus reports typed readiness without applying changes.
 // Failed phases are named alongside the counts from successful phases.
-func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
+func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) (*gen.AdminUpstreamOAuthMigrationAuthClients, int64) {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: true})
 	switch {
@@ -108,10 +105,10 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 			SelectionClasses:         []*gen.AdminUpstreamOAuthMigrationSelectionClass{},
 			SelectionGaps:            []*gen.AdminUpstreamOAuthMigrationSelectionGap{},
 			SelectionGapCount:        new(int64(0)),
-		}
+		}, 0
 	case err != nil:
 		logger.ErrorContext(ctx, "check typed auth clients", attr.SlogError(err))
-		return nil
+		return nil, 0
 	}
 	phases := failedPhases(report)
 	for _, phase := range phases {
@@ -188,7 +185,20 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 		SelectionClasses:         classes,
 		SelectionGaps:            gaps,
 		SelectionGapCount:        new(int64(gapCount)),
+	}, countReconnectCredentials(report.SelectionGaps)
+}
+
+func countReconnectCredentials(gaps []authclientbackfill.SelectionGap) int64 {
+	credentials := make(map[uuid.UUID]struct{})
+	for _, gap := range gaps {
+		switch gap.Outcome {
+		case authclientbackfill.SelectionAmbiguous, authclientbackfill.SelectionStaleNoAuth, authclientbackfill.SelectionUnusable:
+			credentials[gap.CredentialID] = struct{}{}
+		case authclientbackfill.SelectionMapped, authclientbackfill.SelectionMap, authclientbackfill.SelectionNoAuth, authclientbackfill.SelectionNoClient, authclientbackfill.SelectionSkippedRace:
+			// These choices are covered, need configuration, or can be rechecked.
+		}
 	}
+	return int64(len(credentials))
 }
 
 // selectionGapLimit bounds the choices a status lists; the count covers the

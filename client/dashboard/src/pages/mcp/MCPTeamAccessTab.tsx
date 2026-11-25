@@ -6,10 +6,8 @@ import { Heading } from "@/components/ui/Heading";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
-import type { ServerTool } from "@/pages/access/serverMerge";
-import { toolDispositionAnnotations } from "@/pages/access/mcpAccessModel";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
 import type { ToolSource } from "@/pages/access/useServerTools";
 import { Button } from "@/components/ui/Button";
 import { TriangleAlert } from "lucide-react";
@@ -23,11 +21,6 @@ import { ManageAccess } from "./access/ManageAccess";
 import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
-
-function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
-  if (!("annotations" in tool)) return [];
-  return toolDispositionAnnotations(tool);
-}
 
 function getInitials(name: string) {
   return name
@@ -109,7 +102,7 @@ export function MCPTeamAccessTab({
     () =>
       catalogTools?.map((tool) => ({
         name: "name" in tool ? tool.name : "",
-        annotations: toolAnnotations(tool),
+        disposition: toolDisposition("annotations" in tool ? tool : {}),
       })),
     [catalogTools],
   );

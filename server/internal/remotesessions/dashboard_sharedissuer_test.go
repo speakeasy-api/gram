@@ -181,6 +181,11 @@ func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.
 	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target))
+	offers := offeredAuthClients(t, ctx, ti.conn, target)
+	require.Len(t, offers, 1)
+	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target), "reconciliation preserves an explicit server offer")
+	require.Equal(t, offers, offeredAuthClients(t, ctx, ti.conn, target), "the exact typed offer survives reconciliation")
 }
 
 // A server an administrator configured apart from its issuer during

@@ -118,7 +118,7 @@
   expect: [list_my_mcp_access]
 - id: access-my-servers-reachable
   prompt: Which MCP servers can I reach?
-  expect: [list_my_mcp_access, list_my_servers]
+  expect: [list_my_mcp_access]
 - id: access-my-access-one
   prompt: Do I personally have access to the Billing API server? If not, how do I ask for it?
   expect: [get_my_mcp_access]

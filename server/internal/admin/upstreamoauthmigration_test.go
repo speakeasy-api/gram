@@ -99,7 +99,7 @@ func (o *migrationOrg) session(userIssuerID uuid.UUID) uuid.UUID {
 		SubjectUrn:          urn.NewUserSubject("user-" + uuid.NewString()[:8]),
 		Jti:                 id.String(),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:        uuid.NullUUID{UUID: id, Valid: true},
 	}))
 	return id
 }
@@ -220,9 +220,7 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 // the credential's typed choice without reconstructing legacy links.
 func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
-	tx, err := db.Begin(ctx) //nolint:glint // notestingrawsql: fixture transaction uses generated SQL.
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	tx := testenv.BeginTx(t, ctx, db)
 	q := authclientbackfill.New(tx)
 	client, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
 		OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true}, ClientType: "remote_session", Source: "admin",
@@ -240,6 +238,19 @@ func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.
 	}))
 	require.NoError(t, authclientbackfill.ProvisionFromTypedOffers(ctx, tx, org.id))
 	require.NoError(t, tx.Commit(ctx))
+}
+
+func TestCountReconnectCredentials(t *testing.T) {
+	t.Parallel()
+	duplicate := uuid.New()
+	gaps := []authclientbackfill.SelectionGap{
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionAmbiguous},
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionUnusable},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionStaleNoAuth},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionNoClient},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionSkippedRace},
+	}
+	require.EqualValues(t, 2, countReconnectCredentials(gaps))
 }
 
 func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {

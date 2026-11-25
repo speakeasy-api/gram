@@ -115,6 +115,10 @@ func TestCommitAddsAnotherProviderAlongsideAServersClient(t *testing.T) {
 			second := createCapturingServer(t, ctx, ti, "alongside-second", issuer)
 			betaClient := commitManualClient(t, ctx, ti, second, beta, "alongside-beta-client")
 
+			_, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+				ID: alphaClient, ProjectID: projectIDFromContext(t, ctx), OrganizationID: activeOrganizationID(t, ctx),
+			})
+			require.NoError(t, err, "the first server's registration must still be live")
 			require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, first))
 			require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, second), "only this server is associated with its new client")
 		})

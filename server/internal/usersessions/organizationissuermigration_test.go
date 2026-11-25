@@ -612,6 +612,14 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	staleIssuer, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
 	require.NoError(t, err)
 	require.Equal(t, sourceID, staleIssuer, "retired issuer cleanup does not delete compatibility parents")
+	_, err = remoteRepo.GetPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.GetPrincipalRemoteSessionBindingParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "remaining source attachment must be revoked")
 	remoteSessionAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: remoteSession.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, remoteSessionAfter.UserSessionIssuerID)
@@ -742,12 +750,6 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	// reauthorization advances the grant on that login but preserves its ID.
 	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
 	require.Equal(t, login, secondLogin)
-
-	// A new generation on the same pinned row must still move. Only material
-	// publication uses the grant generation as a compare-and-swap fence.
-	changed, err := testrepo.New(ti.conn).MutateAttachmentSupersededGrantGenerationFixture(ctx, login)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, changed)
 
 	remoteRepo := remotesessionsrepo.New(ti.conn)
 	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))

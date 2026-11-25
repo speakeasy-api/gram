@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -113,7 +114,7 @@ func probeOnOrganizationGateway(t *testing.T, ctx context.Context, service *Serv
 // probeOnNoProject probes a client this organization gateway can't reach, which fails before any lookup.
 func probeOnNoProject(t *testing.T, ctx context.Context, rec *mcpconnectionattemptstest.Recording, trigger remotesessionmetrics.ValidationTrigger) error {
 	t.Helper()
-	return probeOnOrganizationGateway(t, ctx, &Service{connections: rec.Recorder}, uuid.NullUUID{UUID: uuid.New(), Valid: true}, trigger)
+	return probeOnOrganizationGateway(t, ctx, &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}, uuid.NullUUID{UUID: uuid.New(), Valid: true}, trigger)
 }
 
 func TestProbeRemoteSession_FailedCheckWritesOneRow(t *testing.T) {
@@ -133,7 +134,7 @@ func TestProbeRemoteSession_NoVerdictExportOmitsProviderHost(t *testing.T) {
 	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
 	logsOn := func(context.Context, string) (bool, error) { return true, nil }
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
-	err := probeOnOrganizationGateway(t, t.Context(), &Service{connections: recorder}, uuid.NullUUID{UUID: uuid.New(), Valid: true}, remotesessionmetrics.ValidationTriggerVerify)
+	err := probeOnOrganizationGateway(t, t.Context(), &Service{aiCatalog: aivendorstest.NewStore(), connections: recorder}, uuid.NullUUID{UUID: uuid.New(), Valid: true}, remotesessionmetrics.ValidationTriggerVerify)
 	require.Error(t, err)
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
@@ -193,7 +194,7 @@ func TestProbeRemoteSession_StoreOutageSaysRetryWithSpeakeasySupport(t *testing.
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, db: pool, authEnforcement: authenforcement.NewGate(pool)}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, db: pool, authEnforcement: authenforcement.NewGate(pool)}
 
 	probeErr := probeOnOrganizationGateway(t, t.Context(), service, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remotesessionmetrics.ValidationTriggerVerify)
 	require.Error(t, probeErr)
@@ -240,7 +241,7 @@ func statusReadFailure(t *testing.T, pool *pgxpool.Pool) error {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	service := &Service{remoteChallengeMgr: remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), remoteChallengeMgr: remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})}
 	endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "org_1", UserSessionIssuerID: uuid.New()}
 	client := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
 	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, nil, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID})

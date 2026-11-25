@@ -19,10 +19,13 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
+  refreshOutcome,
   serversNeedingConnection,
 } from "./connectionAttention";
 import { KeyCredentialChoice } from "./KeyCredentialChoice";
@@ -42,7 +45,7 @@ function IdentityRepairLink({ server }: { server: InventoryServer }) {
       target="_blank"
       rel="noreferrer"
     >
-      Open Identity settings
+      Open Sign-in settings
     </a>
   );
 }
@@ -117,6 +120,39 @@ export function StepAuthentication({
   // Editing shows only the existing agent assignment; an available personal
   // connection is a candidate until the editor chooses to assign it.
   const displayed = displayedConnections(connections);
+  // The server whose connection status is being refreshed, and then the one
+  // whose refreshed status is told once it is read. One refresh re-reads
+  // every row, so only one runs at a time.
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshed, setRefreshed] = useState<string | null>(null);
+  const refreshedConnection =
+    refreshed === null ? undefined : displayed.get(refreshed);
+  const refreshedName = servers.find((server) => server.id === refreshed)?.name;
+  useEffect(() => {
+    if (refreshed === null) return;
+    if (!refreshedConnection || refreshedConnection.status === "checking")
+      return;
+    setRefreshed(null);
+    const { tone, message } = refreshOutcome(
+      refreshedName ?? "this server",
+      refreshedConnection,
+    );
+    toast[tone](message);
+  }, [refreshed, refreshedConnection, refreshedName]);
+  const refresh = async (serverId: string, serverName: string) => {
+    setRefreshing(serverId);
+    try {
+      await connections.refetch();
+    } catch {
+      toast.error(
+        `Could not check the connection to ${serverName}. Try again.`,
+      );
+      return;
+    } finally {
+      setRefreshing(null);
+    }
+    setRefreshed(serverId);
+  };
   const missing = serversNeedingConnection(servers, displayed);
   return (
     <div className="space-y-5">
@@ -411,11 +447,18 @@ export function StepAuthentication({
                       size="sm"
                       aria-label={`Refresh ${server.name} connection status`}
                       title="Refresh connection status"
+                      aria-busy={refreshing === server.id}
+                      disabled={refreshing !== null}
                       onClick={() => {
-                        void connections.refetch();
+                        void refresh(server.id, server.name);
                       }}
                     >
-                      <RefreshCw className="size-4" />
+                      <RefreshCw
+                        className={cn(
+                          "size-4",
+                          refreshing === server.id && "animate-spin",
+                        )}
+                      />
                     </Button>
                   </div>
                 )}

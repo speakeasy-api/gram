@@ -33,6 +33,7 @@
 //! not persist as divergence on the user's chat.
 
 use std::num::NonZeroU8;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -449,6 +450,48 @@ impl Compactor for CachedCompactor {
             }
             _ => Ok(transcript.to_vec()),
         }
+    }
+}
+
+/// Counts in-memory transcript rewrites by a loop compactor. Tools that skip
+/// repeating what they already put in the transcript (`tool_search`) reset
+/// that record when the count moves, since compaction may have summarised
+/// the earlier result away.
+pub type TranscriptEpoch = Arc<AtomicU64>;
+
+/// Wraps a loop compactor and bumps a [`TranscriptEpoch`] after every pass.
+/// A pass that fails and keeps the transcript still bumps it: a spare reset
+/// only costs a repeated tool result.
+pub struct EpochCompactor<C> {
+    inner: C,
+    epoch: TranscriptEpoch,
+}
+
+impl<C> EpochCompactor<C> {
+    pub fn new(inner: C, epoch: TranscriptEpoch) -> Self {
+        Self { inner, epoch }
+    }
+}
+
+#[async_trait]
+impl<C: Compactor> Compactor for EpochCompactor<C> {
+    fn should_compact(
+        &self,
+        transcript: &[Item],
+        point: MutationPoint,
+    ) -> Option<CompactionReason> {
+        self.inner.should_compact(transcript, point)
+    }
+
+    async fn compact(
+        &self,
+        transcript: &[Item],
+        reason: CompactionReason,
+        cancellation: Option<TurnCancellation>,
+    ) -> Result<Vec<Item>, CompactionError> {
+        let result = self.inner.compact(transcript, reason, cancellation).await;
+        self.epoch.fetch_add(1, Ordering::AcqRel);
+        result
     }
 }
 
