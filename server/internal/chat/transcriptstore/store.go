@@ -134,12 +134,35 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string
 		if err != nil {
 			return safe(err)
 		}
-		n, err := q.Capture(ctx, repo.CaptureParams{MessageID: id, ProjectID: projectID, OrganizationID: organizationID, ChatID: row.ChatID, SourceHash: row.SourceHash, Ciphertext: ciphertext})
+		meta := metadataOf(row.Content, row.ContentRaw, row.ToolCalls)
+		n, err := q.Capture(ctx, repo.CaptureParams{
+			MessageID:       id,
+			ProjectID:       projectID,
+			OrganizationID:  organizationID,
+			ChatID:          row.ChatID,
+			SourceHash:      row.SourceHash,
+			Ciphertext:      ciphertext,
+			ToolCallCount:   meta.toolCallCount,
+			ContentBytes:    meta.contentBytes,
+			ContentRawBytes: meta.contentRawBytes,
+			ToolCallsBytes:  meta.toolCallsBytes,
+		})
 		if err != nil {
 			return safe(err)
 		}
 		if n != 1 {
 			return ErrChanged
+		}
+		// Tool-call IDs are rewritten with the shadow, inside the same
+		// transaction, so they never describe an older version of the message.
+		if err := q.DeleteToolCallIDs(ctx, id); err != nil {
+			return safe(err)
+		}
+		if len(meta.toolCallIDs) == 0 {
+			continue
+		}
+		if err := q.InsertToolCallIDs(ctx, repo.InsertToolCallIDsParams{MessageID: id, ChatID: row.ChatID, ProjectID: projectID, ToolCallIds: meta.toolCallIDs}); err != nil {
+			return safe(err)
 		}
 	}
 	return nil

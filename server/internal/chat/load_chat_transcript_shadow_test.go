@@ -82,7 +82,7 @@ func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
 
 	store, reader := newMeteredTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, first, second)
-	ti.service.WithTranscriptShadowReads(store, ti.projectID)
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoShadowExists(t *testing
 
 	store := newTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, captured)
-	ti.service.WithTranscriptShadowReads(store, ti.projectID)
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestLoadChat_ReadEnabledProjectFailsOnAStaleShadow(t *testing.T) {
 	// A write that skips capture leaves the shadow behind the plaintext.
 	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	require.NoError(t, err)
-	ti.service.WithTranscriptShadowReads(store, ti.projectID)
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, ti.projectID))
 
 	_, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.ErrorIs(t, err, transcriptstore.ErrStale)
@@ -169,7 +169,7 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	captureTranscriptShadows(t, ti, store, edited)
 	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
 	require.NoError(t, err)
-	ti.service.WithTranscriptShadowReads(store, uuid.New())
+	ti.service.WithTranscripts(transcriptstore.NewTranscripts(store, uuid.New()))
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)

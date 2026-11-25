@@ -43,8 +43,8 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
 	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
-	require.Nil(t, shadow.Store)
-	require.Empty(t, shadow.ProjectIDs)
+	require.Nil(t, shadow)
+	require.False(t, shadow.Enabled(uuid.New()))
 }
 
 func TestTranscriptShadowProjectIDs(t *testing.T) {
@@ -103,7 +103,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cleanup()) })
 	const columns = `message_id uuid NOT NULL, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp()`
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), tool_call_count integer,
+ content_bytes integer, content_raw_bytes integer, tool_calls_bytes integer`
 	type schemaCase struct {
 		name, ddl string
 		ok        bool
@@ -127,6 +128,13 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "identity extra column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id), extra bigint NOT NULL GENERATED ALWAYS AS IDENTITY)", ok: true},
 		{name: "primary key", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "unique index with included column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
+		{name: "missing tool call table", ddl: "DROP TABLE chat_message_transcript_tool_calls; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+	}
+	for _, name := range []string{"tool_call_count", "content_bytes", "content_raw_bytes", "tool_calls_bytes"} {
+		tests = append(tests,
+			schemaCase{name: "missing " + name, ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id)); ALTER TABLE chat_message_transcripts DROP COLUMN " + name},
+			schemaCase{name: "wrong type " + name, ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(columns, name+" integer", name+" text", 1) + ", PRIMARY KEY (message_id))"},
+		)
 	}
 	for _, column := range []struct{ name, typ string }{
 		{"message_id", "uuid"}, {"project_id", "uuid"}, {"organization_id", "text"},
@@ -144,7 +152,9 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 			t.Parallel()
 			db, err := infra.CloneTestDatabase(t, "transcript_shadow_preflight")
 			require.NoError(t, err)
-			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
+			// CASCADE drops only the tool-call table's foreign key; the table
+			// itself stays, as the check requires.
+			_, err = db.Exec(t.Context(), "DROP TABLE IF EXISTS chat_message_transcripts CASCADE") //nolint:glint // notestingrawsql: isolated DDL fixture for catalog compatibility checks.
 			require.NoError(t, err)
 			if tc.ddl != "" {
 				_, err = db.Exec(t.Context(), tc.ddl) //nolint:glint // notestingrawsql: isolated incompatible schema fixture.
@@ -199,11 +209,13 @@ func TestTranscriptShadowSchemaFollowsSearchPath(t *testing.T) {
 	require.NoError(t, err)
 
 	//nolint:glint // notestingrawsql: isolated DDL fixture that moves the table into another schema.
-	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts;
+	_, err = db.Exec(t.Context(), `DROP TABLE IF EXISTS chat_message_transcripts CASCADE;
 CREATE SCHEMA app;
+ALTER TABLE chat_message_transcript_tool_calls SET SCHEMA app;
 CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY, project_id uuid NOT NULL,
  organization_id text NOT NULL, ciphertext text NOT NULL, source_hash bytea NOT NULL,
- updated_at timestamptz NOT NULL DEFAULT clock_timestamp())`)
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(), tool_call_count integer,
+ content_bytes integer, content_raw_bytes integer, tool_calls_bytes integer)`)
 	require.NoError(t, err)
 
 	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.

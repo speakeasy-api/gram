@@ -93,8 +93,7 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
-	_, captureEnabled := w.transcriptShadowProjects[projectID]
-	if changed > 0 && w.transcriptShadow != nil && captureEnabled {
+	if changed > 0 && w.transcripts.Enabled(projectID) {
 		if organizationID == "" {
 			organizationID, err = q.GetProjectOrganizationID(ctx, projectID)
 			if err != nil {

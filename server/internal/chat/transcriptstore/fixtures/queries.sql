@@ -59,3 +59,12 @@ UPDATE chat_messages SET storage_error=sqlc.narg(storage_error)::text WHERE id=s
 -- name: InsertShadow :execrows
 INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'));
+
+-- name: ShadowMetadata :one
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_message_transcripts WHERE message_id=$1;
+
+-- name: ShadowToolCallIDs :many
+SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 ORDER BY tool_call_id;
+
+-- name: SetToolCalls :execrows
+UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3;

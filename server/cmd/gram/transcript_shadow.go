@@ -36,23 +36,12 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
-// transcriptShadow is the shadow store a process configured, and the projects
-// that use it. Store is nil when no project captures shadows.
-type transcriptShadow struct {
-	// Store seals and opens shadow copies.
-	Store *transcriptstore.Store
-
-	// ProjectIDs are the projects that capture shadows. Their chat reads open
-	// the shadows instead of plaintext, so a read never meets a shadow that
-	// capture stopped keeping current.
-	ProjectIDs []uuid.UUID
-}
-
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
-// writes and reads. Plaintext remains authoritative for every other project;
-// startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
-	none := transcriptShadow{Store: nil, ProjectIDs: nil}
+// writes and reads, and wires the writer to capture for them. Plaintext remains
+// authoritative for every other project; startup never backfills old
+// messages. It returns nil when no project keeps shadows.
+func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	var none *transcriptstore.Transcripts
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
@@ -102,8 +91,9 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
-	writer.WithTranscriptShadow(store, projectIDs...)
-	return transcriptShadow{Store: store, ProjectIDs: projectIDs}, nil
+	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
+	writer.WithTranscripts(transcripts)
+	return transcripts, nil
 }
 
 // checkTranscriptShadowSchema checks only the sidecar contract used by the store.
@@ -112,6 +102,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 // the store's queries resolve it: deployed databases keep it outside public.
 // Every omitted NOT NULL column must be supplied by the database. All inferred
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
+// The metadata columns capture writes, and the tool-call ID table beside the
+// sidecar, must exist too.
 func checkTranscriptShadowSchema(ctx context.Context, db interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }) error {
@@ -154,7 +146,21 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
    AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext', 'source_hash')
  )
  AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
- AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)`).Scan(&compatible)
+ AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)
+ AND NOT EXISTS (
+ SELECT 1 FROM (VALUES ('tool_call_count'), ('content_bytes'), ('content_raw_bytes'), ('tool_calls_bytes')) AS metadata(name)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  JOIN sidecar s ON s.oid = a.attrelid
+  WHERE a.attname = metadata.name AND a.atttypid = 'integer'::regtype AND NOT a.attisdropped
+ ))
+ AND NOT EXISTS (
+ SELECT 1 FROM (VALUES ('message_id'), ('tool_call_id'), ('chat_id'), ('project_id')) AS tool_call(name)
+ WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
+    AND a.attname = tool_call.name AND NOT a.attisdropped
+ ))`).Scan(&compatible)
 	if err != nil {
 		return fmt.Errorf("check chat transcript shadow schema: %w", err)
 	}

@@ -94,13 +94,9 @@ type Service struct {
 	staffOrg     staff.Organization
 	riskFindings *chatfindings.Reader
 
-	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
-	// unless some project reads through shadows.
-	transcriptShadow *transcriptstore.Store
-
-	// transcriptShadowReadProjects are the projects whose chat reads open
-	// shadows instead of plaintext.
-	transcriptShadowReadProjects map[uuid.UUID]struct{}
+	// transcripts opens encrypted shadow copies of message bodies for the
+	// projects that keep them. Nil opens none.
+	transcripts *transcriptstore.Transcripts
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -149,15 +145,10 @@ func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge 
 	return s
 }
 
-// WithTranscriptShadowReads makes chat reads for the listed projects open
-// message bodies from encrypted shadows instead of plaintext. An empty list or
-// a nil store leaves every project on plaintext.
-func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projectIDs ...uuid.UUID) *Service {
-	s.transcriptShadow = store
-	s.transcriptShadowReadProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
-	for _, projectID := range projectIDs {
-		s.transcriptShadowReadProjects[projectID] = struct{}{}
-	}
+// WithTranscripts makes chat reads open message bodies from encrypted shadows
+// instead of plaintext for the projects the Transcripts serve.
+func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
+	s.transcripts = transcripts
 	return s
 }
 
@@ -202,31 +193,30 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:                         auth.New(logger, db, sessions, authzEngine),
-		authz:                        authzEngine,
-		db:                           db,
-		sessions:                     sessions,
-		chatSessions:                 chatSessions,
-		assistantTokens:              assistantTokens,
-		logger:                       logger,
-		repo:                         repo.New(db),
-		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:                   openRouter,
-		completionClient:             completionClient,
-		contextWindow:                contextWindow,
-		assetStorage:                 assetStorage,
-		posthog:                      posthog,
-		telemetryService:             telemetryService,
-		billingRepo:                  billingRepo,
-		audit:                        auditLogger,
-		staffOrg:                     staffOrg,
-		riskFindings:                 nil,
-		transcriptShadow:             nil,
-		transcriptShadowReadProjects: nil,
-		access:                       NewSessionAccess(logger, db, authzEngine),
-		turnStream:                   nil, // opt in via WithTurnStream
-		streamMetrics:                nil, // opt in via WithStreamRotation
-		streamMaxAge:                 0,   // opt in via WithStreamRotation
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		db:               db,
+		sessions:         sessions,
+		chatSessions:     chatSessions,
+		assistantTokens:  assistantTokens,
+		logger:           logger,
+		repo:             repo.New(db),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:       openRouter,
+		completionClient: completionClient,
+		contextWindow:    contextWindow,
+		assetStorage:     assetStorage,
+		posthog:          posthog,
+		telemetryService: telemetryService,
+		billingRepo:      billingRepo,
+		audit:            auditLogger,
+		staffOrg:         staffOrg,
+		riskFindings:     nil,
+		transcripts:      nil,
+		access:           NewSessionAccess(logger, db, authzEngine),
+		turnStream:       nil, // opt in via WithTurnStream
+		streamMetrics:    nil, // opt in via WithStreamRotation
+		streamMaxAge:     0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
 

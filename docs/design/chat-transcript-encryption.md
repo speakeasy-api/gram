@@ -99,12 +99,31 @@ Direct SQL updates outside the shared writer can make a shadow stale. Verified
 reads reject it, and a subsequent backfill refreshes it. Before encrypted-only
 rollout, migrate those writes too and establish a fenced plaintext-removal protocol.
 
+## One entry point: `transcriptstore.Transcripts`
+
+`transcriptstore.Transcripts` holds the store and the capture allowlist, and is
+the one place that decides per project whether a write captures a shadow and a
+read opens one. Every method is a no-op for a project off the list, and a nil
+`Transcripts` serves no project. The writer captures through
+`Transcripts.Capture`, and readers open a page of any sqlc row type with
+`transcriptstore.OpenRows`, which maps each row to a `Body` of pointers at its
+body fields. Readers no longer keep their own allowlist.
+
+Capture also stores plaintext-free metadata next to each shadow, measured from
+the same snapshot it seals: `tool_call_count` and the byte lengths of
+`content`, `content_raw` and `tool_calls` (as `octet_length` of their text
+form), plus one `chat_message_transcript_tool_calls` row per provider
+tool-call ID. They are current exactly when the shadow is, so readers can
+count, budget and look up tool calls without decrypting. Shadows captured
+before these columns existed hold NULL until a backfill recaptures them.
+
 ## Shadow reads
 
 Reads use the capture allowlist, so no project reads shadows that capture
 stopped keeping current. For every project that captures shadows, `chat.load`
-opens each page's message bodies with `Store.LoadMany` and serves the opened
-`content`, `content_raw` and `tool_calls` in place of the plaintext columns.
+opens each page's message bodies through `Transcripts` (one `Store.LoadMany`
+call per page) and serves the opened body fields in place of the plaintext
+columns.
 
 `LoadMany` leaves out any message that has no shadow at all, and `chat.load`
 serves that message's plaintext body. Messages written before capture began, or

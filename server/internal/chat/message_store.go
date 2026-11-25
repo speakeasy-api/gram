@@ -114,9 +114,9 @@ type ChatMessageWriter struct {
 	assetStorage assets.BlobStore
 	stokenCodec  *stokens.Codec
 	observers    []MessageObserver
-	// transcriptShadow is opt-in shadow storage, not an encrypted-only rollout.
-	transcriptShadow         *transcriptstore.Store
-	transcriptShadowProjects map[uuid.UUID]struct{}
+	// transcripts captures encrypted shadows for the projects that keep them.
+	// Nil captures none.
+	transcripts *transcriptstore.Transcripts
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
 	turnStream  *TurnStream
@@ -127,16 +127,15 @@ type ChatMessageWriter struct {
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
-		db:                       db,
-		logger:                   logger.With(attr.SlogComponent("chat-message-writer")),
-		assetStorage:             assetStorage,
-		stokenCodec:              stokens.NewCodec(),
-		observers:                nil,
-		transcriptShadow:         nil,
-		transcriptShadowProjects: nil,
-		shutdownCtx:              ctx,
-		cancel:                   cancel,
-		turnStream:               nil,
+		db:           db,
+		logger:       logger.With(attr.SlogComponent("chat-message-writer")),
+		assetStorage: assetStorage,
+		stokenCodec:  stokens.NewCodec(),
+		observers:    nil,
+		transcripts:  nil,
+		shutdownCtx:  ctx,
+		cancel:       cancel,
+		turnStream:   nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
@@ -145,32 +144,19 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
-// WithTranscriptShadow enables atomic encrypted shadow copies for shared writer
-// operations. Configure it before serving requests, after the separate schema
-// migration and organization key provisioning. It does not encrypt assets or
-// remove plaintext; direct SQL updates still need backfill to refresh shadows.
-// An empty project allowlist disables capture; there is no implicit all-project
-// mode, including when the option is called from another service.
-func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, projectIDs ...uuid.UUID) *ChatMessageWriter {
-	w.transcriptShadow = store
-	w.transcriptShadowProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
-	for _, projectID := range projectIDs {
-		w.transcriptShadowProjects[projectID] = struct{}{}
-	}
+// WithTranscripts enables atomic encrypted shadow copies for shared writer
+// operations, for the projects the Transcripts serve. Configure it before
+// serving requests, after the schema migration and organization key
+// provisioning. It does not encrypt assets or remove plaintext; direct SQL
+// updates still need backfill to refresh shadows.
+func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcripts) *ChatMessageWriter {
+	w.transcripts = transcripts
 	return w
 }
 
 func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	if w.transcriptShadow == nil {
-		return nil
-	}
-	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
-		return nil
-	}
-	if err := w.transcriptShadow.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {
-		return fmt.Errorf("capture encrypted transcript shadow: %w", err)
-	}
-	return nil
+	//nolint:wrapcheck // Capture already wraps with the shadow capture context.
+	return w.transcripts.Capture(ctx, db, organizationID, projectID, messageIDs)
 }
 
 func messageWriteIDs(writes []MessageWrite) []uuid.UUID {

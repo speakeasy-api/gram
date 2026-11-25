@@ -57,24 +57,28 @@ WITH live AS MATERIALIZED (
  SELECT m.id FROM chat_messages m
  JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
  JOIN projects p ON p.id = c.project_id
- WHERE m.id = $5 AND m.project_id = $1 AND p.organization_id = $2
- AND m.chat_id = $6
+ WHERE m.id = $9 AND m.project_id = $1 AND p.organization_id = $2
+ AND m.chat_id = $10
  AND sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) = $4::bytea
  FOR SHARE OF m, c, p
 )
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash)
-SELECT live.id, $1, $2, $3, $4::bytea FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, updated_at = clock_timestamp()
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes)
+SELECT live.id, $1, $2, $3, $4::bytea, $5::integer, $6::integer, $7::integer, $8::integer FROM live
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, tool_call_count = EXCLUDED.tool_call_count, content_bytes = EXCLUDED.content_bytes, content_raw_bytes = EXCLUDED.content_raw_bytes, tool_calls_bytes = EXCLUDED.tool_calls_bytes, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = $1 AND chat_message_transcripts.organization_id = $2
 `
 
 type CaptureParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Ciphertext     string
-	SourceHash     []byte
-	MessageID      uuid.UUID
-	ChatID         uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	Ciphertext      string
+	SourceHash      []byte
+	ToolCallCount   int32
+	ContentBytes    int32
+	ContentRawBytes int32
+	ToolCallsBytes  int32
+	MessageID       uuid.UUID
+	ChatID          uuid.UUID
 }
 
 func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error) {
@@ -83,6 +87,10 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 		arg.OrganizationID,
 		arg.Ciphertext,
 		arg.SourceHash,
+		arg.ToolCallCount,
+		arg.ContentBytes,
+		arg.ContentRawBytes,
+		arg.ToolCallsBytes,
 		arg.MessageID,
 		arg.ChatID,
 	)
@@ -90,6 +98,39 @@ func (q *Queries) Capture(ctx context.Context, arg CaptureParams) (int64, error)
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteToolCallIDs = `-- name: DeleteToolCallIDs :exec
+DELETE FROM chat_message_transcript_tool_calls WHERE message_id = $1
+`
+
+func (q *Queries) DeleteToolCallIDs(ctx context.Context, messageID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteToolCallIDs, messageID)
+	return err
+}
+
+const insertToolCallIDs = `-- name: InsertToolCallIDs :exec
+INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
+SELECT $1, ids.tool_call_id, $2, $3
+FROM unnest($4::text[]) AS ids(tool_call_id)
+ON CONFLICT (message_id, tool_call_id) DO NOTHING
+`
+
+type InsertToolCallIDsParams struct {
+	MessageID   uuid.UUID
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	ToolCallIds []string
+}
+
+func (q *Queries) InsertToolCallIDs(ctx context.Context, arg InsertToolCallIDsParams) error {
+	_, err := q.db.Exec(ctx, insertToolCallIDs,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.ToolCallIds,
+	)
+	return err
 }
 
 const load = `-- name: Load :one

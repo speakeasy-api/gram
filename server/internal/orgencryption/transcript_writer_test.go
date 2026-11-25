@@ -42,7 +42,7 @@ func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcrip
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
 	if shadow {
-		writer.WithTranscriptShadow(store, p.ID)
+		writer.WithTranscripts(transcriptstore.NewTranscripts(store, p.ID))
 	}
 	return &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: writer, store: store}
 }
@@ -219,7 +219,7 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, false, false)
 	// Dropping only in this isolated database proves the opt-out path never consults shadow storage.
-	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop this table.
+	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcript_tool_calls, chat_message_transcripts`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop these tables.
 	require.NoError(t, err)
 	m := f.message("EXAMPLE opt-out plaintext")
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
@@ -232,11 +232,11 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 
 	// Neither an accidentally empty allowlist nor another project may widen
 	// capture to this project or start consulting unavailable shadow storage.
-	f.writer.WithTranscriptShadow(f.store, []uuid.UUID{}...)
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, []uuid.UUID{}...))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE empty allowlist")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.writer.WithTranscriptShadow(f.store, uuid.New())
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, uuid.New()))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE excluded project")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)

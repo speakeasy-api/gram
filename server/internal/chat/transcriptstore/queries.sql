@@ -17,9 +17,9 @@ WITH live AS MATERIALIZED (
  AND sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) = @source_hash::bytea
  FOR SHARE OF m, c, p
 )
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash)
-SELECT live.id, @project_id, @organization_id, @ciphertext, @source_hash::bytea FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, updated_at = clock_timestamp()
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash, tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes)
+SELECT live.id, @project_id, @organization_id, @ciphertext, @source_hash::bytea, @tool_call_count::integer, @content_bytes::integer, @content_raw_bytes::integer, @tool_calls_bytes::integer FROM live
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, tool_call_count = EXCLUDED.tool_call_count, content_bytes = EXCLUDED.content_bytes, content_raw_bytes = EXCLUDED.content_raw_bytes, tool_calls_bytes = EXCLUDED.tool_calls_bytes, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = @project_id AND chat_message_transcripts.organization_id = @organization_id;
 
 -- name: Load :one
@@ -57,3 +57,12 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
 WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.organization_id = @organization_id;
+
+-- name: DeleteToolCallIDs :exec
+DELETE FROM chat_message_transcript_tool_calls WHERE message_id = @message_id;
+
+-- name: InsertToolCallIDs :exec
+INSERT INTO chat_message_transcript_tool_calls (message_id, tool_call_id, chat_id, project_id)
+SELECT @message_id, ids.tool_call_id, @chat_id, @project_id
+FROM unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
+ON CONFLICT (message_id, tool_call_id) DO NOTHING;

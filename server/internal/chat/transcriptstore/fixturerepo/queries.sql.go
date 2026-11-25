@@ -238,6 +238,65 @@ func (q *Queries) SetStorageError(ctx context.Context, storageError pgtype.Text,
 	return result.RowsAffected(), nil
 }
 
+const setToolCalls = `-- name: SetToolCalls :execrows
+UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3
+`
+
+func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setToolCalls, toolCalls, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const shadowMetadata = `-- name: ShadowMetadata :one
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_message_transcripts WHERE message_id=$1
+`
+
+type ShadowMetadataRow struct {
+	ToolCallCount   pgtype.Int4
+	ContentBytes    pgtype.Int4
+	ContentRawBytes pgtype.Int4
+	ToolCallsBytes  pgtype.Int4
+}
+
+func (q *Queries) ShadowMetadata(ctx context.Context, messageID uuid.UUID) (ShadowMetadataRow, error) {
+	row := q.db.QueryRow(ctx, shadowMetadata, messageID)
+	var i ShadowMetadataRow
+	err := row.Scan(
+		&i.ToolCallCount,
+		&i.ContentBytes,
+		&i.ContentRawBytes,
+		&i.ToolCallsBytes,
+	)
+	return i, err
+}
+
+const shadowToolCallIDs = `-- name: ShadowToolCallIDs :many
+SELECT tool_call_id FROM chat_message_transcript_tool_calls WHERE message_id=$1 ORDER BY tool_call_id
+`
+
+func (q *Queries) ShadowToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, shadowToolCallIDs, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tool_call_id string
+		if err := rows.Scan(&tool_call_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_call_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unattributeMessage = `-- name: UnattributeMessage :execrows
 UPDATE chat_messages SET project_id=NULL WHERE id=$1 AND project_id=$2
 `
