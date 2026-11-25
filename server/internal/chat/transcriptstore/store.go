@@ -37,14 +37,14 @@ type Store struct {
 	db      *pgxpool.Pool
 	service *orgencryption.Service
 	tracer  trace.Tracer
-	metrics *captureMetrics
+	metrics *storeMetrics
 }
 
 func New(db *pgxpool.Pool, service *orgencryption.Service, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*Store, error) {
 	if db == nil || service == nil || tracerProvider == nil || meterProvider == nil {
 		return nil, ErrInvalid
 	}
-	metrics, err := newCaptureMetrics(meterProvider)
+	metrics, err := newStoreMetrics(meterProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -100,13 +100,13 @@ func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string
 
 	start := time.Now()
 	err := s.capture(ctx, db, organizationID, projectID, messageIDs)
-	outcome := classifyCapture(err)
-	s.metrics.record(ctx, projectID, len(messageIDs), time.Since(start), outcome)
+	result := classify(err)
+	s.metrics.capture.record(ctx, projectID, len(messageIDs), time.Since(start), result)
 
-	span.SetAttributes(attr.Outcome(outcome))
+	span.SetAttributes(attr.Outcome(result))
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, string(outcome))
+		span.SetStatus(codes.Error, string(result))
 	}
 	return err
 }
@@ -173,6 +173,96 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 	source := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
 	if !sameMessage(opened, source) {
 		return zero, ErrStale
+	}
+	return opened, nil
+}
+
+// LoadMany opens the shadows of a page of messages with one codec backed by the
+// process's committed data key cache: a warm cache needs no KMS call, and a
+// cold one unwraps the organization's key once for the page. A message with no
+// shadow at all is left out of the result, and the caller serves its plaintext.
+// Every shadow that does exist gets Load's checks, and one that is stale or not
+// authentic fails the whole page: an existing shadow is never skipped in favour
+// of plaintext. Duplicate IDs are opened once.
+func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
+	if len(messageIDs) == 0 {
+		return map[uuid.UUID]transcriptcrypto.Message{}, nil
+	}
+
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.LoadMany", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.OrganizationID(organizationID),
+		attr.TranscriptShadowMessageCount(len(messageIDs)),
+	))
+	defer span.End()
+
+	start := time.Now()
+	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs)
+	result := classify(err)
+	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
+
+	span.SetAttributes(attr.Outcome(result))
+	if err != nil {
+		s.metrics.read.recordMessages(ctx, projectID, len(messageIDs), result)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(result))
+		return nil, err
+	}
+
+	missing := 0
+	for _, id := range messageIDs {
+		if _, ok := opened[id]; !ok {
+			missing++
+		}
+	}
+	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing, outcomeSuccess)
+	s.metrics.read.recordMessages(ctx, projectID, missing, outcomePlaintextFallback)
+	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(missing))
+	return opened, nil
+}
+
+func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.Message, error) {
+	if organizationID == "" || projectID == uuid.Nil {
+		return nil, ErrInvalid
+	}
+	wanted := make(map[uuid.UUID]struct{}, len(messageIDs))
+	for _, id := range messageIDs {
+		if id == uuid.Nil {
+			return nil, ErrInvalid
+		}
+		wanted[id] = struct{}{}
+	}
+	ids := make([]uuid.UUID, 0, len(wanted))
+	for id := range wanted {
+		ids = append(ids, id)
+	}
+
+	rows, err := repo.New(s.db).LoadMany(ctx, repo.LoadManyParams{MessageIds: ids, ProjectID: project(projectID), OrganizationID: organizationID})
+	if err != nil {
+		return nil, safe(err)
+	}
+	if len(rows) == 0 {
+		return map[uuid.UUID]transcriptcrypto.Message{}, nil
+	}
+
+	codec, err := transcriptcrypto.New(s.service, organizationID)
+	if err != nil {
+		return nil, safe(err)
+	}
+	opened := make(map[uuid.UUID]transcriptcrypto.Message, len(rows))
+	for _, row := range rows {
+		if !row.Current {
+			return nil, ErrStale
+		}
+		msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
+		if err != nil {
+			return nil, safe(err)
+		}
+		source := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
+		if !sameMessage(msg, source) {
+			return nil, ErrStale
+		}
+		opened[row.ID] = msg
 	}
 	return opened, nil
 }
