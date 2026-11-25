@@ -22,6 +22,7 @@ interface NormalizedServer {
   /** Namespace prefix for this server's tools; only consulted when more than one server is configured. */
   name: string | undefined;
   environment: string | undefined;
+  accessToken?: string;
 }
 
 export function useMCPTools({
@@ -53,9 +54,12 @@ export function useMCPTools({
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     ([k, v]) => `${k}:${String(v)}`,
   );
-  const serversQueryKey = servers.map(
-    (s) => `${s.url}|${s.name ?? ""}|${s.environment ?? ""}`,
-  );
+  const serversQueryKey = servers.map((s) => [
+    s.url,
+    s.name,
+    s.environment,
+    s.accessToken,
+  ]);
 
   // Each MCP transport stores a direct reference to its headers object and
   // spreads it on every send, so writes propagate to subsequent tool-call
@@ -103,6 +107,9 @@ export function useMCPTools({
         headers: {
           ...envHeaders,
           ...authHeaders,
+          ...(server.accessToken && {
+            Authorization: `Bearer ${server.accessToken}`,
+          }),
           ...(server.environment && {
             "Gram-Environment": server.environment,
           }),
@@ -226,6 +233,7 @@ function normalizeServers(
       url: entry.url,
       name: entry.name,
       environment: entry.environment,
+      accessToken: entry.accessToken,
     }));
   }
   if (mcp) {
