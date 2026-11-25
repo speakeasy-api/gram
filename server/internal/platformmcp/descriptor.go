@@ -295,8 +295,6 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // FilterExternalTools applies caller-specific discovery policy to an already
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
-// A client with a tool allowlist (see clientToolAllowlist) sees only those
-// tools, intersected with what its grants make discoverable.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
 	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
@@ -308,16 +306,10 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(r.aiCatalogSnapshot(ctx), principal.ClientID)
-	// The small discovery surface reaches every tool by design, so the
-	// allowlist only narrows the full catalogue.
-	if discoveryModeFromContext(ctx) != discoveryFull {
-		allowlist = nil
-	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)
