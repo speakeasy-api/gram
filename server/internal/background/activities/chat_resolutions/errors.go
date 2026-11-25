@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/temporal"
@@ -96,7 +97,7 @@ func IsInferenceDisabled(err error) bool {
 // still matches the pinned one and returns the messages at that generation. On
 // mismatch it returns a non-retryable Temporal error so the workflow can
 // continue-as-new on the new generation instead of acting on stale indices.
-func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID, expectedGeneration int32) ([]repo.ChatMessage, error) {
+func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, transcripts *transcriptstore.Transcripts, db transcriptstore.DBTX, chatID, projectID uuid.UUID, expectedGeneration int32) ([]repo.ChatMessage, error) {
 	currentGen, err := queries.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
@@ -107,11 +108,7 @@ func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, 
 	if currentGen != expectedGeneration {
 		return nil, newGenerationBumpedError(expectedGeneration, currentGen)
 	}
-	messages, err := queries.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
-		ChatID:     chatID,
-		ProjectID:  projectID,
-		Generation: expectedGeneration,
-	})
+	messages, err := transcripts.ListChatMessagesByGeneration(ctx, db, projectID, chatID, expectedGeneration)
 	if err != nil {
 		return nil, fmt.Errorf("list chat messages by generation: %w", err)
 	}

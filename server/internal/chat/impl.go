@@ -2671,10 +2671,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
 	}
 
-	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: chat.ProjectID,
-	})
+	messages, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, chat.ProjectID, chatID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list chat messages").LogError(ctx, s.logger)
 	}
@@ -3067,10 +3064,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	messages, err := s.transcripts.ListLatestGenerationChatMessages(ctx, s.db, *authCtx.ProjectID, chatID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").LogError(ctx, s.logger)
 	}

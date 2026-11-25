@@ -1335,8 +1335,9 @@ func newStartCommand() *cli.Command {
 				WithRiskFindings(chatRiskFindings).
 				WithTranscripts(transcripts).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
-				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
+				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()).WithTranscripts(transcripts))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
+			assistantsCore.SetTranscripts(transcripts)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -1855,6 +1856,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create intent policies service: %w", err)
 			}
+			intentPoliciesSvc.WithTranscripts(transcripts)
 			intentpolicies.Attach(mux, intentPoliciesSvc)
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
@@ -2263,6 +2265,7 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				approvalService,
 			)
+			riskService.WithTranscripts(transcripts)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

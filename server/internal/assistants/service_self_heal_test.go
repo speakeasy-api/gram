@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -172,10 +173,10 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		require.Equal(t, assistantID.String(), reading.GetAttributes()[metering.AttributeAssistantID])
 		require.Equal(t, string(metering.WorkloadSourceAssistant), reading.GetAttributes()[metering.AttributeWorkloadSource])
 	}
-	before, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	before, err := (*transcriptstore.Transcripts)(nil).ListLatestGenerationChatMessages(ctx, conn, projectID, chatID)
 	require.NoError(t, err)
 	require.NoError(t, core.selfHealCorruptHistory(ctx, chatID, projectID, assistantID))
-	after, err := q.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	after, err := (*transcriptstore.Transcripts)(nil).ListLatestGenerationChatMessages(ctx, conn, projectID, chatID)
 	require.NoError(t, err)
 	require.Len(t, after, len(before))
 	for i := 1; i < len(after); i++ {

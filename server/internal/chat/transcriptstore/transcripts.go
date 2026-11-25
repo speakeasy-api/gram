@@ -3,6 +3,7 @@ package transcriptstore
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,10 @@ import (
 type Transcripts struct {
 	store    *Store
 	projects map[uuid.UUID]struct{}
+
+	// organizations caches each listed project's organization, which opening
+	// a shadow needs and most readers do not have at hand.
+	organizations *sync.Map
 }
 
 // NewTranscripts serves shadows for the listed projects only. An empty list
@@ -27,7 +32,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
 	}
-	return &Transcripts{store: store, projects: projects}
+	return &Transcripts{store: store, projects: projects, organizations: &sync.Map{}}
 }
 
 // Enabled reports whether the project captures and reads shadows.
@@ -95,24 +100,7 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 		if !ok {
 			continue
 		}
-		if b.Content != nil {
-			*b.Content = message.Content
-		}
-		if b.ContentRaw != nil {
-			*b.ContentRaw = message.ContentRaw
-		}
-		if b.ToolCalls != nil {
-			*b.ToolCalls = message.ToolCalls
-		}
-		if b.ToolCallSummaries != nil {
-			*b.ToolCallSummaries = message.ToolCallSummaries
-		}
-		if b.ToolOutcomeNotes != nil {
-			*b.ToolOutcomeNotes = optionalText(message.ToolOutcomeNotes)
-		}
-		if b.StorageError != nil {
-			*b.StorageError = optionalText(message.StorageError)
-		}
+		b.assign(message)
 	}
 	return nil
 }

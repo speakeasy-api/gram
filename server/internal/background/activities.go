@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"net/netip"
 	"net/url"
@@ -273,6 +274,7 @@ func NewActivities(
 	signInEpochs signins.EpochRaiser,
 	serverURL *url.URL,
 	staffOrg staff.Organization,
+	transcripts *transcriptstore.Transcripts,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -455,7 +457,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		mcpConnectionOutcomesDaily:       activities.NewMCPConnectionOutcomesDaily(logger, meterProvider, db, chConn, staffOrg),
-		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
+		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient, transcripts),
 		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, runnerKeys),
@@ -475,10 +477,10 @@ func NewActivities(
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:          activities.NewProcessScheduledTrigger(triggerApp),
 		markTriggerFired:                 activities.NewMarkTriggerFired(triggerApp),
-		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient),
+		segmentChat:                      resolution_activities.NewSegmentChat(logger, db, chatClient, transcripts),
 		deleteChatResolutions:            resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
-		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db),
+		analyzeSegment:                   resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger, transcripts),
+		getUserFeedbackForChat:           resolution_activities.NewGetUserFeedbackForChat(logger, db, transcripts),
 		fetchUnanalyzedMessages:          risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                     analyzeBatch,
 		markMessagesAnalyzed:             risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),

@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -458,7 +458,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
 	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
-	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
+	messages, err := (*transcriptstore.Transcripts)(nil).ListLatestGenerationChatMessages(ctx, db, key.ProjectID, chatID)
 	require.NoError(t, err)
 	users, finals := 0, 0
 	for _, message := range messages {

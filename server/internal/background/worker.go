@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"net/netip"
 	"net/url"
@@ -132,11 +133,15 @@ type WorkerOptions struct {
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
-	ChatClient                   *chat.Client
-	OpenRouter                   openrouter.Provisioner
-	OpenRouterSpend              openrouter.SpendClient
-	K8sClient                    *k8s.KubernetesClients
-	ExpectedTargetCNAME          string
+
+	// Transcripts reads chat message bodies, opening encrypted shadows for the
+	// projects that keep them. Nil reads plaintext for every project.
+	Transcripts         *transcriptstore.Transcripts
+	ChatClient          *chat.Client
+	OpenRouter          openrouter.Provisioner
+	OpenRouterSpend     openrouter.SpendClient
+	K8sClient           *k8s.KubernetesClients
+	ExpectedTargetCNAME string
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
@@ -635,6 +640,7 @@ func NewTemporalWorker(
 		signInEpochs(opts.RedisClient),
 		opts.ServerURL,
 		opts.StaffOrganization,
+		opts.Transcripts,
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
 

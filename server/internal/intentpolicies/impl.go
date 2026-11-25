@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -49,11 +50,21 @@ type Service struct {
 	authz      *authz.Engine
 	features   feature.Provider
 	chatWriter *chat.ChatMessageWriter
-	completion openrouter.CompletionClient
-	jev        *intentpolicy.JevEvaluator
-	guardrail  intentpolicy.Guardrail
-	engine     *intentpolicy.Engine
-	now        func() time.Time
+	// transcripts reads chat message bodies, opening encrypted shadows for
+	// the projects that keep them. Nil reads plaintext.
+	transcripts *transcriptstore.Transcripts
+	completion  openrouter.CompletionClient
+	jev         *intentpolicy.JevEvaluator
+	guardrail   intentpolicy.Guardrail
+	engine      *intentpolicy.Engine
+	now         func() time.Time
+}
+
+// WithTranscripts makes session analysis read message bodies from encrypted
+// shadows for the projects that keep them.
+func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
+	s.transcripts = transcripts
+	return s
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -187,7 +198,7 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 		}
 		generation = &latest
 	}
-	rows, err := q.ListChatMessagesByGeneration(ctx, chatrepo.ListChatMessagesByGenerationParams{ChatID: chatID, ProjectID: projectID, Generation: *generation})
+	rows, err := s.transcripts.ListChatMessagesByGeneration(ctx, s.db, projectID, chatID, *generation)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat messages").LogError(ctx, logger)
 	}

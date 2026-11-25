@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 	"strings"
 	"time"
@@ -26,15 +27,17 @@ type AnalyzeSegment struct {
 	chatClient      openrouter.CompletionClient
 	db              *pgxpool.Pool
 	telemetryLogger *telemetry.Logger
+	transcripts     *transcriptstore.Transcripts
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, transcripts *transcriptstore.Transcripts) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:          logger,
 		repo:            repo.New(db),
 		chatClient:      chatClient,
 		db:              db,
 		telemetryLogger: telemetryLogger,
+		transcripts:     transcripts,
 	}
 }
 
@@ -66,7 +69,7 @@ type segmentAnalysisResult struct {
 }
 
 func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error {
-	allMessages, err := loadMessagesAtPinnedGeneration(ctx, a.repo, args.ChatID, args.ProjectID, args.Generation)
+	allMessages, err := loadMessagesAtPinnedGeneration(ctx, a.repo, a.transcripts, a.db, args.ChatID, args.ProjectID, args.Generation)
 	if err != nil {
 		return err
 	}

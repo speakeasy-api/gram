@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -15,14 +16,18 @@ import (
 )
 
 type GetUserFeedbackForChat struct {
-	logger *slog.Logger
-	repo   *repo.Queries
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	transcripts *transcriptstore.Transcripts
 }
 
-func NewGetUserFeedbackForChat(logger *slog.Logger, db *pgxpool.Pool) *GetUserFeedbackForChat {
+func NewGetUserFeedbackForChat(logger *slog.Logger, db *pgxpool.Pool, transcripts *transcriptstore.Transcripts) *GetUserFeedbackForChat {
 	return &GetUserFeedbackForChat{
-		logger: logger,
-		repo:   repo.New(db),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		transcripts: transcripts,
 	}
 }
 
@@ -71,11 +76,7 @@ func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackFor
 		return nil, fmt.Errorf("list user feedback: %w", err)
 	}
 
-	messages, err := g.repo.ListChatMessagesByGeneration(ctx, repo.ListChatMessagesByGenerationParams{
-		ChatID:     args.ChatID,
-		ProjectID:  args.ProjectID,
-		Generation: generation,
-	})
+	messages, err := g.transcripts.ListChatMessagesByGeneration(ctx, g.db, args.ProjectID, args.ChatID, generation)
 	if err != nil {
 		return nil, fmt.Errorf("list chat messages by generation: %w", err)
 	}
