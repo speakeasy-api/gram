@@ -7,6 +7,8 @@ export interface ConnectStepMember {
   slug: string;
   name: string;
   mcpServerId?: string;
+  choose?: boolean;
+  connect?: () => void;
 }
 
 /**
@@ -17,16 +19,19 @@ export interface ConnectStepMember {
  */
 export function GatewayConnectStep({
   members,
-  onConnect,
   onSkip,
   availableCount,
+  choosingConnection = false,
+  connecting = false,
+  connectionError = false,
 }: {
   members: ConnectStepMember[];
-  /** Opens the gateway's connect page; coming back checks again. */
-  onConnect: () => void;
   onSkip: () => void;
   /** Tools the viewer can use without connecting, for the skip link. */
   availableCount: number;
+  choosingConnection?: boolean;
+  connecting?: boolean;
+  connectionError?: boolean;
 }): JSX.Element {
   const names =
     members.length === 1
@@ -36,12 +41,12 @@ export function GatewayConnectStep({
     <div className="flex w-full max-w-2xl flex-col gap-6 px-6 pt-2 pb-10">
       <div className="space-y-2">
         <Heading variant="h4" className="normal-case">
-          Connect your accounts
+          {choosingConnection ? "Choose connections" : "Connect your accounts"}
         </Heading>
         <Text muted small className="block">
-          {names} {members.length === 1 ? "signs" : "sign"} each person in with
-          their own account. Connect to see and run{" "}
-          {members.length === 1 ? "its" : "their"} tools as you.
+          {choosingConnection
+            ? `Review which credentials ${names} can use for this session. Then you can see and run the approved tools.`
+            : `${names} ${members.length === 1 ? "signs" : "sign"} each person in with their own account. Connect to see and run ${members.length === 1 ? "its" : "their"} tools as you.`}
         </Text>
       </div>
       <ul className="bg-card divide-y border">
@@ -62,14 +67,24 @@ export function GatewayConnectStep({
             <Button
               variant="primary"
               size="sm"
-              onClick={onConnect}
-              aria-label={`Connect your ${member.name} account`}
+              onClick={member.connect}
+              disabled={(member.choose && connecting) || !member.connect}
+              aria-label={
+                member.choose
+                  ? `Choose a connection for ${member.name}`
+                  : `Connect your ${member.name} account`
+              }
             >
-              <Button.Text>Connect</Button.Text>
+              <Button.Text>
+                {member.choose ? "Choose connection" : "Connect"}
+              </Button.Text>
             </Button>
           </li>
         ))}
       </ul>
+      {connectionError ? (
+        <p role="alert">Couldn&apos;t start sign-in. Try again.</p>
+      ) : null}
       <button
         type="button"
         onClick={onSkip}

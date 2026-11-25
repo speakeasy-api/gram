@@ -242,7 +242,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 			"the other server on the same client keeps what it offers")
 	})
 
-	t.Run("the only server's own binding cannot be detached on its own", func(t *testing.T) {
+	t.Run("a sole server can detach its offer without unlinking the issuer", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-own")
@@ -254,13 +254,12 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 			McpServerID:           serverID.String(),
 			RemoteSessionClientID: clientID.String(),
 		})
-		var shareable *oops.ShareableError
-		require.ErrorAs(t, err, &shareable)
-		require.Equal(t, oops.CodeConflict, shareable.Code)
-		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+		require.NoError(t, err)
+		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+		requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
 	})
 
-	t.Run("unbinding a client from the issuer removes its associations", func(t *testing.T) {
+	t.Run("unbinding a client from the issuer preserves explicit server associations", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-unbind")
@@ -279,8 +278,8 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first), "the current serving path cannot reach an unbound client")
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, second))
+		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, first))
+		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, second))
 	})
 
 	t.Run("a deleted client's associations are removed in every project", func(t *testing.T) {
@@ -351,6 +350,8 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
+	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, targetID))
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, siblingID), "configuring one server must not associate the issuer's other servers")
 
 	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, clientID))
@@ -392,11 +393,8 @@ func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
 }
 
-// TestDetachServerClientAssociation_EnforcedSoleConsumer proves an enforced
-// organization can stop its issuer's only server offering a bound client:
-// the binding still implies the association, so the association stays for the
-// upstream client choice, while the link the server offers the client through
-// is retired and a later synchronization does not bring it back.
+// Detaching a sole server offer retires only the derived offer and leaves
+// any issuer pair and administrator offers intact.
 func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	t.Parallel()
 
@@ -430,10 +428,10 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	payload := &gen.DetachServerClientAssociationPayload{McpServerID: serverID.String(), RemoteSessionClientID: clientID.String()}
 	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, payload), "the binding must not refuse an enforced organization")
 	require.Equal(t, linksBefore+int64(len(offered)), auditCount(audit.ActionAuthClientDetachMcpServer), "the retired link is what the audit trail records")
-	require.Equal(t, associationsBefore, auditCount(audit.ActionRemoteSessionClientDetachMcpServer), "the association stays, so no detach of it is recorded")
+	require.Equal(t, associationsBefore+1, auditCount(audit.ActionRemoteSessionClientDetachMcpServer))
 
-	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID),
-		"the association the binding implies is left for the upstream client choice")
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
 	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"only the link derived from the association is retired")
 	require.True(t, authClientLive(t, ctx, ti.conn, offered[0]))
@@ -478,11 +476,9 @@ func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(
 	err = ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
 		McpServerID: serverID.String(), RemoteSessionClientID: clientID.String(),
 	})
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeNotFound, shareable.Code, "no backfill-owned link remains to retire")
+	require.NoError(t, err)
 	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))
-	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, serverID))

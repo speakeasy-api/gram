@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -52,7 +53,19 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
 	admin := authz.NewGrant(authz.ScopeOrgAdmin, f.organizationID)
 
-	server, ok, err := service.servers.Server(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
+	// The fixture has a legacy server association. It is not enough to make
+	// the proxied server eligible until the server offers a live registration.
+	readerCtx := authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())})
+	_, ok, err := service.servers.Server(readerCtx, f.organizationID, f.projectID, f.serverID)
+	require.NoError(t, err)
+	require.False(t, ok)
+	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
+	require.NoError(t, err)
+	offers := authclientbackfill.New(conn)
+	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.organizationID, ProjectID: conv.ToNullUUID(f.projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: binding.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.organizationID, McpServerID: f.serverID, AuthClientID: authClientID, Source: "admin"}))
+	server, ok, err := service.servers.Server(readerCtx, f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, server.speakeasy, "the vendor's order is read through the provider resolver")
@@ -70,8 +83,6 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.Len(t, output.IdentityChaining.Bindings, 1)
 	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
 
-	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
-	require.NoError(t, err)
 	accepted := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	_, err = remotesessionsrepo.New(conn).PlantEMACredentialFixture(ctx, remotesessionsrepo.PlantEMACredentialFixtureParams{
 		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), UserSessionIssuerID: conv.ToNullUUID(f.userIssuer),

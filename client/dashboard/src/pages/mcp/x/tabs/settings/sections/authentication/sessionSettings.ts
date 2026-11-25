@@ -1,7 +1,7 @@
 import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 
-// Shared by the MCP server's Sessions rows and an MCP Authentication
-// Provider's settings form, so both describe a setting the same way.
+// Shared by the MCP server's sign-in rows and an MCP sign-in's
+// settings form, so both describe a setting the same way.
 
 export type DurationUnit = "hour" | "day" | "week";
 

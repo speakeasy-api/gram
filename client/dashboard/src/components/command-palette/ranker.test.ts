@@ -136,6 +136,24 @@ describe("fuzzyScore", () => {
     ).toBeCloseTo(1 + titleBonus("Slack MCP"), 10);
   });
 
+  it("prefers a keyword that is the whole multi-word query", () => {
+    const whole = candidate("Page", { keywords: ["mcp authentication"] });
+    const split = candidate("Page", { keywords: ["mcp", "authentication"] });
+    expect(fuzzyScore("mcp authentication", whole)).toBeGreaterThan(
+      fuzzyScore("mcp authentication", split),
+    );
+  });
+
+  it("ignores stop words when matching a whole keyword", () => {
+    const whole = candidate("Page", { keywords: ["authentication provider"] });
+    const split = candidate("Page", {
+      keywords: ["authentication", "provider"],
+    });
+    expect(fuzzyScore("open authentication provider", whole)).toBeGreaterThan(
+      fuzzyScore("open authentication provider", split),
+    );
+  });
+
   it("halves the score when a token is unmatched", () => {
     const matched = fuzzyScore("slack", candidate("Slack"));
     const withUnmatched = fuzzyScore("slack zzzz", candidate("Slack"));

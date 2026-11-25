@@ -48,7 +48,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -3655,7 +3654,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend))
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
 	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
@@ -3750,12 +3749,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, strictVariant bool) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, strictVariant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -3767,29 +3766,15 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
-// project's managed assistant additionally gets exactly one managed-only
-// toolset — legacy or Platform MCP, per the rollout variant — which must never
-// be reachable by any other assistant.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, strictVariant bool) ([]string, error) {
+// project's managed assistant additionally gets the Platform MCP read toolset
+// (and the Speakeasy Slack toolset when Slack routes to the project), which
+// must never be reachable by any other assistant.
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			var variant feature.Variant
-			if strictVariant {
-				resolved, err := s.resolveAssistantToolsVariant(ctx, assistant.ProjectID)
-				if err != nil {
-					return nil, err
-				}
-				variant = resolved
-			} else {
-				variant = s.assistantToolsVariant(ctx, assistant.ProjectID)
-			}
-			if variant == feature.VariantAssistantToolsPlatformMCP {
-				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
-			} else {
-				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-			}
+			platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
 			routed, err := s.speakeasySlackRouted(ctx, assistant)
 			if err != nil {
 				return nil, err
@@ -3804,39 +3789,6 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
-}
-
-// assistantToolsVariant reports which managed-assistant platform toolset the
-// organization owning projectID is on. Evaluation mirrors the Platform MCP
-// organization gate: distinct ID is the org ID with the org-slug PostHog
-// group. Every failure path returns the legacy variant but never aborts the
-// turn — a flag-provider outage must not take down bootstrap or reconcile, nor
-// silently strip the managed assistant's tools.
-func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
-	variant, err := s.resolveAssistantToolsVariant(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
-		return feature.VariantAssistantToolsLegacy
-	}
-	return variant
-}
-
-// resolveAssistantToolsVariant reports lookup failures instead of falling back.
-// Kit fingerprints its tool set, so a fallback would read as a configuration
-// change rather than an outage.
-func (s *ServiceCore) resolveAssistantToolsVariant(ctx context.Context, projectID uuid.UUID) (feature.Variant, error) {
-	if s.featureFlags == nil {
-		return feature.VariantAssistantToolsLegacy, nil
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		return "", fmt.Errorf("resolve organization for assistant tools variant: %w", err)
-	}
-	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
-	if err != nil {
-		return "", fmt.Errorf("resolve assistant platform mcp variant: %w", err)
-	}
-	return feature.AssistantToolsVariant(variant), nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -3988,10 +3940,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// The managed-assistant platform toolset is granted only to the project's
-	// managed assistant; tools in it must not be reachable by any other
-	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, false)
+	// The Platform MCP read toolset is granted only to the project's managed
+	// assistant; tools in it must not be reachable by any other assistant.
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}

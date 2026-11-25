@@ -17,8 +17,8 @@ function values(overrides: Partial<LogFilterValues> = {}): LogFilterValues {
   return {
     date: { preset: "1d", customRange: null, customLabel: null },
     outcome: [],
-    server: null,
-    person: null,
+    server: [],
+    person: [],
     service: null,
     app: null,
     appVersion: null,
@@ -49,7 +49,7 @@ describe("toAttemptFilters", () => {
       values({
         outcome: ["failed", "exploded"],
         step: ["sign_in_renewal", "nope"],
-        person: "user:user_dana",
+        person: ["user:user_dana"],
         message: ["session_expired"],
         app: "unlisted",
       }),
@@ -89,10 +89,21 @@ describe("logsSearch", () => {
 
   it("keeps single-value dimensions to one value", () => {
     const params = new URLSearchParams(
-      logsSearch({ serverIds: ["one", "two"], range: "7d" }, NOW),
+      logsSearch({ apps: ["cursor", "codex"], range: "7d" }, NOW),
     );
-    expect(params.get("server")).toBe("one");
+    expect(params.get("app")).toBe("cursor");
     expect(params.get("range")).toBe("7d");
+  });
+
+  it("keeps every server and person, as a problem's filters list them", () => {
+    const params = new URLSearchParams(
+      logsSearch(
+        { serverIds: ["one", "two"], people: ["user:a", "user:b"] },
+        NOW,
+      ),
+    );
+    expect(params.get("server")).toBe("one,two");
+    expect(params.get("person")).toBe("user:a,user:b");
   });
 
   it("writes nothing for the default range", () => {

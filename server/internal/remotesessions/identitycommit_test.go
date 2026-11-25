@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The tests below skip Preflight, which refuses the same plans with plain
@@ -35,14 +36,17 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-detach-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-detach-next-client", nextProviderID, false)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, nextProviderID, nextClientID))
+	plan := linkPlan(t, ctx, ti, userIssuerID, nextProviderID, nextClientID)
+	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, orgClientID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), plan.MCPServerID)
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, plan)
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
 	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
 }
 
-func TestIdentityCommitBindRefusesAttachingOrgClientToOrgIssuer(t *testing.T) {
+func TestIdentityCommitBindOffersOrgRegistrationWithoutBinding(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -50,8 +54,13 @@ func TestIdentityCommitBindRefusesAttachingOrgClientToOrgIssuer(t *testing.T) {
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-attach-provider", "", false, []string{"none"})
 	orgClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-attach-client", providerID, true)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, providerID, orgClientID))
-	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
+	plan := linkPlan(t, ctx, ti, userIssuerID, providerID, orgClientID)
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, plan)
+	require.NoError(t, commit.Bind(ctx, tx, reg))
+	_, err := commit.Commit(ctx, tx)
+	require.NoError(t, err)
+	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	require.Equal(t, []uuid.UUID{orgClientID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), plan.MCPServerID))
 }
 
 func TestIdentityCommitBindRefusesDetachingClientWithLiveAgentBinding(t *testing.T) {
@@ -65,7 +74,10 @@ func TestIdentityCommitBindRefusesDetachingClientWithLiveAgentBinding(t *testing
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "identity-commit-agent-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "identity-commit-agent-next-client", nextProviderID, false)
 
-	commit, tx, reg := lockIdentityCommit(t, ctx, ti, linkPlan(t, ctx, userIssuerID, nextProviderID, nextClientID))
+	plan := linkPlan(t, ctx, ti, userIssuerID, nextProviderID, nextClientID)
+	associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, clientID)
+	recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), plan.MCPServerID)
+	commit, tx, reg := lockIdentityCommit(t, ctx, ti, plan)
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityConflict)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, clientID, userIssuerID, true)
@@ -80,7 +92,7 @@ func TestIdentityCommitBindRequiresLock(t *testing.T) {
 	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-unlocked-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-unlocked-client", providerID, false)
 
-	commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, userIssuerID, providerID, clientID))
+	commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, ti, userIssuerID, providerID, clientID))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
 	tx, err := commit.Begin(ctx)
@@ -95,36 +107,74 @@ func TestIdentityCommitBindRequiresLock(t *testing.T) {
 func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	var requests atomic.Int64
-	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	t.Cleanup(registrationServer.Close)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-issuer")
-	providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
+	for name, global := range map[string]bool{"project client": false, "platform-global client": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var requests atomic.Int64
+			registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			t.Cleanup(registrationServer.Close)
+			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-issuer")
+			providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+			var clientID uuid.UUID
+			if global {
+				client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+					RemoteSessionIssuerID: providerID,
+					ClientID:              "identity-commit-reuse-global-client",
+				})
+				require.NoError(t, err)
+				clientID = client.ID
+				otherProject := createProject(t, ctx, ti.conn, "identity-commit-reuse-other")
+				otherIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "identity-commit-reuse-hidden")
+				require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+					RemoteSessionClientID: clientID,
+					UserSessionIssuerID:   otherIssuer,
+				}))
+			} else {
+				clientID = createServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, false)
+			}
+			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: clientID,
+				UserSessionIssuerID:   userIssuerID,
+			}))
+			deletedIssuer := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-deleted")
+			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: clientID,
+				UserSessionIssuerID:   deletedIssuer,
+			}))
+			_, err := usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+				ID:        deletedIssuer,
+				ProjectID: projectIDFromContext(t, ctx),
+			})
+			require.NoError(t, err)
 
-	plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
-	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
-	plan.Bound = remotesessions.ReuseBound
-	commit := identityCommitter(t, ti).Prepare(plan)
-	require.NoError(t, commit.Preflight(ctx))
-	reg, err := commit.Register(ctx)
-	require.NoError(t, err)
-	require.Equal(t, remotesessions.RegistrationReused, reg.Method)
-	require.Zero(t, requests.Load())
+			plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
+			associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, clientID)
+			recordTypedClients(t, ctx, ti.conn, activeOrganizationID(t, ctx), plan.MCPServerID)
+			plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
+			plan.Bound = remotesessions.ReuseBound
+			commit := identityCommitter(t, ti).Prepare(plan)
+			require.NoError(t, commit.Preflight(ctx))
+			reg, err := commit.Register(ctx)
+			require.NoError(t, err)
+			require.Equal(t, remotesessions.RegistrationReused, reg.Method)
+			require.Zero(t, requests.Load())
 
-	tx, err := commit.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) }) })
-	require.NoError(t, commit.Lock(ctx, tx))
-	require.NoError(t, commit.Bind(ctx, tx, reg))
-	res, err := commit.Commit(ctx, tx)
-	require.NoError(t, err)
-	require.True(t, res.Reused)
-	require.Equal(t, clientID, res.Client.ID)
+			tx, err := commit.Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) }) })
+			require.NoError(t, commit.Lock(ctx, tx))
+			require.NoError(t, commit.Bind(ctx, tx, reg))
+			res, err := commit.Commit(ctx, tx)
+			require.NoError(t, err)
+			require.True(t, res.Reused)
+			require.Equal(t, clientID, res.Client.ID)
+			require.Equal(t, []uuid.UUID{userIssuerID}, res.Bindings)
+		})
+	}
 }
 
 // seedLiveAgentBinding attaches a new agent to the caller's remote session
@@ -188,7 +238,7 @@ func lockIdentityCommit(t *testing.T, ctx context.Context, ti *testInstance, pla
 
 // linkPlan binds the stored client clientID of providerID, replacing the
 // clients bound for the user session issuer's current provider.
-func linkPlan(t *testing.T, ctx context.Context, userIssuerID, providerID, clientID uuid.UUID) remotesessions.IdentityPlan {
+func linkPlan(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID, providerID, clientID uuid.UUID) remotesessions.IdentityPlan {
 	t.Helper()
 	return remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -198,6 +248,7 @@ func linkPlan(t *testing.T, ctx context.Context, userIssuerID, providerID, clien
 			ActorDisplayName: nil,
 		},
 		UserSessionIssuerID: userIssuerID,
+		MCPServerID:         createServerIdentityTargetOnIssuer(t, ctx, ti, "identity-plan-"+uuid.NewString()[:8], userIssuerID),
 		Provider:            remotesessions.UseProvider(providerID),
 		Client:              remotesessions.LinkClient(clientID),
 		Bound:               remotesessions.ReplaceBound,

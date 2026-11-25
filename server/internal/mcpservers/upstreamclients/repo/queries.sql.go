@@ -750,8 +750,8 @@ type GetAuthClientSelectionRow struct {
 // server's credential headers must be carried by it. A client or association
 // an administrator created is authoritative and mirrors nothing, so those
 // checks do not apply to it.
-// With typed_only, which the caller sets for an organization enforcing upstream
-// auth, auth client links alone say what a server offers: an offered client's
+// With typed_only (always for serving, enrollment-dependent for consent),
+// auth client links alone say what a server offers: an offered client's
 // registration counts as attached, and an upstream OAuth client association
 // does not give the server an OAuth client. upstream_auth_pending still reads
 // associations, so a server no auth client was ever linked to stays
@@ -1092,6 +1092,61 @@ func (q *Queries) ListGatewayMembersAddedAfterIssuance(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHostedUpstreamAssignments = `-- name: ListHostedUpstreamAssignments :many
+SELECT s.id AS server_id, s.project_id, s.requires_upstream_auth, s.user_session_issuer_id,
+       a.remote_session_client_id AS registration_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+JOIN organization_metadata AS org ON org.id = p.organization_id AND org.disabled_at IS NULL
+LEFT JOIN mcp_server_remote_session_clients AS a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+   AND a.organization_id = org.id AND NOT a.deleted
+WHERE s.id = ANY($1::uuid[]) AND p.organization_id = $2::text
+  AND s.toolset_id IS NOT NULL AND NOT s.deleted
+ORDER BY s.id, a.remote_session_client_id
+`
+
+type ListHostedUpstreamAssignmentsParams struct {
+	ServerIds      []uuid.UUID
+	OrganizationID string
+}
+
+type ListHostedUpstreamAssignmentsRow struct {
+	ServerID             uuid.UUID
+	ProjectID            uuid.UUID
+	RequiresUpstreamAuth pgtype.Bool
+	UserSessionIssuerID  uuid.NullUUID
+	RegistrationID       uuid.NullUUID
+}
+
+// Preserve the server row even without a live placement so readers can
+// distinguish an explicit no-auth setting from missing configuration.
+func (q *Queries) ListHostedUpstreamAssignments(ctx context.Context, arg ListHostedUpstreamAssignmentsParams) ([]ListHostedUpstreamAssignmentsRow, error) {
+	rows, err := q.db.Query(ctx, listHostedUpstreamAssignments, arg.ServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHostedUpstreamAssignmentsRow
+	for rows.Next() {
+		var i ListHostedUpstreamAssignmentsRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.ProjectID,
+			&i.RequiresUpstreamAuth,
+			&i.UserSessionIssuerID,
+			&i.RegistrationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1585,12 +1640,22 @@ func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServ
 }
 
 const listServersAssociatedWithClient = `-- name: ListServersAssociatedWithClient :many
-SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = $1::uuid
-  AND ($2::text IS NULL OR a.organization_id = $2::text)
-ORDER BY a.organization_id, a.mcp_server_id
+SELECT DISTINCT reach.organization_id, reach.mcp_server_id, reach.project_id
+FROM (
+  SELECT a.organization_id, a.mcp_server_id, a.project_id
+  FROM mcp_server_remote_session_clients a
+  WHERE a.remote_session_client_id = $1::uuid
+  UNION ALL
+  SELECT offer.organization_id, offer.mcp_server_id, offer.project_id
+  FROM mcp_server_auth_clients offer
+  JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  JOIN mcp_servers server ON server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  JOIN projects p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+  WHERE auth.remote_session_client_id = $1::uuid AND NOT offer.deleted
+) reach
+JOIN projects p ON p.id = reach.project_id AND p.organization_id = reach.organization_id
+WHERE $2::text IS NULL OR reach.organization_id = $2::text
+ORDER BY reach.organization_id, reach.mcp_server_id
 `
 
 type ListServersAssociatedWithClientParams struct {
@@ -1604,9 +1669,9 @@ type ListServersAssociatedWithClientRow struct {
 	ProjectID      uuid.UUID
 }
 
-// Every live MCP server with an association to the client, tombstoned ones
-// included, with the organization and project it sits in. Without an
-// organization it spans every organization, for a platform-global client.
+// Discover both records that the caller may mutate: the association writer's
+// mirror (including tombstones and associations of retired servers/projects)
+// and typed offers, including unmirrored ones.
 func (q *Queries) ListServersAssociatedWithClient(ctx context.Context, arg ListServersAssociatedWithClientParams) ([]ListServersAssociatedWithClientRow, error) {
 	rows, err := q.db.Query(ctx, listServersAssociatedWithClient, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {
@@ -1711,49 +1776,8 @@ WHERE a.mcp_server_id = s.id
   AND (
     s.deleted IS TRUE
     OR NOT EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN remote_session_clients AS c
-        ON c.id = link.remote_session_client_id
-       AND c.deleted IS FALSE
-      WHERE link.remote_session_client_id = a.remote_session_client_id
-        AND (
-          link.user_session_issuer_id = s.user_session_issuer_id
-          OR EXISTS (
-            SELECT 1
-            FROM meta_mcp_servers AS gateway
-            JOIN projects AS gateway_project
-              ON gateway_project.id = gateway.project_id
-             AND gateway_project.deleted IS FALSE
-            JOIN user_session_issuers AS gateway_issuer
-              ON gateway_issuer.id = gateway.user_session_issuer_id
-             AND gateway_issuer.deleted IS FALSE
-             AND (gateway_issuer.project_id = s.project_id
-                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
-            JOIN meta_mcp_server_members AS member
-              ON member.meta_mcp_server_id = gateway.id
-             AND member.project_id = gateway.project_id
-             AND member.deleted IS FALSE
-            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
-              AND gateway.deleted IS FALSE
-              AND member.mcp_server_id = s.id
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM user_session_issuers AS organization_issuer
-            WHERE organization_issuer.id = link.user_session_issuer_id
-              AND organization_issuer.project_id IS NULL
-              AND organization_issuer.organization_id = a.organization_id
-              AND organization_issuer.deleted IS FALSE
-              AND (
-              SELECT count(*)
-              FROM user_session_issuers AS sibling
-              WHERE sibling.organization_id = organization_issuer.organization_id
-                AND sibling.project_id IS NULL
-                AND sibling.deleted IS FALSE
-            ) = 1
-          )
-        )
+      SELECT 1 FROM remote_session_clients AS c
+      WHERE c.id = a.remote_session_client_id AND c.deleted IS FALSE
     )
   )
 RETURNING a.mcp_server_id
@@ -1764,14 +1788,8 @@ type PruneUnservableAssociationsParams struct {
 	OrganizationID string
 }
 
-// Removes the project's associations no issuer can serve: the server is gone,
-// the client is deleted, or the client is bound neither to the server's own
-// user session issuer nor to the live issuer of a gateway fronting the server
-// (a gateway it is a member of, or its organization's only organization-level
-// issuer for the organization gateway). Rows are deleted outright rather
-// than soft-deleted: a soft-deleted row records an explicit detach, which
-// capture and the backfill keep, and automatic cleanup must not read as one,
-// so a server that regains its binding or rejoins a gateway is captured again.
+// Removes only associations with a deleted server or registration. The offer
+// belongs to the server and survives changes to its sign-in or gateway paths.
 func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -1948,4 +1966,20 @@ func (q *Queries) RemoveGlobalClientAssociations(ctx context.Context, remoteSess
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const requireHostedUpstreamAssignment = `-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND toolset_id IS NOT NULL AND NOT deleted
+`
+
+type RequireHostedUpstreamAssignmentParams struct {
+	ServerID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RequireHostedUpstreamAssignment(ctx context.Context, arg RequireHostedUpstreamAssignmentParams) error {
+	_, err := q.db.Exec(ctx, requireHostedUpstreamAssignment, arg.ServerID, arg.ProjectID)
+	return err
 }

@@ -102,7 +102,7 @@ function footerHint(
   orgUrl: string,
 ): string {
   if (trustingCount === 0) {
-    return `Creates the ${newIssuerSlug} sign-in issuer and links it to Okta. To use an existing sign-in issuer, trust Okta sign-in on it in the table.`;
+    return `Creates the ${newIssuerSlug} MCP sign-in and links it to Okta. To use an existing MCP sign-in, trust Okta sign-in on it in the table.`;
   }
   return `Okta (${orgUrl}) signs people in through the linked app.`;
 }
@@ -133,7 +133,7 @@ function useFetchAllPages(query: {
   };
 }
 
-/** Every organization sign-in issuer, across all pages. */
+/** Every organization MCP sign-in, across all pages. */
 function useAllOrganizationSignInIssuers(): {
   issuers: UserSessionIssuer[];
   isPending: boolean;

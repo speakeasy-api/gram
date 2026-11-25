@@ -243,14 +243,8 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 RETURNING mcp_server_id;
 
 -- name: PruneUnservableAssociations :many
--- Removes the project's associations no issuer can serve: the server is gone,
--- the client is deleted, or the client is bound neither to the server's own
--- user session issuer nor to the live issuer of a gateway fronting the server
--- (a gateway it is a member of, or its organization's only organization-level
--- issuer for the organization gateway). Rows are deleted outright rather
--- than soft-deleted: a soft-deleted row records an explicit detach, which
--- capture and the backfill keep, and automatic cleanup must not read as one,
--- so a server that regains its binding or rejoins a gateway is captured again.
+-- Removes only associations with a deleted server or registration. The offer
+-- belongs to the server and survives changes to its sign-in or gateway paths.
 DELETE FROM mcp_server_remote_session_clients AS a
 USING mcp_servers AS s
 WHERE a.mcp_server_id = s.id
@@ -260,49 +254,8 @@ WHERE a.mcp_server_id = s.id
   AND (
     s.deleted IS TRUE
     OR NOT EXISTS (
-      SELECT 1
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN remote_session_clients AS c
-        ON c.id = link.remote_session_client_id
-       AND c.deleted IS FALSE
-      WHERE link.remote_session_client_id = a.remote_session_client_id
-        AND (
-          link.user_session_issuer_id = s.user_session_issuer_id
-          OR EXISTS (
-            SELECT 1
-            FROM meta_mcp_servers AS gateway
-            JOIN projects AS gateway_project
-              ON gateway_project.id = gateway.project_id
-             AND gateway_project.deleted IS FALSE
-            JOIN user_session_issuers AS gateway_issuer
-              ON gateway_issuer.id = gateway.user_session_issuer_id
-             AND gateway_issuer.deleted IS FALSE
-             AND (gateway_issuer.project_id = s.project_id
-                  OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = a.organization_id))
-            JOIN meta_mcp_server_members AS member
-              ON member.meta_mcp_server_id = gateway.id
-             AND member.project_id = gateway.project_id
-             AND member.deleted IS FALSE
-            WHERE gateway.user_session_issuer_id = link.user_session_issuer_id
-              AND gateway.deleted IS FALSE
-              AND member.mcp_server_id = s.id
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM user_session_issuers AS organization_issuer
-            WHERE organization_issuer.id = link.user_session_issuer_id
-              AND organization_issuer.project_id IS NULL
-              AND organization_issuer.organization_id = a.organization_id
-              AND organization_issuer.deleted IS FALSE
-              AND (
-              SELECT count(*)
-              FROM user_session_issuers AS sibling
-              WHERE sibling.organization_id = organization_issuer.organization_id
-                AND sibling.project_id IS NULL
-                AND sibling.deleted IS FALSE
-            ) = 1
-          )
-        )
+      SELECT 1 FROM remote_session_clients AS c
+      WHERE c.id = a.remote_session_client_id AND c.deleted IS FALSE
     )
   )
 RETURNING a.mcp_server_id;
@@ -516,6 +469,26 @@ SELECT EXISTS (
     )
 ) AS sole_consumer;
 
+-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
+WHERE id = @server_id AND project_id = @project_id AND toolset_id IS NOT NULL AND NOT deleted;
+
+-- name: ListHostedUpstreamAssignments :many
+-- Preserve the server row even without a live placement so readers can
+-- distinguish an explicit no-auth setting from missing configuration.
+SELECT s.id AS server_id, s.project_id, s.requires_upstream_auth, s.user_session_issuer_id,
+       a.remote_session_client_id AS registration_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+JOIN organization_metadata AS org ON org.id = p.organization_id AND org.disabled_at IS NULL
+LEFT JOIN mcp_server_remote_session_clients AS a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+   AND a.organization_id = org.id AND NOT a.deleted
+WHERE s.id = ANY(@server_ids::uuid[]) AND p.organization_id = @organization_id::text
+  AND s.toolset_id IS NOT NULL AND NOT s.deleted
+ORDER BY s.id, a.remote_session_client_id;
+
 -- name: ListServerAssociatedClients :many
 -- The live clients associated with each of the given servers, for consent to
 -- offer a server only its own clients.
@@ -541,8 +514,8 @@ WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
 -- server's credential headers must be carried by it. A client or association
 -- an administrator created is authoritative and mirrors nothing, so those
 -- checks do not apply to it.
--- With typed_only, which the caller sets for an organization enforcing upstream
--- auth, auth client links alone say what a server offers: an offered client's
+-- With typed_only (always for serving, enrollment-dependent for consent),
+-- auth client links alone say what a server offers: an offered client's
 -- registration counts as attached, and an upstream OAuth client association
 -- does not give the server an OAuth client. upstream_auth_pending still reads
 -- associations, so a server no auth client was ever linked to stays
@@ -1118,15 +1091,25 @@ WHERE sel.credential_kind = @credential_kind::text
   AND sel.deleted IS FALSE;
 
 -- name: ListServersAssociatedWithClient :many
--- Every live MCP server with an association to the client, tombstoned ones
--- included, with the organization and project it sits in. Without an
--- organization it spans every organization, for a platform-global client.
-SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = @remote_session_client_id::uuid
-  AND (sqlc.narg('organization_id')::text IS NULL OR a.organization_id = sqlc.narg('organization_id')::text)
-ORDER BY a.organization_id, a.mcp_server_id;
+-- Discover both records that the caller may mutate: the association writer's
+-- mirror (including tombstones and associations of retired servers/projects)
+-- and typed offers, including unmirrored ones.
+SELECT DISTINCT reach.organization_id, reach.mcp_server_id, reach.project_id
+FROM (
+  SELECT a.organization_id, a.mcp_server_id, a.project_id
+  FROM mcp_server_remote_session_clients a
+  WHERE a.remote_session_client_id = @remote_session_client_id::uuid
+  UNION ALL
+  SELECT offer.organization_id, offer.mcp_server_id, offer.project_id
+  FROM mcp_server_auth_clients offer
+  JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  JOIN mcp_servers server ON server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  JOIN projects p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+  WHERE auth.remote_session_client_id = @remote_session_client_id::uuid AND NOT offer.deleted
+) reach
+JOIN projects p ON p.id = reach.project_id AND p.organization_id = reach.organization_id
+WHERE sqlc.narg('organization_id')::text IS NULL OR reach.organization_id = sqlc.narg('organization_id')::text
+ORDER BY reach.organization_id, reach.mcp_server_id;
 
 -- name: ListOrganizationProjectsWithServers :many
 -- The organization's live projects with a live MCP server, for a change that

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
@@ -57,7 +56,6 @@ func TestDeleteDomain_ActiveNetworkIngressPinConflicts(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: "ciphertext", Valid: true},
 		AttestorNamespace:      resources.Namespace,
 		AttestorServiceAccount: resources.AttestorServiceAccount,
 		ProviderResources:      encoded,

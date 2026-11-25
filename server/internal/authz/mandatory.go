@@ -89,6 +89,8 @@ type MandatoryAuthorization struct {
 	key           *apiKeyAdmission
 	// narrowedProject is a project a credential minted from a key is bound to.
 	narrowedProject *uuid.UUID
+	// workloadOwner is resolved by live admission, not credential claims.
+	workloadOwner string
 }
 
 func (m MandatoryAuthorization) Caller() MandatoryCaller { return m.caller }
@@ -99,9 +101,16 @@ func (m MandatoryAuthorization) PrincipalID() string { return m.principalID }
 
 func (m MandatoryAuthorization) OrganizationID() string { return m.organizationID }
 
-// RepresentedUserID is the user bound to $represented_user, the same binding
-// enforcement uses. Callers that represent no user return "".
+// RepresentedUserID returns the user the caller represents, if any. It does
+// not include the owner bound only for an auth-client admission check.
 func (m MandatoryAuthorization) RepresentedUserID() string { return m.authorization.representedUser }
+
+func (m MandatoryAuthorization) authClientRepresentedUserID() string {
+	if m.caller == MandatoryCallerWorkload {
+		return m.workloadOwner
+	}
+	return m.RepresentedUserID()
+}
 
 // LegacyAuthCeiling reports whether admission derived the caller's auth
 // client ceiling from server access in a pre-version-5 stored policy.
@@ -132,9 +141,10 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false},
 		key:             nil,
 		narrowedProject: nil,
+		workloadOwner:   "",
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -170,12 +180,16 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		if err != nil {
 			return m, fmt.Errorf("prepare mandatory authorization: %w", err)
 		}
-		authorization, ok = grantAuthorizationFromContext(prepared)
+		ctx = prepared
+		authorization, ok = grantAuthorizationFromContext(ctx)
 	}
 	if !ok {
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonNoPolicy), nil
 	}
 	m.authorization = authorization
+	if m.caller == MandatoryCallerWorkload {
+		m.workloadOwner, _ = AdmittedWorkloadOwner(ctx)
+	}
 	return m, nil
 }
 
@@ -274,6 +288,11 @@ func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string,
 	}
 	if m.admittedByVisibility(visibility) {
 		return visibilityAdmission(), nil
+	}
+	if m.caller == MandatoryCallerWorkload {
+		// Bind the admitted workload owner only for this check; the
+		// credential ceiling, assigned agent and owner policies still apply.
+		m.authorization.representedUser = m.authClientRepresentedUserID()
 	}
 	return m.Decide(organizationID, use)
 }

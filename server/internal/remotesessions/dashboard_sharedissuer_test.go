@@ -47,6 +47,9 @@ func seedSharedIssuerOn(t *testing.T, ctx context.Context, ti *testInstance, slu
 	require.NoError(t, err)
 	firstClient, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
+	// These tests exercise the separate legacy binding writers. Seed the
+	// junction row they used to get incidentally from server setup.
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: firstClient, UserSessionIssuerID: userIssuerID}))
 	second, _ := sourceBackedTarget(t, ctx, ti, slug+"-second", userIssuerID)
 
 	shared := sharedIssuer{userIssuerID: userIssuerID, first: first, firstProvider: firstProvider, firstClient: firstClient, second: second}
@@ -111,7 +114,7 @@ func TestAttachUserSessionIssuerOffersOnTheSoleServerUnderEnforcement(t *testing
 	providerID := createServerIdentityProvider(t, ctx, ti, "attach-enforced-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "attach-enforced-client", providerID, false)
 
-	_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  clientID.String(),
 		UserSessionIssuerID: userIssuerID.String(),
 	})
@@ -139,7 +142,7 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 		{name: "attaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
 			t.Helper()
 			clientID := createServerIdentityClient(t, ctx, ti, "leftover-attached-client", providerID, false)
-			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
 			require.NoError(t, err)
 			return []uuid.UUID{clientID}
 		}},
@@ -160,11 +163,11 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 		{name: "detaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
 			t.Helper()
 			clientID := createServerIdentityClient(t, ctx, ti, "leftover-detached-client", providerID, false)
-			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
 			require.NoError(t, err)
-			_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
 			require.NoError(t, err)
-			return nil
+			return []uuid.UUID{clientID}
 		}},
 	}
 	for _, tc := range tests {
@@ -275,7 +278,11 @@ func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
 
 				require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
 
-				require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
+				wantProvider := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+				if enabled {
+					wantProvider = conv.ToNullUUID(providerID)
+				}
+				require.Equal(t, wantProvider, storedIssuer(t, ctx, ti.conn, projectID, shared.second))
 				// Disabling an explicit registration is not consent to route the
 				// issuer's different credentials to this server after rollback.
 				requireClientBound(t, ctx, ti, secondClient, shared.userIssuerID, false)
@@ -309,7 +316,7 @@ func TestAttachUserSessionIssuerOffersBesideTheServersOwnOfferUnderEnforcement(t
 	attachedProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-attached-provider", "", false, []string{"none"})
 	attachedClient := createServerIdentityClient(t, ctx, ti, "beside-offer-attached-client", attachedProvider, false)
 
-	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
+	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{attachedClient}, associatedClients(t, ctx, ti.conn, projectID, shared.second))
