@@ -581,6 +581,10 @@ func TestFirstRunToolsFitHostBudget(t *testing.T) {
 		t.Logf("%s: tools/list %d bytes", mode, len(raw))
 		require.Less(t, len(raw), hostTotalToolBudget/4, mode)
 		for _, tool := range firstRun {
+			if tool.Name == "get_mcp_readiness" {
+				// The distinction must still be visible in a truncated search result.
+				require.Contains(t, truncateUTF8(tool.Description, maxSearchDescriptionBytes), "use get_xaa_readiness for Cross-App Access")
+			}
 			require.Nil(t, tool.OutputSchema, tool.Name)
 			spec, err := json.Marshal(tool)
 			require.NoError(t, err)
