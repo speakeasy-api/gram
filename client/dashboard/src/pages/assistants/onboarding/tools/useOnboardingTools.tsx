@@ -2471,6 +2471,7 @@ type OnboardingTools = ReturnType<typeof buildAssistantTools>;
 export type OnboardingToolName = keyof OnboardingTools;
 
 export type OnboardingToolPermissions = {
+  usesProjectMCPAccess?: boolean;
   canWriteAssistant: boolean;
   canReadProject: boolean;
   canWriteProject: boolean;
@@ -2544,10 +2545,21 @@ const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
   "propose_slack_setup",
 ]);
 
+const MCP_ATTACHMENT_TOOLS = new Set<OnboardingToolName>([
+  "attach_mcp_server",
+  "detach_mcp_server",
+  "attach_toolset",
+  "detach_toolset",
+  "propose_slack_setup", // Also attaches a toolset.
+]);
+
 export function isOnboardingToolAllowed(
   tool: OnboardingToolName,
   permissions: OnboardingToolPermissions,
 ): boolean {
+  if (permissions.usesProjectMCPAccess && MCP_ATTACHMENT_TOOLS.has(tool)) {
+    return false;
+  }
   if (!permissions.canWriteAssistant && !ASSISTANT_READ_TOOLS.has(tool)) {
     return false;
   }
@@ -2604,6 +2616,7 @@ export function useOnboardingTools(): {
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
     const permissions: OnboardingToolPermissions = {
+      usesProjectMCPAccess: draft.assistant?.runtimeVersion === 3,
       canWriteAssistant,
       canReadProject,
       canWriteProject,

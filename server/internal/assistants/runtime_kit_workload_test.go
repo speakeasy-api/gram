@@ -358,7 +358,7 @@ func TestKitWorkloadDBSavepointRollbackLeavesNoTrust(t *testing.T) {
 		require.NoError(t, provisionErr)
 		// Returning the post-provision composition error rolls back this
 		// savepoint while leaving the outer cleanup transaction committable.
-		_, compositionErr := kitCompositionMCP(c, binding)
+		_, compositionErr := kitCompositionMCP(nil, binding)
 		if compositionErr != nil {
 			return fmt.Errorf("compose test workload: %w", compositionErr)
 		}
@@ -603,33 +603,14 @@ func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
 	require.NotEqual(t, first.IssuerID, second.IssuerID)
 }
 
-func TestKitConfiguredTurnRemovalWithdrawsWorkload(t *testing.T) {
+func TestKitConfiguredRuntimeRejectsLegacyMCPConfiguration(t *testing.T) {
 	t.Parallel()
-	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "mcp-removal")
-	require.NoError(t, err)
-	r = kitWorkloadMetadata(t, r, binding)
-	protocol := &kitConfiguredRuntimeProtocol{core: core}
-	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: []runtimeMCPServer{}})
-	require.ErrorIs(t, err, errKitMCPConfigurationUnverified)
-	preserved, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, preserved, "legacy configuration must pause without revoking rollback authority")
-	binding.MCPDesiredSetHash = kitMCPDesiredSetHash([]runtimeMCPServer{{ID: "attached", URL: "https://mcp.example/mcp/attached"}})
-	r = kitWorkloadMetadata(t, r, binding)
-	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: nil})
-	require.ErrorIs(t, err, errKitMCPDiscoveryUnavailable)
-	live, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, live, "omitted desired set must preserve workload admission")
-	err = protocol.RunTurn(t.Context(), r, runTurnRequest{MCPServers: []runtimeMCPServer{}})
-	require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported)
-	count, err := workloadrepo.New(db).CountLiveAdmissionsForSubject(t.Context(), workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject, MatchKind: "exact"})
-	require.NoError(t, err)
-	require.Zero(t, count)
+	protocol := kitConfiguredRuntimeProtocol{}
+	r := assistantRuntimeRecord{BackendMetadataJSON: []byte(`{"workload":{"mcp_desired_set_hash":"legacy"}}`)}
+	require.ErrorIs(t, protocol.RunTurn(t.Context(), r, runTurnRequest{}), errKitMCPConfigurationUnverified)
 }
 
-func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
+func TestKitAttachmentEditDoesNotRequireRetirement(t *testing.T) {
 	t.Parallel()
 	_, db, key, _ := kitSessionFixture(t)
 	core := newProvisioningCore(t, db)
@@ -642,9 +623,8 @@ func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
 	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: "kit-attached"}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err, "normal full-form save with unchanged attachments must work")
 	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
-	require.ErrorIs(t, err, errAssistantValidation)
-	require.ErrorContains(t, err, "retire the Kit runtime")
+	require.NoError(t, err)
 	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
 	require.NoError(t, err)
-	require.Len(t, rows, 1, "rejected edit must roll back its writes")
+	require.Empty(t, rows)
 }

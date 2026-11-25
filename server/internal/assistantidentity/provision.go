@@ -26,9 +26,19 @@ import (
 // its unbound root triggers bound. The caller owns the transaction; a failed
 // call must roll it back.
 //
-// A new agent starts with the project-wide ceiling from initialGrants. Users
-// refine that policy on the agent afterwards; it is never re-synchronised.
+// Legacy agents start with project-wide Connect. Users refine that policy on
+// the agent afterwards; it is never re-synchronised.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
+	return s.provision(ctx, tx, p, true)
+}
+
+// ProvisionKit creates a dedicated agent whose server access is assigned
+// through ordinary policy grants. Existing agent policies are left intact.
+func (s *Service) ProvisionKit(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
+	return s.provision(ctx, tx, p, false)
+}
+
+func (s *Service) provision(ctx context.Context, tx pgx.Tx, p ProvisionParams, projectConnect bool) error {
 	actor, err := provisionActor(p)
 	if err != nil {
 		return err
@@ -73,7 +83,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 	if err != nil {
 		return err
 	}
-	grants := initialGrants(p.ProjectID, p.AssistantID)
+	grants := initialGrants(p.ProjectID, p.AssistantID, projectConnect)
 	// A dedicated agent may inherit inference only within this project and
 	// only when everyone delegating it already has it: the provisioning user
 	// and the owner, or the owner alone when staff provision.
@@ -185,18 +195,19 @@ func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams,
 	return agent, nil
 }
 
-// initialGrants is the dedicated agent's starting ceiling: every MCP server
-// and skill in the assistant's project, plus administration of the assistant
-// itself.
-func initialGrants(project, assistant uuid.UUID) []authz.Grant {
+// initialGrants grants project metadata and skills, and administration of the
+// assistant itself. Only legacy runtimes bootstrap project-wide Connect.
+func initialGrants(project, assistant uuid.UUID, projectConnect bool) []authz.Grant {
 	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
 	projectMCP[authz.SelectorKeyProjectID] = project.String()
 	grants := []authz.Grant{
-		authz.NewGrantWithSelector(authz.ScopeMCPConnect, projectMCP),
 		authz.NewGrantWithSelector(authz.ScopeMCPRead, projectMCP),
 		// Skill selectors carry no project dimension; the project ID is the
 		// resource the project-wide skill:read check names.
 		authz.NewGrant(authz.ScopeSkillRead, project.String()),
+	}
+	if projectConnect {
+		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeMCPConnect, projectMCP))
 	}
 	return append(grants, assistantSelfAdminGrants(assistant)...)
 }

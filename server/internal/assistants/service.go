@@ -1814,11 +1814,6 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
-			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
-		}
-	}
 	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
 		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
 		if err != nil {
@@ -1837,6 +1832,15 @@ func (s *ServiceCore) CreateAssistant(
 				return assistantRecord{}, errRuntimeSwitchConflict
 			}
 			record.RuntimeVersion = 3
+		}
+	}
+	if provisionIdentity {
+		provision := s.identities.Provision
+		if record.RuntimeVersion == 3 {
+			provision = s.identities.ProvisionKit
+		}
+		if err := provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 		}
 	}
 	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
@@ -1976,27 +1980,6 @@ func (s *ServiceCore) UpdateAssistant(
 		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
 	}
 
-	// Compare canonical persisted attachments inside this transaction, after
-	// normal resolution. Full-form no-op saves are safe; actual Kit connection
-	// changes must roll back until the resident runtime has been retired.
-	var kitAttachmentsBefore []assistantrepo.LoadAssistantMcpServersRow
-	checkKitAttachments := false
-	if toolsets != nil || mcpServers != nil {
-		runtimes, err := queries.ListAssistantRuntimesForSwitch(ctx, assistantrepo.ListAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("check Kit attachment edit safety: %w", err)
-		}
-		for _, runtime := range runtimes {
-			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
-		}
-		if checkKitAttachments {
-			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-			if err != nil {
-				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
-			}
-		}
-	}
-
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
@@ -2056,16 +2039,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
-		}
-	}
-
-	if checkKitAttachments {
-		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
-		}
-		if !kitAttachmentSetsEqual(kitAttachmentsBefore, after) {
-			return assistantRecord{}, fmt.Errorf("%w: retire the Kit runtime before changing MCP attachments", errAssistantValidation)
 		}
 	}
 
@@ -3645,7 +3618,10 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+	var mcpServers []runtimeMCPServer
+	if runtime.RuntimeVersion != 3 {
+		mcpServers = s.currentRuntimeMCPServers(ctx, assistant)
+	}
 
 	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
@@ -3902,8 +3878,10 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
-	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+	if assistant.RuntimeVersion != 3 {
+		if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+		}
 	}
 	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
@@ -3931,18 +3909,15 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// The Platform MCP read toolset is granted only to the project's managed
-	// assistant; tools in it must not be reachable by any other assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
-	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
+	var mcpServers []runtimeMCPServer
+	if assistant.RuntimeVersion != 3 {
+		// Keep the managed Platform MCP toolset scoped to the managed assistant.
+		platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+		if err != nil {
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
+		}
+		mcpServers = resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
 	}
-
-	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
-	// best-effort URLs rather than aborting the whole bootstrap. The runner
-	// will discover the failure when it tries to list tools and the
-	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
 
 	// Only the managed assistant's saved prompt is swapped for the current
 	// built-in one; a user-created assistant keeps its prompt verbatim.
@@ -4337,8 +4312,10 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		State:               row.State,
 		WarmUntil:           row.WarmUntil,
 	}
-	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
-		return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, err
+	if runtime.RuntimeVersion != 3 {
+		if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
+			return assistantThreadRecord{}, assistantRecord{}, assistantRuntimeRecord{}, err
+		}
 	}
 	return thread, assistant, runtime, nil
 }

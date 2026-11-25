@@ -138,12 +138,14 @@ export function buildSystemPrompt(args: {
   snapshot?: AssistantSnapshot;
   skillsEnabled?: boolean;
   skillMutationsEnabled?: boolean;
+  usesProjectMCPAccess?: boolean;
 }): string {
   const {
     mode,
     snapshot,
     skillsEnabled = false,
     skillMutationsEnabled = false,
+    usesProjectMCPAccess = false,
   } = args;
   const isEdit = mode === "edit" && !!snapshot;
 
@@ -164,7 +166,10 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
 - Status: ${snapshot.status}
-- Toolsets: ${
+${
+  usesProjectMCPAccess
+    ? "- MCP access: controlled by the backing agent’s policy in the Overview tab."
+    : `- Toolsets: ${
         snapshot.toolsets.length === 0
           ? "none attached"
           : snapshot.toolsets
@@ -183,7 +188,8 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
                   `\`${m.slug}\`${m.environmentSlug ? ` (env: \`${m.environmentSlug}\`)` : ""}`,
               )
               .join(", ")
-      }
+      }`
+}
 ${
   skillsEnabled
     ? `- Skills: ${
@@ -203,6 +209,10 @@ ${
 ${snapshot.instructions.trim().length > 0 ? snapshot.instructions : "(empty — none set yet)"}`
     : "";
 
+  const accessBlock = usesProjectMCPAccess
+    ? "# Kit MCP access\nThis assistant discovers project MCP servers through its agent's access policy. The attachment instructions and tools do not apply. Direct the user to MCP servers in the assistant’s Overview tab to change the agent's direct Connect grants. For Slack trigger setup use the Triggers tab."
+    : "";
+
   const modeBlock = isEdit
     ? `# Mode
 Edit flow. The Assistant already exists (see "Current Assistant state" above). Skip \`propose_name\` and \`propose_personality\` entirely — never call them. Use \`set_personality\` / \`set_tasks\` / \`update_assistant\` / \`attach_toolset\` / \`detach_toolset\`${skillMutationsEnabled ? " / `attach_skill` / `detach_skill`" : ""} / \`create_trigger\` / \`update_trigger\` / etc. directly to make the changes the user asks for.
@@ -220,7 +230,13 @@ ${tonePersona}
 
 ${BASE}${skillsEnabled ? SKILLS : ""}${skillMutationsEnabled ? SKILL_MUTATIONS : ""}${stateBlock}
 
-${modeBlock}
+${modeBlock}${
+    accessBlock
+      ? `
+
+${accessBlock}`
+      : ""
+  }
 
 # Other
 - One question, not three. Don't ask "shall I proceed?" between steps — just go.`;

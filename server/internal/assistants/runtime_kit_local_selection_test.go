@@ -6,10 +6,12 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +19,8 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_local_selection")
 	require.NoError(t, err)
-	project, existing, _, _ := insertAssistantFixture(t, db)
+	project := newProvisioningProject(t, db, "kit-local-selection")
+	existing := createLegacyAssistant(t, db, project, "Legacy")
 	core := newProvisioningCore(t, db)
 	core.serverURL = &url.URL{Scheme: "https", Host: "api.example"}
 	core.guardianPolicy = guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
@@ -28,7 +31,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	require.NoError(t, err)
 	config := KitLocalCompositionConfig{
 		Environment: "local", Image: "example.invalid/kit:local", Network: "isolated-test", ExtraCACertFile: "/test/ca.pem", Origin: origin,
-		PersistedMCP: true, TurnStream: new(chat.TurnStream),
+		TurnStream:      new(chat.TurnStream),
 		WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion",
 	}
 	require.NoError(t, core.InstallKitLocalRuntime(config))
@@ -40,14 +43,21 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, versioned.kit.ServerURL())
 	require.NotEqual(t, origin.String(), versioned.kit.ServerURL().String(), "Kit's own server URL is not the inference provider origin")
-	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil, nil)
+	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)
+	require.NotNil(t, created.AgentID)
+	grants, err := authz.LoadGrants(t.Context(), db, "org-test", []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeAgent, *created.AgentID)})
+	require.NoError(t, err)
+	require.NotEmpty(t, grants)
+	for _, grant := range grants {
+		require.NotEqual(t, authz.ScopeMCPConnect, grant.Scope, "Kit starts without any server assignment")
+	}
 	q := assistantrepo.New(db)
 	saved, err := q.GetAssistant(t.Context(), assistantrepo.GetAssistantParams{ProjectID: project, AssistantID: created.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 3, saved.RuntimeVersion)
-	old, err := q.GetAssistant(t.Context(), assistantrepo.GetAssistantParams{ProjectID: project, AssistantID: existing})
+	old, err := q.GetAssistant(t.Context(), assistantrepo.GetAssistantParams{ProjectID: project, AssistantID: existing.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, old.RuntimeVersion)
 }

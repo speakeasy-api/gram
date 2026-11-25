@@ -22,7 +22,6 @@ func TestKitProductionTurnFailureRetiresUnusableRuntime(t *testing.T) {
 		{ErrHistoryCorrupted, true},
 		{errKitMCPConfigurationUnverified, true},
 		{ErrKitMCPDesiredSetUnsupported, true},
-		{errKitMCPDiscoveryUnavailable, false},
 	} {
 		t.Run(tc.failure.Error(), func(t *testing.T) {
 			t.Parallel()

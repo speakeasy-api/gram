@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/urfave/cli/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -40,13 +40,10 @@ func assistantKitRuntimeFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "assistant-kit-gke-snapshots-enabled", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_SNAPSHOTS_ENABLED"}, Usage: "Enable Kit GKE snapshot provisioning for new sessions."},
 		&cli.StringFlag{Name: "assistant-kit-network", EnvVars: []string{"GRAM_ASSISTANT_KIT_NETWORK"}, Usage: "Isolated local container network with a trusted TLS relay for ai.speakeasy.com."},
 		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt new assistant sessions into Kit v3 using an explicit non-latest tag or digest; empty preserves legacy composition."},
-		&cli.StringFlag{Name: "assistant-kit-mcp-resource", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_RESOURCE"}, Usage: "Exact HTTPS URL of the attached issuer-gated MCP resource to provision for Kit."},
-		&cli.StringFlag{Name: "assistant-kit-mcp-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER"}, Usage: "Expected OAuth issuer advertised by the configured Kit MCP resource."},
-		&cli.StringFlag{Name: "assistant-kit-mcp-issuer-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_ISSUER_ID"}, Usage: "Persisted user-session issuer UUID for the configured Kit resource."},
 	}
 }
 
-func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
+func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
 	if c.String("assistant-kit-image") == "" {
 		return nil
 	}
@@ -80,22 +77,6 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 			return err
 		}
 	}
-	resource, err := url.Parse(c.String("assistant-kit-mcp-resource"))
-	if err != nil {
-		return fmt.Errorf("parse Kit MCP resource: %w", err)
-	}
-	issuer, err := url.Parse(c.String("assistant-kit-mcp-issuer"))
-	if err != nil {
-		return fmt.Errorf("parse Kit MCP issuer: %w", err)
-	}
-	var issuerID uuid.UUID
-	if raw := c.String("assistant-kit-mcp-issuer-id"); raw != "" {
-		issuerID, err = uuid.Parse(raw)
-	}
-	if err != nil {
-		return fmt.Errorf("assistant-kit-mcp-issuer-id must identify the configured resource's issuer")
-	}
-
 	if serverURL == nil {
 		return fmt.Errorf("kit requires the deployment server URL")
 	}
@@ -110,10 +91,10 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		issuerBaseURL = (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
 	}
 	config := assistants.KitLocalCompositionConfig{
-		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
-		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
+		OrgHosts:    orgHosts,
+		Environment: c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, Network: c.String("assistant-kit-network"), AllowInsecureInference: false,
-		MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: issuerID, TurnStream: chat.NewTurnStream(redisClient),
+		TurnStream:            chat.NewTurnStream(redisClient),
 		WorkloadJWKSURL:       c.String("assistant-kit-workload-jwks-url"),
 		WorkloadIssuerURL:     c.String("assistant-kit-workload-issuer"),
 		WorkloadSubject:       c.String("assistant-kit-workload-subject"),

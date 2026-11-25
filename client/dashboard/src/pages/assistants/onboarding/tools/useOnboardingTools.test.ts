@@ -84,3 +84,36 @@ describe("isOnboardingToolAllowed", () => {
     expect(isOnboardingToolAllowed("propose_slack_setup", admin)).toBe(true);
   });
 });
+
+it("does not offer attachment writes for assistants with project MCP access", () => {
+  const permissions = {
+    canWriteAssistant: true,
+    canReadProject: true,
+    canWriteProject: true,
+    canReadMCP: true,
+    canWriteMCP: true,
+    canReadSkills: true,
+    canWriteEnvironment: true,
+  };
+  for (const tool of [
+    "attach_mcp_server",
+    "detach_mcp_server",
+    "attach_toolset",
+    "detach_toolset",
+    "propose_slack_setup",
+  ] as const) {
+    expect(isOnboardingToolAllowed(tool, permissions)).toBe(true);
+    expect(
+      isOnboardingToolAllowed(tool, {
+        ...permissions,
+        usesProjectMCPAccess: true,
+      }),
+    ).toBe(false);
+  }
+  expect(
+    isOnboardingToolAllowed("list_mcp_servers", {
+      ...permissions,
+      usesProjectMCPAccess: true,
+    }),
+  ).toBe(true);
+});

@@ -211,28 +211,39 @@ function standingBlocks(cell: ScopeCell): ResourceAudienceEntry[] {
  * API returns one entry per principal and level, widest principal first, and
  * that order is what the list keeps.
  */
-export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
+export function buildAccessRows(
+  entries: ResourceAudienceEntry[],
+  subjects: Pick<
+    AccessRow,
+    "principalUrn" | "kind" | "displayName" | "description"
+  >[] = [],
+): AccessRow[] {
   const rows = new Map<string, AccessRow>();
-
+  const ensureRow = (subject: (typeof subjects)[number]): AccessRow => {
+    const { principalUrn, kind, displayName, description } = subject;
+    const existing = rows.get(principalUrn);
+    if (existing) return existing;
+    const row: AccessRow = {
+      principalUrn,
+      kind,
+      displayName,
+      description,
+      cells: {
+        use: emptyCell("use", principalUrn),
+        view: emptyCell("view", principalUrn),
+        manage: emptyCell("manage", principalUrn),
+      },
+      memberIds: [],
+      inheritedOnly: true,
+      accessUnknown: false,
+    };
+    rows.set(principalUrn, row);
+    return row;
+  };
+  // A known subject can inherit access even when it has no rules of its own.
+  for (const subject of subjects) ensureRow(subject);
   for (const entry of entries) {
-    let row = rows.get(entry.principalUrn);
-    if (!row) {
-      row = {
-        principalUrn: entry.principalUrn,
-        kind: entry.kind,
-        displayName: entry.displayName,
-        description: entry.description,
-        cells: {
-          use: emptyCell("use", entry.principalUrn),
-          view: emptyCell("view", entry.principalUrn),
-          manage: emptyCell("manage", entry.principalUrn),
-        },
-        memberIds: [],
-        inheritedOnly: true,
-        accessUnknown: false,
-      };
-      rows.set(entry.principalUrn, row);
-    }
+    const row = ensureRow(entry);
     if (entry.appliesTo === "resource") row.inheritedOnly = false;
     // Every rule for a principal reports the same membership; the first one
     // that carries it is as good as any.
