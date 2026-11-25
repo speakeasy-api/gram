@@ -124,6 +124,7 @@ export default function Home(): JSX.Element {
  * Bento grid around the terminal: on wide screens the terminal takes the
  * right two of three columns and the top two rows; tiles fill the left column
  * and the bottom row. Below `lg` everything stacks, terminal first.
+ * With connection problems: 12 columns, Needs attention over two rows, four tiles below.
  */
 function TerminalHomeGrid(): JSX.Element {
   // Who may see connection problems, not whether any exist, so the grid stays put.

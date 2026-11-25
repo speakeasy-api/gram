@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProjectSuspectedProblem } from "@gram/client/models/components/projectsuspectedproblem.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { formatSince } from "@/pages/mcp-sessions/connection-health/format";
 
@@ -28,7 +29,7 @@ const state = vi.hoisted(() => ({
     ok: true,
     loggingEnabled: true,
     viewerScope: "all",
-    problems: [] as Record<string, unknown>[],
+    problems: [] as ProjectSuspectedProblem[],
     total: undefined as number | undefined,
     status: 503,
   },
@@ -190,10 +191,11 @@ import { useConnectionProblems } from "./useConnectionProblems";
 const NOW = new Date(2026, 10, 20, 12, 0);
 const today = (h: number, m: number) => new Date(2026, 10, 20, h, m);
 
+// The SDK's parsed shape: it turns the API's ISO strings into Dates.
 function problem(
   id: string,
-  extra: Record<string, unknown> = {},
-): Record<string, unknown> {
+  extra: Partial<ProjectSuspectedProblem> = {},
+): ProjectSuspectedProblem {
   return {
     id,
     headline: `Problem ${id}`,
@@ -496,6 +498,34 @@ describe("Needs attention connection rows", () => {
       "shrink-0",
     );
     expect(within(card()).getByText("Ask ›").className).toContain("shrink-0");
+  });
+
+  it("sets the headline in medium weight and keeps since and its time together", async () => {
+    state.scopes = ["log:read", "org:admin"];
+    state.signals = [criticalSignal];
+    state.connections.problems = [
+      problem("a"),
+      problem("b", {
+        suspectedProblemRule: "one_person",
+        since: new Date(2026, 10, 19, 16, 5),
+      }),
+    ];
+    renderWidgets();
+    await settled();
+    const since = `since ${formatSince(today(9, 5).toISOString(), NOW)}`;
+    const label = within(card()).getByTitle(`Problem a ${since}`);
+    const headline = within(label).getByText("Problem a");
+    expect(headline.className).toContain("font-medium");
+    const when = within(label).getByText(since);
+    expect(when.className).toContain("whitespace-nowrap");
+    expect(when.className).not.toContain("font-medium");
+    const oneDay = within(card()).getByTitle(/^Problem b since /);
+    const oneDaySince = within(oneDay).getByText(/^since /);
+    expect(oneDaySince.className).toContain("whitespace-nowrap");
+    expect(oneDaySince.textContent).not.toContain("16:05");
+    const own = within(card()).getByTitle("Agent reads secrets");
+    expect(own.querySelector(".font-medium")).toBeNull();
+    expect(own.textContent).toBe("Agent reads secrets");
   });
 
   it("keeps main's single-line labels and in-flow hints in the base card", async () => {

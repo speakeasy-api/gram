@@ -19,7 +19,10 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
-import { problemHeadline } from "@/pages/mcp-sessions/connection-health/format";
+import {
+  problemHeadline,
+  problemSince,
+} from "@/pages/mcp-sessions/connection-health/format";
 import { connectionProblemHref } from "@/pages/mcp-sessions/connection-health/links";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
@@ -117,6 +120,8 @@ export function HomeWidgets({
 type AttentionItem = {
   key: string;
   label: string;
+  /** Shown in place of `label`, which stays the hover text. */
+  labelNode?: ReactNode;
   detail: string;
   tone: "destructive" | "warning";
   /** False leaves out the hover hint. */
@@ -194,6 +199,14 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
         ({
           key: `connection:${p.id}`,
           label: problemHeadline(p, now),
+          labelNode: (
+            <>
+              <span className="font-medium">{p.headline}</span>{" "}
+              <span className="whitespace-nowrap">
+                since {problemSince(p, now)}
+              </span>
+            </>
+          ),
           detail: p.fact,
           tone: "destructive",
           hint: false,
@@ -273,7 +286,7 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
                         : "max-lg:line-clamp-2 max-lg:break-words lg:block lg:truncate",
                     )}
                   >
-                    {item.label}
+                    {item.labelNode ?? item.label}
                   </span>
                   <span
                     title={item.detail}
