@@ -129,6 +129,10 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		{name: "primary key", ddl: "CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "unique index with included column", ddl: "CREATE TABLE chat_message_transcripts (" + columns + "); CREATE UNIQUE INDEX ON chat_message_transcripts (message_id) INCLUDE (project_id)", ok: true},
 		{name: "wrong type tool call id", ddl: "ALTER TABLE chat_message_transcript_tool_calls ALTER COLUMN tool_call_id TYPE integer USING 0; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "nullable tool call chat", ddl: "ALTER TABLE chat_message_transcript_tool_calls ALTER COLUMN chat_id DROP NOT NULL; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "missing tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "deferrable tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; ALTER TABLE chat_message_transcript_tool_calls ADD UNIQUE (message_id, tool_call_id) DEFERRABLE; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
+		{name: "unique tool call conflict target", ddl: "ALTER TABLE chat_message_transcript_tool_calls DROP CONSTRAINT chat_message_transcript_tool_calls_pkey; CREATE UNIQUE INDEX ON chat_message_transcript_tool_calls (tool_call_id, message_id); CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))", ok: true},
 		{name: "missing tool call table", ddl: "DROP TABLE chat_message_transcript_tool_calls; CREATE TABLE chat_message_transcripts (" + columns + ", PRIMARY KEY (message_id))"},
 	}
 	for _, name := range []string{"tool_call_count", "content_bytes", "content_raw_bytes", "tool_calls_bytes"} {
