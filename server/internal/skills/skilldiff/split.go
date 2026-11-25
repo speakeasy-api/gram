@@ -148,9 +148,26 @@ func (s *diffSplitter) line(line string) error {
 		if match == nil {
 			return fmt.Errorf("%w: invalid hunk header %q", ErrMalformed, strings.TrimSpace(line))
 		}
-		s.oldLeft, s.newLeft = hunkCount(match[1]), hunkCount(match[2])
+		oldCount, err := hunkCount(match[1])
+		if err != nil {
+			return err
+		}
+		newCount, err := hunkCount(match[2])
+		if err != nil {
+			return err
+		}
+		s.oldLeft, s.newLeft = oldCount, newCount
 	case s.current.Len() == 0:
 		return fmt.Errorf("%w: content before the first file header", ErrMalformed)
+	case s.inHeaders:
+		return fmt.Errorf("%w: --- header not followed by a +++ header", ErrMalformed)
+	case line[0] == '\\':
+		// A "\ No newline at end of file" marker follows the hunk's last line,
+		// which is when the counts have already reached zero.
+	default:
+		// Anything else outside a hunk would be carried into the preceding
+		// file's diff unchecked.
+		return fmt.Errorf("%w: unexpected line outside a hunk", ErrMalformed)
 	}
 	s.current.WriteString(line)
 	return nil
@@ -178,17 +195,17 @@ func headerPath(line, marker, prefix string) string {
 }
 
 // hunkCount reads an optional hunk line count, which defaults to one. The
-// pattern only captures digits, so a parse failure means an absurd count and
-// is read as zero, which the line accounting then reports as malformed.
-func hunkCount(raw string) int {
+// pattern only captures digits, so a parse failure means a count too large for
+// an int, which no real hunk has.
+func hunkCount(raw string) (int, error) {
 	if raw == "" {
-		return 1
+		return 1, nil
 	}
 	count, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("%w: hunk line count %q out of range", ErrMalformed, raw)
 	}
-	return count
+	return count, nil
 }
 
 // IsText reports whether content can be edited as text: valid UTF-8 with no NUL

@@ -88,6 +88,9 @@ func TestSplit_RejectsMalformedDiffs(t *testing.T) {
 		{name: "extra removed line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1,2 @@\n-a\n-b\n+x\n+y\n"},
 		{name: "extra added line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1,2 +1 @@\n+x\n+y\n-a\n-b\n"},
 		{name: "extra context line", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1,3 @@\n-a\n c\n+x\n+y\n"},
+		{name: "text between files", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1 @@\n-a\n+b\nstray text\n--- a/references/r.md\n+++ b/references/r.md\n@@ -1 +1 @@\n-c\n+d\n"},
+		{name: "text between headers", diff: "--- a/SKILL.md\nstray text\n+++ b/SKILL.md\n@@ -1 +1 @@\n-a\n+b\n"},
+		{name: "overflowing hunk counts", diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1,99999999999999999999 +1,99999999999999999999 @@\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,8 +134,30 @@ func TestTree_ApplyChangeEditsOnlyTheNamedTextFile(t *testing.T) {
 func TestIsText(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, skilldiff.IsText([]byte("plain text\n")))
-	require.True(t, skilldiff.IsText(nil))
-	require.False(t, skilldiff.IsText([]byte{'a', 0, 'b'}))
-	require.False(t, skilldiff.IsText([]byte{0xff, 0xfe}))
+	tests := []struct {
+		name    string
+		content []byte
+		want    bool
+	}{
+		{name: "plain text", content: []byte("plain text\n"), want: true},
+		{name: "empty", content: nil, want: true},
+		{name: "NUL byte", content: []byte{'a', 0, 'b'}, want: false},
+		{name: "invalid UTF-8", content: []byte{0xff, 0xfe}, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, skilldiff.IsText(tc.content))
+		})
+	}
+}
+
+func TestSplit_KeepsANoNewlineMarkerAfterAHunk(t *testing.T) {
+	t.Parallel()
+
+	diff := "--- a/references/r.md\n+++ b/references/r.md\n@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file\n"
+	files, err := skilldiff.Split(diff)
+	require.NoError(t, err)
+	require.Equal(t, []skilldiff.FileDiff{{Path: "references/r.md", Diff: diff}}, files)
 }
