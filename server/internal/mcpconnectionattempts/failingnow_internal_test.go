@@ -11,10 +11,28 @@ import (
 
 func TestReadFailed_MarksAReadOverItsLimits(t *testing.T) {
 	t.Parallel()
-	require.ErrorIs(t, readFailed("query", &clickhouse.Exception{Code: 396}), ErrReadTooLarge, "too many result rows")
-	require.ErrorIs(t, readFailed("query", &clickhouse.Exception{Code: 159}), ErrReadTooLarge, "timeout")
-	require.NotErrorIs(t, readFailed("query", &clickhouse.Exception{Code: 60}), ErrReadTooLarge)
-	require.NotErrorIs(t, readFailed("query", errors.New("network")), ErrReadTooLarge)
+	for _, c := range []struct {
+		name    string
+		err     error
+		overCap bool
+	}{
+		{"too many rows", &clickhouse.Exception{Code: 158}, true},
+		{"timeout", &clickhouse.Exception{Code: 159}, true},
+		{"memory limit", &clickhouse.Exception{Code: 241}, true},
+		{"too many bytes", &clickhouse.Exception{Code: 307}, true},
+		{"too many result rows", &clickhouse.Exception{Code: 396}, true},
+		{"unknown table", &clickhouse.Exception{Code: 60}, false},
+		{"network", errors.New("network"), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if c.overCap {
+				require.ErrorIs(t, readFailed("query", c.err), ErrReadTooLarge)
+			} else {
+				require.NotErrorIs(t, readFailed("query", c.err), ErrReadTooLarge)
+			}
+		})
+	}
 }
 
 // The driver replaces a context's max_execution_time, so each failing read caps its time in the query.
