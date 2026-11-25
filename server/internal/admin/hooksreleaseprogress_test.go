@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strconv"
@@ -55,12 +56,25 @@ func TestSummarizeHooksPublishState(t *testing.T) {
 		require.Equal(t, int64(2), result.OrganizationsOnLegacyFlag)
 	})
 
-	t.Run("with a staged rollout at 100 percent", func(t *testing.T) {
+	t.Run("with a staged rollout running", func(t *testing.T) {
 		t.Parallel()
-		stage := &hooksrollout.Stage{Revision: 1, Version: 66, Percent: 100, State: hooksrollout.StageRunning, Reason: "", SetBy: "", SetAt: time.Time{}}
-		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, stage, overrides, staffOrg)
-		require.Equal(t, int64(4), result.OrganizationsCleared)
-		require.Equal(t, int64(0), result.OrganizationsHeld)
+		stage := &hooksrollout.Stage{Revision: 2, Version: 66, Percent: 25, State: hooksrollout.StageRunning, Reason: "", SetBy: "", SetAt: time.Time{}}
+		inside, outside := "", ""
+		for i := 0; inside == "" || outside == ""; i++ {
+			orgID := fmt.Sprintf("org-%d", i)
+			if hooksrollout.InStage(orgID, stage.Percent) {
+				inside = cmp.Or(inside, orgID)
+			} else {
+				outside = cmp.Or(outside, orgID)
+			}
+		}
+		staged := []repo.AdminListHooksPublishStateRow{
+			{OrganizationID: inside, OrganizationSlug: "inside", PublishedHooksVersion: "64"},
+			{OrganizationID: outside, OrganizationSlug: "outside", PublishedHooksVersion: "64"},
+		}
+		result := summarizeHooksPublishState(staged, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, stage, nil, staffOrg)
+		require.Equal(t, int64(1), result.OrganizationsCleared)
+		require.Equal(t, int64(1), result.OrganizationsHeld)
 	})
 }
 
