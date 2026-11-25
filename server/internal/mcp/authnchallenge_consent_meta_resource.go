@@ -173,7 +173,7 @@ func (s *Service) authorizedMetaMembers(
 			if candidate.McpServerVisibility != mcpservers.VisibilityPublic && candidate.McpServerVisibility != mcpservers.VisibilityPrivate {
 				continue
 			}
-			connect := authz.MCPCheck(authz.ScopeMCPConnect, candidate.McpServerID.String(), candidate.ProjectID.String())
+			connect := authz.MCPServer(authz.MCPServerIDOf(candidate.McpServerID), authz.ProjectIDOf(candidate.ProjectID)).Connect()
 			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
 			if err != nil {
 				return nil, fmt.Errorf("authorize login member: %w", err)
