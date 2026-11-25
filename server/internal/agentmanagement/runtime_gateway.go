@@ -2,9 +2,14 @@ package agentmanagement
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
+
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
@@ -56,6 +61,9 @@ func (s *Service) GetRuntimeGateway(ctx context.Context, payload *gen.GetRuntime
 	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 		ID: agent.ProjectID.UUID, OrganizationID: human.Auth.ActiveOrganizationID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return unavailableRuntimeGateway(runtimeGatewayProjectRequired), nil
+	}
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "read agent project")
 	}
@@ -63,15 +71,26 @@ func (s *Service) GetRuntimeGateway(ctx context.Context, payload *gen.GetRuntime
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "read agent organization")
 	}
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organization.ID)
+	if err != nil {
+		return nil, s.serviceError(ctx, err, "resolve project gateway host")
+	}
 	_, unavailable, err := orggateway.Availability(ctx, s.db, organization)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "resolve project gateway availability")
 	}
 	if unavailable != orggateway.UnavailabilityNone {
-		return unavailableRuntimeGateway(string(unavailable)), nil
+		servedOnCustomDomain := unavailable == orggateway.UnavailabilityCustomDomainOnly && lockdown.ServingHost != ""
+		if !servedOnCustomDomain {
+			return unavailableRuntimeGateway(string(unavailable)), nil
+		}
 	}
 
-	endpoint := orggateway.ProjectURL(s.runtimeGatewayHosts.ServerURL(organization.DefaultHost), organization.Slug, project.Slug)
+	baseURL := s.runtimeGatewayHosts.ServerURL(organization.DefaultHost)
+	if lockdown.ServingHost != "" {
+		baseURL = &url.URL{Scheme: "https", Host: lockdown.ServingHost}
+	}
+	endpoint := orggateway.ProjectURL(baseURL, organization.Slug, project.Slug)
 	return &gen.AgentRuntimeGateway{Available: true, URL: &endpoint, UnavailableReason: nil}, nil
 }
 
