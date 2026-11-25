@@ -496,7 +496,14 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	if g.projectTokens == nil {
 		return g.tokens, nil
 	}
-	if member.backend == metaMemberBackendHosted || resolvesByAssociation(member) {
+	if member.backend == metaMemberBackendHosted {
+		tokens, err := g.projectTokens.getMember(ctx, member)
+		if err != nil && !errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrClientCredentialMisconfigured) && !errors.Is(err, remotesessions.ErrClientCredentialUnavailable) {
+			return nil, memberCredentialLoadError(member, err)
+		}
+		return tokens, err
+	}
+	if resolvesByAssociation(member) {
 		tokens, err := g.projectTokens.getMember(ctx, member)
 		if err != nil {
 			return nil, memberCredentialLoadError(member, err)

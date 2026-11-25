@@ -293,8 +293,9 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		if required {
-			require.Contains(t, w.Body.String(), "has no usable upstream configuration")
+			require.Contains(t, w.Body.String(), "unknown server")
 		} else {
+			require.NotContains(t, w.Body.String(), "unknown server")
 			require.NotContains(t, w.Body.String(), "has no usable upstream configuration")
 		}
 	}
