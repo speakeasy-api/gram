@@ -1522,6 +1522,7 @@ func EncodeListSuspectedProblemsRequest(encoder func(*http.Request) goahttp.Enco
 // by the mcpConnectionHealth listSuspectedProblems endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeListSuspectedProblemsResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1563,6 +1564,20 @@ func DecodeListSuspectedProblemsResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewListSuspectedProblemsResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListSuspectedProblemsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listSuspectedProblems", err)
+			}
+			err = ValidateListSuspectedProblemsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listSuspectedProblems", err)
+			}
+			return nil, NewListSuspectedProblemsUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListSuspectedProblemsUnauthorizedResponseBody
@@ -1765,6 +1780,7 @@ func EncodeGetSuspectedProblemRequest(encoder func(*http.Request) goahttp.Encode
 // by the mcpConnectionHealth getSuspectedProblem endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeGetSuspectedProblemResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1806,6 +1822,20 @@ func DecodeGetSuspectedProblemResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewGetSuspectedProblemResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetSuspectedProblemUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "getSuspectedProblem", err)
+			}
+			err = ValidateGetSuspectedProblemUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "getSuspectedProblem", err)
+			}
+			return nil, NewGetSuspectedProblemUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetSuspectedProblemUnauthorizedResponseBody
@@ -2009,6 +2039,7 @@ func EncodeListProjectSuspectedProblemsRequest(encoder func(*http.Request) goaht
 // restoreBody controls whether the response body should be restored after
 // having been read.
 // DecodeListProjectSuspectedProblemsResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2050,6 +2081,20 @@ func DecodeListProjectSuspectedProblemsResponse(decoder func(*http.Response) goa
 			}
 			res := NewListProjectSuspectedProblemsResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListProjectSuspectedProblemsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListProjectSuspectedProblemsUnauthorizedResponseBody

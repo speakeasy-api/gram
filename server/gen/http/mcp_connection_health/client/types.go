@@ -1358,6 +1358,25 @@ type ListDeniedClientsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSuspectedProblemsUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "unavailable" error.
+type ListSuspectedProblemsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListSuspectedProblemsUnauthorizedResponseBody is the type of the
 // "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -1548,6 +1567,25 @@ type ListSuspectedProblemsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetSuspectedProblemUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "unavailable" error.
+type GetSuspectedProblemUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetSuspectedProblemUnauthorizedResponseBody is the type of the
 // "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -1723,6 +1761,25 @@ type GetSuspectedProblemUnexpectedResponseBody struct {
 // "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
 // body for the "gateway_error" error.
 type GetSuspectedProblemGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListProjectSuspectedProblemsUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "listProjectSuspectedProblems" endpoint HTTP
+// response body for the "unavailable" error.
+type ListProjectSuspectedProblemsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3492,6 +3549,21 @@ func NewListSuspectedProblemsResultOK(body *ListSuspectedProblemsResponseBody) *
 	return v
 }
 
+// NewListSuspectedProblemsUnavailable builds a mcpConnectionHealth service
+// listSuspectedProblems endpoint unavailable error.
+func NewListSuspectedProblemsUnavailable(body *ListSuspectedProblemsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListSuspectedProblemsUnauthorized builds a mcpConnectionHealth service
 // listSuspectedProblems endpoint unauthorized error.
 func NewListSuspectedProblemsUnauthorized(body *ListSuspectedProblemsUnauthorizedResponseBody) *goa.ServiceError {
@@ -3652,6 +3724,21 @@ func NewGetSuspectedProblemResultOK(body *GetSuspectedProblemResponseBody) *mcpc
 	}
 	if body.Problem != nil {
 		v.Problem = unmarshalSuspectedProblemDetailResponseBodyToMcpconnectionhealthSuspectedProblemDetail(body.Problem)
+	}
+
+	return v
+}
+
+// NewGetSuspectedProblemUnavailable builds a mcpConnectionHealth service
+// getSuspectedProblem endpoint unavailable error.
+func NewGetSuspectedProblemUnavailable(body *GetSuspectedProblemUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -3823,6 +3910,21 @@ func NewListProjectSuspectedProblemsResultOK(body *ListProjectSuspectedProblemsR
 			continue
 		}
 		v.Problems[i] = unmarshalProjectSuspectedProblemResponseBodyToMcpconnectionhealthProjectSuspectedProblem(val)
+	}
+
+	return v
+}
+
+// NewListProjectSuspectedProblemsUnavailable builds a mcpConnectionHealth
+// service listProjectSuspectedProblems endpoint unavailable error.
+func NewListProjectSuspectedProblemsUnavailable(body *ListProjectSuspectedProblemsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
 	}
 
 	return v
@@ -5659,6 +5761,30 @@ func ValidateListDeniedClientsGatewayErrorResponseBody(body *ListDeniedClientsGa
 	return
 }
 
+// ValidateListSuspectedProblemsUnavailableResponseBody runs the validations
+// defined on listSuspectedProblems_unavailable_response_body
+func ValidateListSuspectedProblemsUnavailableResponseBody(body *ListSuspectedProblemsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListSuspectedProblemsUnauthorizedResponseBody runs the validations
 // defined on listSuspectedProblems_unauthorized_response_body
 func ValidateListSuspectedProblemsUnauthorizedResponseBody(body *ListSuspectedProblemsUnauthorizedResponseBody) (err error) {
@@ -5900,6 +6026,30 @@ func ValidateListSuspectedProblemsGatewayErrorResponseBody(body *ListSuspectedPr
 	return
 }
 
+// ValidateGetSuspectedProblemUnavailableResponseBody runs the validations
+// defined on getSuspectedProblem_unavailable_response_body
+func ValidateGetSuspectedProblemUnavailableResponseBody(body *GetSuspectedProblemUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetSuspectedProblemUnauthorizedResponseBody runs the validations
 // defined on getSuspectedProblem_unauthorized_response_body
 func ValidateGetSuspectedProblemUnauthorizedResponseBody(body *GetSuspectedProblemUnauthorizedResponseBody) (err error) {
@@ -6119,6 +6269,30 @@ func ValidateGetSuspectedProblemUnexpectedResponseBody(body *GetSuspectedProblem
 // ValidateGetSuspectedProblemGatewayErrorResponseBody runs the validations
 // defined on getSuspectedProblem_gateway_error_response_body
 func ValidateGetSuspectedProblemGatewayErrorResponseBody(body *GetSuspectedProblemGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListProjectSuspectedProblemsUnavailableResponseBody runs the
+// validations defined on listProjectSuspectedProblems_unavailable_response_body
+func ValidateListProjectSuspectedProblemsUnavailableResponseBody(body *ListProjectSuspectedProblemsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

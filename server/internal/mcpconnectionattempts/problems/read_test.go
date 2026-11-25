@@ -57,22 +57,22 @@ func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.S
 func (f *readFixture) read(org string, project uuid.UUID, recordedSince time.Time) []Problem {
 	f.t.Helper()
 	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: project == uuid.Nil}
-	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, recordedSince, f.now)
+	got, err := problemsOf(Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, recordedSince, f.now))
 	require.NoError(f.t, err)
 	return got
 }
 
 func TestRead_LogsOffReturnsTheError(t *testing.T) {
 	t.Parallel()
-	_, err := Read(t.Context(), nil, nil, logsOff, ReadScope{OrganizationID: "org-" + uuid.NewString(), WholeOrganization: true}, time.Time{}, time.Now())
+	_, err := problemsOf(Read(t.Context(), nil, nil, logsOff, ReadScope{OrganizationID: "org-" + uuid.NewString(), WholeOrganization: true}, time.Time{}, time.Now()))
 	require.ErrorIs(t, err, mcpconnectionattempts.ErrLogsOff)
 }
 
 func TestRead_RejectsAnEmptyScope(t *testing.T) {
 	t.Parallel()
-	_, err := Read(t.Context(), nil, nil, mcpconnectionattemptstest.LogsOn, ReadScope{WholeOrganization: true}, time.Time{}, time.Now())
+	_, err := problemsOf(Read(t.Context(), nil, nil, mcpconnectionattemptstest.LogsOn, ReadScope{WholeOrganization: true}, time.Time{}, time.Now()))
 	require.Error(t, err)
-	_, err = Read(t.Context(), nil, nil, mcpconnectionattemptstest.LogsOn, ReadScope{OrganizationID: "org-" + uuid.NewString()}, time.Time{}, time.Now())
+	_, err = problemsOf(Read(t.Context(), nil, nil, mcpconnectionattemptstest.LogsOn, ReadScope{OrganizationID: "org-" + uuid.NewString()}, time.Time{}, time.Now()))
 	require.Error(t, err, "no project is an error, not the whole organization")
 }
 
@@ -126,7 +126,7 @@ func TestRead_KeepsOneProvidersFailures(t *testing.T) {
 		f.fail(mcpconnectionattempts.ServerScope(org, project, b, mcpconnectionattempts.AppDCR), time.Hour)
 	}
 	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: false, IssuerID: uuid.New(), IssuerServerIDs: []string{a.String()}}
-	got, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, f.now)
+	got, err := problemsOf(Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, f.now))
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, a.String(), got[0].Scope.Key)
@@ -344,3 +344,5 @@ func TestListServerUpstreams_KeepsOneProject(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, here, rows[0].ID)
 }
+
+func problemsOf(g Grouped, err error) ([]Problem, error) { return g.Problems, err }

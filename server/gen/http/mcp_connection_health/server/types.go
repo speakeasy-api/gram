@@ -1358,6 +1358,25 @@ type ListDeniedClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSuspectedProblemsUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "unavailable" error.
+type ListSuspectedProblemsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListSuspectedProblemsUnauthorizedResponseBody is the type of the
 // "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -1548,6 +1567,25 @@ type ListSuspectedProblemsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSuspectedProblemUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "unavailable" error.
+type GetSuspectedProblemUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetSuspectedProblemUnauthorizedResponseBody is the type of the
 // "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -1723,6 +1761,25 @@ type GetSuspectedProblemUnexpectedResponseBody struct {
 // "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
 // body for the "gateway_error" error.
 type GetSuspectedProblemGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListProjectSuspectedProblemsUnavailableResponseBody is the type of the
+// "mcpConnectionHealth" service "listProjectSuspectedProblems" endpoint HTTP
+// response body for the "unavailable" error.
+type ListProjectSuspectedProblemsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3396,6 +3453,21 @@ func NewListDeniedClientsGatewayErrorResponseBody(res *goa.ServiceError) *ListDe
 	return body
 }
 
+// NewListSuspectedProblemsUnavailableResponseBody builds the HTTP response
+// body from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsUnavailableResponseBody(res *goa.ServiceError) *ListSuspectedProblemsUnavailableResponseBody {
+	body := &ListSuspectedProblemsUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListSuspectedProblemsUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "listSuspectedProblems" endpoint of the
 // "mcpConnectionHealth" service.
@@ -3546,6 +3618,21 @@ func NewListSuspectedProblemsGatewayErrorResponseBody(res *goa.ServiceError) *Li
 	return body
 }
 
+// NewGetSuspectedProblemUnavailableResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemUnavailableResponseBody(res *goa.ServiceError) *GetSuspectedProblemUnavailableResponseBody {
+	body := &GetSuspectedProblemUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetSuspectedProblemUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getSuspectedProblem" endpoint of the
 // "mcpConnectionHealth" service.
@@ -3686,6 +3773,21 @@ func NewGetSuspectedProblemUnexpectedResponseBody(res *goa.ServiceError) *GetSus
 // "mcpConnectionHealth" service.
 func NewGetSuspectedProblemGatewayErrorResponseBody(res *goa.ServiceError) *GetSuspectedProblemGatewayErrorResponseBody {
 	body := &GetSuspectedProblemGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListProjectSuspectedProblemsUnavailableResponseBody builds the HTTP
+// response body from the result of the "listProjectSuspectedProblems" endpoint
+// of the "mcpConnectionHealth" service.
+func NewListProjectSuspectedProblemsUnavailableResponseBody(res *goa.ServiceError) *ListProjectSuspectedProblemsUnavailableResponseBody {
+	body := &ListProjectSuspectedProblemsUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
