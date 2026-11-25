@@ -35,7 +35,8 @@ type Service interface {
 	// Set `risk_only` to return only messages with risk findings plus a few
 	// messages of surrounding context per finding. Set `query` to instead return
 	// only messages whose text matches a search query plus surrounding context
-	// (mutually exclusive with `risk_only`).
+	// (mutually exclusive with `risk_only`); while `scan_has_more` is true, call
+	// again with `scan_cursor` for the next chunk of matches.
 	LoadChat(context.Context, *LoadChatPayload) (res *Chat, err error)
 	// Read or set a chat's title. Omit `title` to return the
 	// current/auto-generated title (titles are generated asynchronously after a
@@ -147,6 +148,18 @@ type Chat struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegment
+	// Present only when `query` was requested. In projects that keep encrypted
+	// transcripts a search scans the generation in chunks, one per request, and
+	// returns the matches of that chunk; true means part of the generation is
+	// still unscanned, so call again with `scan_cursor` set to `next_scan_cursor`
+	// and merge the results. False when the search is complete.
+	ScanHasMore *bool
+	// Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the
+	// next chunk.
+	NextScanCursor *string
+	// Present only when `query` was requested: how many messages of the generation
+	// the search has scanned so far, for progress against `totals.total`.
+	ScannedMessages *int64
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsage
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -751,6 +764,10 @@ type LoadChatPayload struct {
 	// segment with a follow-up `before_seq`/`after_seq` request. Mutually
 	// exclusive with `risk_only`.
 	Query *string
+	// Continues a chunked `query` search: pass the previous response's
+	// `next_scan_cursor` with the same `query` and `generation`. Ignored without
+	// `query`.
+	ScanCursor *string
 }
 
 // A contiguous run of messages in a windowed view (`risk_only` via

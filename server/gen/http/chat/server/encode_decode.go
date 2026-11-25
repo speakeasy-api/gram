@@ -1134,6 +1134,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			fromStart         bool
 			riskOnly          bool
 			query             *string
+			scanCursor        *string
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
@@ -1243,6 +1244,20 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				err = goa.MergeErrors(err, goa.InvalidLengthError("query", *query, utf8.RuneCountInString(*query), 200, false))
 			}
 		}
+		scanCursorRaw := qp.Get("scan_cursor")
+		if scanCursorRaw != "" {
+			scanCursor = &scanCursorRaw
+		}
+		if scanCursor != nil {
+			if utf8.RuneCountInString(*scanCursor) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("scan_cursor", *scanCursor, utf8.RuneCountInString(*scanCursor), 1, true))
+			}
+		}
+		if scanCursor != nil {
+			if utf8.RuneCountInString(*scanCursor) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("scan_cursor", *scanCursor, utf8.RuneCountInString(*scanCursor), 1024, false))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1262,7 +1277,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, query, sessionToken, projectSlugInput, chatSessionsToken, apikeyToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, query, scanCursor, sessionToken, projectSlugInput, chatSessionsToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

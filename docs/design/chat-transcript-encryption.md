@@ -138,7 +138,23 @@ the capping in Go for every project. Writes that change a shadowed field after
 insert (`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow in
 the same transaction.
 
-Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
+Search cannot run in SQL over ciphertext. For a listed project,
+`Transcripts.SearchChat` (dashboard `chat.load` with `query`) and
+`Transcripts.SearchPlatformChats` (Platform MCP `search_chats`) scan messages in
+keyset order, 200 per chunk, one query per chunk. That query returns a
+shadowed message's ciphertext and no plaintext body, so the match is decided in
+Go on the opened shadow with the ILIKE semantics the SQL used (`like.go`). A
+message with no shadow is matched on its plaintext, the usual fallback. The scan
+does not hash the plaintext either; the rows it returns are checked for
+staleness when they are read for display (the chat.load windows through the
+joined read, the Platform MCP hits through `ListShadowsCurrent`). Each call
+scans a bounded number of messages and returns a cursor: `chat.load` scans one
+chunk and the dashboard follows `next_scan_cursor`, merging matches as they
+arrive; `search_chats` scans up to 1,000 messages and reports
+`scan_incomplete` so the agent decides whether to continue. Projects off the
+list keep the single SQL `ILIKE` query.
+
+Still open: tool-call counts and the hooks tool-call lookup,
 byte budgets, and the kit projection compare still work on plaintext inside SQL.
 The `streams` process does not configure shadows, so its prompt-injection judge
 window and signal evaluation read plaintext for every project. Plain inserts

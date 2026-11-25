@@ -213,7 +213,7 @@ var _ = Service("chat", func() {
 			Scope("producer")
 		})
 
-		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).")
+		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`); while `scan_has_more` is true, call again with `scan_cursor` for the next chunk of matches.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -245,6 +245,10 @@ var _ = Service("chat", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("scan_cursor", String, "Continues a chunked `query` search: pass the previous response's `next_scan_cursor` with the same `query` and `generation`. Ignored without `query`.", func() {
+				MinLength(1)
+				MaxLength(1024)
+			})
 			Required("id")
 		})
 
@@ -260,6 +264,7 @@ var _ = Service("chat", func() {
 			Param("from_start")
 			Param("risk_only")
 			Param("query")
+			Param("scan_cursor")
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
@@ -731,6 +736,9 @@ var Chat = Type("Chat", func() {
 	Attribute("has_more_after", Boolean, "Whether newer messages exist after the last message in this page (within the returned generation). Load them with an `after_seq` cursor.")
 	Attribute("risk_segments", ArrayOf(RiskSegment), "Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment's cursors to expand it.")
 	Attribute("match_segments", ArrayOf(RiskSegment), "Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.")
+	Attribute("scan_has_more", Boolean, "Present only when `query` was requested. In projects that keep encrypted transcripts a search scans the generation in chunks, one per request, and returns the matches of that chunk; true means part of the generation is still unscanned, so call again with `scan_cursor` set to `next_scan_cursor` and merge the results. False when the search is complete.")
+	Attribute("next_scan_cursor", String, "Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the next chunk.")
+	Attribute("scanned_messages", Int64, "Present only when `query` was requested: how many messages of the generation the search has scanned so far, for progress against `totals.total`.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
 	Attribute("work_units_report", String, "Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.")

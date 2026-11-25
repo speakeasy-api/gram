@@ -37,6 +37,10 @@ const (
 	// chatSearchTimeout bounds each search or read, since message text has no
 	// search index and a broad window over a busy project can be slow.
 	chatSearchTimeout = 10 * time.Second
+	// chatSearchScanBudget bounds the messages one search call scans in a
+	// project that keeps encrypted transcripts, where text is matched in Go
+	// after opening each message: five chunks, well inside chatSearchTimeout.
+	chatSearchScanBudget = 5 * transcriptstore.SearchChunkMessages
 	// chatSearchDefaultLimit and chatSearchMaxLimit bound hits per page.
 	chatSearchDefaultLimit = 10
 	chatSearchMaxLimit     = 20
@@ -70,6 +74,9 @@ type ChatSearchService struct {
 	budget      OperationBudget
 	references  *subjectReferenceCodec
 	redactor    *chatredact.Redactor
+	// scanBudget bounds the messages one search scans in a project that keeps
+	// encrypted transcripts.
+	scanBudget int
 }
 
 // NewChatSearchService composes the external-only transcript tools. Missing
@@ -89,7 +96,7 @@ func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *a
 	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
 		return nil
 	}
-	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
+	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New(), scanBudget: chatSearchScanBudget}
 }
 
 func (s *ChatSearchService) valid() bool {
@@ -170,6 +177,14 @@ type SearchChatsOutput struct {
 	// NextCursor continues the search; a page may be short or empty and still
 	// have one.
 	NextCursor string `json:"next_cursor,omitempty"`
+
+	// ScanIncomplete reports that this call spent its scan budget before
+	// reaching the end of the date range, which only happens in projects that
+	// keep encrypted transcripts. More matches may remain behind NextCursor.
+	ScanIncomplete bool `json:"scan_incomplete,omitempty"`
+
+	// Note explains ScanIncomplete and the choice it leaves to the caller.
+	Note string `json:"note,omitempty"`
 }
 
 // chatSearchCursor is the keyset position of the last row a page consumed.
@@ -265,9 +280,11 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	return chatAccess{project: project, ownUserID: principal.UserID, ownedAgentIDs: owned}, nil
 }
 
-// Search returns one keyset page of matching messages. SQL matches raw stored
-// text; a hit whose redacted text no longer shows the query is dropped, but
-// the page still advances past it so hidden matches never stall a cursor.
+// Search returns one keyset page of matching messages. The store matches raw
+// stored text, in SQL or, for a project that keeps encrypted transcripts, in Go
+// over a bounded scan; a hit whose redacted text no longer shows the query is
+// dropped, but the page still advances past it so hidden matches never stall
+// a cursor.
 func (s *ChatSearchService) Search(ctx context.Context, principal Principal, input SearchChatsInput) (SearchChatsOutput, error) {
 	var zero SearchChatsOutput
 	if input.SortOrder == "" {
@@ -331,18 +348,25 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		}
 	}
 
-	rows, err := s.transcripts.SearchPlatformChatMessages(ctx, s.db, transcriptstore.SearchPlatformChatMessagesParams{
-		OpenShadows: false,
-		ProjectID:   project.ID, OrganizationID: principal.OrganizationID,
-		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
-		// The own scope is ANDed with every caller filter, so owner_user_id,
-		// participant_id and chat_ids can only narrow what the member may see.
-		OwnUserID: access.ownUserID, OwnedAgentIds: access.ownedAgentIDs,
-		ChatIds: chatIDs, OwnerUserID: input.OwnerUserID, Source: input.Source, Pattern: likeContainsPattern(input.Query),
-		ParticipantID: input.ParticipantID, ParticipantProvider: input.ParticipantProvider,
-		HasCursor: input.Cursor != "", OldestFirst: input.SortOrder == chatSearchSortOldestFirst,
-		CursorAt: conv.ToPGTimestamptz(cursor.CreatedAt), CursorID: cursor.ID,
-		RowLimit: int32(limit + 1),
+	// In a project that keeps encrypted transcripts, message text is matched in
+	// Go one chunk at a time, so a call scans at most chatSearchScanBudget
+	// messages and may return a short page with a cursor to continue.
+	page, err := s.transcripts.SearchPlatformChats(ctx, s.db, transcriptstore.PlatformChatSearch{
+		Params: transcriptstore.SearchPlatformChatMessagesParams{
+			OpenShadows: false,
+			ProjectID:   project.ID, OrganizationID: principal.OrganizationID,
+			FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
+			// The own scope is ANDed with every caller filter, so owner_user_id,
+			// participant_id and chat_ids can only narrow what the member may see.
+			OwnUserID: access.ownUserID, OwnedAgentIds: access.ownedAgentIDs,
+			ChatIds: chatIDs, OwnerUserID: input.OwnerUserID, Source: input.Source, Pattern: likeContainsPattern(input.Query),
+			ParticipantID: input.ParticipantID, ParticipantProvider: input.ParticipantProvider,
+			HasCursor: input.Cursor != "", OldestFirst: input.SortOrder == chatSearchSortOldestFirst,
+			CursorAt: conv.ToPGTimestamptz(cursor.CreatedAt), CursorID: cursor.ID,
+			RowLimit: 0,
+		},
+		Limit:      limit,
+		ScanBudget: s.scanBudget,
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -350,12 +374,10 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		}
 		return zero, fmt.Errorf("search chat messages: %w", err)
 	}
-	more := len(rows) > limit
-	rows = rows[:min(len(rows), limit)]
 
-	output := SearchChatsOutput{Hits: []ChatMessageHit{}, NextCursor: ""}
+	output := SearchChatsOutput{Hits: []ChatMessageHit{}, NextCursor: "", ScanIncomplete: false, Note: ""}
 	owners := map[uuid.UUID]string{}
-	for _, row := range rows {
+	for _, row := range page.Rows {
 		text, changed, err := s.messageText(ctx, row.Content, row.ToolCalls, row.ContentRaw)
 		if err != nil {
 			return zero, err
@@ -379,9 +401,8 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		})
 		owners[row.ChatID] = row.OwnerUserID
 	}
-	if more {
-		last := rows[len(rows)-1]
-		value, err := json.Marshal(chatSearchCursor{CreatedAt: last.CreatedAt.Time.UTC(), ID: last.ID})
+	if page.More {
+		value, err := json.Marshal(chatSearchCursor{CreatedAt: page.NextCreatedAt.Time.UTC(), ID: page.NextID})
 		if err != nil {
 			return zero, fmt.Errorf("encode chat search cursor: %w", err)
 		}
@@ -389,6 +410,10 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		if err != nil {
 			return zero, fmt.Errorf("seal chat search cursor: %w", err)
 		}
+	}
+	if page.ScanIncomplete {
+		output.ScanIncomplete = true
+		output.Note = fmt.Sprintf("This project keeps encrypted transcripts, so each call scans at most %d messages and this one stopped before reaching the end of the date range. Hits may be few or none, yet more matching messages can remain. To keep searching, call search_chats again with next_cursor and the same filters; each further call is as slow. Narrowing the date range or adding owner_user_id, participant_id, source or chat_ids makes each call cover more of what matters.", page.Scanned)
 	}
 	for id, owner := range owners {
 		if err := s.recordAccess(ctx, principal, project.ID, id, owner); err != nil {

@@ -556,7 +556,7 @@ func TestSourceFingerprintExpressionsAgree(t *testing.T) {
 	// Readers in internal/plainrepo hash other table aliases; the expression
 	// must match once the alias is set aside.
 	alias := regexp.MustCompile(`\b[a-z_]+\.(content_raw|content|tool_calls|tool_outcome_notes|tool_call_summaries|storage_error)\b`)
-	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1, "internal/plainrepo/queries.sql": 22} {
+	for path, count := range map[string]int{"queries.sql": 6, "fixtures/queries.sql": 1, "internal/plainrepo/queries.sql": 24} {
 		source, err := os.ReadFile(path)
 		require.NoError(t, err)
 		matches := expression.FindAllString(string(source), -1)

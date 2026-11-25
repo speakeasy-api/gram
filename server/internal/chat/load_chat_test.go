@@ -38,6 +38,7 @@ func loadPayload(id string) *gen.LoadChatPayload {
 		FromStart:         false,
 		RiskOnly:          false,
 		Query:             nil,
+		ScanCursor:        nil,
 	}
 }
 
@@ -664,6 +665,12 @@ func TestLoadChat_Search_Window(t *testing.T) {
 	require.True(t, containsSeq(res.Messages, needleSeq))
 	// Risk segments are absent in query mode.
 	require.Empty(t, res.RiskSegments)
+	// A project without encrypted transcripts is searched in one request.
+	require.NotNil(t, res.ScanHasMore)
+	require.False(t, *res.ScanHasMore)
+	require.Nil(t, res.NextScanCursor)
+	require.NotNil(t, res.ScannedMessages)
+	require.EqualValues(t, 30, *res.ScannedMessages)
 }
 
 // TestLoadChat_Search_Empty verifies a query with no matches returns nothing.

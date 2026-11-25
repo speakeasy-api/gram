@@ -404,7 +404,7 @@ func BuildLoadChatOverviewPayload(chatLoadChatOverviewID string, chatLoadChatOve
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string, chatLoadChatApikeyToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatScanCursor string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string, chatLoadChatApikeyToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -513,6 +513,21 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			}
 		}
 	}
+	var scanCursor *string
+	{
+		if chatLoadChatScanCursor != "" {
+			scanCursor = &chatLoadChatScanCursor
+			if utf8.RuneCountInString(*scanCursor) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("scan_cursor", *scanCursor, utf8.RuneCountInString(*scanCursor), 1, true))
+			}
+			if utf8.RuneCountInString(*scanCursor) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("scan_cursor", *scanCursor, utf8.RuneCountInString(*scanCursor), 1024, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if chatLoadChatSessionToken != "" {
@@ -546,6 +561,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.FromStart = fromStart
 	v.RiskOnly = riskOnly
 	v.Query = query
+	v.ScanCursor = scanCursor
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

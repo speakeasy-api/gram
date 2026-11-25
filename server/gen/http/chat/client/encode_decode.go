@@ -1089,6 +1089,9 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if p.Query != nil {
 			values.Add("query", *p.Query)
 		}
+		if p.ScanCursor != nil {
+			values.Add("scan_cursor", *p.ScanCursor)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

@@ -201,6 +201,66 @@ WHERE EXISTS (
 )
 ORDER BY o.created_at ASC, o.seq ASC;
 
+-- name: ScanChatSearchChunk :many
+-- One chunk of a chunked search over one chat generation in a project that
+-- keeps shadows: up to @chunk_size messages after the keyset cursor, oldest
+-- first. A message with a shadow returns its ciphertext and no plaintext body,
+-- so the store matches it on the opened shadow only. A message with no shadow
+-- (written before capture began) returns its plaintext, the fallback every read
+-- applies.
+SELECT m.id, m.chat_id, m.created_at, m.seq,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
+       CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
+       CASE WHEN t.message_id IS NULL THEN m.content_raw END::jsonb AS fallback_content_raw
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id::uuid
+  AND m.generation = @generation::integer
+  AND (NOT @has_cursor::boolean OR (m.created_at, m.seq) > (@cursor_at::timestamptz, @cursor_seq::bigint))
+ORDER BY m.created_at ASC, m.seq ASC
+LIMIT @chunk_size::integer;
+
+-- name: ListSearchMatchWindows :many
+-- The search view around matches the store already found in Go: the same rows
+-- and columns as ListSearchWindowedMessages, seeded by @match_ids instead of
+-- an ILIKE. A chunked search builds windows one chunk at a time, so when this
+-- chunk's first window starts right after the previous chunk's last window
+-- (@bridge_rn), that row is returned too: the two windows then share a message
+-- and the caller joins them into one segment instead of showing a gap.
+WITH ordered AS (
+  SELECT
+    cm.*,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = @chat_id
+    AND cm.project_id = @project_id::uuid
+    AND cm.generation = @generation::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o WHERE o.id = ANY(@match_ids::uuid[])
+),
+bridge_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.rn = @bridge_rn::bigint
+    AND EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn + 1 + @context_size::bigint)
+)
+SELECT
+  o.*,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match,
+  t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM ordered o
+LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND @open_shadows::boolean
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - @context_size::bigint AND m.rn + @context_size::bigint
+)
+   OR o.rn IN (SELECT rn FROM bridge_rns)
+ORDER BY o.created_at ASC, o.seq ASC;
+
 -- name: GetChatEntryTotals :one
 -- Per-generation trace-entry totals for the chat detail filter bar. The detail
 -- sheet paginates messages, so counts derived from the loaded page understate
@@ -656,6 +716,66 @@ ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
          CASE WHEN NOT @oldest_first THEN m.created_at END DESC,
          CASE WHEN NOT @oldest_first THEN m.id END DESC
 LIMIT @row_limit::integer;
+
+-- name: ScanPlatformChatMessages :many
+-- One chunk of the Platform MCP chat search in a project that keeps shadows:
+-- the filters, order and cursor of SearchPlatformChatMessages without its text
+-- match, which the store applies in Go to each opened shadow. title_match
+-- reports whether the chat title (not transcript body) matches @pattern. A
+-- message with a shadow returns its ciphertext and no plaintext body; one with
+-- no shadow returns its plaintext, the fallback every read applies.
+SELECT m.id, m.chat_id, m.seq, m.created_at, m.role, m.generation,
+       COALESCE(CASE WHEN octet_length(m.source) <= 512 THEN m.source END, '')::text AS source,
+       COALESCE(CASE WHEN octet_length(m.user_id) <= 512 THEN m.user_id END, '')::text AS user_id,
+       COALESCE(CASE WHEN octet_length(c.title) <= 4096 THEN c.title END, '')::text AS chat_title,
+       c.title_manually_set AS chat_title_manually_set,
+       COALESCE(c.user_id, '')::text AS owner_user_id,
+       COALESCE(c.title ILIKE @pattern::text ESCAPE '\'
+         OR (NOT c.title_manually_set
+             AND ('Cron: ' || substring(c.title from '^\s*\[cron:[0-9a-fA-F-]{36} ([^\]]+)')) ILIKE @pattern ESCAPE '\'), false)::boolean AS title_match,
+       t.ciphertext AS shadow_ciphertext,
+       COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
+       CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
+       CASE WHEN t.message_id IS NULL THEN m.content_raw END::jsonb AS fallback_content_raw
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+WHERE m.project_id = @project_id::uuid
+  AND c.organization_id = @organization_id AND p.organization_id = @organization_id
+  AND c.deleted IS FALSE AND p.deleted IS FALSE
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND (cardinality(@chat_ids::uuid[]) = 0 OR m.chat_id = ANY(@chat_ids::uuid[]))
+  AND (@own_user_id::text = '' OR c.user_id = @own_user_id
+       OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
+  AND (@owner_user_id::text = '' OR c.user_id = @owner_user_id)
+  AND (@source::text = '' OR m.source = @source)
+  AND (@participant_id::text = ''
+       OR (@participant_provider::text = '' AND m.user_id = @participant_id)
+       OR EXISTS (
+         SELECT 1 FROM chat_message_participants cp
+         WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id AND cp.message_id = m.id
+           AND (cp.user_id = @participant_id OR cp.provider_user_id = @participant_id)
+           AND (@participant_provider = '' OR cp.provider = @participant_provider)))
+  AND (NOT @has_cursor::boolean
+       OR (@oldest_first::boolean AND (m.created_at, m.id) > (@cursor_at::timestamptz, @cursor_id::uuid))
+       OR (NOT @oldest_first AND (m.created_at, m.id) < (@cursor_at, @cursor_id)))
+ORDER BY CASE WHEN @oldest_first THEN m.created_at END ASC,
+         CASE WHEN @oldest_first THEN m.id END ASC,
+         CASE WHEN NOT @oldest_first THEN m.created_at END DESC,
+         CASE WHEN NOT @oldest_first THEN m.id END DESC
+LIMIT @row_limit::integer;
+
+-- name: ListShadowsCurrent :many
+-- Whether each listed message's shadow still matches its source row, for
+-- results a chunked search found on shadows it opened without reading the
+-- plaintext. A message with no shadow is not returned.
+SELECT m.id,
+       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+FROM chat_messages m
+JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+WHERE m.project_id = @project_id::uuid
+  AND m.id = ANY(@message_ids::uuid[]);
 
 -- name: ReadPlatformChatMessages :many
 -- Capture-sequence window around one message of this chat, or its latest one,

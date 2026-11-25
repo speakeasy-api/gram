@@ -1313,11 +1313,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination
-	// (before_seq/after_seq) reuses the same open and is not re-logged; only
+	// (before_seq/after_seq) and search continuation (scan_cursor) reuse the
+	// same open and are not re-logged; only
 	// session-authenticated (dashboard) reads are recorded, since chat-token,
 	// external-user, and assistant reads are the owner/runtime consuming their
 	// own transcript rather than a reviewer accessing a session.
-	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil {
+	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil && payload.ScanCursor == nil {
 		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
 			return nil, err
 		}
@@ -1357,6 +1358,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// latestPageRows holds the repo rows of the initial newest page so we can
 		// infer the chat source from them; only populated on that first request.
 		latestPageRows []repo.ChatMessage
+		// search is the query search's page, set only in the search view.
+		search *transcriptstore.ChatSearchPage
 	)
 
 	// query enables the search-windowed view; it's mutually exclusive with the
@@ -1428,17 +1431,29 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// are ignored on this initial request; the dashboard expands segments with
 		// plain before_seq/after_seq follow-ups. Message construction mirrors the
 		// risk_only branch above.
-		rows, err := s.transcripts.ListSearchWindowedMessages(ctx, s.db, transcriptstore.SearchWindow{
+		// Projects that keep encrypted transcripts are searched one chunk per
+		// request; the dashboard follows next_scan_cursor until the scan ends.
+		scanCursor := ""
+		if payload.ScanCursor != nil {
+			scanCursor = *payload.ScanCursor
+		}
+		page, err := s.transcripts.SearchChat(ctx, s.db, transcriptstore.ChatSearch{
 			ContextSize: searchContextWindow,
 			ProjectID:   *authCtx.ProjectID,
 			ChatID:      chat.ID,
 			Generation:  generation,
 			Query:       queryStr,
+			Cursor:      scanCursor,
 			MatchLimit:  searchMatchLimit,
 		})
+		if errors.Is(err, transcriptstore.ErrInvalidCursor) {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid scan cursor")
+		}
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
+		rows := page.Rows
+		search = &page
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1705,6 +1720,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		HasMoreAfter:         hasMoreAfter,
 		RiskSegments:         riskSegments,
 		MatchSegments:        matchSegments,
+		ScanHasMore:          nil,
+		NextScanCursor:       nil,
+		ScannedMessages:      nil,
 		Totals: &gen.ChatTotals{
 			Total:             totals.Total,
 			UserMessages:      totals.UserMessages,
@@ -1720,6 +1738,18 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		AgentUsage:        nil,
 		WorkUnits:         nil,
 		WorkUnitsReport:   nil,
+	}
+
+	if search != nil {
+		// A search that is complete has scanned the whole generation, which a
+		// single SQL search does in one request.
+		scanned := totals.Total
+		if search.More {
+			scanned = search.Scanned
+		}
+		result.ScanHasMore = &search.More
+		result.NextScanCursor = conv.PtrEmpty(search.NextCursor)
+		result.ScannedMessages = &scanned
 	}
 
 	if isInitialLatest {

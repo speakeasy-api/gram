@@ -31059,7 +31059,7 @@ paths:
                 type: query
     /rpc/chat.load:
         get:
-            description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).'
+            description: 'Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`); while `scan_has_more` is true, call again with `scan_cursor` for the next chunk of matches.'
             operationId: loadChat
             parameters:
                 - allowEmptyValue: true
@@ -31131,6 +31131,15 @@ paths:
                   schema:
                     description: When set (and `risk_only` is false), return only messages whose text matches this query (case-insensitive substring over message text, tool names/arguments, and structured content), each padded with a fixed window of surrounding messages, grouped into contiguous segments (see `match_segments`). Cursors are ignored on the initial request; expand a segment with a follow-up `before_seq`/`after_seq` request. Mutually exclusive with `risk_only`.
                     maxLength: 200
+                    minLength: 1
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Continues a chunked `query` search: pass the previous response''s `next_scan_cursor` with the same `query` and `generation`. Ignored without `query`.'
+                  in: query
+                  name: scan_cursor
+                  schema:
+                    description: 'Continues a chunked `query` search: pass the previous response''s `next_scan_cursor` with the same `query` and `generation`. Ignored without `query`.'
+                    maxLength: 1024
                     minLength: 1
                     type: string
                 - allowEmptyValue: true
@@ -110456,6 +110465,9 @@ components:
                     items:
                         $ref: '#/components/schemas/ChatMessage'
                     description: The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
+                next_scan_cursor:
+                    type: string
+                    description: 'Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the next chunk.'
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -110480,6 +110492,13 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskSegment'
                     description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
+                scan_has_more:
+                    type: boolean
+                    description: Present only when `query` was requested. In projects that keep encrypted transcripts a search scans the generation in chunks, one per request, and returns the matches of that chunk; true means part of the generation is still unscanned, so call again with `scan_cursor` set to `next_scan_cursor` and merge the results. False when the search is complete.
+                scanned_messages:
+                    type: integer
+                    description: 'Present only when `query` was requested: how many messages of the generation the search has scanned so far, for progress against `totals.total`.'
+                    format: int64
                 slack_channel_id:
                     type: string
                     description: Observed Slack channel associated with this session.

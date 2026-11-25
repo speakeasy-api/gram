@@ -205,6 +205,18 @@ type LoadChatResponseBody struct {
 	// messages, each spanning one or more query matches and their surrounding
 	// context. Use each segment's cursors to expand it.
 	MatchSegments []*RiskSegmentResponseBody `form:"match_segments,omitempty" json:"match_segments,omitempty" xml:"match_segments,omitempty"`
+	// Present only when `query` was requested. In projects that keep encrypted
+	// transcripts a search scans the generation in chunks, one per request, and
+	// returns the matches of that chunk; true means part of the generation is
+	// still unscanned, so call again with `scan_cursor` set to `next_scan_cursor`
+	// and merge the results. False when the search is complete.
+	ScanHasMore *bool `form:"scan_has_more,omitempty" json:"scan_has_more,omitempty" xml:"scan_has_more,omitempty"`
+	// Present when `scan_has_more` is true: pass it as `scan_cursor` to scan the
+	// next chunk.
+	NextScanCursor *string `form:"next_scan_cursor,omitempty" json:"next_scan_cursor,omitempty" xml:"next_scan_cursor,omitempty"`
+	// Present only when `query` was requested: how many messages of the generation
+	// the search has scanned so far, for progress against `totals.total`.
+	ScannedMessages *int64 `form:"scanned_messages,omitempty" json:"scanned_messages,omitempty" xml:"scanned_messages,omitempty"`
 	// Agent-specific usage enrichment for the chat, when available.
 	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// Whole-generation trace-entry totals for the returned generation. Because
@@ -4169,6 +4181,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		MaxGeneration:        *body.MaxGeneration,
 		HasMoreBefore:        *body.HasMoreBefore,
 		HasMoreAfter:         *body.HasMoreAfter,
+		ScanHasMore:          body.ScanHasMore,
+		NextScanCursor:       body.NextScanCursor,
+		ScannedMessages:      body.ScannedMessages,
 		WorkUnitsReport:      body.WorkUnitsReport,
 		SlackTeamID:          body.SlackTeamID,
 		SlackChannelID:       body.SlackChannelID,
