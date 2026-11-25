@@ -1,7 +1,12 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import type { MintUserSessionRequestBody } from "@gram/client/models/components/mintusersessionrequestbody.js";
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { MintUserSessionResponseBody } from "@gram/client/models/components/mintusersessionresponsebody.js";
+import {
+  queryOptions,
+  useQuery,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 /**
  * The resource a minted JWT's audience binds to. The unified mint RPC takes
@@ -101,11 +106,17 @@ export function useUserSessionToken({
   };
 }
 
+type UserSessionTokenOptionsFactory = (
+  target: UserSessionTokenTarget,
+  userSessionIssuerId: string | undefined,
+  throwOnError?: false,
+) => UseQueryOptions<MintUserSessionResponseBody | null>;
+
 /** Shared token query policy for clients that connect to several targets. */
 export function useUserSessionTokenOptions(projectOverride?: {
   id: string;
   slug: string;
-}) {
+}): UserSessionTokenOptionsFactory {
   const session = useSession();
   const ambientProject = useProject();
   const project = projectOverride ?? ambientProject;
@@ -118,7 +129,7 @@ export function useUserSessionTokenOptions(projectOverride?: {
   ) => {
     const { kind, id } = target;
     const enabled = !!id && !!userSessionIssuerId;
-    return queryOptions({
+    return queryOptions<MintUserSessionResponseBody | null>({
       queryKey: [
         "userSessionToken",
         kind,
