@@ -1,0 +1,29 @@
+.speakeasy/out.openapi.yaml
+  s_e35a227fdb4e2a::t_109e0a5d405d03 107261,107324,114899,117176,117608,117698
+client/dashboard/src/sdk/src/models/components/listrolegrant.ts
+  s_e35a227fdb4e2a::t_78e86e2716e580 63,123
+client/dashboard/src/sdk/src/models/components/requestaccessform.ts
+  s_e35a227fdb4e2a::t_c809f4a967ed90 32
+client/dashboard/src/sdk/src/models/components/rolegrant.ts
+  s_e35a227fdb4e2a::t_dfe00549856f29 67
+client/dashboard/src/sdk/src/models/components/scopedefinition.ts
+  s_e35a227fdb4e2a::t_291172c4311b30 149
+client/dashboard/src/sdk/src/models/components/scopetask.ts
+  s_e35a227fdb4e2a::t_1513386c864fc7 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9ea74b7229b7e827f25f57a8fc11a5f90fbee4d",
+  "prompts": {},
+  "sessions": {
+    "s_e35a227fdb4e2a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5e581201-916d-47d8-9f60-7cec15ab7139",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
