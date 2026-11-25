@@ -596,21 +596,6 @@ export class Admin extends ClientSDK {
   }
 
   /**
-   * getHooksReleaseProgress admin
-   *
-   * @remarks
-   * Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.
-   */
-  async getHooksReleaseProgress(
-    options?: RequestOptions,
-  ): Promise<AdminHooksReleaseProgress> {
-    return unwrapAsync(adminGetHooksReleaseProgress(
-      this,
-      options,
-    ));
-  }
-
-  /**
    * pauseHooksRolloutStage admin
    *
    * @remarks
@@ -623,6 +608,21 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminPauseHooksRolloutStage(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * getHooksReleaseProgress admin
+   *
+   * @remarks
+   * Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.
+   */
+  async getHooksReleaseProgress(
+    options?: RequestOptions,
+  ): Promise<AdminHooksReleaseProgress> {
+    return unwrapAsync(adminGetHooksReleaseProgress(
+      this,
       options,
     ));
   }

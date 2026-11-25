@@ -778,7 +778,7 @@ examples:
   adminCancelHooksRolloutStage:
     speakeasy-default-admin-cancel-hooks-rollout-stage:
       requestBody:
-        application/json: {"reason": "<value>"}
+        application/json: {"reason": "<value>", "revision": 46538}
       responses:
         "200":
           application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
@@ -1951,7 +1951,7 @@ examples:
   adminPauseHooksRolloutStage:
     speakeasy-default-admin-pause-hooks-rollout-stage:
       requestBody:
-        application/json: {"reason": "<value>"}
+        application/json: {"reason": "<value>", "revision": 848142}
       responses:
         "200":
           application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
@@ -2049,6 +2049,8 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminResumeHooksRolloutStage:
     speakeasy-default-admin-resume-hooks-rollout-stage:
+      requestBody:
+        application/json: {"revision": 644382}
       responses:
         "200":
           application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
@@ -2280,7 +2282,7 @@ examples:
   adminStartHooksRolloutStage:
     speakeasy-default-admin-start-hooks-rollout-stage:
       requestBody:
-        application/json: {"version": 301245}
+        application/json: {"revision": 923472, "version": 301245}
       responses:
         "200":
           application/json: {"canary_organization_slugs": [], "current_version": 418772, "overrides": [], "recent_changes": []}
