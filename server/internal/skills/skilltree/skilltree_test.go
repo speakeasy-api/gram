@@ -106,6 +106,9 @@ func TestValidatePath(t *testing.T) {
 		{name: "invalid utf8", path: "scripts/\xff.sh", valid: false},
 		{name: "manifest", path: "SKILL.md", valid: false},
 		{name: "manifest other case", path: "skill.md", valid: false},
+		{name: "under manifest", path: "SKILL.md/x", valid: false},
+		{name: "under manifest other case", path: "Skill.MD/scripts/run.sh", valid: false},
+		{name: "manifest name deeper", path: "references/SKILL.md", valid: true},
 		{name: "too long", path: strings.Repeat("a", skilltree.MaxPathBytes+1), valid: false},
 	}
 
@@ -154,6 +157,41 @@ func TestValidate_RejectsCaseOnlyDuplicates(t *testing.T) {
 		{Path: "references/guide.md", Content: []byte("b"), ContentType: ""},
 	})
 	require.ErrorIs(t, err, skilltree.ErrDuplicatePath)
+}
+
+func TestValidate_RejectsFileThatIsAlsoADirectory(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		paths []string
+		want  error
+	}{
+		{name: "file then nested file", paths: []string{"scripts", "scripts/run.py"}, want: skilltree.ErrPathConflict},
+		{name: "nested file then file", paths: []string{"scripts/run.py", "scripts"}, want: skilltree.ErrPathConflict},
+		{name: "deep ancestor", paths: []string{"assets/templates", "assets/templates/a/b.html"}, want: skilltree.ErrPathConflict},
+		{name: "ancestor other case", paths: []string{"Scripts", "scripts/run.py"}, want: skilltree.ErrPathConflict},
+		{name: "under manifest", paths: []string{"SKILL.md/x"}, want: skilltree.ErrInvalidPath},
+		{name: "shared prefix is not a directory", paths: []string{"scripts", "scripts.md", "scripts-old/run.py"}, want: nil},
+		{name: "siblings", paths: []string{"scripts/a.py", "scripts/b.py", "references/a.md"}, want: nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			files := make([]skilltree.File, 0, len(tc.paths))
+			for _, p := range tc.paths {
+				files = append(files, skilltree.File{Path: p, Content: []byte("x"), ContentType: ""})
+			}
+			_, err := skilltree.Validate(files)
+			if tc.want == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
 }
 
 func TestValidate_RejectsTooManyFiles(t *testing.T) {

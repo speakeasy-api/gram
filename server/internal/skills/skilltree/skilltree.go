@@ -61,6 +61,12 @@ var (
 	// is checked out on a case-insensitive file system.
 	ErrDuplicatePath = errors.New("duplicate skill file path")
 
+	// ErrPathConflict reports a supporting file whose path is also a
+	// directory of another file's path, such as scripts and scripts/run.py.
+	// Such a tree cannot be written to a file system, a ZIP or a git tree.
+	// Paths are compared ignoring letter case, as for ErrDuplicatePath.
+	ErrPathConflict = errors.New("conflicting skill file paths")
+
 	// ErrTooManyFiles reports more than MaxFiles supporting files.
 	ErrTooManyFiles = errors.New("too many skill files")
 
@@ -111,7 +117,8 @@ type Entry struct {
 // MaxPathBytes bytes. It may not contain empty, "." or ".." segments,
 // backslashes, control characters, or invisible format characters such as
 // bidirectional overrides, which can disguise a file name when it is shown.
-// It may not name the skill root itself or the manifest.
+// It may not name the skill root itself or the manifest, nor place a file
+// under a directory named like the manifest.
 func ValidatePath(p string) error {
 	switch {
 	case p == "":
@@ -136,8 +143,16 @@ func ValidatePath(p string) error {
 		return fmt.Errorf("%w: %q escapes the skill root", ErrInvalidPath, p)
 	case strings.EqualFold(p, ManifestPath):
 		return fmt.Errorf("%w: %q is the skill manifest, not a supporting file", ErrInvalidPath, p)
+	case strings.EqualFold(firstSegment(p), ManifestPath):
+		return fmt.Errorf("%w: %q places a file under the skill manifest %s", ErrInvalidPath, p, ManifestPath)
 	}
 	return nil
+}
+
+// firstSegment returns the part of p before its first slash.
+func firstSegment(p string) string {
+	first, _, _ := strings.Cut(p, "/")
+	return first
 }
 
 // isFormatRune reports Unicode format characters (category Cf), such as
@@ -186,8 +201,28 @@ func Validate(files []File) ([]Entry, error) {
 		})
 	}
 
+	if err := checkPathConflicts(seen); err != nil {
+		return nil, err
+	}
+
 	slices.SortFunc(entries, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
 	return entries, nil
+}
+
+// checkPathConflicts reports a file whose path is a directory of another
+// file's path. seen maps each lowercased path to the path as supplied.
+func checkPathConflicts(seen map[string]string) error {
+	for folded, original := range seen {
+		for i := range len(folded) {
+			if folded[i] != '/' {
+				continue
+			}
+			if file, ok := seen[folded[:i]]; ok {
+				return fmt.Errorf("%w: %q is a file, so %q cannot be inside it", ErrPathConflict, file, original)
+			}
+		}
+	}
+	return nil
 }
 
 // Digest returns the lowercase hex tree digest of a skill version.
