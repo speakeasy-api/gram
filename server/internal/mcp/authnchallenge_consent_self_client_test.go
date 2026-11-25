@@ -56,12 +56,14 @@ func seedSelfClientConsentEndpoint(t *testing.T, slug string, withSubjectClient 
 	orgID := authCtx.ActiveOrganizationID
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	selfClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-self", "", []uuid.UUID{shared})
+	selfClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-self", "", nil)
+	seedConsentSignInPlacement(t, ctx, ti, shared, selfClient)
 	markConsentClientSelf(t, ctx, ti.conn, projectID, orgID, selfClient)
 
 	subjectClient := uuid.Nil
 	if withSubjectClient {
-		subjectClient = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-subject", "", []uuid.UUID{shared})
+		subjectClient = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-subject", "", nil)
+		seedConsentSignInPlacement(t, ctx, ti, shared, subjectClient)
 	}
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug+"-consent")

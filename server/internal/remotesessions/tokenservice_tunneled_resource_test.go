@@ -90,7 +90,8 @@ func TestFallbackResourceForClient_TunneledIdentifierLeavesRemoteSiblingQualifie
 
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-tunnel-mixed")
 	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-tunnel-mixed")
-	seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-remote-mcp", "https://remote.example.com/mcp")
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-remote-mcp", "https://remote.example.com/mcp")
+	associateClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, clientID)
 	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-tunnel-mcp", "https://tunneled.internal/mcp")
 
 	resource, err := mgr.FallbackResourceForClient(ctx, authCtx.ActiveOrganizationID, clientID)

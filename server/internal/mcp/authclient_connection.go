@@ -55,13 +55,19 @@ type authClientConnectionOwner struct {
 // their consent and live policy are read too, and the mandatory decision lets
 // the agent use that connection whoever issued the key, as long as the
 // owner's policy, the key issuer's and the agent's all allow it.
-func (s *Service) authClientConnection(ctx context.Context, permit authClientPermitRequest) (authClientConnectionOwner, error) {
+func (s *Service) authClientConnection(ctx context.Context, permit authClientPermitRequest, mandatory bool) (authClientConnectionOwner, error) {
 	none := authClientConnectionOwner{owner: "", attachedSession: uuid.Nil, authorizer: false, consent: authz.AttachedConnectionConsent{}}
 	if permit.ClientType != authClientTypeRemoteSession {
 		return none, nil
 	}
 	if permit.Subject.Kind == urn.SessionSubjectKindUser {
 		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false, consent: authz.AttachedConnectionConsent{}}, nil
+	}
+	if permit.Subject.Kind == urn.SessionSubjectKindWorkload {
+		// Match the owner already bound by live workload admission. Token
+		// acquisition independently rechecks workload ownership and reach.
+		owner, _ := authz.AdmittedWorkloadOwner(ctx)
+		return authClientConnectionOwner{owner: owner, attachedSession: uuid.Nil, authorizer: false, consent: authz.AttachedConnectionConsent{}}, nil
 	}
 	// An agent key with no attachment for this registration is served by its
 	// validated authorizer's own connection; the mcp:auth check names that
@@ -106,7 +112,7 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	if s.authz == nil || !hasAuthorizer || authorizer == conn.OwnerUserID {
 		return attachment, nil
 	}
-	load, required, err := s.attachedConsentUse(ctx, permit.OrganizationID)
+	load, required, err := s.attachedConsentUse(ctx, permit.OrganizationID, mandatory)
 	if err != nil {
 		return none, fmt.Errorf("resolve attached connection consent use: %w", err)
 	}
@@ -131,8 +137,8 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 // it, so a failed read must refuse (required), and the shadow records the
 // decision enforcement would make. Otherwise the connect-equivalent rule
 // decides, and the owner's policy is not read at all.
-func (s *Service) attachedConsentUse(ctx context.Context, organizationID string) (load, required bool, err error) {
-	permitter, err := s.authClientPermitFor(ctx, organizationID)
+func (s *Service) attachedConsentUse(ctx context.Context, organizationID string, mandatory bool) (load, required bool, err error) {
+	permitter, err := s.authClientPermitFor(mandatory)
 	if err != nil {
 		return false, false, err
 	}

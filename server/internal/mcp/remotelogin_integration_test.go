@@ -60,6 +60,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
 
+	associateServerRegistration(t, ctx, ti.conn, result.Toolset.OrganizationID, result.Toolset.ProjectID, result.Toolset.ID, result.RemoteSessionClient.ID)
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
 
 	userSubject := urn.NewUserSubject(uuid.NewString())
@@ -105,6 +106,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
 
+	associateServerRegistration(t, ctx, ti.conn, result.Toolset.OrganizationID, result.Toolset.ProjectID, result.Toolset.ID, result.RemoteSessionClient.ID)
 	mgr, authnCache := buildChallengeManagerForTest(t, ti)
 
 	parentID := uuid.NewString()
@@ -176,6 +178,7 @@ func TestRemoteLoginCallback_FinalRedirectURI(t *testing.T) {
 		RemoteSessionCallbackBaseURL: ti.serverURL.String(),
 	})
 
+	associateServerRegistration(t, ctx, ti.conn, result.Toolset.OrganizationID, result.Toolset.ProjectID, result.Toolset.ID, result.RemoteSessionClient.ID)
 	mgr, _ := buildChallengeManagerForTest(t, ti)
 	userSubject := urn.NewUserSubject(uuid.NewString())
 
@@ -210,6 +213,7 @@ func TestRemoteLoginChallenge_CustomDomainRegistersGramCallback(t *testing.T) {
 	_, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, hostedToolset{Toolset: result.Toolset, McpSlug: pgtype.Text{String: result.McpSlug, Valid: true}}, "remote-login-custom.example.com")
 
 	mgr, _ := buildChallengeManagerForTest(t, ti)
+	associateServerRegistration(t, ctx, ti.conn, result.Toolset.OrganizationID, result.Toolset.ProjectID, result.Toolset.ID, result.RemoteSessionClient.ID)
 	clients, err := mgr.ListClients(ctx, result.Toolset.ProjectID, result.Toolset.OrganizationID, result.UserSessionIssuer.ID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)

@@ -7,7 +7,8 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventoryInfinite } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { RetryButton } from "@/components/retry-button";
+import { describeApiError } from "@/lib/api-error";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
@@ -413,19 +414,16 @@ export function ShadowMCPInventoryTable({
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
         <div className="space-y-1">
           <Text variant="body" className="font-medium">
-            Shadow MCP inventory could not be loaded
+            Shadow MCP servers could not be loaded
           </Text>
           <Text muted small className="max-w-md">
-            It may be a temporary problem. Try again.
+            {describeApiError(inventoryQuery.error).message}
           </Text>
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void inventoryQuery.refetch()}
-        >
-          <Button.Text>Retry</Button.Text>
-        </Button>
+        <RetryButton
+          isRetrying={inventoryQuery.isFetching}
+          onRetry={() => void inventoryQuery.refetch()}
+        />
       </div>
     );
   }
@@ -543,16 +541,18 @@ export function ShadowMCPInventoryTable({
       </Table>
       {inventoryQuery.isFetchNextPageError ? (
         <div className="flex items-center justify-between border p-3">
-          <Text destructive small>
-            More servers could not be loaded.
-          </Text>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void inventoryQuery.fetchNextPage()}
-          >
-            <Button.Text>Retry</Button.Text>
-          </Button>
+          <div className="space-y-0.5">
+            <Text destructive small>
+              More servers could not be loaded.
+            </Text>
+            <Text muted small>
+              {describeApiError(inventoryQuery.error).message}
+            </Text>
+          </div>
+          <RetryButton
+            isRetrying={inventoryQuery.isFetchingNextPage}
+            onRetry={() => void inventoryQuery.fetchNextPage()}
+          />
         </div>
       ) : null}
     </div>

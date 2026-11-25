@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // Several MCP servers usually share one user session issuer, and a client's
@@ -111,7 +111,7 @@ func TestAttachUserSessionIssuerOffersOnTheSoleServerUnderEnforcement(t *testing
 	providerID := createServerIdentityProvider(t, ctx, ti, "attach-enforced-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "attach-enforced-client", providerID, false)
 
-	_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  clientID.String(),
 		UserSessionIssuerID: userIssuerID.String(),
 	})
@@ -124,26 +124,24 @@ func TestAttachUserSessionIssuerOffersOnTheSoleServerUnderEnforcement(t *testing
 	)
 }
 
-// A client a deleted server configured stays bound to the issuer. It is not what
-// the writers below configure, so it must not reach the server left on the
-// issuer under enforcement.
+// A deleted server's registration must not reach the remaining server on the
+// same sign-in, even when another client write synchronizes the typed offers.
 func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		// write changes the issuer's bindings and returns the client the
-		// remaining server is expected to offer, if any.
-		write func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID
+		// write returns the clients the remaining server should offer.
+		write func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID, serverID uuid.UUID) []uuid.UUID
 	}{
-		{name: "attaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+		{name: "attaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, _, serverID uuid.UUID) []uuid.UUID {
 			t.Helper()
 			clientID := createServerIdentityClient(t, ctx, ti, "leftover-attached-client", providerID, false)
-			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			_, err := (attachFixture{ti: ti}).attach(ctx, serverID, clientID)
 			require.NoError(t, err)
 			return []uuid.UUID{clientID}
 		}},
-		{name: "creating a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+		{name: "creating a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID, _ uuid.UUID) []uuid.UUID {
 			t.Helper()
 			created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
 				RemoteSessionIssuerID: providerID.String(),
@@ -157,13 +155,12 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 			require.NoError(t, err)
 			return []uuid.UUID{uuid.MustParse(created.ID)}
 		}},
-		{name: "detaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, userIssuerID uuid.UUID) []uuid.UUID {
+		{name: "detaching a client", write: func(t *testing.T, ctx context.Context, ti *testInstance, providerID, _, serverID uuid.UUID) []uuid.UUID {
 			t.Helper()
 			clientID := createServerIdentityClient(t, ctx, ti, "leftover-detached-client", providerID, false)
-			_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
+			_, err := (attachFixture{ti: ti}).attach(ctx, serverID, clientID)
 			require.NoError(t, err)
-			_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
-			require.NoError(t, err)
+			require.NoError(t, detachServerClient(ctx, ti, serverID, clientID))
 			return nil
 		}},
 	}
@@ -178,10 +175,10 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 			shared := seedSharedIssuer(t, ctx, ti, "leftover", "")
 			_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
 			require.NoError(t, err)
-			requireClientBound(t, ctx, ti, shared.firstClient, shared.userIssuerID, true)
+			require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, shared.second), "the deleted server's placement does not configure its sibling")
 			providerID := createServerIdentityProvider(t, ctx, ti, "leftover-second-provider", "", false, []string{"none"})
 
-			want := tc.write(t, ctx, ti, providerID, shared.userIssuerID)
+			want := tc.write(t, ctx, ti, providerID, shared.userIssuerID, shared.second)
 
 			require.ElementsMatch(t, want, associatedClients(t, ctx, ti.conn, projectID, shared.second))
 			wantOffered := make([]uuid.UUID, 0, len(want))
@@ -193,9 +190,9 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 	}
 }
 
-// Without enforcement CaptureSoleConsumers writes nothing, because Reconcile
-// already captures there.
-func TestCaptureSoleConsumersWritesNothingWithoutEnforcement(t *testing.T) {
+// Reconcile ignores FK parents; an explicit capture can still configure the
+// named sole consumer without enforcement.
+func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -204,14 +201,23 @@ func TestCaptureSoleConsumersWritesNothingWithoutEnforcement(t *testing.T) {
 	target, _ := sourceBackedTarget(t, ctx, ti, "capture-off-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "capture-off-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "capture-off-client", providerID, false)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
-
-	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, activeOrganizationID(t, ctx), projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
-
+	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
+	orgID := activeOrganizationID(t, ctx)
+	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
+
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
+
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target))
+	offers := offeredAuthClients(t, ctx, ti.conn, target)
+	require.Len(t, offers, 1)
+	compatibility := testrepo.New(ti.conn)
+	require.NoError(t, compatibility.DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
+		RemoteSessionClientID: clientID, ProjectID: conv.ToNullUUID(projectID),
+	}))
+	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target), "compatibility parent removal does not revoke an explicit server offer")
+	require.Equal(t, offers, offeredAuthClients(t, ctx, ti.conn, target), "the exact typed offer survives reconciliation")
 }
 
 // A server an administrator configured apart from its issuer during
@@ -275,7 +281,11 @@ func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
 
 				require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
 
-				require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
+				wantProvider := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+				if enabled {
+					wantProvider = conv.ToNullUUID(providerID)
+				}
+				require.Equal(t, wantProvider, storedIssuer(t, ctx, ti.conn, projectID, shared.second))
 				// Disabling an explicit registration is not consent to route the
 				// issuer's different credentials to this server after rollback.
 				requireClientBound(t, ctx, ti, secondClient, shared.userIssuerID, false)
@@ -309,7 +319,7 @@ func TestAttachUserSessionIssuerOffersBesideTheServersOwnOfferUnderEnforcement(t
 	attachedProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-attached-provider", "", false, []string{"none"})
 	attachedClient := createServerIdentityClient(t, ctx, ti, "beside-offer-attached-client", attachedProvider, false)
 
-	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
+	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{attachedClient}, associatedClients(t, ctx, ti.conn, projectID, shared.second))

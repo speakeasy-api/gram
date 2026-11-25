@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -225,7 +227,17 @@ func TestBuildAuthorizationUrl_RotatesRejectedRegistration(t *testing.T) {
 	require.True(t, client.ClientSecretExpiresAt.Valid, "the issuer's new expiry is recorded")
 	require.False(t, client.LegacyCallbackUrl)
 
-	_, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, env.db, audit.ActionRemoteSessionClientUpdate, env.clientID.String())
+	require.NoError(t, err)
+	for _, snapshot := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
+		var view struct {
+			UserSessionIssuerIDs []string `json:"UserSessionIssuerIds"`
+		}
+		require.NoError(t, json.Unmarshal(snapshot, &view))
+		require.Equal(t, []string{env.session.UserSessionIssuerID.String()}, view.UserSessionIssuerIDs)
+	}
+
+	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
 		RemoteSessionClientID: env.clientID,
 	})

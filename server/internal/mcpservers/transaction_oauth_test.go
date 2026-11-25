@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -18,20 +20,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Choosing an issuer no other server or gateway uses configures the server's
-// sign-in, so the server offers the clients already bound there, with and
-// without upstream auth enforcement.
-func TestCreateMCPServerInTransaction_PublishesOAuthBeforeCommit(t *testing.T) {
+// Selecting a downstream issuer does not configure its registrations as upstream offers.
+func TestCreateMCPServerInTransaction_DoesNotInheritOAuthBeforeCommit(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
 		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
 			t.Parallel()
-			testCreatePublishesOAuthBeforeCommit(t, enforced)
+			testCreateDoesNotInheritOAuthBeforeCommit(t, enforced)
 		})
 	}
 }
 
-func testCreatePublishesOAuthBeforeCommit(t *testing.T, enforced bool) {
+func testCreateDoesNotInheritOAuthBeforeCommit(t *testing.T, enforced bool) {
 	t.Helper()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -44,7 +44,7 @@ func testCreatePublishesOAuthBeforeCommit(t *testing.T, enforced bool) {
 		require.NoError(t, err)
 	}
 	issuer := createOrganizationIssuer(t, ctx, ti, auth.ActiveOrganizationID)
-	remoteIssuer, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
+	seedRemoteRegistration(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID)
 	source := uuid.New()
 	fixtures := backfill.New(ti.conn)
 	require.NoError(t, fixtures.SeedRemoteMCPServerFixture(ctx, backfill.SeedRemoteMCPServerFixtureParams{ID: source, ProjectID: *auth.ProjectID, Url: "https://mcp.example.com/atomic-create"}))
@@ -56,22 +56,22 @@ func testCreatePublishesOAuthBeforeCommit(t *testing.T, enforced bool) {
 		RemoteMCPServerID:   uuid.NullUUID{UUID: source, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer, Valid: true}, server.RemoteSessionIssuerID)
+	require.Equal(t, uuid.NullUUID{UUID: uuid.MustParse(issuer), Valid: true}, server.UserSessionIssuerID)
+	require.False(t, server.RemoteSessionIssuerID.Valid, "an unoffered registration is not an upstream provider")
 	links, err := backfill.New(tx).ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{backfill.OAuthClientID(auth.ActiveOrganizationID, remoteClient, backfill.TypeRemoteSession)}, links, "the configured registration must have its stable typed OAuth link before commit")
+	require.Empty(t, links, "selecting a downstream issuer does not configure an upstream offer")
 	require.NoError(t, tx.Rollback(ctx))
+	_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID: server.ID, ProjectID: *auth.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 	links, err = fixtures.ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
 	require.Empty(t, links, "rollback must not publish typed OAuth state")
 }
 
-// A server created on a user session issuer another server already signs in
-// through gets that server's client only while the issuer's bindings are what
-// serves both. Under upstream auth enforcement a server offers what was
-// configured for it, and an issuer another server uses configures nothing for
-// the new one.
-func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement(t *testing.T) {
+func TestCreateMCPServerInTransaction_DoesNotInheritIssuerClient(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -112,12 +112,10 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 				return server.ID
 			}
 
-			// The first server is the issuer's only one when the client is
-			// bound, so the client is its own.
+			// The registration writer explicitly configures the first server.
 			first := create("Configured server", "https://mcp.example.com/configured")
-			_, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
+			_, remoteClient := seedRemoteRegistration(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID)
 			issuerIDs := []uuid.UUID{uuid.MustParse(issuer)}
-			require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, issuerIDs))
 			require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, issuerIDs, []uuid.UUID{remoteClient}))
 			typedClient := backfill.OAuthClientID(auth.ActiveOrganizationID, remoteClient, backfill.TypeRemoteSession)
 			links, err := fixtures.ListServerAuthClientsFixture(ctx, first)
@@ -128,26 +126,16 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, second)
 			require.NoError(t, err)
-			if tc.enforced {
-				require.Empty(t, links, "an enforced server offers a client nobody configured for it")
-			} else {
-				require.Equal(t, []uuid.UUID{typedClient}, links)
-			}
+			require.Empty(t, links, "the sibling's offer cannot stamp or qualify a new server")
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)
 			require.Equal(t, []uuid.UUID{typedClient}, links)
 
-			// Alone on the issuer, the second server is its bindings' only
-			// consumer. That proves nothing under enforcement either: nobody
-			// configured the first server's client for it.
+			// Becoming the issuer's sole consumer does not configure an offer.
 			require.NoError(t, ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: first.String()}))
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, second)
 			require.NoError(t, err)
-			if tc.enforced {
-				require.Empty(t, links, "an enforced server offers the client of a server deleted beside it")
-			} else {
-				require.Equal(t, []uuid.UUID{typedClient}, links)
-			}
+			require.Empty(t, links, "deleting a sibling does not give away its offers")
 		})
 	}
 }

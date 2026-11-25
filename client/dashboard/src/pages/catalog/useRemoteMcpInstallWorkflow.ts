@@ -57,7 +57,7 @@ import {
 } from "@/pages/security/server-guardrails/server-guardrail-policy";
 
 export const ISSUER_LOOKUP_FAILED_MESSAGE =
-  "Couldn't load your organization's user session issuers. Try again.";
+  "Couldn't load your organization's MCP sign-ins. Try again.";
 
 type InstallPhaseName =
   | "selectRemotes"

@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -178,26 +177,12 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		return repo.McpServer{}, fmt.Errorf("audit MCP server creation: %w", err)
 	}
 
-	// Capture configured OAuth associations and typed state before commit, not
-	// in a best-effort post-commit resync.
+	// Refresh the routing copy without treating a downstream issuer as an
+	// instruction to offer every registration historically bound to it.
 	if issuerID.Valid {
-		derive := repo.ResyncMCPServerRemoteSessionIssuersParams{
+		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, repo.ResyncMCPServerRemoteSessionIssuersParams{
 			UserSessionIssuerIds: []uuid.UUID{issuerID.UUID}, OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
-		}
-		// Gateway capture reads the column, so derive it before reconcile, and
-		// again after, because reconcile changes the associations it derives from.
-		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
-			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
-		}
-		if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}); err != nil {
-			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
-		}
-		// Choosing the issuer configures the server's sign-in, so a server that
-		// is the issuer's only consumer offers the clients bound there.
-		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, input.OrganizationID, input.ProjectID, []uuid.UUID{issuerID.UUID}, nil); err != nil {
-			return repo.McpServer{}, fmt.Errorf("capture server upstream clients: %w", err)
-		}
-		if _, err := repo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, derive); err != nil {
+		}); err != nil {
 			return repo.McpServer{}, fmt.Errorf("derive server upstream issuer: %w", err)
 		}
 		server, err = repo.New(tx).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: server.ID, ProjectID: input.ProjectID})

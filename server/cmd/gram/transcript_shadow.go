@@ -36,30 +36,44 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// transcriptShadow is the shadow store a process configured, and the projects
+// that use it. Store is nil when no project captures shadows.
+type transcriptShadow struct {
+	// Store seals and opens shadow copies.
+	Store *transcriptstore.Store
+
+	// ProjectIDs are the projects that capture shadows. Their chat reads open
+	// the shadows instead of plaintext, so a read never meets a shadow that
+	// capture stopped keeping current.
+	ProjectIDs []uuid.UUID
+}
+
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
-// writes. Plaintext remains authoritative; startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) error {
+// writes and reads. Plaintext remains authoritative for every other project;
+// startup never backfills old messages.
+func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
+	none := transcriptShadow{Store: nil, ProjectIDs: nil}
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
 		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
-			return fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
+			return none, fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
 		}
-		return nil
+		return none, nil
 	}
 	projectIDs, err := parseTranscriptShadowProjectIDs(values)
 	if err != nil {
-		return err
+		return none, err
 	}
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
-		return fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
+		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
 	if db == nil || writer == nil {
-		return fmt.Errorf("chat transcript shadow requires database and writer")
+		return none, fmt.Errorf("chat transcript shadow requires database and writer")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
-		return err
+		return none, err
 	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
@@ -68,10 +82,10 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	for _, projectID := range projectIDs {
 		org, err := queries.GetProjectOrganizationID(ctx, projectID)
 		if err != nil {
-			return fmt.Errorf("resolve chat transcript shadow project: %w", err)
+			return none, fmt.Errorf("resolve chat transcript shadow project: %w", err)
 		}
 		if strings.TrimSpace(org) == "" {
-			return fmt.Errorf("chat transcript shadow project has no organization")
+			return none, fmt.Errorf("chat transcript shadow project has no organization")
 		}
 		if _, ok := seen[org]; !ok {
 			organizations = append(organizations, org)
@@ -81,19 +95,21 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	// Build the store first: it can fail, and provisioning mints keys.
 	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
 	if err != nil {
-		return fmt.Errorf("create chat transcript shadow store: %w", err)
+		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
 	for _, org := range organizations {
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
-			return fmt.Errorf("provision chat transcript shadow encryption: %w", err)
+			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
 	writer.WithTranscriptShadow(store, projectIDs...)
-	return nil
+	return transcriptShadow{Store: store, ProjectIDs: projectIDs}, nil
 }
 
 // checkTranscriptShadowSchema checks only the sidecar contract used by the store.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
+// The table is looked up through the connection's search_path, the same way
+// the store's queries resolve it: deployed databases keep it outside public.
 // Every omitted NOT NULL column must be supplied by the database. All inferred
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
 func checkTranscriptShadowSchema(ctx context.Context, db interface {
@@ -103,7 +119,7 @@ func checkTranscriptShadowSchema(ctx context.Context, db interface {
 	err := db.QueryRow(ctx, `
 WITH sidecar AS (
  SELECT oid FROM pg_catalog.pg_class
- WHERE oid = pg_catalog.to_regclass('public.chat_message_transcripts')
+ WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
  AND relkind IN ('r', 'p')
 ), required(name, type_oid) AS (
  VALUES ('message_id', 'uuid'::regtype),

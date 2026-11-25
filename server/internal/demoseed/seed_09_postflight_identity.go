@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
@@ -144,8 +143,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the inert Jamf Pro self client, found %d"},
 		// Nobody connects a self client, and no MCP server uses this one.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDJamfClientIssuerBindings(ctx, jamfClient)
-		}, 0, "demo seed postflight: Jamf Pro self client must not be bound to a user session issuer, found %d bindings"},
+			return s.q.PostflightIDJamfClientOffers(ctx, repo.PostflightIDJamfClientOffersParams{JamfClient: jamfClient, OrgID: org, ProjectID: proj})
+		}, 0, "demo seed postflight: Jamf Pro self client must not be offered on an MCP server, found %d offers"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDJamfClientSessions(ctx, jamfClient)
 		}, 0, "demo seed postflight: Jamf Pro self client must have no remote sessions, found %d"},
@@ -196,25 +195,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 3, "demo seed postflight: expected 3 Remote MCP identity clients (Example OAuth's, Linear's and Notion's), found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 4, "demo seed postflight: expected 4 Remote MCP User Identity bindings, found %d"},
-		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
-		// derive: every live client bound to the Example OAuth server's user session issuer names
-		// one remote issuer, and it is the stamped one. The query returns no
-		// row when its HAVING fails (the SQL's IF NOT FOUND), so a row counts
-		// as 1 and no row as 0.
+		// The Example OAuth server has one live personal offer from its stamped provider.
 		{func(ctx context.Context) (int64, error) {
-			_, err := s.q.PostflightIDLinearIssuerStamp(ctx, repo.PostflightIDLinearIssuerStampParams{
-				LinearIssuer:       s.det("issuer-linear"),
+			return s.q.PostflightIDLinearPersonalOffer(ctx, repo.PostflightIDLinearPersonalOfferParams{
+				LinearServer:       s.det("mcpserver-linear"),
+				ProjectID:          proj,
+				OrgID:              org,
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				return 0, nil
-			case err != nil:
-				return 0, fmt.Errorf("linear issuer stamp: %w", err)
-			}
-			return 1, nil
-		}, 1, "demo seed postflight: the Example OAuth server user session issuer must bind clients of exactly one remote issuer, its stamped provider"},
+		}, 1, "demo seed postflight: expected one personal typed offer from the Example OAuth server's provider, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDLinearStampedServers(ctx, repo.PostflightIDLinearStampedServersParams{
 				ProjectID:          proj,
@@ -226,9 +215,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
 			})
 		}, 1, "demo seed postflight: expected the Example OAuth server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
-		// Example OAuth's one OAuth client, Acme Wiki's own client, and
-		// Linear's and Notion's.
-		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
+		// The Example OAuth, Linear, and Notion OAuth registrations.
+		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway
 		// sign-ins on both members, and the organization sign-ins' no-auth
@@ -243,6 +231,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				LinearServerID:     s.det("mcpserver-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
 		}, 41, "demo seed postflight: expected exactly 41 matching upstream client choices, found %d"},
@@ -258,8 +247,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended Example OAuth server client or Example Shared Credential server no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Example OAuth server client or Example Shared Credential server client"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,
@@ -361,6 +351,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// unreviewed IS the absence of one — so the table stores just the two
 		// decided states, and both have to survive the reseed with their full
 		// complement of rows.
+		{byOrg(s.q.PostflightIDLinkedAITools), 5, "demo seed postflight: %d AI tool decisions linked to their catalog product, expected 5"},
 		{byOrg(s.q.PostflightIDApprovedAITools), 3, "demo seed postflight: %d approved AI tools, expected 3"},
 		{byOrg(s.q.PostflightIDBlockedAITools), 2, "demo seed postflight: %d blocked AI tools, expected 2"},
 		// Anything else in the column would be a row the seed no longer means

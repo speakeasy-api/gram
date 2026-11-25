@@ -70,6 +70,9 @@ func TestConsentPost_RefusesWhenNoConnectionCanServe(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx := seedTwoClientConsentEndpoint(t, "no-serving-"+uuid.NewString()[:8])
+			for _, id := range []uuid.UUID{fx.clientA, fx.clientB} {
+				seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
+			}
 			if tc.expire {
 				expireConsentGrant(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, consentChainedUpstream)
 			}
@@ -107,6 +110,9 @@ func TestConsentPost_ApprovesWhenAnotherConnectionStillWorks(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedTwoClientConsentEndpoint(t, "expired-one")
+	for _, id := range []uuid.UUID{fx.clientA, fx.clientB} {
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
+	}
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, consentChainedUpstream)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
 
@@ -139,10 +145,13 @@ func TestConsentPost_TypedChoiceRefusesAnExpiredPersonalClient(t *testing.T) {
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, registration, fx.subject, consentChainedUpstream)
 
-	_, err = postApproveResult(t, ctx, fx)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+	w := postApprove(t, ctx, fx)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	location, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Empty(t, location.Query().Get("code"))
+	require.Equal(t, "/mcp/"+fx.endpoint.Slug+"/connect", location.Path)
+	require.Equal(t, fx.stateID, location.Query().Get("state"))
 }
 
 // A shared credential needs no connection, so an expired service card does not block it.
@@ -500,7 +509,9 @@ func TestServeConsentAction_VerifyNeverConnectedAsksToConnect(t *testing.T) {
 	projectID, orgID := consentTestTenant(t, ctx)
 	client := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "verify-never-client", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, client)
-	createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "verify-never-other", "https://never.example.com/mcp", conv.ToNullUUID(issuer), 1)
+	member := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "verify-never-other", "https://never.example.com/mcp", conv.ToNullUUID(issuer), 1)
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, client, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, orgID, fx.subject.ID, member.mcpServerID.String())
 
 	fx.server = "verify-never-other"
 	requireVerifyNotice(t, fx, client, verifyNotConnectedCard)
@@ -527,11 +538,14 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			projectID, orgID := consentTestTenant(t, ctx)
 			linked, shared := fx.clientID, fx.endpoint.UserSessionIssuerID
 			if !tc.sibling {
-				require.NoError(t, remotesessions_repo.New(fx.ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, remotesessions_repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: linked, ProjectID: conv.ToNullUUID(projectID)}))
+				require.NoError(t, testrepo.New(fx.ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{RemoteSessionClientID: linked, ProjectID: conv.ToNullUUID(projectID)}))
 			}
 
 			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
 			fixtures := authclientfixtures.New(fx.ti.conn)
+			// The shared fixture offers linked by default. Remove that offer
+			// without removing its token or the sibling case's issuer binding.
+			require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, fx.endpoint.McpServerID.UUID))
 			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
 			require.NoError(t, err)
 			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
@@ -547,6 +561,16 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			requireValidated(t, fx)
 			requireProbe(t, fx.member.drain(), "typed-token", true, true)
 			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+
+			if tc.sibling {
+				// The stale issuer binding and saved grant cannot make the sibling connectable.
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {linked.String()}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				refused := httptest.NewRecorder()
+				require.ErrorContains(t, fx.ti.service.ServeConsentAction(refused, req, fx.endpoint), "unknown remote session client for this MCP server")
+				require.Empty(t, refused.Header().Get("Location"))
+			}
 
 			form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"disconnect"}, "client_id": {registration.String()}}
 			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))

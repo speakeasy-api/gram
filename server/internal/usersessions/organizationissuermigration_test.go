@@ -536,7 +536,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
 
-	subject := urn.NewUserSubject("remote-migrate-user")
+	subject := urn.NewUserSubject(authCtx.UserID)
 	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   sourceID,
@@ -560,7 +560,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		RemoteSessionClientID: remoteClient.ID,
 		RemoteSessionID:       remoteSession.ID,
 		GrantGeneration:       remoteSession.GrantGeneration,
-		AttachedBySubjectID:   "remote-migrate-user",
+		AttachedBySubjectID:   subject.String(),
 	})
 	require.NoError(t, err)
 	emaBindingID, err := fixtures.InsertRemoteSessionEMABindingFixture(ctx, testrepo.InsertRemoteSessionEMABindingFixtureParams{
@@ -604,7 +604,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		RemoteSessionClientID: remoteClient.ID,
 		RemoteSessionID:       staleSession.ID,
 		GrantGeneration:       staleSession.GrantGeneration,
-		AttachedBySubjectID:   "remote-migrate-stale-user",
+		AttachedBySubjectID:   staleSubject.String(),
 	})
 	require.NoError(t, err)
 	disconnected, err := remoteRepo.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
@@ -617,9 +617,20 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.RemoteSessionsMigrated)
-	_, err = fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "a disconnected connection's attachment leaves with the source")
-
+	staleIssuer, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
+	require.NoError(t, err)
+	require.Equal(t, sourceID, staleIssuer, "retired issuer cleanup does not delete compatibility parents")
+	_, err = remoteRepo.GetPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.GetPrincipalRemoteSessionBindingParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "remaining source attachment must be revoked")
+	sourcePairs, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, sourcePairs, "source compatibility pair stays intact")
 	remoteSessionAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: remoteSession.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, remoteSessionAfter.UserSessionIssuerID)
@@ -632,23 +643,15 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Equal(t, int64(2), emaBinding.Generation)
 	linkCount, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: targetID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), linkCount)
+	require.Equal(t, int64(1), linkCount, "the surviving issuer must still carry the registration for legacy readers")
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
-	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "two distinct target upstream issuers must fail closed")
+	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "issuer-client links do not determine the stamp")
 
-	// The server was its source issuer's only consumer, so consolidation
-	// pinned the client it used. As the target's only consumer it also takes
-	// the client the target bound, which the preview reports before it does.
-	require.Len(t, preflight.ServerImpacts, 1)
-	impact := preflight.ServerImpacts[0]
-	require.Equal(t, mcpServerID.String(), impact.McpServerID)
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), impact.ImpactSeverity)
-	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"changes_provider", "pinned"}, impact.Reasons)
-	require.Equal(t, []string{remoteClient.ID.String()}, impact.PinnedClientIds)
-	require.Len(t, impact.ClientsAfter, 2)
-	require.Len(t, result.ServerImpacts, 1, "the migrate result reports the same change")
+	require.Empty(t, preflight.ServerImpacts)
+	require.Empty(t, result.ServerImpacts)
+
 }
 
 // seedMigrationRemoteClient seeds an upstream client bound to each issuer.
@@ -763,13 +766,25 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	gatewayID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-gateway")
 	clientID := seedMigrationRemoteClient(t, ctx, ti, "cross-issuer-migrate-upstream", sourceID, gatewayID)
 	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-user", gatewayID, clientID, sourceID)
+	// A second agent uses the same registration and same login. The fixture's
+	// reauthorization advances the grant on that login but preserves its ID.
+	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
+	require.Equal(t, login, secondLogin)
 
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}
+	parents, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents)
 	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
 
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[sourceID], targetID, login)
-	remoteRepo := remotesessionsrepo.New(ti.conn)
+	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
+	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents)
 	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")
@@ -800,11 +815,13 @@ func TestOrganizationUserSessionIssuerMigrateKeepsOneAttachmentForSameLogin(t *t
 	require.NoError(t, err)
 
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[targetID], targetID, login)
-	_, err = testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingIDs[sourceID])
-	require.ErrorIs(t, err, pgx.ErrNoRows, "the source's duplicate leaves with the source")
+	sourceIssuer, err := testrepo.New(ti.conn).GetPrincipalRemoteSessionBindingIssuerFixture(ctx, bindingIDs[sourceID])
+	require.NoError(t, err)
+	require.Equal(t, sourceID, sourceIssuer, "the duplicate remains on the retired issuer, never replacing the target attachment")
 	active, err := testrepo.New(ti.conn).CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, login)
 	require.NoError(t, err)
-	require.Equal(t, int32(1), active)
+	require.EqualValues(t, 1, active, "only the target attachment remains active")
+
 }
 
 // seedMigrationAttachments makes one person's login through loginIssuerID and
@@ -814,7 +831,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
-		SubjectUrn:            urn.NewUserSubject(person),
+		SubjectUrn:            urn.NewUserSubject(authCtx.UserID),
 		UserSessionIssuerID:   loginIssuerID,
 		RemoteSessionClientID: clientID,
 		AccessTokenEncrypted:  "test-ciphertext",
@@ -837,7 +854,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 			RemoteSessionClientID: clientID,
 			RemoteSessionID:       login.ID,
 			GrantGeneration:       login.GrantGeneration,
-			AttachedBySubjectID:   person,
+			AttachedBySubjectID:   login.SubjectUrn.String(),
 		})
 		require.NoError(t, err)
 	}

@@ -317,7 +317,7 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 			require.Equal(t, map[string]any{"readOnlyHint": true}, tool.Annotations, tool.Name)
 		}
 	}
-	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
+	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "execute_read_only_tool", "connection_status"}, names)
 
 	// The contract consults neither the endpoint nor the meta server, so every
 	// caller receives these same tools.

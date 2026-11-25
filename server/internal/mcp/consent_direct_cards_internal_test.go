@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -26,7 +27,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		clientType   string
 		state        string
 		enforced     bool
-		shadow       bool
 		hosted       bool
 		issuerLinked bool
 		wantCard     bool
@@ -44,16 +44,14 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		{name: "disabled excluded", clientType: authClientTypeRemoteSession, state: "disabled", enforced: true, issuerLinked: true},
 		{name: "deleted excluded", clientType: authClientTypeRemoteSession, state: "deleted", enforced: true, issuerLinked: true},
 		{name: "unlinked excluded", clientType: authClientTypeRemoteSession, state: "unlinked", enforced: true, issuerLinked: true},
-		{name: "off preserves legacy", issuerLinked: true, wantCard: true},
-		{name: "shadow preserves legacy", shadow: true, issuerLinked: true, wantCard: true},
-		{name: "hosted preserves legacy", hosted: true, enforced: true, issuerLinked: true, wantCard: true},
+		{name: "off ignores legacy attachment", issuerLinked: true},
+		{name: "hosted assignment without issuer link", hosted: true, enforced: true, wantCard: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
 			ctx := t.Context()
 			flags := new(feature.InMemory)
-			flags.SetFlag(feature.FlagAuthClientResolverShadow, f.orgID, tc.shadow)
 			f.service.features = flags
 			f.service.authEnforcement = authenforcement.NewGate(pool)
 			if tc.enforced {
@@ -85,7 +83,14 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			}
 			endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: signIn, McpServerID: validUUID(f.serverID)}
 			if tc.hosted {
-				endpoint.ToolsetID = validUUID(uuid.New())
+				hostedID := f.hosted()
+				require.NoError(t, f.q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: hostedID, UserSessionIssuerID: validUUID(signIn)}))
+				hosted, err := mcpserversrepo.New(pool).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: hostedID, ProjectID: f.projectID})
+				require.NoError(t, err)
+				_, err = f.q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: hosted.ID, RemoteSessionClientID: f.registration})
+				require.NoError(t, err)
+				endpoint.McpServerID = validUUID(hosted.ID)
+				endpoint.ToolsetID = hosted.ToolsetID
 			}
 			state := AuthnChallengeState{}
 			if tc.reconnect != "" {
@@ -112,7 +117,7 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 	}
 }
 
-func TestDirectConsentConnectionCardsModeErrorFailsClosed(t *testing.T) {
+func TestDirectConsentConnectionCardsOfferReadErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_consent_mode_error")
 	require.NoError(t, err)
@@ -122,7 +127,7 @@ func TestDirectConsentConnectionCardsModeErrorFailsClosed(t *testing.T) {
 	cancel()
 	// No challenge manager: mode lookup must fail before reading legacy clients.
 	clients, typed, err := f.service.listEndpointClientsAndRegistrations(ctx, &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID)}, AuthnChallengeState{})
-	require.ErrorContains(t, err, "read upstream auth enforcement")
+	require.ErrorContains(t, err, "list configured auth offers")
 	require.Empty(t, clients)
 	require.Empty(t, typed)
 }

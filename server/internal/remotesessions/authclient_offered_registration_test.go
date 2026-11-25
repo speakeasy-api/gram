@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -155,8 +156,7 @@ func TestClientMcpServers_IncludeOfferingServersWithoutASignInLink(t *testing.T)
 	require.Len(t, servers.Items, 1)
 	require.Equal(t, serverID.String(), servers.Items[0].ID)
 
-	// Deleting the client also detaches it from the servers behind its links,
-	// so they stay in the list beside the servers that offer it, each once.
+	// A stale sign-in link is neither a typed offer nor a server association.
 	otherSignIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offered-impact-linked")
 	linkedServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, otherSignIn, "linked-impact", "https://linked-impact.example.com/mcp")
 	for _, id := range []uuid.UUID{signIn, otherSignIn} {
@@ -165,7 +165,7 @@ func TestClientMcpServers_IncludeOfferingServersWithoutASignInLink(t *testing.T)
 
 	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"offered-impact", "linked-impact"}, preflight.McpServerNames)
+	require.Equal(t, []string{"offered-impact"}, preflight.McpServerNames)
 
 	servers, err = ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
 	require.NoError(t, err)
@@ -173,7 +173,27 @@ func TestClientMcpServers_IncludeOfferingServersWithoutASignInLink(t *testing.T)
 	for _, item := range servers.Items {
 		ids = append(ids, item.ID)
 	}
-	require.ElementsMatch(t, []string{serverID.String(), linkedServer.String()}, ids)
+	require.Equal(t, []string{serverID.String()}, ids)
+
+	// A concrete server association remains delete impact even if it has not
+	// produced a live offer; it must not appear in the offered-server list.
+	associate(t, ctx, ti.conn, organizationID, projectID, linkedServer, registration)
+	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"offered-impact", "linked-impact"}, preflight.McpServerNames)
+	servers, err = ti.service.ListClientMcpServers(ctx, &orgclientsgen.ListClientMcpServersPayload{ClientID: registration.String()})
+	require.NoError(t, err)
+	require.Len(t, servers.Items, 1)
+	require.Equal(t, serverID.String(), servers.Items[0].ID)
+
+	inventory, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{IssuerID: issuerID.String()})
+	require.NoError(t, err)
+	require.Len(t, inventory.Items, 1)
+	require.Equal(t, 1, inventory.Items[0].McpServerCount)
+	issuerPreflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orgissuersgen.GetIssuerDeletePreflightPayload{ID: issuerID.String()})
+	require.NoError(t, err)
+	require.Equal(t, 1, issuerPreflight.ClientCount)
+	require.ElementsMatch(t, []string{"offered-impact", "linked-impact"}, issuerPreflight.McpServerNames)
 }
 
 // A tunneled server's identifier decides a login's resource but is not a URL an
@@ -223,10 +243,9 @@ func TestClientDeletePreflight_NamesAnUnnamedTunnelBySlug(t *testing.T) {
 	require.Equal(t, []string{"unnamed-tunnel"}, preflight.McpServerNames)
 }
 
-// A sign-in can front servers with different upstreams. Where typed auth
-// clients are enforced, the server that offers the registration decides its
-// resource, not every server behind the sign-in it is linked to.
-func TestResourceForClientAtUpstream_OfferDecidesOverSignInLinks(t *testing.T) {
+// A compatibility parent alone supplies no resource. With enforcement, a typed
+// offer takes precedence over an association on another server sharing the sign-in.
+func TestResourceForClientAtUpstream_OfferDecidesOverAssociation(t *testing.T) {
 	t.Parallel()
 	const offering, sibling = "https://offering.example.com/mcp", "https://sibling.example.com/mcp"
 	ctx, ti := newTestService(t)
@@ -237,19 +256,20 @@ func TestResourceForClientAtUpstream_OfferDecidesOverSignInLinks(t *testing.T) {
 
 	signIn := createUserSessionIssuer(t, ctx, ti.conn, "usi-offer-decides")
 	offeringServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-a", offering)
-	seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
+	siblingServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "offer-decides-b", sibling)
 	issuerID := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(organizationID), "offer-decides-issuer", "https://issuer.example.com/offer-decides")
 	registration := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, projectID, issuerID, "offer-decides-cid")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registration,
-		UserSessionIssuerID:   signIn,
-	}))
-	offerRegistration(t, ctx, ti.conn, organizationID, projectID, offeringServer, registration)
+	ensureAttachmentParent(t, ctx, ti.conn, registration, signIn)
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
-
 	got, err := mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
 	require.NoError(t, err)
-	require.Equal(t, sibling, got, "without enforcement the sign-in's servers decide, and the registration claims the upstream it is connected through")
+	require.Empty(t, got, "a compatibility parent does not make the registration serve a sibling")
+
+	associateClient(t, ctx, ti.conn, organizationID, projectID, siblingServer, registration)
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, offeringServer, registration)
+	got, err = mgr.ResourceForClientAtUpstream(ctx, organizationID, registration, nil, sibling)
+	require.NoError(t, err)
+	require.Equal(t, sibling, got, "without enforcement the explicit association supplies the resource")
 
 	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
 
@@ -266,7 +286,7 @@ func TestDisconnectAuthClientRemoteSession_RevokesUpstreamWithoutASignInLink(t *
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "offered-disconnect", upstream.URL+"/revoke", "s3cret", true)
-	require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
+	require.NoError(t, testrepo.New(ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
 		RemoteSessionClientID: fx.clientID,
 		ProjectID:             conv.ToNullUUID(fx.projectID),
 	}))
@@ -377,11 +397,8 @@ func TestAuthClientRemoteSessionActions_RefuseARetiredIssuer(t *testing.T) {
 	require.False(t, session.AutoRefresh)
 }
 
-// Without enforcement the administrator's client lists are the servers behind
-// its links, whichever organization owns them and without a slug fallback.
-// Enforcement scopes them to the organization and adds the servers that offer
-// the client.
-func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
+// Inventory always uses typed offers and never follows foreign sign-in links.
+func TestClientMcpServers_AlwaysUsesTenantTypedOffers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -397,7 +414,7 @@ func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
 	otherProject, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: uuid.New(), Name: "Other", Slug: "mode-list-other-project", OrganizationID: otherOrganization})
 	require.NoError(t, err)
 	otherSignIn := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "mode-list-other-usi")
-	otherServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, otherProject, otherSignIn, "mode-list-other-server", "https://mode-list-other.example.com/mcp")
+	seedRemoteMcpServerForLogin(t, ctx, ti.conn, otherProject, otherSignIn, "mode-list-other-server", "https://mode-list-other.example.com/mcp")
 
 	signIn := createUserSessionIssuer(t, ctx, ti.conn, "mode-list-usi")
 	fixtures := authclientbackfill.New(ti.conn)
@@ -405,7 +422,7 @@ func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
 	require.NoError(t, fixtures.SeedTunneledSourceFixture(ctx, authclientbackfill.SeedTunneledSourceFixtureParams{ID: tunnelID, ProjectID: projectID, Name: "mode-list-tunnel", KeyHash: "hash-mode-list", ResourceIdentifier: conv.ToPGText("https://mode-list.internal.example.com/mcp")}))
 	require.NoError(t, fixtures.SeedTunneledMCPServerFixture(ctx, authclientbackfill.SeedTunneledMCPServerFixtureParams{ID: unnamedServer, ProjectID: projectID, Slug: conv.ToPGText("mode-list-unnamed"), TunneledMcpServerID: conv.ToNullUUID(tunnelID)}))
 	offerRegistration(t, ctx, ti.conn, organizationID, projectID, unnamedServer, registration)
-	linkedServer := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "mode-list-linked", "https://mode-list-linked.example.com/mcp")
+	seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "mode-list-linked", "https://mode-list-linked.example.com/mcp")
 	for _, id := range []uuid.UUID{signIn, otherSignIn} {
 		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: id}))
 	}
@@ -422,15 +439,15 @@ func TestClientMcpServers_ModeDecidesTheList(t *testing.T) {
 
 	preflight, err := ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"mode-list-linked", "mode-list-other-server"}, preflight.McpServerNames)
-	require.ElementsMatch(t, []string{linkedServer.String(), otherServer.String()}, listed())
+	require.Equal(t, []string{"mode-list-unnamed"}, preflight.McpServerNames)
+	require.Equal(t, []string{unnamedServer.String()}, listed())
 
 	enforceUpstreamAuth(t, ctx, ti.conn, organizationID)
 
 	preflight, err = ti.service.GetClientDeletePreflight(ctx, &orgclientsgen.GetClientDeletePreflightPayload{ID: registration.String()})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"mode-list-linked", "mode-list-unnamed"}, preflight.McpServerNames)
-	require.ElementsMatch(t, []string{linkedServer.String(), unnamedServer.String()}, listed())
+	require.Equal(t, []string{"mode-list-unnamed"}, preflight.McpServerNames)
+	require.Equal(t, []string{unnamedServer.String()}, listed())
 }
 
 // A platform-global client belongs to no organization, so neither client list

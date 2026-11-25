@@ -22,9 +22,12 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -461,4 +464,27 @@ func TestWorkloadAssertionGrant_AdvertisedFromTheEndpointAlone(t *testing.T) {
 	grants, ok := fetchASMetadata(t, f.ti, slug)["grant_types_supported"].([]any)
 	require.True(t, ok)
 	require.ElementsMatch(t, []any{"authorization_code", "refresh_token", workloadGrantJWTBearer}, grants)
+}
+
+func TestWorkloadAssertionGrant_RecordsTypedUpstreamChoice(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	slug := "workload-typed-choice"
+	issuerID := f.fx.target.UserSessionIssuerID
+	projectID := f.fx.target.ProjectID
+	serverID := attachConsentRemoteMcpServer(t, f.ctx, f.ti.conn, projectID, issuerID, slug, "https://mcp.example.test/stream")
+	_, err := mcpendpointsrepo.New(f.ti.conn).CreateMCPEndpoint(f.ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug})
+	require.NoError(t, err)
+	seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, f.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), serverID)
+	clientID := seedStaticIssuanceOffer(t, f.ctx, f.ti, f.fx.orgID, projectID, serverID)
+	issuer, _ := fetchAdvertisedIssuer(t, f.ctx, f.ti, slug)
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamAssertion: {f.assertion(t, issuer)},
+		oauthwire.ParamResource:  {strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/" + slug},
+		"upstream_auth_client":   {serverID.String() + ":" + clientID.String()},
+	}
+	w := postForm(t, f.ti, slug, "token", form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	requireIssuedTypedChoice(t, f.ctx, f.ti, issuerID, serverID, clientID, w.Body.Bytes())
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 var (
@@ -28,13 +29,13 @@ const shadowAIFeature = "shadow_ai"
 // shadowAIDetectionReader is the access service's trusted-caller seam for the
 // Shadow AI inventory.
 type shadowAIDetectionReader interface {
-	ReadAIDetections(context.Context, access.AIDetectionsReadInput) (*accessgen.ListAIDetectionsResult, error)
+	ReadAIDetections(context.Context, *aivendors.Snapshot, access.AIDetectionsReadInput) (*accessgen.ListAIDetectionsResult, error)
 }
 
 // shadowAILibraryReader loads the organization's served scan-target library:
 // Speakeasy's built-ins overlaid with whatever the organization changed.
 type shadowAILibraryReader interface {
-	LoadLibrary(context.Context, string) (*aitargets.OrganizationList, error)
+	LoadLibrary(context.Context, *aivendors.Snapshot, string) (*aitargets.OrganizationList, error)
 }
 
 // PostgresShadowAILibrary reads the library from the agent tables, where
@@ -47,11 +48,11 @@ func NewPostgresShadowAILibrary(queries *agentrepo.Queries) *PostgresShadowAILib
 	return &PostgresShadowAILibrary{queries: queries}
 }
 
-func (l *PostgresShadowAILibrary) LoadLibrary(ctx context.Context, organizationID string) (*aitargets.OrganizationList, error) {
+func (l *PostgresShadowAILibrary) LoadLibrary(ctx context.Context, catalog *aivendors.Snapshot, organizationID string) (*aitargets.OrganizationList, error) {
 	if l == nil || l.queries == nil {
 		return nil, ErrShadowAIUnavailable
 	}
-	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("load ai scan library: %w", err)
 	}
@@ -117,7 +118,7 @@ type ListShadowAIInventoryOutput struct {
 	Tools []ShadowAIToolSummary `json:"tools"`
 }
 
-func (s *ShadowAIService) ListInventory(ctx context.Context, principal Principal, input ListShadowAIInventoryInput) (ListShadowAIInventoryOutput, error) {
+func (s *ShadowAIService) ListInventory(ctx context.Context, catalog *aivendors.Snapshot, principal Principal, input ListShadowAIInventoryInput) (ListShadowAIInventoryOutput, error) {
 	if err := s.admit(ctx, principal); err != nil {
 		return ListShadowAIInventoryOutput{}, err
 	}
@@ -129,7 +130,7 @@ func (s *ShadowAIService) ListInventory(ctx context.Context, principal Principal
 	if category != "" && !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
 		return ListShadowAIInventoryOutput{}, ErrShadowAIInvalid
 	}
-	result, err := s.detections.ReadAIDetections(ctx, access.AIDetectionsReadInput{
+	result, err := s.detections.ReadAIDetections(ctx, catalog, access.AIDetectionsReadInput{
 		OrganizationID: principal.OrganizationID,
 		Category:       category,
 	})
@@ -193,7 +194,7 @@ type ListAIScanLibraryOutput struct {
 	Targets        []AIScanTargetSummary `json:"targets"`
 }
 
-func (s *ShadowAIService) ListLibrary(ctx context.Context, principal Principal, input ListAIScanLibraryInput) (ListAIScanLibraryOutput, error) {
+func (s *ShadowAIService) ListLibrary(ctx context.Context, catalog *aivendors.Snapshot, principal Principal, input ListAIScanLibraryInput) (ListAIScanLibraryOutput, error) {
 	if err := s.admit(ctx, principal); err != nil {
 		return ListAIScanLibraryOutput{}, err
 	}
@@ -201,7 +202,7 @@ func (s *ShadowAIService) ListLibrary(ctx context.Context, principal Principal, 
 	if category != "" && !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
 		return ListAIScanLibraryOutput{}, ErrShadowAIInvalid
 	}
-	list, err := s.library.LoadLibrary(ctx, principal.OrganizationID)
+	list, err := s.library.LoadLibrary(ctx, catalog, principal.OrganizationID)
 	if err != nil {
 		return ListAIScanLibraryOutput{}, fmt.Errorf("read ai scan library: %w", err)
 	}

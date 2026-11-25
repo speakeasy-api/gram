@@ -13,6 +13,7 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -42,6 +43,18 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 					created, err := ti.service.CreateRemoteSessionClient(ctx, payload)
 					require.NoError(t, err)
 					clientID = created.ID
+					if operation == "detach" {
+						// The fixture-only detach path needs an actual parent to remove.
+						require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+							RemoteSessionClientID: uuid.MustParse(clientID), UserSessionIssuerID: userIssuerID,
+						}))
+					}
+				}
+				offersBefore := offeredAuthClients(t, ctx, ti.conn, serverID)
+				if operation == "detach" {
+					require.Len(t, offersBefore, 1)
+				} else {
+					require.Empty(t, offersBefore)
 				}
 				var err error
 				blocker := testenv.BeginTx(t, ctx, ti.conn)
@@ -64,9 +77,9 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 					case "cimd":
 						_, err = ti.service.CreateCimd(ctx, &clientsgen.CreateCimdPayload{RemoteSessionIssuerID: issuerID.String(), UserSessionIssuerIds: []string{userIssuerID.String()}})
 					case "attach":
-						_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
+						_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
 					case "detach":
-						_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
+						_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: clientID, UserSessionIssuerID: userIssuerID.String()})
 					}
 					done <- err
 				}()
@@ -94,7 +107,8 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 				if operation == "detach" {
 					expectedBindings = 1
 				}
-				require.Equal(t, expectedBindings, bindings, "binding mutation must follow writer scope acquisition")
+				require.Equal(t, expectedBindings, bindings, "compatibility parent mutation must follow writer scope acquisition")
+				require.Equal(t, offersBefore, offeredAuthClients(t, ctx, ti.conn, serverID), "typed offer mutation must follow writer scope acquisition")
 				err = repo.New(blocker).LockingFixtureLockUserIssuer(ctx, repo.LockingFixtureLockUserIssuerParams{UserIssuerID: userIssuerID, ProjectID: projectID})
 				require.NoError(t, err, "issuer lock must follow the complete writer scope")
 				if clientID != "" {
@@ -107,6 +121,11 @@ func TestClientBindingWriterScopeBeforeIssuerLocks(t *testing.T) {
 					require.NoError(t, err)
 				case <-ctx.Done():
 					t.Fatal(ctx.Err())
+				}
+				require.Len(t, offeredAuthClients(t, ctx, ti.conn, serverID), 1)
+				if operation == "detach" {
+					require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID))
+					require.Equal(t, offersBefore, offeredAuthClients(t, ctx, ti.conn, serverID), "unlink only removes the parent")
 				}
 			})
 		}

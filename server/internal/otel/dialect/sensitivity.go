@@ -37,6 +37,13 @@ var sensitiveDataExactKeys = map[string]struct{}{
 	"speakeasy.agent.text":             {},
 	"speakeasy.agent.user_email":       {},
 	"speakeasy.agent.external_user_id": {},
+
+	// Exported MCP server feedback carries the agent's own words outside the
+	// record body, and names the person who was signed in. The mcpfeedback
+	// package pins these spellings to the keys it exports in a test.
+	"speakeasy.mcp_feedback.workaround": {},
+	"speakeasy.mcp_feedback.intention":  {},
+	"speakeasy.mcp_feedback.user_id":    {},
 }
 
 var sensitiveDataPrefixes = [...]string{

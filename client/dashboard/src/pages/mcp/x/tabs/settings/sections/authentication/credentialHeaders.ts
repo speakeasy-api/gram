@@ -1,6 +1,13 @@
-import { DENIED_PASS_THROUGH_SOURCES } from "@/lib/remote-identity/drafts/headerDrafts";
 import type { AuthClientHeader } from "@gram/client/models/components/authclientheader.js";
 import type { AuthClientHeaderInput } from "@gram/client/models/components/authclientheaderinput.js";
+
+// Never forward the caller's authentication or cookies as an upstream credential.
+const DENIED_PASS_THROUGH_SOURCES: ReadonlySet<string> = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+]);
 
 /** One header an upstream credential sends, as it is being edited. */
 export type HeaderDraft = {

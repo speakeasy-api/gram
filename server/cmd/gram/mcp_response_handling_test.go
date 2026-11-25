@@ -20,6 +20,7 @@ import (
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -78,7 +79,7 @@ func newResponseHandlingTestMux(t *testing.T, publisher *capturingMeterPublisher
 	host, err := mcp.NewAuthenticationHost("https://auth.example.com", origin, "prod")
 	require.NoError(t, err)
 
-	mux, err := newMCPServerMux(cli.NewContext(nil, flags, nil), testenv.NewLogger(t), pool, origin, host, nil, nil, &background.Publishers{MeterReadings: publisher})
+	mux, err := newMCPServerMux(cli.NewContext(nil, flags, nil), testenv.NewLogger(t), pool, origin, aivendorstest.NewStore(), host, nil, nil, &background.Publishers{MeterReadings: publisher})
 	require.NoError(t, err)
 	return mux
 }
