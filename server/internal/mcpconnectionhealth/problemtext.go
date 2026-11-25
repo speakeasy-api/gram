@@ -41,10 +41,10 @@ const (
 	factOtherAppEach  = "Another app worked on each of {servers} in this time."
 
 	factTheyUse        = "They use {app}."
-	factConnect        = "For each person, the connection their app asked for on {server} is missing or has expired."
-	factConnectSome    = "For each person, the connection their app asked for on at least one of these servers is missing or has expired."
-	factConnectOne     = "The connection their app asked for on {server} is missing or has expired."
-	factConnectOneEach = "The connection their app asked for on each of these servers is missing or has expired."
+	factConnect        = "For each person, the connection their app asked for on {server} is missing, has expired, or can no longer be used."
+	factConnectSome    = "For each person, the connection their app asked for on at least one of these servers is missing, has expired, or can no longer be used."
+	factConnectOne     = "The connection their app asked for on {server} is missing, has expired, or can no longer be used."
+	factConnectOneEach = "The connection their app asked for on each of these servers is missing, has expired, or can no longer be used."
 	factConnectLink    = "If their app shows a connection link, they can use it to connect or reconnect."
 )
 
@@ -270,15 +270,20 @@ func namedPlaces(p problems.Problem) []mcpconnectionattempts.FailingPerson {
 	return out
 }
 
-// serversPhrase names the problem's servers so each name tells them apart: "Linear", "Linear and GitHub", "Linear and 2 other MCP servers", "2 MCP servers".
+// serversPhrase names the problem's servers only where the names tell them apart: "Linear", "Linear and GitHub", "Linear and 2 other MCP servers", "2 MCP servers".
 func serversPhrase(n names, p problems.Problem) string {
 	reached := reachedServers(p)
-	var named []string
+	var labels []string
 	for _, e := range namedPlaces(p) {
-		if name := episodeServerName(n, e); name != "" && !slices.Contains(named, name) {
-			named = append(named, name)
+		labels = append(labels, episodeServerName(n, e))
+	}
+	var named []string
+	for _, l := range labels {
+		if l != "" {
+			named = append(named, l)
 		}
 	}
+	same := len(named) == 2 && named[0] == named[1]
 	switch {
 	case reached == 0:
 		return ""
@@ -286,14 +291,14 @@ func serversPhrase(n names, p problems.Problem) string {
 		return named[0]
 	case reached == 1:
 		return "an MCP server"
+	case len(named) == 0 || same:
+		return fmt.Sprintf("%d MCP servers", reached)
 	case reached == 2 && len(named) == 2:
 		return named[0] + " and " + named[1]
-	case reached == 2 && len(named) == 1:
+	case reached == 2:
 		return named[0] + " and 1 other MCP server"
-	case len(named) > 0:
-		return fmt.Sprintf("%s and %d other MCP servers", named[0], reached-1)
 	default:
-		return fmt.Sprintf("%d MCP servers", reached)
+		return fmt.Sprintf("%s and %d other MCP servers", named[0], reached-1)
 	}
 }
 

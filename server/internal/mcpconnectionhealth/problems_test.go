@@ -145,7 +145,7 @@ func TestListSuspectedProblems_ListsWhatEachPersonFixesLast(t *testing.T) {
 	require.Equal(t, int64(7), connect.PeopleCount)
 	require.Equal(t, new(gen.SuspectedProblemWhoFixes("person")), connect.WhoFixes)
 	require.Equal(t, "7 people need to connect an account for Linear", connect.Headline)
-	require.Equal(t, "For each person, the connection their app asked for on Linear is missing or has expired. If their app shows a connection link, they can use it to connect or reconnect.", connect.Fact)
+	require.Equal(t, "For each person, the connection their app asked for on Linear is missing, has expired, or can no longer be used. If their app shows a connection link, they can use it to connect or reconnect.", connect.Fact)
 
 	got := ti.getProblem(t, ctx, connect.ID)
 	require.True(t, got.Found)

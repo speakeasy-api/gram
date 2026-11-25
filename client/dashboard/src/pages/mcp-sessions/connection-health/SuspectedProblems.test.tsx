@@ -473,6 +473,7 @@ describe("ProblemDetailSheet", () => {
         found: true,
         problem: {
           ...DETAIL,
+          since: "2026-11-19T21:00:00Z",
           lastFailedAt: "2026-11-19T22:00:00Z",
           failedPer10Minutes: [
             { start: "2026-11-19T23:50:00Z", attempts: 2 },
@@ -482,7 +483,9 @@ describe("ProblemDetailSheet", () => {
       },
     };
     renderSheet(new Date("2026-11-19T23:00:00Z"));
-    expect(screen.getByText(/latest failure 19 Nov, 22:00/)).toBeTruthy();
+    expect(
+      screen.getByText(/Since 19 Nov, 21:00 · latest failure 19 Nov, 22:00/),
+    ).toBeTruthy();
     expect(state.tooltips).toEqual(["19 Nov, 23:50", "00:10"]);
   });
 
@@ -515,6 +518,35 @@ describe("ProblemDetailSheet", () => {
     };
     renderSheet();
     expect(screen.getByText("These failures point to the app.")).toBeTruthy();
+  });
+
+  it("does not name an app when two people use different apps", () => {
+    const unlisted = (appKey: string) => ({
+      ...person(appKey),
+      apps: [{ family: "", name: "Unlisted app", appKey }],
+    });
+    for (const people of [
+      [
+        person("a"),
+        {
+          ...person("b"),
+          apps: [{ family: "cursor", name: "Cursor", version: "2.0.1" }],
+        },
+      ],
+      [unlisted("one"), unlisted("two")],
+    ]) {
+      state.query = {
+        data: {
+          loggingEnabled: true,
+          viewerScope: "all",
+          found: true,
+          problem: { ...DETAIL, source: "app", people, peopleTotal: 2 },
+        },
+      };
+      renderSheet();
+      expect(screen.getByText("These failures point to the app.")).toBeTruthy();
+      cleanup();
+    }
   });
 
   it("says the counts are wider when the filters had to be", () => {

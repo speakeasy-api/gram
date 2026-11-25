@@ -151,8 +151,17 @@ function sourceName(problem: SuspectedProblemDetail): string | undefined {
     )
   )
     return undefined;
-  const apps = new Set(problem.people.flatMap((p) => p.apps.map(appLabel)));
-  return apps.size === 1 ? [...apps][0] : undefined;
+  // Two unlisted apps share a label, so they are told apart by family, version and key.
+  const apps = new Map(
+    problem.people
+      .flatMap((p) => p.apps)
+      .map((a) => [
+        `${a.family}\u0000${a.version ?? ""}\u0000${a.appKey ?? ""}`,
+        a,
+      ]),
+  );
+  const [only] = apps.values();
+  return apps.size === 1 && only ? appLabel(only) : undefined;
 }
 
 /** A fixed question; every name and label goes in the escaped context, never in the question. */
@@ -208,10 +217,10 @@ function ProblemBody({
     asOf.getTime() - Date.parse(problem.filters.from) > 24 * 60 * 60 * 1000;
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, asOf)}`;
   const peopleCount = problem.peopleCount;
-  const sinceLabel = formatSince(problem.since, now);
-  const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
   // Dates show against the day the sheet renders, not the day the page opened.
   const today = new Date();
+  const sinceLabel = formatSince(problem.since, today);
+  const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
   return (
     <div className="flex min-h-full flex-col">
       <SheetHeader className="gap-1.5 border-b px-6 py-5 pr-12">
