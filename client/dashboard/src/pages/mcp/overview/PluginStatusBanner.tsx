@@ -91,10 +91,11 @@ function WritablePluginStatusBanner({
   // to it would reappear every 5s beside the status and never settle. Saving
   // shows its own spinner on the Publish button.
   // A failed status read hides the sync state; it must not take the page down.
-  const { data: publishStatus } = usePublishStatus(scope, undefined, {
-    refetchInterval: 5_000,
-    throwOnError: false,
-  });
+  const { data: publishStatus, isError: publishStatusFailed } =
+    usePublishStatus(scope, undefined, {
+      refetchInterval: 5_000,
+      throwOnError: false,
+    });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
@@ -140,6 +141,9 @@ function WritablePluginStatusBanner({
   // membership in a plugin alone isn't enough if the marketplace repo
   // itself was never set up on GitHub.
   const isTrulyPublished = isPublished && marketplaceReady;
+  // Without a status read the marketplace state is unknown, not unset.
+  const marketplaceUnknown =
+    isPublished && !marketplaceReady && publishStatusFailed;
   const memberIdSet = new Set(memberPlugins.map((plugin) => plugin.id));
   const selectedIdSet = new Set(selectedPluginIds);
   const hasChanges =
@@ -294,25 +298,28 @@ function WritablePluginStatusBanner({
     </Button>
   );
 
-  const statusLabel = isTrulyPublished
-    ? `In ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}`
-    : isPublished
-      ? "Marketplace needs setup"
-      : "Not in a plugin";
+  const statusLabel =
+    isTrulyPublished || marketplaceUnknown
+      ? `In ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}`
+      : isPublished
+        ? "Marketplace needs setup"
+        : "Not in a plugin";
 
   // Plugins are optional, so a server in none is neutral; one in a plugin
   // nobody can install yet is the case worth a warning.
   const statusTone = isTrulyPublished
     ? "success"
-    : isPublished
+    : isPublished && !marketplaceUnknown
       ? "warning"
       : "neutral";
 
   const statusHint = isTrulyPublished
     ? memberPlugins.map((plugin) => plugin.name).join(", ")
-    : isPublished && !marketplaceReady
-      ? "Set up the marketplace on the Plugins page to make it installable."
-      : "Add it to a plugin so your team can install it.";
+    : marketplaceUnknown
+      ? "Couldn't check whether the marketplace is set up."
+      : isPublished && !marketplaceReady
+        ? "Set up the marketplace on the Plugins page to make it installable."
+        : "Add it to a plugin so your team can install it.";
 
   return (
     <SettingsSection>

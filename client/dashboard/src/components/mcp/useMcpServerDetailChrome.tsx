@@ -218,10 +218,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   });
   // Only the readiness row reads this; a failed status read leaves that row
   // unknown rather than taking down every tab of the server.
-  const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
-    enabled: canReadPlugins,
-    throwOnError: false,
-  });
+  const { data: publishStatus, isError: publishStatusFailed } =
+    usePublishStatus(pluginScope, undefined, {
+      enabled: canReadPlugins,
+      throwOnError: false,
+    });
   const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   // The same load the detail page does, so it is shared from the cache; it
   // finds the toolset from the list when the read omits its summary.
@@ -421,9 +422,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
                 label: "Included in a plugin",
                 description: isTrulyIncluded
                   ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-                  : isPluginMember
-                    ? "Marketplace needs publishing before this plugin is installable."
-                    : "Add this server to a plugin so your team can install it.",
+                  : isPluginMember && publishStatusFailed
+                    ? "Couldn't check whether the marketplace is published."
+                    : isPluginMember
+                      ? "Marketplace needs publishing before this plugin is installable."
+                      : "Add this server to a plugin so your team can install it.",
                 ready: isTrulyIncluded,
                 // Distribution is a later choice, not part of making the
                 // server work, so it never counts as a step left.
