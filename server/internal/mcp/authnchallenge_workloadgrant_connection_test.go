@@ -100,8 +100,8 @@ func forgeSignature(t *testing.T, compact string) string {
 	return strings.Join(parts, ".")
 }
 
-// An organization that takes no upstream choices yet refuses one the app names, after the workload is proven.
-func TestWorkloadAssertionGrant_RecordsUpstreamChoice(t *testing.T) {
+// A choice for an unreachable server is refused after the workload is proven.
+func TestWorkloadAssertionGrant_RecordsUnreachableUpstreamChoiceRefusal(t *testing.T) {
 	t.Parallel()
 
 	f := newWorkloadGrantFixture(t)
@@ -122,8 +122,8 @@ func TestWorkloadAssertionGrant_RecordsUpstreamChoice(t *testing.T) {
 	require.ErrorAs(t, f.ti.service.HandleToken(httptest.NewRecorder(), req), &oauthErr)
 	require.Equal(t, http.StatusBadRequest, oauthErr.Status)
 
-	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeUpstreamCredentialChoice)
-	require.Equal(t, "choice_not_accepted", row.SubReason)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCredentialChoiceInvalid)
+	require.Equal(t, "choice_server_not_reached", row.SubReason)
 	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
 	require.Equal(t, urn.NewWorkloadSubject(f.issuerID, f.subject).String(), row.SubjectURN)
 	require.Empty(t, f.workloadSessions(t))

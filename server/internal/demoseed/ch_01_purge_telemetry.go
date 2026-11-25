@@ -174,8 +174,9 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
+				+ (SELECT count() FROM mcp_connection_last_served WHERE organization_id = ?)
 				+ (SELECT count() FROM hook_install_summaries WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}

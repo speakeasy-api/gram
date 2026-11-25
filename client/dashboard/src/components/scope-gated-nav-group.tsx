@@ -1,8 +1,4 @@
-import {
-  CollapsibleNavGroup,
-  CollapsibleNavItem,
-  ReleaseStageNavSection,
-} from "@/components/nav-menu";
+import { CollapsibleNavGroup, CollapsibleNavItem } from "@/components/nav-menu";
 import type { ReleaseStage } from "@/components/release-stage-badge";
 
 // Stable items lead each group; staged items follow, most mature first. Keyed
@@ -56,15 +52,16 @@ export function ScopeGatedNavGroup({
   const { hasAnyScope } = useRBAC();
 
   const visible = visibleNavEntries(items, hasAnyScope);
-  const stable = visible.filter((entry) => !entry.item.stage);
-  const sections = STAGE_ORDER.map((sectionStage) => ({
-    sectionStage,
-    entries: visible.filter((entry) => entry.item.stage === sectionStage),
-  })).filter((section) => section.entries.length > 0);
+  // Each staged row carries its own dot, so there is no section around them.
+  const ordered = [
+    ...visible.filter((entry) => !entry.item.stage),
+    ...STAGE_ORDER.flatMap((stageKey) =>
+      visible.filter((entry) => entry.item.stage === stageKey),
+    ),
+  ];
 
-  // The header links to the top row as rendered: stable items first, then
-  // each stage section in order.
-  const first = stable[0] ?? sections[0]?.entries[0];
+  // The header links to the top row as rendered.
+  const first = ordered[0];
   if (!first) return null;
 
   return (
@@ -73,26 +70,13 @@ export function ScopeGatedNavGroup({
       Icon={Icon}
       defaultHref={first.item.href()}
       stage={stage}
-      activeStage={visible.find((entry) => entry.item.active)?.item.stage}
     >
-      {stable.map((entry) => (
+      {ordered.map((entry) => (
         <CollapsibleNavItem
           key={entry.item.url}
           item={entry.item}
           label={entry.label}
         />
-      ))}
-      {sections.map(({ sectionStage, entries }) => (
-        <ReleaseStageNavSection key={sectionStage} stage={sectionStage}>
-          {entries.map((entry) => (
-            <CollapsibleNavItem
-              key={entry.item.url}
-              item={entry.item}
-              label={entry.label}
-              stageSection={sectionStage}
-            />
-          ))}
-        </ReleaseStageNavSection>
       ))}
     </CollapsibleNavGroup>
   );

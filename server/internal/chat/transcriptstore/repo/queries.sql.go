@@ -140,6 +140,67 @@ func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 	return i, err
 }
 
+const loadMany = `-- name: LoadMany :many
+SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
+       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = c.project_id
+JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
+WHERE m.id = ANY($1::uuid[]) AND m.project_id = $2 AND p.organization_id = $3
+`
+
+type LoadManyParams struct {
+	MessageIds     []uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+}
+
+type LoadManyRow struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ToolCalls         []byte
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	StorageError      pgtype.Text
+	Ciphertext        string
+	Current           bool
+}
+
+func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyRow, error) {
+	rows, err := q.db.Query(ctx, loadMany, arg.MessageIds, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadManyRow
+	for rows.Next() {
+		var i LoadManyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ToolCalls,
+			&i.ToolOutcomeNotes,
+			&i.ToolCallSummaries,
+			&i.StorageError,
+			&i.Ciphertext,
+			&i.Current,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const progress = `-- name: Progress :one
 SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::bigint AS current,
        count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash <> sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))))::bigint AS waiting,

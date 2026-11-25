@@ -5,19 +5,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -62,103 +58,130 @@ func impactAssociatedClients(t *testing.T, ctx context.Context, ti *testInstance
 	return ids
 }
 
-// The incident this preview exists for: a source issuer's only server signs
-// in through one client it was never explicitly associated with, and an
-// organization issuer already fronts another server with no client at all.
-// Merging the source's binding into the organization issuer used to leave
-// the unassociated target server requiring that client, because nothing
-// claimed it. Consolidation now records the source server's client first, so
-// the target server still requires nothing, and the preview says so.
-func TestOrganizationUserSessionIssuerMigratePinsSoleConsumerClientBeforeMerging(t *testing.T) {
+func TestOrganizationUserSessionIssuerMigratePreservesHostedPlacementWithoutCopyingLinks(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
-	targetID := seedOrganizationTierIssuer(t, ctx, ti.conn, "pin-target")
-	sourceID := seedIssuer(t, ctx, ti, "pin-source")
-	targetServer := impactSeedServer(t, ctx, ti, targetID)
-	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
-	sourceClient := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "offer-target")
+	source := seedIssuer(t, ctx, ti, "offer-source")
+	registration := seedMigrationRemoteClient(t, ctx, ti, "offered-without-link")
+	hostedRegistration := seedMigrationRemoteClient(t, ctx, ti, "hosted-with-source-link", source)
+	linkOnly := leftoverSeedBoundRegistration(t, ctx, ti, source)
+	leftoverSeedBoundRegistration(t, ctx, ti, target)
+	member := impactSeedServer(t, ctx, ti, source)
+	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "offer-hosted")
+	targetServer := impactSeedServer(t, ctx, ti, target)
+	clientID := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, member, registration)
+	hostedOffer := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, hosted, hostedRegistration)
+	fixtures := selectionbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: hosted, RemoteSessionClientID: hostedRegistration,
+	}))
+	gateway := uuid.New()
+	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gateway, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "typed-gateway", UserSessionIssuerID: conv.ToNullUUID(source)}))
+	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member}))
+	session, err := seedUserSession(t, ctx, ti.conn, source, urn.NewUserSubject("typed-choice"))
 	require.NoError(t, err)
-	require.True(t, preflight.ImpactPreviewed)
-	require.True(t, preflight.CanMigrate)
-	require.Len(t, preflight.ServerImpacts, 1, "only the pinned source server is listed; the target server does not change")
-	impact := preflight.ServerImpacts[0]
-	require.Equal(t, sourceServer.String(), impact.McpServerID)
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("info"), impact.ImpactSeverity)
-	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"pinned"}, impact.Reasons)
-	require.Equal(t, []string{sourceClient.String()}, impact.PinnedClientIds)
-	require.Empty(t, preflight.DroppedClientLinks)
-	require.Empty(t, preflight.WarningsFingerprint, "a pin that changes nothing needs no confirmation")
-	require.Empty(t, impactAssociatedClients(t, ctx, ti, sourceServer), "the preview rolls back")
-
-	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	for range 2 {
+		preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.String(), TargetID: target.String()})
+		require.NoError(t, err)
+		require.True(t, preflight.CanMigrate)
+		require.Empty(t, preflight.ServerImpacts)
+		require.Empty(t, preflight.DroppedClientLinks)
+		choices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: "user_session", CredentialID: migrationCredentialID(session)})
+		require.NoError(t, err)
+		require.Empty(t, choices, "preview rolls back selection and issuer writes")
+	}
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, source.String(), target.String()))
 	require.NoError(t, err)
-	require.Len(t, result.ServerImpacts, 1)
-
-	require.Equal(t, []uuid.UUID{sourceClient}, impactAssociatedClients(t, ctx, ti, sourceServer))
-	bound, err := remotesessions.BoundUserSessionIssuerClients(ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, targetID)
+	require.Empty(t, result.ServerImpacts)
+	require.Empty(t, result.DroppedClientLinks)
+	choice, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: "user_session", CredentialID: migrationCredentialID(session), McpServerID: member})
 	require.NoError(t, err)
-	required, err := remotesessions.RequiredServerClients(ctx, ti.conn, auth.ActiveOrganizationID, targetID, targetServer, bound)
+	require.Equal(t, conv.ToNullUUID(clientID), choice.AuthClientID)
+	for _, reg := range []uuid.UUID{registration, hostedRegistration, linkOnly} {
+		parents, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: reg, UserSessionIssuerID: target})
+		require.NoError(t, err)
+		require.Zero(t, parents, "only actual attachment rekeys may write target parents")
+	}
+	hostedOffers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, hosted)
 	require.NoError(t, err)
-	require.Empty(t, required, "the target server must not inherit the source server's client")
-	required, err = remotesessions.RequiredServerClients(ctx, ti.conn, auth.ActiveOrganizationID, targetID, sourceServer, bound)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{sourceClient}, required)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionUserSessionIssuerMigrate)
-	require.NoError(t, err)
-	metadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	pinned, ok := metadata["pinned_associations"].([]any)
-	require.True(t, ok)
-	require.Len(t, pinned, 1)
-	impacts, ok := metadata["server_impacts"].([]any)
-	require.True(t, ok)
-	require.Len(t, impacts, 1)
+	require.Equal(t, []uuid.UUID{hostedOffer}, hostedOffers, "the source-linked registration survives as the exact hosted offer, not as a target link")
+	require.Equal(t, []uuid.UUID{hostedRegistration}, impactAssociatedClients(t, ctx, ti, hosted), "the exact hosted placement remains available to per-server readers")
+	for _, id := range []uuid.UUID{member, targetServer} {
+		require.Empty(t, impactAssociatedClients(t, ctx, ti, id))
+	}
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: source.String(), TargetID: target.String()})
+	require.Error(t, err, "retry with a retired source does not repeat writes")
 }
 
-// A server whose clients consolidation cannot decide keeps resolving the
-// source's binding through the target, where an unassociated target server
-// would start requiring it too. That client's provider is not one the target
-// server's upstream advertises, so the preview blocks the consolidation
-// instead of letting it hand the server a token for another upstream.
-func TestOrganizationUserSessionIssuerMigrateBlocksClientOutsideUpstreamMetadata(t *testing.T) {
+func TestIssuerMigrationPreviewReadsDirectAssociationWithoutTypedHistory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-
-	targetID := seedIssuer(t, ctx, ti, "metadata-target")
-	sourceID := seedIssuer(t, ctx, ti, "metadata-source")
-	targetServer := impactSeedServer(t, ctx, ti, targetID)
-	// Two servers share the source, so its binding proves neither.
-	impactSeedServer(t, ctx, ti, sourceID)
-	impactSeedServer(t, ctx, ti, sourceID)
-	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-	require.NoError(t, authclientbackfill.New(ti.conn).SeedValidProtectedResourceFixture(ctx, authclientbackfill.SeedValidProtectedResourceFixtureParams{
-		ProjectID:            *auth.ProjectID,
-		OrganizationID:       auth.ActiveOrganizationID,
-		ResourceIdentifier:   "https://upstream.example.com/mcp",
-		MetadataUrl:          pgtype.Text{},
-		AuthorizationServers: []string{"https://other-provider.example.com"},
-	}))
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	issuer := seedIssuer(t, ctx, ti, "association-preview")
+	server, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, issuer)
+	params := usersessionsrepo.ListIssuerMigrationOAuthOffersParams{ServerIds: []uuid.UUID{server}, OrganizationID: auth.ActiveOrganizationID}
+	offers, err := usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, params)
 	require.NoError(t, err)
-	require.True(t, preflight.ImpactPreviewed)
-	require.False(t, preflight.CanMigrate)
-	require.Len(t, preflight.ServerImpacts, 1)
-	impact := preflight.ServerImpacts[0]
-	require.Equal(t, targetServer.String(), impact.McpServerID)
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("blocker"), impact.ImpactSeverity)
-	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"provider_not_in_metadata", "gains_client"}, impact.Reasons)
+	require.Equal(t, []usersessionsrepo.ListIssuerMigrationOAuthOffersRow{{McpServerID: server, RemoteSessionClientID: registration}}, offers)
+	typedClient := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, server, registration)
+	require.NoError(t, authclientbackfill.New(ti.conn).SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: typedClient, Enabled: false}))
+	offers, err = usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, offers, "disabled typed history suppresses association fallback")
+}
 
-	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
-	requireOopsCode(t, err, oops.CodeConflict)
+func seedMigrationTypedOffer(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID, registration uuid.UUID) uuid.UUID {
+	t.Helper()
+	return seedMigrationTypedOfferWithSource(t, ctx, ti, projectID, serverID, registration, "admin")
+}
+
+func seedMigrationTypedOfferWithSource(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID, registration uuid.UUID, source string) uuid.UUID {
+	t.Helper()
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	q := authclientbackfill.New(ti.conn)
+	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: source, RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: source}))
+	return id
+}
+
+func TestOrganizationUserSessionIssuerMigratePreservesBackfilledTypedOffers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "backfill-target")
+	source := seedIssuer(t, ctx, ti, "backfill-source")
+	proxiedReg := seedMigrationRemoteClient(t, ctx, ti, "backfill-proxied-reg", source)
+	hostedReg := seedMigrationRemoteClient(t, ctx, ti, "backfill-hosted-reg", source)
+	member := impactSeedServer(t, ctx, ti, source)
+	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "backfill-hosted")
+	proxiedOffer := seedMigrationTypedOfferWithSource(t, ctx, ti, *auth.ProjectID, member, proxiedReg, "backfill")
+	hostedOffer := seedMigrationTypedOfferWithSource(t, ctx, ti, *auth.ProjectID, hosted, hostedReg, "backfill")
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.String(), TargetID: target.String()})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+	require.Empty(t, preflight.ServerImpacts)
+	require.Empty(t, preflight.DroppedClientLinks)
+
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, source.String(), target.String()))
+	require.NoError(t, err)
+	require.Empty(t, result.ServerImpacts)
+	require.Empty(t, result.DroppedClientLinks)
+
+	backfillQueries := authclientbackfill.New(ti.conn)
+	memberOffers, err := backfillQueries.ListServerAuthClientsFixture(ctx, member)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{proxiedOffer}, memberOffers, "consolidation must not retire backfilled typed offers on proxied servers")
+	hostedOffers, err := backfillQueries.ListServerAuthClientsFixture(ctx, hosted)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{hostedOffer}, hostedOffers, "consolidation must not retire backfilled typed offers on hosted servers")
 }
 
 // A deleted client's binding is never carried to the target. It changes
@@ -221,160 +244,4 @@ func TestOrganizationUserSessionIssuerMigratePreflightTimesOutOnHeldLock(t *test
 
 	_, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
 	requireOopsCode(t, err, oops.CodeConflict)
-}
-
-// A hosted server resolves every client its issuer binds, not only the ones
-// associated with it. Carrying a source server's client of the same provider
-// onto the hosted server's issuer would leave it two clients for one provider,
-// which serving refuses, so the preview blocks the consolidation.
-func TestOrganizationUserSessionIssuerMigrateBlocksSecondClientForHostedServer(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	targetID := seedIssuer(t, ctx, ti, "hosted-target")
-	sourceID := seedIssuer(t, ctx, ti, "hosted-source")
-	hostedServer := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, targetID, "hosted-impact")
-
-	fixtures := selectionbackfill.New(ti.conn)
-	providerID := uuid.New()
-	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, selectionbackfill.SeedRemoteSessionIssuerFixtureParams{ID: providerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), Slug: "shared-provider", Issuer: "https://shared-provider.example.com"}))
-	seedClient := func(issuerID uuid.UUID) uuid.UUID {
-		clientID := uuid.New()
-		require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, selectionbackfill.SeedRemoteSessionClientFixtureParams{ID: clientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), RemoteSessionIssuerID: providerID, ClientID: clientID.String()}))
-		require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID}))
-		return clientID
-	}
-	hostedClient := seedClient(targetID)
-	sourceClient := seedClient(sourceID)
-	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
-	require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: sourceServer, RemoteSessionClientID: sourceClient}))
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
-	require.NoError(t, err)
-	require.False(t, preflight.CanMigrate)
-	var hosted *orggen.UserSessionIssuerMigrationServerImpact
-	for _, impact := range preflight.ServerImpacts {
-		if impact.McpServerID == hostedServer.String() {
-			hosted = impact
-		}
-	}
-	require.NotNil(t, hosted, "the hosted server's change is reported")
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("blocker"), hosted.ImpactSeverity)
-	require.Contains(t, hosted.Reasons, orggen.UserSessionIssuerMigrationImpactReason("multiple_clients_for_provider"))
-	require.Len(t, hosted.ClientsBefore, 1)
-	require.Equal(t, hostedClient.String(), hosted.ClientsBefore[0].RemoteSessionClientID)
-	require.Len(t, hosted.ClientsAfter, 2)
-}
-
-// A client bound to both the source and the organization's only
-// organization-level issuer is shared with the servers there. Those servers
-// are part of the preview, so consolidation pins the client to the source
-// server it proves, and the preview reports that the organization issuer's
-// server stops requiring it, even though that server is on neither issuer.
-func TestOrganizationUserSessionIssuerMigrateReportsServerOnOrganizationIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	organizationID := seedOrganizationTierIssuer(t, ctx, ti.conn, "claim-organization")
-	targetID := seedIssuer(t, ctx, ti, "claim-target")
-	sourceID := seedIssuer(t, ctx, ti, "claim-source")
-	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
-	organizationServer := impactSeedServer(t, ctx, ti, organizationID)
-	shared := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-	require.NoError(t, selectionbackfill.New(ti.conn).SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: organizationID}))
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
-	require.NoError(t, err)
-	impacts := make(map[string]*orggen.UserSessionIssuerMigrationServerImpact)
-	for _, impact := range preflight.ServerImpacts {
-		impacts[impact.McpServerID] = impact
-	}
-	require.Len(t, impacts, 2)
-	organizationImpact := impacts[organizationServer.String()]
-	require.NotNil(t, organizationImpact)
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), organizationImpact.ImpactSeverity)
-	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"loses_client"}, organizationImpact.Reasons)
-	sourceImpact := impacts[sourceServer.String()]
-	require.NotNil(t, sourceImpact)
-	require.Equal(t, []string{shared.String()}, sourceImpact.PinnedClientIds)
-	require.NotEmpty(t, preflight.WarningsFingerprint)
-}
-
-// A gateway resolves every client its issuer binds, associated or not, so a
-// gateway on the source keeps every source binding it signs in through.
-func TestOrganizationUserSessionIssuerMigrateCarriesBindingsForSourceGateway(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	targetID := seedIssuer(t, ctx, ti, "gateway-target")
-	sourceID := seedIssuer(t, ctx, ti, "gateway-source")
-	require.NoError(t, selectionbackfill.New(ti.conn).SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: uuid.New(), OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Source gateway", UserSessionIssuerID: conv.ToNullUUID(sourceID)}))
-	gatewayClient := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
-	require.NoError(t, err)
-	require.Empty(t, preflight.DroppedClientLinks)
-
-	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
-	require.NoError(t, err)
-	bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: gatewayClient, UserSessionIssuerID: targetID})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), bound)
-}
-
-// A fingerprint confirms one preview. When what the consolidation would do
-// changes afterwards, the consolidation refuses the stale confirmation.
-func TestOrganizationUserSessionIssuerMigrateRefusesStaleFingerprint(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-
-	targetID := seedIssuer(t, ctx, ti, "stale-target")
-	sourceID := seedIssuer(t, ctx, ti, "stale-source")
-	leftoverSeedServer(t, ctx, ti, sourceID)
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
-	require.NoError(t, err)
-	require.Empty(t, preflight.WarningsFingerprint)
-
-	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-
-	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
-	requireOopsCode(t, err, oops.CodeConflict)
-}
-
-// A gateway counts an association as a claim only for the servers it
-// fronts. A gateway fronting another server in the consolidation must not
-// stop a pin for a server it does not front.
-func TestOrganizationUserSessionIssuerMigratePinsDespiteGatewayFrontingAnotherServer(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	auth, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	targetID := seedIssuer(t, ctx, ti, "fronted-target")
-	sourceID := seedIssuer(t, ctx, ti, "fronted-source")
-	gatewayIssuerID := seedIssuer(t, ctx, ti, "fronted-gateway-issuer")
-	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
-	frontedServer := impactSeedServer(t, ctx, ti, targetID)
-	shared := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
-
-	fixtures := selectionbackfill.New(ti.conn)
-	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: gatewayIssuerID}))
-	gatewayID := uuid.New()
-	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Fronting gateway", UserSessionIssuerID: conv.ToNullUUID(gatewayIssuerID)}))
-	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID, McpServerID: frontedServer}))
-
-	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
-	require.NoError(t, err)
-	var pinned []string
-	for _, impact := range preflight.ServerImpacts {
-		if impact.McpServerID == sourceServer.String() {
-			pinned = impact.PinnedClientIds
-		}
-	}
-	require.Equal(t, []string{shared.String()}, pinned, "the source server is pinned; the gateway fronts another server")
 }

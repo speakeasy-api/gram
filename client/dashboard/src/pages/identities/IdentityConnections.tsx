@@ -117,7 +117,7 @@ export default function IdentityConnections(): JSX.Element {
             happens to broker. */}
         <IdentityPanel
           title="Active MCP connections"
-          handoffLabel="MCP Sessions"
+          handoffLabel="MCP Sign-in"
           handoffHref={handoffs.mcpSessions}
         >
           <ConnectionsListSection

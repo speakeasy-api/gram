@@ -837,13 +837,11 @@ type metaGateAdmission struct {
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
 func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
-	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx))
+	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))
 	skipped := new(remotesessions.SkippedClients)
 
-	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
-	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	var gateCaller gatewayCaller
@@ -871,7 +869,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		gateCaller = admission.caller
 		gateAgentID = admission.agentID
 		authentication.skippedUpstreams = skipped
-		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
+		gateProjectTokens = s.newOrganizationGatewayTokens(ctx, r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -900,31 +898,13 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
-		if gateMemberChoices == nil && gateAgentID != uuid.Nil {
-			// Decided before the token path, so members the key has a choice
-			// for resolve lazily like any other chosen member.
-			agentKeyChoicesRead = true
-			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, metaServer.UserSessionIssuerID.UUID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
-			if err != nil {
-				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
-			}
-		}
-		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
-			// Proxied members resolve only their chosen clients, so the
-			// issuer's other clients resolve lazily, for hosted members that
-			// need them, and an unrelated broken one blocks nothing else.
-			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
-		} else {
-			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
-			if err != nil {
-				return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
-			}
-			gateTokens = tokens
-		}
+		// Proxied members resolve only their chosen clients. Hosted members
+		// resolve their exact upstream placement on first use.
+		gateProjectTokens = s.newOrganizationGatewayTokens(ctx, r, authentication.endpoint, authentication.subject, skipped)
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
 	}
-	if gateMemberChoices == nil && gateAgentID != uuid.Nil && !agentKeyChoicesRead {
+	if gateMemberChoices == nil && gateAgentID != uuid.Nil {
 		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, metaServer.UserSessionIssuerID.UUID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
@@ -955,7 +935,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		agentMembership:     membership.agentID != uuid.Nil,
 		organizationGateway: membership.organization,
 		organizationID:      metaServer.OrganizationID,
-		tokens:              gateTokens,
+		tokens:              nil,
 		projectTokens:       gateProjectTokens,
 		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.

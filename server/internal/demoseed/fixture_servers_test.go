@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
@@ -49,10 +50,10 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 	require.Equal(t, testServerURL+"/rpc/demoseed", base)
 
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
-	s := &seeder{spec: spec}
+	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	q := testrepo.New(db)
 	for range 2 {
-		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec)
+		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
 		require.NoError(t, err)
 
 		oauth, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-linear"))
@@ -68,6 +69,11 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 		require.NoError(t, err)
 		require.Equal(t, "Bearer "+fixtureauth.SharedToken, static.Value.String)
 		require.False(t, static.IsSecret, "a secret header must hold ciphertext; this one holds the checked-in token")
+
+		sharedHeader, err := q.GetAuthClientHeaderFixture(ctx, s.det("auth-client-slack-header"))
+		require.NoError(t, err)
+		require.Equal(t, static.Value, sharedHeader.Value)
+		require.Equal(t, static.IsSecret, sharedHeader.IsSecret)
 
 		header, err := q.GetAuthClientHeaderFixture(ctx, s.det("auth-client-github-token-header"))
 		require.NoError(t, err)

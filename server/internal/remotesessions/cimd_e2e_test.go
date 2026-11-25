@@ -98,10 +98,7 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, docURL, client.ClientID, "CIMD client_id is the document URL")
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)

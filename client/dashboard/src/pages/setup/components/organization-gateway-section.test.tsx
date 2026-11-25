@@ -148,9 +148,7 @@ describe("OrganizationGatewayConnectorSection", () => {
     renderSection();
 
     expect(
-      screen
-        .getByRole("link", { name: "MCP Authentication" })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: "MCP Sign-in" }).getAttribute("href"),
     ).toBe("/acme/user-session-issuers");
     expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
     expectNoUrlOrSteps();
@@ -203,7 +201,7 @@ describe("OrganizationGatewayConnectorSection", () => {
     expect(screen.queryByText(/opening this setup card/)).toBeNull();
     // Only the way to make a project's provider organization-wide.
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
-      ["MCP Authentication"],
+      ["MCP Sign-in"],
     );
     expectNoUrlOrSteps();
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -231,7 +229,7 @@ describe("OrganizationGatewayConnectorSection", () => {
     expect(screen.getByText(/more than one/)).toBeTruthy();
     // Consolidation, not creation.
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
-      ["MCP Authentication"],
+      ["MCP Sign-in"],
     );
     expectNoUrlOrSteps();
   });

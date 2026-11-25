@@ -83,3 +83,16 @@ func parseRFC6749TokenError(body []byte) (RFC6749Error, bool) {
 	e.Code = strings.TrimSpace(e.Code)
 	return e, e.Code != ""
 }
+
+// IsDescriptionText reports whether s fits the RFC 6749 §5.2 error_description grammar.
+func IsDescriptionText(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if b := s[i]; b < 0x20 || b > 0x7e || b == '"' || b == '\\' {
+			return false
+		}
+	}
+	return true
+}

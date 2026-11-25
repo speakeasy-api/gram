@@ -123,7 +123,7 @@ describe("McpSessionsProvider", () => {
 
   it("drops the header and shows no provider switch with one provider", () => {
     renderProvider("mcp-servers");
-    expect(screen.queryByText("MCP Authentication Provider")).toBeNull();
+    expect(screen.queryByText("MCP sign-in")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "acme-sso",
@@ -138,11 +138,11 @@ describe("McpSessionsProvider", () => {
     renderProvider("mcp-servers");
     expect(
       screen.getByRole("button", {
-        name: "What is an MCP Authentication Provider?",
+        name: "What is an MCP sign-in?",
       }),
     ).toBeTruthy();
     const trigger = screen.getByRole("combobox", {
-      name: "MCP Authentication Provider",
+      name: "MCP sign-in",
     });
     expect(trigger.textContent).toContain("acme-sso");
     fireEvent.click(trigger);
@@ -162,7 +162,7 @@ describe("McpSessionsProvider", () => {
   it("renders the header and MCP servers as before with connection health off", () => {
     state.health = "off";
     renderProvider("mcp-servers");
-    const eyebrow = screen.getByText("MCP Authentication Provider");
+    const eyebrow = screen.getByText("MCP sign-in");
     expect(eyebrow.className).toBe("text-eyebrow");
     expect(eyebrow.children).toHaveLength(0);
     expect(screen.queryByRole("combobox")).toBeNull();
@@ -172,7 +172,7 @@ describe("McpSessionsProvider", () => {
   it("renders the MCP servers tab as before while the flag loads", () => {
     state.health = "pending";
     renderProvider("mcp-servers");
-    const eyebrow = screen.getByText("MCP Authentication Provider");
+    const eyebrow = screen.getByText("MCP sign-in");
     expect(eyebrow.children).toHaveLength(0);
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(state.linkRows.at(-1)).toBe(false);
@@ -181,7 +181,7 @@ describe("McpSessionsProvider", () => {
   it("renders nothing on Overview while the flag loads", () => {
     state.health = "pending";
     renderProvider("overview");
-    expect(screen.queryByText("MCP Authentication Provider")).toBeNull();
+    expect(screen.queryByText("MCP sign-in")).toBeNull();
     expect(screen.queryByText("acme-sso")).toBeNull();
   });
 });

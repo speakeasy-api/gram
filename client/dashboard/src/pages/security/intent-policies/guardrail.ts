@@ -18,13 +18,12 @@ export const OUTCOME_ACTION: Record<RuleOutcome, string> = {
   clarify: "Ask a person first",
 };
 
-/** Label keys a rule reads, plus `tool.args` when it matches the command. */
+/** Label keys a rule reads. */
 export function labelsRead(contract: IntentContract): string[] {
   const keys: string[] = [];
   for (const c of contract.conditions) {
     if (c.label && !keys.includes(c.label)) keys.push(c.label);
   }
-  if (contract.conditions.some((c) => c.pattern)) keys.push("tool.args");
   return keys;
 }
 

@@ -3,12 +3,10 @@
  */
 
 import { remoteSessionClientsAttachKeySet } from "../funcs/remoteSessionClientsAttachKeySet.js";
-import { remoteSessionClientsAttachUserSessionIssuer } from "../funcs/remoteSessionClientsAttachUserSessionIssuer.js";
 import { remoteSessionClientsCreate } from "../funcs/remoteSessionClientsCreate.js";
 import { remoteSessionClientsCreateCimd } from "../funcs/remoteSessionClientsCreateCimd.js";
 import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.js";
 import { remoteSessionClientsDetachKeySet } from "../funcs/remoteSessionClientsDetachKeySet.js";
-import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
 import { remoteSessionClientsGetNewClientCallbackUrl } from "../funcs/remoteSessionClientsGetNewClientCallbackUrl.js";
 import { remoteSessionClientsList } from "../funcs/remoteSessionClientsList.js";
@@ -25,10 +23,6 @@ import {
   AttachRemoteSessionClientKeySetSecurity,
 } from "../models/operations/attachremotesessionclientkeyset.js";
 import {
-  AttachUserSessionIssuerRequest,
-  AttachUserSessionIssuerSecurity,
-} from "../models/operations/attachusersessionissuer.js";
-import {
   CreateCimdRemoteSessionClientRequest,
   CreateCimdRemoteSessionClientSecurity,
 } from "../models/operations/createcimdremotesessionclient.js";
@@ -44,10 +38,6 @@ import {
   DetachRemoteSessionClientKeySetRequest,
   DetachRemoteSessionClientKeySetSecurity,
 } from "../models/operations/detachremotesessionclientkeyset.js";
-import {
-  DetachUserSessionIssuerRequest,
-  DetachUserSessionIssuerSecurity,
-} from "../models/operations/detachusersessionissuer.js";
 import {
   GetNewRemoteSessionClientCallbackUrlRequest,
   GetNewRemoteSessionClientCallbackUrlSecurity,
@@ -93,25 +83,6 @@ export class RemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsAttachKeySet(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * attachUserSessionIssuer remoteSessionClients
-   *
-   * @remarks
-   * Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
-   */
-  async attachUserSessionIssuer(
-    request: AttachUserSessionIssuerRequest,
-    security?: AttachUserSessionIssuerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RemoteSessionClient> {
-    return unwrapAsync(remoteSessionClientsAttachUserSessionIssuer(
       this,
       request,
       security,
@@ -188,25 +159,6 @@ export class RemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(remoteSessionClientsDetachKeySet(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * detachUserSessionIssuer remoteSessionClients
-   *
-   * @remarks
-   * Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
-   */
-  async detachUserSessionIssuer(
-    request: DetachUserSessionIssuerRequest,
-    security?: DetachUserSessionIssuerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RemoteSessionClient> {
-    return unwrapAsync(remoteSessionClientsDetachUserSessionIssuer(
       this,
       request,
       security,
@@ -334,7 +286,7 @@ export class RemoteSessionClients extends ClientSDK {
    * updateRemoteSessionClient remoteSessionClients
    *
    * @remarks
-   * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
+   * Rotate the client_secret or change the non-issuer settings on an existing remote_session_client.
    */
   async update(
     request: UpdateRemoteSessionClientRequest,

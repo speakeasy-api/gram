@@ -147,6 +147,12 @@ type Endpoints struct {
 	ClearOrganizationHooksRollout           goa.Endpoint
 	ListTailscaleOAuthMigration             goa.Endpoint
 	RunTailscaleOAuthMigrationStep          goa.Endpoint
+	GetOrganizationEncryption               goa.Endpoint
+	ListOrganizationEncryptionTransitions   goa.Endpoint
+	EnrollOrganizationEncryption            goa.Endpoint
+	RollbackOrganizationEncryption          goa.Endpoint
+	RunOrganizationEncryption               goa.Endpoint
+	FinalizeOrganizationEncryption          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -302,6 +308,12 @@ func NewEndpoints(s Service) *Endpoints {
 		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationEndpoint(s, a.APIKeyAuth),
 		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepEndpoint(s, a.APIKeyAuth),
+		GetOrganizationEncryption:               NewGetOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		ListOrganizationEncryptionTransitions:   NewListOrganizationEncryptionTransitionsEndpoint(s, a.APIKeyAuth),
+		EnrollOrganizationEncryption:            NewEnrollOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		RollbackOrganizationEncryption:          NewRollbackOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		RunOrganizationEncryption:               NewRunOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		FinalizeOrganizationEncryption:          NewFinalizeOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -437,6 +449,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ClearOrganizationHooksRollout = m(e.ClearOrganizationHooksRollout)
 	e.ListTailscaleOAuthMigration = m(e.ListTailscaleOAuthMigration)
 	e.RunTailscaleOAuthMigrationStep = m(e.RunTailscaleOAuthMigrationStep)
+	e.GetOrganizationEncryption = m(e.GetOrganizationEncryption)
+	e.ListOrganizationEncryptionTransitions = m(e.ListOrganizationEncryptionTransitions)
+	e.EnrollOrganizationEncryption = m(e.EnrollOrganizationEncryption)
+	e.RollbackOrganizationEncryption = m(e.RollbackOrganizationEncryption)
+	e.RunOrganizationEncryption = m(e.RunOrganizationEncryption)
+	e.FinalizeOrganizationEncryption = m(e.FinalizeOrganizationEncryption)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3392,5 +3410,144 @@ func NewRunTailscaleOAuthMigrationStepEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return s.RunTailscaleOAuthMigrationStep(ctx, p)
+	}
+}
+
+// NewGetOrganizationEncryptionEndpoint returns an endpoint function that calls
+// the method "getOrganizationEncryption" of service "admin".
+func NewGetOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewListOrganizationEncryptionTransitionsEndpoint returns an endpoint
+// function that calls the method "listOrganizationEncryptionTransitions" of
+// service "admin".
+func NewListOrganizationEncryptionTransitionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrganizationEncryptionTransitionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrganizationEncryptionTransitions(ctx, p)
+	}
+}
+
+// NewEnrollOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "enrollOrganizationEncryption" of service "admin".
+func NewEnrollOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnrollOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnrollOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewRollbackOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "rollbackOrganizationEncryption" of service "admin".
+func NewRollbackOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RollbackOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RollbackOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewRunOrganizationEncryptionEndpoint returns an endpoint function that calls
+// the method "runOrganizationEncryption" of service "admin".
+func NewRunOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewFinalizeOrganizationEncryptionEndpoint returns an endpoint function that
+// calls the method "finalizeOrganizationEncryption" of service "admin".
+func NewFinalizeOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FinalizeOrganizationEncryptionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.FinalizeOrganizationEncryption(ctx, p)
 	}
 }

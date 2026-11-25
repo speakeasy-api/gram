@@ -171,3 +171,22 @@ func toolEvalSnapshot(t *testing.T, registrar *Registrar) tooleval.Catalogue {
 		Tools:     toolEvalCatalogue(t, registrar),
 	}
 }
+
+func TestToolEvalProgressiveNetworkAccessDiscovery(t *testing.T) {
+	t.Parallel()
+
+	surface := toolEvalProgressiveSurface(t, toolEvalRegistrar(t))
+	result, err := surface.Dispatch(t.Context(), searchPlatformToolsName, json.RawMessage(`{"query":"lock a server down over a private network","limit":50}`))
+	require.NoError(t, err)
+	var output searchPlatformToolsOutput
+	require.NoError(t, json.Unmarshal([]byte(result.Output), &output))
+	index := func(name string) int {
+		return slices.IndexFunc(output.Items, func(item platformToolSummary) bool { return item.Name == name })
+	}
+	change, traffic := index(setMCPNetworkAccessToolName), index(mcpNetworkTrafficToolName)
+	require.NotEqual(t, -1, change)
+	require.NotEqual(t, -1, traffic)
+	require.Less(t, change, traffic)
+	require.Contains(t, output.Items[change].Description, "private network only")
+	require.Contains(t, output.Items[traffic].Description, "This does not change access.")
+}

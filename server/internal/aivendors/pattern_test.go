@@ -249,6 +249,33 @@ func TestPatternRejectsPathInsideQueryOrFragment(t *testing.T) {
 	}
 }
 
+// The query/fragment guard looks only at the authority, before the first slash.
+func TestMatchesPattern_QueryOrFragmentGuardCoversOnlyTheAuthority(t *testing.T) {
+	t.Parallel()
+	const pattern = "https://chatgpt.com/oauth/*/client.json"
+	for _, tc := range []struct {
+		name     string
+		clientID string
+		want     bool
+	}{
+		{name: "long id on an unknown host", clientID: "https://unknown.example.com/" + strings.Repeat("a?#", 1000) + "/client.json", want: false},
+		{name: "query after the first slash", clientID: "https://chatgpt.com/oauth/connector/client.json?x=1", want: false},
+		{name: "fragment after the first slash", clientID: "https://chatgpt.com/oauth/connector/client.json#x", want: false},
+		{name: "query in a segment", clientID: "https://chatgpt.com/oauth/a?b/client.json", want: false},
+		{name: "query in the authority", clientID: "https://chatgpt.com?x=/oauth/connector/client.json", want: false},
+		{name: "plain match", clientID: "https://chatgpt.com/oauth/connector/client.json", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, matchesPattern(pattern, tc.clientID))
+		})
+	}
+	_, _, ok := splitAuthorityAndPath("https://chatgpt.com/oauth?x=1#y")
+	require.True(t, ok, "a query after the first slash leaves the authority intact")
+	_, _, ok = splitAuthorityAndPath("https://chatgpt.com#x/oauth")
+	require.False(t, ok, "a fragment before the first slash cannot begin a path")
+}
+
 // TestCatalog_PatternsAreValid is the guard that makes the whole design
 // safe: it runs validatePattern over every wildcard actually shipped, so a
 // dangerous catalog entry fails the build rather than silently widening
@@ -265,6 +292,73 @@ func TestCatalog_PatternsAreValid(t *testing.T) {
 		require.NoErrorf(t, validatePattern(preset.URL), "catalog pattern %q is unsafe", preset.URL)
 	}
 	require.Positive(t, found, "expected at least one catalog pattern; if patterns were removed, delete this guard deliberately")
+}
+
+func TestPatternsOverlap(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		a, b    string
+		overlap bool
+	}{
+		{"https://example.com/oauth/*/client.json", "https://example.com/*/*/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.com/*/tenant/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.org/oauth/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com:8443/oauth/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/other/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/client.json?v=1", false},
+		{chatGPTPattern, codexPattern, false},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.overlap, PatternsOverlap(tc.a, tc.b), "%s / %s", tc.a, tc.b)
+		require.Equal(t, tc.overlap, PatternsOverlap(tc.b, tc.a), "%s / %s", tc.b, tc.a)
+		if tc.overlap {
+			witness := overlapWitness(tc.a, tc.b)
+			require.True(t, matchesPattern(tc.a, witness), witness)
+			require.True(t, matchesPattern(tc.b, witness), witness)
+		}
+	}
+}
+
+// overlapWitness builds a client ID that matches both overlapping patterns.
+func overlapWitness(a, b string) string {
+	prefix, aRest, _ := splitAuthorityAndPath(a)
+	_, bRest, _ := splitAuthorityAndPath(b)
+	aPath, suffix := splitPathAndSuffix(aRest)
+	bPath, _ := splitPathAndSuffix(bRest)
+	bSegments := strings.Split(bPath, "/")
+	segments := strings.Split(aPath, "/")
+	for i, segment := range segments {
+		switch {
+		case segment != "*":
+		case bSegments[i] != "*":
+			segments[i] = bSegments[i]
+		default:
+			segments[i] = "x"
+		}
+	}
+	return prefix + "/" + strings.Join(segments, "/") + suffix
+}
+
+func TestCompiledPatternsDoNotOverlap(t *testing.T) {
+	t.Parallel()
+	var patterns []string
+	for _, entry := range CIMDDocuments() {
+		if entry.Document.Pattern {
+			require.NoError(t, validatePattern(entry.Document.URL), entry.Document.URL)
+			patterns = append(patterns, entry.Document.URL)
+		}
+	}
+	require.GreaterOrEqual(t, len(patterns), 2)
+	pairs := 0
+	for i := range patterns {
+		for j := i + 1; j < len(patterns); j++ {
+			pairs++
+			require.False(t, PatternsOverlap(patterns[i], patterns[j]), "%s overlaps %s", patterns[i], patterns[j])
+		}
+	}
+	t.Logf("%d patterns, %d pairs checked", len(patterns), pairs)
 }
 
 // TestCatalogAdmits_ChatGPTConnectorNamespace exercises the end-to-end

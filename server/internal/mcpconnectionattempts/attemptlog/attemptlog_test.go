@@ -3,6 +3,7 @@ package attemptlog_test
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -645,5 +646,61 @@ func TestList_AScriptWinsOverAnUnrecognizedAppInEitherOrder(t *testing.T) {
 	require.Len(t, rows, 2)
 	for _, row := range rows {
 		require.Equal(t, mcpconnectionattempts.FamilyScript, row.App)
+	}
+}
+
+// A filtered reason with few attempts is counted even when more than a facet's worth of
+// other reasons have more: counting all reasons first and filtering after would drop it.
+func TestCountByReason_AppliesTheFiltersBeforeCounting(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i := range attemptlog.MaxFacetValues + 1 {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Duration(i+2)*time.Minute))
+		r := f.row(a, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError, true, time.Second, person("u1"))
+		r.Reason, r.Repeats = fmt.Sprintf("noise_%03d", i), 2
+	}
+	ours := f.attempt(f.org, f.project, f.server, f.now.Add(-3*time.Hour))
+	f.row(ours, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, time.Second, person("u2"))
+	other := f.attempt(f.org, f.project, f.server, f.now.Add(-4*time.Hour))
+	f.row(other, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, time.Second, person("u3"))
+	f.insert()
+
+	filters := attemptlog.Filters{People: []string{urn.NewUserSubject("u2").String()}, Reasons: []string{mcpconnectionattempts.CodeStaticKeyRejected.String()}}
+	counts, err := attemptlog.Count(t.Context(), f.ch, f.scope(), attemptlog.Filters{}, f.now)
+	require.NoError(t, err)
+	require.NotContains(t, counts.Facets[attemptlog.FacetReasons], attemptlog.FacetValue{Value: mcpconnectionattempts.CodeStaticKeyRejected.String(), Attempts: 2}, "the facet keeps only the reasons with the most attempts")
+
+	got, err := attemptlog.CountByReason(t.Context(), f.ch, f.scope(), filters, f.now)
+	require.NoError(t, err)
+	require.Equal(t, []attemptlog.FacetValue{{Value: mcpconnectionattempts.CodeStaticKeyRejected.String(), Attempts: 1}}, got)
+}
+
+func TestCountOver_FillsEveryIntervalFromAnUnalignedStart(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	base := f.now.Truncate(10 * time.Minute)
+	for _, ago := range []time.Duration{29 * time.Minute, 25 * time.Minute, 8 * time.Minute, 5 * time.Minute} {
+		a := f.attempt(f.org, f.project, f.server, base.Add(-ago))
+		f.row(a, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError, true, time.Second, person("u1"))
+	}
+	f.insert()
+
+	scope := f.scope()
+	scope.From, scope.To = base.Add(-27*time.Minute), base
+	got, err := attemptlog.CountOver(t.Context(), f.ch, scope, attemptlog.Filters{}, 10*time.Minute, f.now)
+	require.NoError(t, err)
+	require.Equal(t, []attemptlog.TimeCount{
+		{Start: base.Add(-30 * time.Minute), Attempts: 1},
+		{Start: base.Add(-20 * time.Minute), Attempts: 0},
+		{Start: base.Add(-10 * time.Minute), Attempts: 2},
+	}, got)
+}
+
+func TestCountOver_RejectsAWidthTheBucketsCannotAgreeOn(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for _, width := range []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond, 7 * time.Minute} {
+		_, err := attemptlog.CountOver(t.Context(), f.ch, f.scope(), attemptlog.Filters{}, width, f.now)
+		require.Error(t, err, width.String())
 	}
 }

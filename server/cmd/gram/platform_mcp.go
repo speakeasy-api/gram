@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -76,6 +77,9 @@ import (
 )
 
 type platformMCPConfig struct {
+	// AICatalog is the process-wide AI client catalog store.
+	AICatalog *aivendors.Store
+
 	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
 	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
@@ -184,7 +188,7 @@ type platformMCPConfig struct {
 	Telemetry platformmcp.DiagnosticsTelemetryReader
 	// ToolUsage is the target-aware tool usage read behind
 	// get_tool_usage_summary: the same pipeline the dashboard Insights board
-	// and the managed platform_get_tool_usage_summary tool read. Nil keeps the
+	// reads. Nil keeps the
 	// tool visible as unavailable rather than serving an empty breakdown.
 	ToolUsage platformmcp.ToolUsageBreakdownReader
 	// SessionCapture resolves the organization's metrics mode, which decides
@@ -303,6 +307,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -469,7 +474,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -664,7 +669,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithAICatalog(config.AICatalog).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve local Platform MCP skills: %w", err)
@@ -1136,6 +1141,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+		AICatalog:     config.AICatalog,
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
 		Cache:         cache.NewRedisCacheAdapter(config.Redis),
@@ -1282,7 +1288,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		adapters,
 		ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(platformmcp.ForcedReadinessProbesPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		budgets.Repair,
-		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
+		platformmcp.NewRemoteMCPReadinessProber(config.AICatalog, config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager).WithIdentityChaining(chaining),
 	).WithTelemetry(telemetry)
 	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
 	if err != nil {
@@ -1469,7 +1475,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
-	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
+	).WithAICatalog(config.AICatalog).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDashboardLinks(config.DashboardURL, config.ServerURL, config.DB).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("serve browser Platform MCP skills: %w", err)

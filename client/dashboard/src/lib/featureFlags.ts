@@ -19,7 +19,7 @@ export const FEATURE_FLAGS = {
   // device agent setup step.
   intunePackageDownload: "intune-package-download",
   killswitches: "gram-killswitches",
-  // Gates MCP Sessions connection health (Overview, Connection Logs); the server checks the same key.
+  // Gates MCP Sign-in connection health (Overview, Connection Logs); the server checks the same key.
   mcpConnectionHealth: "mcp-connection-health",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
@@ -43,6 +43,9 @@ export const FEATURE_FLAGS = {
   // Creating tool approval policies and the Tool approvals tab. The server
   // enforces the same key on policy create and update.
   toolApprovals: "risk-tool-approvals",
+  // UI-only rollout gate for the project homepage with the terminal-style
+  // Project Assistant.
+  terminalHome: "terminal-home",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];

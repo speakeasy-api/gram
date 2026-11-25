@@ -189,7 +189,7 @@ func (h *Interactions) handleClick(ctx context.Context, payload clickPayload, ac
 	deadline := time.Time{}
 	switch {
 	case window == endOfDayKey:
-		if endOfDay.Sub(h.now()) < minEndOfDayLead {
+		if endOfDay.Sub(h.now()) < access.MinEndOfDayLead {
 			return slackdm.Ephemeral("This request's end of day has passed or is too close. Pick a duration instead.")
 		}
 		deadline = endOfDay

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -131,7 +132,7 @@ func TestUnservedCredentialReason(t *testing.T) {
 func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{}
+	service := &Service{aiCatalog: aivendorstest.NewStore()}
 	subject := urn.NewUserSubject("user_1")
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
 	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
@@ -141,6 +142,26 @@ func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.ErrorContains(t, err, "This connection can't be checked here.")
+}
+
+func TestAssignedHostedTokenRejectsSiblingAndQualifiedGrant(t *testing.T) {
+	t.Parallel()
+
+	assigned, sibling, issuer := uuid.New(), uuid.New(), uuid.New()
+	tokens := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {RemoteSessionClientID: sibling, Token: "sibling-token"},
+	}
+	_, found := assignedHostedToken(tokens, assigned)
+	require.False(t, found, "sharing an issuer does not make the sibling eligible")
+
+	tokens[issuer] = remotesessions.UpstreamToken{RemoteSessionClientID: assigned, Token: "qualified-token", Resource: "https://example.com/mcp"}
+	_, found = assignedHostedToken(tokens, assigned)
+	require.False(t, found, "hosted tools must not receive a resource-qualified token")
+
+	tokens[issuer] = remotesessions.UpstreamToken{RemoteSessionClientID: assigned, Token: "assigned-token"}
+	entry, found := assignedHostedToken(tokens, assigned)
+	require.True(t, found)
+	require.Equal(t, "assigned-token", entry.Token)
 }
 
 func TestDescribeNoUsableCredential(t *testing.T) {
