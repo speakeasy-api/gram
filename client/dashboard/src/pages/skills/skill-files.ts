@@ -5,8 +5,8 @@ import { decodeManifestFile, MAX_SKILL_MANIFEST_BYTES } from "./skill-manifest";
 // before it leaves the browser, with the same rules the API would apply.
 export const MAX_SKILL_FILES = 100;
 export const MAX_SKILL_FILE_BYTES = 5 * 1024 * 1024;
-export const MAX_SKILL_FILES_TOTAL_BYTES = 10 * 1024 * 1024;
-export const MAX_SKILL_FILE_PATH_BYTES = 512;
+const MAX_SKILL_FILES_TOTAL_BYTES = 10 * 1024 * 1024;
+const MAX_SKILL_FILE_PATH_BYTES = 512;
 export const SKILL_MANIFEST_PATH = "SKILL.md";
 
 /** A file read from an uploaded folder or zip, before the skill is parsed. */
