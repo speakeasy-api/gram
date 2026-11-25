@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/internal/plainrepo"
@@ -60,4 +61,115 @@ func (t *Transcripts) ListChatMessagesByGeneration(ctx context.Context, db DBTX,
 	return t.chatMessages(ctx, db, projectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
 		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
 	})
+}
+
+// ChatPage selects one keyset page of a chat generation for
+// ListChatMessagesAfterPage and ListChatMessagesBeforePage. A NULL Cursor
+// returns the oldest (after) or newest (before) page.
+type ChatPage struct {
+	ProjectID  uuid.UUID
+	ChatID     uuid.UUID
+	Generation int32
+	Cursor     pgtype.Int8
+	Limit      int32
+}
+
+// ListChatMessagesAfterPage returns messages after the cursor, oldest first.
+func (t *Transcripts) ListChatMessagesAfterPage(ctx context.Context, db DBTX, page ChatPage) ([]chatrepo.ChatMessage, error) {
+	rows, err := plainrepo.New(db).ListChatMessagesAfterPage(ctx, plainrepo.ListChatMessagesAfterPageParams{OpenShadows: t.Enabled(page.ProjectID), ChatID: page.ChatID, ProjectID: page.ProjectID, Generation: page.Generation, AfterSeq: page.Cursor, Lim: page.Limit})
+	if err != nil {
+		return nil, safe(err)
+	}
+	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+	})
+}
+
+// ListChatMessagesBeforePage returns messages before the cursor, newest first.
+func (t *Transcripts) ListChatMessagesBeforePage(ctx context.Context, db DBTX, page ChatPage) ([]chatrepo.ChatMessage, error) {
+	rows, err := plainrepo.New(db).ListChatMessagesBeforePage(ctx, plainrepo.ListChatMessagesBeforePageParams{OpenShadows: t.Enabled(page.ProjectID), ChatID: page.ChatID, ProjectID: page.ProjectID, Generation: page.Generation, BeforeSeq: page.Cursor, Lim: page.Limit})
+	if err != nil {
+		return nil, safe(err)
+	}
+	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+	})
+}
+
+// ListRiskWindowedMessagesRow is one message of the risk-only chat view.
+type ListRiskWindowedMessagesRow = plainrepo.ListRiskWindowedMessagesRow
+
+// RiskWindow selects the risk-only view: every message within ContextSize
+// positions of a flagged message or of a prompt whose attachment is flagged.
+type RiskWindow struct {
+	ProjectID          uuid.UUID
+	ChatID             uuid.UUID
+	Generation         int32
+	ContextSize        int64
+	RiskMessageIDs     []uuid.UUID
+	RiskContentPartIDs []uuid.UUID
+}
+
+// ListRiskWindowedMessages returns the risk-only view, oldest first.
+func (t *Transcripts) ListRiskWindowedMessages(ctx context.Context, db DBTX, w RiskWindow) ([]ListRiskWindowedMessagesRow, error) {
+	rows, err := plainrepo.New(db).ListRiskWindowedMessages(ctx, plainrepo.ListRiskWindowedMessagesParams{OpenShadows: t.Enabled(w.ProjectID), ContextSize: w.ContextSize, ChatID: w.ChatID, ProjectID: w.ProjectID, Generation: w.Generation, RiskContentPartIds: w.RiskContentPartIDs, RiskMessageIds: w.RiskMessageIDs})
+	if err != nil {
+		return nil, safe(err)
+	}
+	joined := make([]joinedRow, len(rows))
+	for i := range rows {
+		r := &rows[i]
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+	}
+	if err := t.openJoined(ctx, db, w.ProjectID, joined); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// ListSearchWindowedMessagesRow is one message of the chat search view.
+type ListSearchWindowedMessagesRow = plainrepo.ListSearchWindowedMessagesRow
+
+// SearchWindow selects the search view: messages whose text matches Query,
+// up to MatchLimit matches, each with ContextSize messages around it.
+type SearchWindow struct {
+	ProjectID   uuid.UUID
+	ChatID      uuid.UUID
+	Generation  int32
+	Query       string
+	MatchLimit  int32
+	ContextSize int64
+}
+
+// ListSearchWindowedMessages returns the search view, oldest first.
+func (t *Transcripts) ListSearchWindowedMessages(ctx context.Context, db DBTX, w SearchWindow) ([]ListSearchWindowedMessagesRow, error) {
+	rows, err := plainrepo.New(db).ListSearchWindowedMessages(ctx, plainrepo.ListSearchWindowedMessagesParams{OpenShadows: t.Enabled(w.ProjectID), ContextSize: w.ContextSize, ChatID: w.ChatID, ProjectID: w.ProjectID, Generation: w.Generation, Query: w.Query, MatchLimit: w.MatchLimit})
+	if err != nil {
+		return nil, safe(err)
+	}
+	joined := make([]joinedRow, len(rows))
+	for i := range rows {
+		r := &rows[i]
+		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+	}
+	if err := t.openJoined(ctx, db, w.ProjectID, joined); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetChatEntryTotalsParams selects a generation and its risk anchors.
+type GetChatEntryTotalsParams = plainrepo.GetChatEntryTotalsParams
+
+// GetChatEntryTotalsRow counts a generation's trace entries by kind.
+type GetChatEntryTotalsRow = plainrepo.GetChatEntryTotalsRow
+
+// GetChatEntryTotals counts a generation's trace entries. It returns no
+// message body.
+func (t *Transcripts) GetChatEntryTotals(ctx context.Context, db DBTX, params GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
+	row, err := plainrepo.New(db).GetChatEntryTotals(ctx, params)
+	if err != nil {
+		return row, safe(err)
+	}
+	return row, nil
 }

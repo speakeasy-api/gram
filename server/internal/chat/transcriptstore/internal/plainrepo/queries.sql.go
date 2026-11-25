@@ -12,6 +12,97 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getChatEntryTotals = `-- name: GetChatEntryTotals :one
+WITH ordered AS (
+  SELECT
+    cm.id,
+    cm.role,
+    CASE
+      WHEN cm.tool_calls IS NULL THEN false
+      WHEN jsonb_typeof(cm.tool_calls) = 'array'
+        THEN jsonb_array_length(cm.tool_calls) > 0
+      -- Some rows store tool_calls double-encoded (a JSON string holding the
+      -- array); treat any non-empty/non-"[]" string as carrying tool calls.
+      WHEN jsonb_typeof(cm.tool_calls) = 'string'
+        THEN btrim(cm.tool_calls #>> '{}') NOT IN ('', '[]', 'null')
+      ELSE false
+    END AS has_tool_calls
+  FROM chat_messages cm
+  WHERE cm.chat_id = $2
+    AND cm.project_id = $3::uuid
+    AND cm.generation = $4::integer
+),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  WHERE ccp.chat_id = $2
+    AND ccp.project_id = $3::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND ccp.id = ANY($5::uuid[])
+)
+SELECT
+  COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'user')::bigint AS user_messages,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'assistant')::bigint AS assistant_messages,
+  COUNT(*) FILTER (WHERE has_tool_calls)::bigint AS tool_calls,
+  COUNT(*) FILTER (WHERE NOT has_tool_calls AND role = 'tool')::bigint AS tool_results,
+  (
+    SELECT COUNT(*)::bigint FROM ordered o
+    WHERE o.id = ANY($1::uuid[])
+    OR o.id IN (SELECT id FROM attachment_risk_prompts)
+  )::bigint AS risk_findings
+FROM ordered
+`
+
+type GetChatEntryTotalsParams struct {
+	RiskMessageIds     []uuid.UUID
+	ChatID             uuid.UUID
+	ProjectID          uuid.UUID
+	Generation         int32
+	RiskContentPartIds []uuid.UUID
+}
+
+type GetChatEntryTotalsRow struct {
+	Total             int64
+	UserMessages      int64
+	AssistantMessages int64
+	ToolCalls         int64
+	ToolResults       int64
+	RiskFindings      int64
+}
+
+// Per-generation trace-entry totals for the chat detail filter bar. The detail
+// sheet paginates messages, so counts derived from the loaded page understate
+// the chat; these totals describe the whole generation regardless of which page
+// is in view. Each message maps to exactly one entry, mirroring the client's
+// getTraceEntryType precedence: a message carrying a non-empty tool_calls array
+// is a tool call regardless of role, otherwise the role decides. risk_findings
+// counts messages the caller's ClickHouse finding anchors flag
+// (@risk_message_ids), directly or through an attachment hanging off them
+// (@risk_content_part_ids).
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
+func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getChatEntryTotals,
+		arg.RiskMessageIds,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.RiskContentPartIds,
+	)
+	var i GetChatEntryTotalsRow
+	err := row.Scan(
+		&i.Total,
+		&i.UserMessages,
+		&i.AssistantMessages,
+		&i.ToolCalls,
+		&i.ToolResults,
+		&i.RiskFindings,
+	)
+	return i, err
+}
+
 const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
 
 SELECT organization_id FROM projects WHERE id = $1
@@ -30,6 +121,243 @@ func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.U
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
+}
+
+const listChatMessagesAfterPage = `-- name: ListChatMessagesAfterPage :many
+SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.chat_id = $2
+  AND m.project_id = $3::uuid
+  AND m.generation = $4::integer
+  AND (
+    $5::bigint IS NULL
+    OR (m.created_at, m.seq) > (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = $2
+        AND a.project_id = $3::uuid
+        AND a.seq = $5::bigint
+    )
+    -- Same missing-anchor fallback as ListChatMessagesBeforePage.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = $2
+          AND a.project_id = $3::uuid
+          AND a.seq = $5::bigint
+      )
+      AND m.seq > $5::bigint
+    )
+  )
+ORDER BY m.created_at ASC, m.seq ASC
+LIMIT $6::integer
+`
+
+type ListChatMessagesAfterPageParams struct {
+	OpenShadows bool
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	AfterSeq    pgtype.Int8
+	Lim         int32
+}
+
+type ListChatMessagesAfterPageRow struct {
+	ChatMessage      ChatMessage
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// Keyset page within a generation, oldest first. Same anchor-row cursor
+// resolution as ListChatMessagesBeforePage. Returns rows strictly after the
+// anchor in transcript order, or the oldest page (start of the thread) when
+// @after_seq is NULL. Fetch @lim = pageSize+1 to detect whether more newer
+// rows remain.
+func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMessagesAfterPageParams) ([]ListChatMessagesAfterPageRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesAfterPage,
+		arg.OpenShadows,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.AfterSeq,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessagesAfterPageRow
+	for rows.Next() {
+		var i ListChatMessagesAfterPageRow
+		if err := rows.Scan(
+			&i.ChatMessage.ID,
+			&i.ChatMessage.Seq,
+			&i.ChatMessage.ChatID,
+			&i.ChatMessage.ProjectID,
+			&i.ChatMessage.Role,
+			&i.ChatMessage.Content,
+			&i.ChatMessage.ContentRaw,
+			&i.ChatMessage.ContentAssetUrl,
+			&i.ChatMessage.Model,
+			&i.ChatMessage.MessageID,
+			&i.ChatMessage.FinishReason,
+			&i.ChatMessage.ToolCalls,
+			&i.ChatMessage.PromptTokens,
+			&i.ChatMessage.CompletionTokens,
+			&i.ChatMessage.TotalTokens,
+			&i.ChatMessage.StorageError,
+			&i.ChatMessage.UserID,
+			&i.ChatMessage.ExternalUserID,
+			&i.ChatMessage.ExternalMessageID,
+			&i.ChatMessage.Origin,
+			&i.ChatMessage.UserAgent,
+			&i.ChatMessage.IpAddress,
+			&i.ChatMessage.Source,
+			&i.ChatMessage.ToolCallID,
+			&i.ChatMessage.ToolUrn,
+			&i.ChatMessage.ToolOutcome,
+			&i.ChatMessage.ToolOutcomeNotes,
+			&i.ChatMessage.ToolCallSummaries,
+			&i.ChatMessage.ContentHash,
+			&i.ChatMessage.Generation,
+			&i.ChatMessage.CaptureKind,
+			&i.ChatMessage.OriginalMessageID,
+			&i.ChatMessage.Replayed,
+			&i.ChatMessage.CreatedAt,
+			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMessagesBeforePage = `-- name: ListChatMessagesBeforePage :many
+SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.capture_kind, m.original_message_id, m.replayed, m.created_at, m.risk_analyzed_at, t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM chat_messages m
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND $1::boolean
+WHERE m.chat_id = $2
+  AND m.project_id = $3::uuid
+  AND m.generation = $4::integer
+  AND (
+    $5::bigint IS NULL
+    OR (m.created_at, m.seq) < (
+      SELECT a.created_at, a.seq FROM chat_messages a
+      WHERE a.chat_id = $2
+        AND a.project_id = $3::uuid
+        AND a.seq = $5::bigint
+    )
+    -- A cursor whose anchor row no longer resolves must not dead-end the
+    -- page (a tuple comparison against an empty subquery is NULL): fall
+    -- back to the plain seq comparison the pre-tuple cursor used.
+    OR (
+      NOT EXISTS (
+        SELECT 1 FROM chat_messages a
+        WHERE a.chat_id = $2
+          AND a.project_id = $3::uuid
+          AND a.seq = $5::bigint
+      )
+      AND m.seq < $5::bigint
+    )
+  )
+ORDER BY m.created_at DESC, m.seq DESC
+LIMIT $6::integer
+`
+
+type ListChatMessagesBeforePageParams struct {
+	OpenShadows bool
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	BeforeSeq   pgtype.Int8
+	Lim         int32
+}
+
+type ListChatMessagesBeforePageRow struct {
+	ChatMessage      ChatMessage
+	ShadowCiphertext pgtype.Text
+	ShadowCurrent    bool
+}
+
+// Keyset page within a generation, newest first. The cursor stays the anchor
+// row's seq (stable, unique, already in the API), but position is compared in
+// transcript order (created_at, seq) so pages agree with the display order
+// even when spool-replayed rows carry backdated created_at. Returns rows
+// strictly before the anchor, or the newest page when @before_seq is NULL.
+// Order DESC so LIMIT keeps the most recent rows; the caller reverses to
+// ascending for display. Fetch @lim = pageSize+1 to detect whether more older
+// rows remain.
+func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMessagesBeforePageParams) ([]ListChatMessagesBeforePageRow, error) {
+	rows, err := q.db.Query(ctx, listChatMessagesBeforePage,
+		arg.OpenShadows,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.BeforeSeq,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMessagesBeforePageRow
+	for rows.Next() {
+		var i ListChatMessagesBeforePageRow
+		if err := rows.Scan(
+			&i.ChatMessage.ID,
+			&i.ChatMessage.Seq,
+			&i.ChatMessage.ChatID,
+			&i.ChatMessage.ProjectID,
+			&i.ChatMessage.Role,
+			&i.ChatMessage.Content,
+			&i.ChatMessage.ContentRaw,
+			&i.ChatMessage.ContentAssetUrl,
+			&i.ChatMessage.Model,
+			&i.ChatMessage.MessageID,
+			&i.ChatMessage.FinishReason,
+			&i.ChatMessage.ToolCalls,
+			&i.ChatMessage.PromptTokens,
+			&i.ChatMessage.CompletionTokens,
+			&i.ChatMessage.TotalTokens,
+			&i.ChatMessage.StorageError,
+			&i.ChatMessage.UserID,
+			&i.ChatMessage.ExternalUserID,
+			&i.ChatMessage.ExternalMessageID,
+			&i.ChatMessage.Origin,
+			&i.ChatMessage.UserAgent,
+			&i.ChatMessage.IpAddress,
+			&i.ChatMessage.Source,
+			&i.ChatMessage.ToolCallID,
+			&i.ChatMessage.ToolUrn,
+			&i.ChatMessage.ToolOutcome,
+			&i.ChatMessage.ToolOutcomeNotes,
+			&i.ChatMessage.ToolCallSummaries,
+			&i.ChatMessage.ContentHash,
+			&i.ChatMessage.Generation,
+			&i.ChatMessage.CaptureKind,
+			&i.ChatMessage.OriginalMessageID,
+			&i.ChatMessage.Replayed,
+			&i.ChatMessage.CreatedAt,
+			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
@@ -191,6 +519,343 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.ChatMessage.Replayed,
 			&i.ChatMessage.CreatedAt,
 			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = $3
+    AND cm.project_id = $4::uuid
+    AND cm.generation = $5::integer
+),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  WHERE ccp.chat_id = $3
+    AND ccp.project_id = $4::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND ccp.id = ANY($6::uuid[])
+),
+risk_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.id = ANY($7::uuid[])
+  OR o.id IN (SELECT id FROM attachment_risk_prompts)
+)
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.tool_call_summaries, o.content_hash, o.generation, o.capture_kind, o.original_message_id, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk,
+  t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM ordered o
+LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND $1::boolean
+WHERE EXISTS (
+  SELECT 1 FROM risk_rns r
+  WHERE o.rn BETWEEN r.rn - $2::bigint AND r.rn + $2::bigint
+)
+ORDER BY o.created_at ASC, o.seq ASC
+`
+
+type ListRiskWindowedMessagesParams struct {
+	OpenShadows        bool
+	ContextSize        int64
+	ChatID             uuid.UUID
+	ProjectID          uuid.UUID
+	Generation         int32
+	RiskContentPartIds []uuid.UUID
+	RiskMessageIds     []uuid.UUID
+}
+
+type ListRiskWindowedMessagesRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	ContentHash       []byte
+	Generation        int32
+	CaptureKind       pgtype.Text
+	OriginalMessageID uuid.NullUUID
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	Rn                int64
+	Total             int64
+	IsRisk            bool
+	ShadowCiphertext  pgtype.Text
+	ShadowCurrent     bool
+}
+
+// Risk-only view: returns every message within +/- @context_size ordinal
+// positions of any active risk finding in the generation, ordered oldest to
+// newest. rn is the message's 1-based ordinal within the generation and total
+// is the generation's message count, so the caller can fold consecutive rn into
+// contiguous segments and decide whether earlier (rn > 1) or later (rn < total)
+// messages remain to be expanded. Overlapping windows merge naturally via set
+// membership. is_risk flags the seed rows (the flagged messages themselves) so
+// the caller can return the explicit risk seq list (context rows are
+// is_risk = false).
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
+func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
+		arg.OpenShadows,
+		arg.ContextSize,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.RiskContentPartIds,
+		arg.RiskMessageIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskWindowedMessagesRow
+	for rows.Next() {
+		var i ListRiskWindowedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ToolCallSummaries,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CaptureKind,
+			&i.OriginalMessageID,
+			&i.Replayed,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.Rn,
+			&i.Total,
+			&i.IsRisk,
+			&i.ShadowCiphertext,
+			&i.ShadowCurrent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
+WITH ordered AS (
+  SELECT
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.capture_kind, cm.original_message_id, cm.replayed, cm.created_at, cm.risk_analyzed_at,
+    row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
+    count(*) OVER () AS total
+  FROM chat_messages cm
+  WHERE cm.chat_id = $3
+    AND cm.project_id = $4::uuid
+    AND cm.generation = $5::integer
+),
+match_rns AS (
+  SELECT o.rn FROM ordered o
+  WHERE o.content ILIKE '%' || $6::text || '%'
+     OR (o.tool_calls IS NOT NULL AND o.tool_calls::text ILIKE '%' || $6::text || '%')
+     OR (o.content_raw IS NOT NULL AND o.content_raw::text ILIKE '%' || $6::text || '%')
+  ORDER BY o.rn
+  LIMIT $7::integer
+)
+SELECT
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.tool_call_summaries, o.content_hash, o.generation, o.capture_kind, o.original_message_id, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match,
+  t.ciphertext AS shadow_ciphertext,
+       COALESCE(t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,o.content,o.content_raw IS NULL,o.content_raw,o.tool_calls IS NULL,o.tool_calls,o.tool_outcome_notes,o.tool_call_summaries IS NULL,o.tool_call_summaries,o.storage_error)::text,'UTF8')), false)::boolean AS shadow_current
+FROM ordered o
+LEFT JOIN chat_message_transcripts t ON t.message_id = o.id AND t.project_id = o.project_id AND $1::boolean
+WHERE EXISTS (
+  SELECT 1 FROM match_rns m
+  WHERE o.rn BETWEEN m.rn - $2::bigint AND m.rn + $2::bigint
+)
+ORDER BY o.created_at ASC, o.seq ASC
+`
+
+type ListSearchWindowedMessagesParams struct {
+	OpenShadows bool
+	ContextSize int64
+	ChatID      uuid.UUID
+	ProjectID   uuid.UUID
+	Generation  int32
+	Query       string
+	MatchLimit  int32
+}
+
+type ListSearchWindowedMessagesRow struct {
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           pgtype.Text
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
+	ContentHash       []byte
+	Generation        int32
+	CaptureKind       pgtype.Text
+	OriginalMessageID uuid.NullUUID
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
+	Rn                int64
+	Total             int64
+	IsMatch           bool
+	ShadowCiphertext  pgtype.Text
+	ShadowCurrent     bool
+}
+
+// Query-search view: same windowing as ListRiskWindowedMessages, but the seed
+// rows are messages whose searchable text matches @query (case-insensitive
+// substring over the narrative content, the tool-call name/arguments JSON, and
+// any structured/multimodal content) instead of messages with a risk finding.
+// Each match is padded with +/- @context_size ordinal positions. rn/total drive
+// segment folding and the has_more flags; is_match flags the seed rows so the
+// caller can return the explicit jump-to-match seq list (context rows are
+// is_match = false). Seed matches are capped at @match_limit (earliest first by
+// ordinal) to bound the response on broad queries. Asset-offloaded content (too
+// large to store inline) is not searchable here.
+func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearchWindowedMessagesParams) ([]ListSearchWindowedMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listSearchWindowedMessages,
+		arg.OpenShadows,
+		arg.ContextSize,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Generation,
+		arg.Query,
+		arg.MatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSearchWindowedMessagesRow
+	for rows.Next() {
+		var i ListSearchWindowedMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.Model,
+			&i.MessageID,
+			&i.FinishReason,
+			&i.ToolCalls,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.StorageError,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.ToolCallSummaries,
+			&i.ContentHash,
+			&i.Generation,
+			&i.CaptureKind,
+			&i.OriginalMessageID,
+			&i.Replayed,
+			&i.CreatedAt,
+			&i.RiskAnalyzedAt,
+			&i.Rn,
+			&i.Total,
+			&i.IsMatch,
 			&i.ShadowCiphertext,
 			&i.ShadowCurrent,
 		); err != nil {

@@ -1379,19 +1379,16 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	switch {
 	case payload.RiskOnly:
-		rows, err := s.repo.ListRiskWindowedMessages(ctx, repo.ListRiskWindowedMessagesParams{
+		rows, err := s.transcripts.ListRiskWindowedMessages(ctx, s.db, transcriptstore.RiskWindow{
 			ContextSize:        riskContextWindow,
 			ProjectID:          *authCtx.ProjectID,
 			ChatID:             chat.ID,
 			Generation:         generation,
-			RiskMessageIds:     riskAnchors.MessageIDs,
-			RiskContentPartIds: riskAnchors.ContentPartIDs,
+			RiskMessageIDs:     riskAnchors.MessageIDs,
+			RiskContentPartIDs: riskAnchors.ContentPartIDs,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
-		}
-		if err := openShadowRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
@@ -1431,7 +1428,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// are ignored on this initial request; the dashboard expands segments with
 		// plain before_seq/after_seq follow-ups. Message construction mirrors the
 		// risk_only branch above.
-		rows, err := s.repo.ListSearchWindowedMessages(ctx, repo.ListSearchWindowedMessagesParams{
+		rows, err := s.transcripts.ListSearchWindowedMessages(ctx, s.db, transcriptstore.SearchWindow{
 			ContextSize: searchContextWindow,
 			ProjectID:   *authCtx.ProjectID,
 			ChatID:      chat.ID,
@@ -1441,9 +1438,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
-		}
-		if err := openShadowRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
@@ -1476,12 +1470,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	case payload.AfterSeq != nil:
 		// Scroll down: messages newer than the cursor, oldest first. Fetch one
 		// extra row to detect whether still-newer messages remain.
-		rows, err := s.repo.ListChatMessagesAfterPage(ctx, repo.ListChatMessagesAfterPageParams{
+		rows, err := s.transcripts.ListChatMessagesAfterPage(ctx, s.db, transcriptstore.ChatPage{
 			ChatID:     chat.ID,
 			ProjectID:  *authCtx.ProjectID,
 			Generation: generation,
-			AfterSeq:   pgtype.Int8{Int64: *payload.AfterSeq, Valid: true},
-			Lim:        int32(limit + 1),
+			Cursor:     pgtype.Int8{Int64: *payload.AfterSeq, Valid: true},
+			Limit:      int32(limit + 1),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
@@ -1492,21 +1486,18 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
-		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	case payload.FromStart && payload.BeforeSeq == nil:
 		// Start of the thread: oldest page, ascending. A NULL cursor returns from
 		// the very beginning. Fetch one extra row to detect whether newer messages
 		// remain. (before_seq takes precedence per the design, hence the guard.)
-		rows, err := s.repo.ListChatMessagesAfterPage(ctx, repo.ListChatMessagesAfterPageParams{
+		rows, err := s.transcripts.ListChatMessagesAfterPage(ctx, s.db, transcriptstore.ChatPage{
 			ChatID:     chat.ID,
 			ProjectID:  *authCtx.ProjectID,
 			Generation: generation,
-			AfterSeq:   pgtype.Int8{Int64: 0, Valid: false}, // null → oldest page
-			Lim:        int32(limit + 1),
+			Cursor:     pgtype.Int8{Int64: 0, Valid: false}, // null → oldest page
+			Limit:      int32(limit + 1),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
@@ -1522,9 +1513,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
-		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	default:
@@ -1535,12 +1523,12 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if payload.BeforeSeq != nil {
 			beforeSeq = pgtype.Int8{Int64: *payload.BeforeSeq, Valid: true}
 		}
-		rows, err := s.repo.ListChatMessagesBeforePage(ctx, repo.ListChatMessagesBeforePageParams{
+		rows, err := s.transcripts.ListChatMessagesBeforePage(ctx, s.db, transcriptstore.ChatPage{
 			ChatID:     chat.ID,
 			ProjectID:  *authCtx.ProjectID,
 			Generation: generation,
-			BeforeSeq:  beforeSeq,
-			Lim:        int32(limit + 1),
+			Cursor:     beforeSeq,
+			Limit:      int32(limit + 1),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
@@ -1554,9 +1542,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreAfter = payload.BeforeSeq != nil
 		if isInitialLatest {
 			latestPageRows = rows
-		}
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 	}
@@ -1581,7 +1566,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	// show real counts even though messages are paginated. Scoped to the loaded
 	// generation to stay consistent with the (also generation-scoped) transcript
 	// and risk-windowed view.
-	totals, err := s.repo.GetChatEntryTotals(ctx, repo.GetChatEntryTotalsParams{
+	totals, err := s.transcripts.GetChatEntryTotals(ctx, s.db, transcriptstore.GetChatEntryTotalsParams{
 		ChatID:             chat.ID,
 		ProjectID:          *authCtx.ProjectID,
 		Generation:         generation,
@@ -3227,13 +3212,13 @@ func foldWindowSegments(n int, at func(i int) (rn, total, seq int64)) []*gen.Ris
 	return segments
 }
 
-func buildRiskSegments(rows []repo.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
+func buildRiskSegments(rows []transcriptstore.ListRiskWindowedMessagesRow) []*gen.RiskSegment {
 	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
 		return rows[i].Rn, rows[i].Total, rows[i].Seq
 	})
 }
 
-func buildSearchSegments(rows []repo.ListSearchWindowedMessagesRow) []*gen.RiskSegment {
+func buildSearchSegments(rows []transcriptstore.ListSearchWindowedMessagesRow) []*gen.RiskSegment {
 	return foldWindowSegments(len(rows), func(i int) (int64, int64, int64) {
 		return rows[i].Rn, rows[i].Total, rows[i].Seq
 	})
