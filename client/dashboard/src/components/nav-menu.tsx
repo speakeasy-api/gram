@@ -476,7 +476,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
-        "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
+        "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)] focus-visible:outline-none",
         "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
@@ -742,28 +742,59 @@ export function CollapsibleNavItem({
           className={cn(
             // A hairline ring rather than the browser's fallback: without a
             // ring class these rows take the 2px outline in App.css, which
-            // draws a black slab around the whole row and its badge.
-            "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
+            // draws a black slab around the whole row and its badge. The
+            // outline is turned off too: Chrome draws it as an `auto` ring
+            // that also wraps the active rule, a second box over the ring.
+            "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)] focus-visible:outline-none",
             "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
+            // A stage row marks itself active on its tree connector: a rule on
+            // the group track beside the connector reads as a second marker.
             item.active
-              ? ACTIVE_ITEM
+              ? stageSection
+                ? "text-foreground"
+                : ACTIVE_ITEM
               : "text-muted-foreground hover:text-foreground",
-            // The section's dashed edge sits on the group rail, 9px left of
-            // the rows above; 16px of padding (past its 1px border) puts the
-            // label back on their column.
-            stageSection && "pl-4",
             // The active rule is centred on the group's 1px track: a 2px rule
             // starts half a pixel left of the track. Rows sit 9px right of it
-            // (the track's 1px plus 8px padding); section rows sit 1px right,
-            // on the section's own border. Active rows only: any `before:`
-            // utility gives the pseudo-element content, which on an inactive
-            // row lands in the flex flow and pushes the label right by the gap.
-            item.active &&
-              (stageSection
-                ? cn("before:-left-[1.5px]", stageActiveRuleClass[stageSection])
-                : "before:-left-[9.5px]"),
+            // (the track's 1px plus 8px padding). Active rows only: any
+            // `before:` utility gives the pseudo-element content, which on an
+            // inactive row lands in the flex flow and pushes the label right
+            // by the gap.
+            item.active && !stageSection && "before:-left-[9.5px]",
           )}
         >
+          {/* A tree connector hangs each Preview or Beta row off the stage
+              label, in its colour: a stem through the row and a tick into
+              it. The stem runs 4px past the row's content each way, over its
+              py-1, so the rows join into one line; the section ends it at the
+              last row's tick. On the active row the stem and tick are solid
+              and 2px: the same full-height rule other rows get on the group
+              track. */}
+          {stageSection && (
+            <span
+              aria-hidden
+              className={cn(
+                "relative w-2 shrink-0 self-stretch",
+                stageTextClass[stageSection],
+              )}
+            >
+              <span
+                data-tree-stem
+                className={cn(
+                  "absolute -inset-y-1 bg-current",
+                  item.active
+                    ? "-left-[0.5px] w-0.5"
+                    : "left-0 w-px opacity-50",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute top-1/2 left-0 w-full -translate-y-1/2 bg-current",
+                  item.active ? "h-0.5" : "h-px opacity-50",
+                )}
+              />
+            </span>
+          )}
           <span className={cn("truncate", isLoading && "nav-shimmer")}>
             {label ?? item.title}
           </span>
@@ -781,19 +812,10 @@ export function CollapsibleNavItem({
 // Release-stage section inside a CollapsibleNavGroup
 // ---------------------------------------------------------------------------
 
-// A faint wash of the stage's colour: the softest background token (100 under
-// the border's 300) at 40% over the sidebar. Mixed with the sidebar rather
-// than transparent so the solid rail under the dashed edge does not show
-// through the gaps.
-const stageSectionBgClass: Record<ReleaseStage, string> = {
-  preview:
-    "bg-[color-mix(in_oklab,var(--bg-warning-softest)_40%,var(--sidebar))]",
-  beta: "bg-[color-mix(in_oklab,var(--bg-information-softest)_40%,var(--sidebar))]",
-};
-
-// Gathers a group's Preview or Beta items into one dashed, tinted box with the
-// stage named once above it, instead of a badge on every row. The label sits
-// clear of the box: laid over the border it cut across the tint's edge.
+// Gathers a group's Preview or Beta items under the stage named once above
+// them, instead of a badge on every row. A tree connector ties the rows to the
+// label and ends at the last one. Only the label and the connector carry the
+// stage colour: a box or tint around the rows read as the selected item.
 export function ReleaseStageNavSection({
   stage,
   children,
@@ -826,11 +848,7 @@ export function ReleaseStageNavSection({
       </div>
       <ul
         aria-labelledby={labelId}
-        className={cn(
-          "-ml-[9px] flex flex-col border border-dashed py-1 pr-1",
-          stageTextClass[stage],
-          stageSectionBgClass[stage],
-        )}
+        className="flex flex-col [&>li:last-child_[data-tree-stem]]:bottom-1/2"
       >
         {children}
       </ul>
