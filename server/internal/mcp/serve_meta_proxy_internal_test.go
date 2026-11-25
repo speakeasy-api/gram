@@ -342,11 +342,12 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	}
 	outageGate, brokenGate := gate(&pgconn.PgError{Code: "57P01"}), gate(&pgconn.PgError{Code: "42P01"})
 
-	_, err := outageGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	member := metaMember{slug: "m", backend: metaMemberBackendProxied}
+	_, err := outageGate.memberTokens(t.Context(), member)
 	_, unavailable := errors.AsType[memberUnavailableError](err)
 	require.True(t, unavailable, "error: %v", err)
 
-	_, err = brokenGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	_, err = brokenGate.memberTokens(t.Context(), member)
 	require.Error(t, err)
 	_, unavailable = errors.AsType[memberUnavailableError](err)
 	require.False(t, unavailable, "a broken query is not an outage: %v", err)
@@ -492,5 +493,5 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	hosted := metaMember{serverID: uuid.New(), slug: "hosted", backend: metaMemberBackendHosted}
 	got, err = gate.memberTokens(t.Context(), hosted)
 	require.NoError(t, err)
-	require.Equal(t, projectTokens, got)
+	require.Equal(t, memberTokens, got)
 }

@@ -518,7 +518,15 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 		// Hosted serving checks the exact placement at dispatch, after member
 		// and toolset permission checks. Consent retains the compatibility
 		// inventory used by the existing writers and callback.
-		if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && (!serving || member.backend != metaMemberBackendHosted) {
+		if serving && member.backend == metaMemberBackendHosted && needsOAuth && userSessionIssuerID != uuid.Nil {
+			registration, err := s.hostedRegistration(ctx, organizationID, member.projectID, member.serverID)
+			if err != nil && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				logger.WarnContext(ctx, "load hosted gateway placement", attr.SlogError(err))
+			}
+			if err != nil || registration == uuid.Nil {
+				continue
+			}
+		} else if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil {
 			if serving && !servingClientsLoaded {
 				servingClientsLoaded = true
 				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
