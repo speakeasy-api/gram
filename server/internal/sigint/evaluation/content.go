@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"io"
 	"net/url"
@@ -131,6 +132,9 @@ func targetContent(row transcriptstore.LoadEvaluationMessagesRow) transcriptstor
 		RowLocalContent: row.RowLocalContent,
 		AttachmentUris:  row.AttachmentUris,
 		ContentTooLarge: false,
+		// The row is already opened; it carries no shadow of its own.
+		ShadowCiphertext: pgtype.Text{String: "", Valid: false},
+		ShadowCurrent:    false,
 	}
 }
 

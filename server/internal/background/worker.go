@@ -262,6 +262,7 @@ func ForDeploymentProcessing(
 		panic(fmt.Errorf("load test worker catalog validator: %w", err))
 	}
 	return &WorkerOptions{
+		Transcripts:                    nil,
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		HookFleetMetrics:               nil,
@@ -373,6 +374,7 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
+		Transcripts:                    nil,
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		HookFleetMetrics:               nil,
@@ -444,6 +446,7 @@ func NewTemporalWorker(
 
 	for _, o := range options {
 		opts = &WorkerOptions{
+			Transcripts:                    conv.Default(o.Transcripts, opts.Transcripts),
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
 			HookFleetMetrics:               conv.Default(o.HookFleetMetrics, opts.HookFleetMetrics),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),

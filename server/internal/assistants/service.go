@@ -556,6 +556,7 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
+		transcripts:                 nil,
 		newAssistantRuntimeVersion:  0,
 		newAssistantRuntimeEligible: nil,
 		identities:                  identities,

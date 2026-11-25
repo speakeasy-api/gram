@@ -23,6 +23,9 @@ func chatMessageBody(m *chatrepo.ChatMessage) Body {
 	return Body{MessageID: m.ID, Content: &m.Content, ContentRaw: &m.ContentRaw, ToolCalls: &m.ToolCalls, ToolOutcomeNotes: &m.ToolOutcomeNotes, ToolCallSummaries: &m.ToolCallSummaries, StorageError: &m.StorageError}
 }
 
+// unsetBody is a placeholder that chatMessages replaces before opening.
+var unsetBody Body
+
 // chatMessages converts embedded rows to the chat repo model and opens them.
 func (t *Transcripts) chatMessages(ctx context.Context, db DBTX, projectID uuid.UUID, n int, row func(int) (plainrepo.ChatMessage, joinedRow)) ([]chatrepo.ChatMessage, error) {
 	messages := make([]chatrepo.ChatMessage, n)
@@ -48,7 +51,7 @@ func (t *Transcripts) ListLatestGenerationChatMessages(ctx context.Context, db D
 		return nil, fmt.Errorf("list latest generation chat messages: %w", err)
 	}
 	return t.chatMessages(ctx, db, projectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
-		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
 
@@ -60,7 +63,7 @@ func (t *Transcripts) ListChatMessagesByGeneration(ctx context.Context, db DBTX,
 		return nil, fmt.Errorf("list chat messages by generation: %w", err)
 	}
 	return t.chatMessages(ctx, db, projectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
-		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
 
@@ -82,7 +85,7 @@ func (t *Transcripts) ListChatMessagesAfterPage(ctx context.Context, db DBTX, pa
 		return nil, fmt.Errorf("list chat messages after page: %w", err)
 	}
 	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
-		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
 
@@ -93,7 +96,7 @@ func (t *Transcripts) ListChatMessagesBeforePage(ctx context.Context, db DBTX, p
 		return nil, fmt.Errorf("list chat messages before page: %w", err)
 	}
 	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
-		return rows[i].ChatMessage, joinedRow{ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent}
+		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
 
@@ -205,7 +208,7 @@ func (t *Transcripts) GetKitProjectionMessage(ctx context.Context, db DBTX, proj
 		return chatrepo.ChatMessage{}, fmt.Errorf("get kit projection message: %w", err)
 	}
 	messages, err := t.chatMessages(ctx, db, projectID, 1, func(int) (plainrepo.ChatMessage, joinedRow) {
-		return row.ChatMessage, joinedRow{ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent}
+		return row.ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}
 	})
 	if err != nil {
 		return chatrepo.ChatMessage{}, err

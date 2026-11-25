@@ -181,7 +181,8 @@ func NewObserver(
 	riskRecorder *metering.RiskRecorder,
 ) chat.MessageObserver {
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
 		logger:                       logger.With(attr.SlogComponent("risk")),
 		db:                           db,
@@ -257,10 +258,11 @@ func NewService(
 	}
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger: logger,
-		db:     db,
-		repo:   repo.New(db),
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
 		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},

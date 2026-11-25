@@ -106,8 +106,10 @@ func (t *Transcripts) openJoinedRows(ctx context.Context, db plainrepo.DBTX, pro
 
 // organization resolves a listed project's organization once per process.
 func (t *Transcripts) organization(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID) (string, error) {
-	if org, ok := t.organizations.Load(projectID); ok {
-		return org.(string), nil
+	if cached, ok := t.organizations.Load(projectID); ok {
+		if org, ok := cached.(string); ok {
+			return org, nil
+		}
 	}
 	org, err := plainrepo.New(db).GetProjectOrganizationID(ctx, projectID)
 	if err != nil {

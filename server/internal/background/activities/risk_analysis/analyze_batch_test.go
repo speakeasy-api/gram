@@ -1,11 +1,11 @@
 package risk_analysis_test
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"strings"
 	"sync"
 	"testing"

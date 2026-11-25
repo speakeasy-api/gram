@@ -90,18 +90,19 @@ func NewService(
 		return nil, fmt.Errorf("compile intent guardrail: %w", err)
 	}
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessions, authzEngine),
-		authz:      authzEngine,
-		features:   features,
-		chatWriter: chatWriter,
-		completion: completion,
-		jev:        intentpolicy.NewJevEvaluator(jevClassifier),
-		guardrail:  guardrail,
-		engine:     engine,
-		now:        time.Now,
+		transcripts: nil,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		features:    features,
+		chatWriter:  chatWriter,
+		completion:  completion,
+		jev:         intentpolicy.NewJevEvaluator(jevClassifier),
+		guardrail:   guardrail,
+		engine:      engine,
+		now:         time.Now,
 	}, nil
 }
 

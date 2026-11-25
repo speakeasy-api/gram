@@ -108,6 +108,7 @@ func NewAnalyzeBatch(
 	}
 
 	return &AnalyzeBatch{
+		transcripts:        nil,
 		logger:             logger,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		metrics:            newRiskMetrics(meterProvider, logger),

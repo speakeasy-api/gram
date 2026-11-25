@@ -89,7 +89,7 @@ func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *a
 	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
 		return nil
 	}
-	return &ChatSearchService{db: db, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
+	return &ChatSearchService{db: db, transcripts: nil, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
 }
 
 func (s *ChatSearchService) valid() bool {

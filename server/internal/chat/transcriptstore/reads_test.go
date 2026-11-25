@@ -69,7 +69,7 @@ func TestLeftRunesMatchesPostgresLeft(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "héll", leftRunes("héllo", 4))
 	require.Equal(t, "héllo", leftRunes("héllo", 10))
-	require.Equal(t, "", leftRunes("héllo", 0))
+	require.Empty(t, leftRunes("héllo", 0))
 	require.Equal(t, strings.Repeat("界", 3), leftRunes(strings.Repeat("界", 5), 3))
 }
 
@@ -102,10 +102,8 @@ func TestJudgeToolCallsOf(t *testing.T) {
 			Arguments string `json:"arguments"`
 		} `json:"function"`
 	}
-	require.NoError(t, jsonUnmarshal(judgeToolCallsOf([]byte("["+strings.Join(calls, ",")+"]")), &out))
+	require.NoError(t, json.Unmarshal([]byte(judgeToolCallsOf([]byte("["+strings.Join(calls, ",")+"]"))), &out))
 	require.Len(t, out, judgeToolCalls)
 	require.Len(t, out[0].Function.Name, judgeToolNameRunes)
 	require.Len(t, out[0].Function.Arguments, judgeArgumentsRunes)
 }
-
-func jsonUnmarshal(s string, v any) error { return json.Unmarshal([]byte(s), v) }

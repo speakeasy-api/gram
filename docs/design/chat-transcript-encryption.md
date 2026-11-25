@@ -117,6 +117,33 @@ tool-call ID. They are current exactly when the shadow is, so readers can
 count, budget and look up tool calls without decrypting. Shadows captured
 before these columns existed hold NULL until a backfill recaptures them.
 
+## Every plaintext read goes through the store
+
+Every query that reads the plaintext body columns of `chat_messages`
+(`content`, `content_raw`, `tool_calls`, `tool_outcome_notes`,
+`tool_call_summaries`, `storage_error`) lives in
+`transcriptstore/internal/plainrepo`. Go's `internal` rule means no other
+package can call one; readers call methods on `transcriptstore.Transcripts`
+instead. The `no-plaintext-transcript-read` glint rule catches a new query that
+reads those columns from anywhere else. `chat/repo.ListChatMessages` stays for
+tests and fixtures only, and the rule rejects production calls to it.
+
+Each query LEFT JOINs the message's shadow when `@open_shadows` is true, so the
+ciphertext and a source-hash check arrive in the same round trip, and opens it
+in Go with the same fallback and stale rules as `LoadMany`. For a project off the
+list the join is skipped by a one-time filter. Where the SQL truncates or blanks
+a body field (risk context, Platform MCP size caps, the sigint budget), the
+store applies the same rule to the opened shadow, or for the judge window does
+the capping in Go for every project. Writes that change a shadowed field after
+insert (`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow in
+the same transaction.
+
+Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
+byte budgets, and the kit projection compare still work on plaintext inside SQL.
+The `streams` process does not configure shadows, so its prompt-injection judge
+window and signal evaluation read plaintext for every project. Plain inserts
+stay in `chat/repo`; the writer captures their shadows in the same transaction.
+
 ## Shadow reads
 
 Reads use the capture allowlist, so no project reads shadows that capture

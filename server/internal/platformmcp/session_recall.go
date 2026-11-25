@@ -128,6 +128,7 @@ func NewSessionRecallService(
 	budget OperationBudget,
 ) *SessionRecallService {
 	return &SessionRecallService{
+		transcripts:   nil,
 		logger:        logger,
 		db:            db,
 		repo:          repo,

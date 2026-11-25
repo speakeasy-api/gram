@@ -141,6 +141,7 @@ func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 	}
 
 	return &Reconcile{
+		transcripts:               nil,
 		logger:                    logger,
 		tracer:                    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"),
 		db:                        db,
