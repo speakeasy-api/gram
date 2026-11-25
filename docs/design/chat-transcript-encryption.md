@@ -120,9 +120,11 @@ message that already has a shadow, that shadow goes stale and the read fails
 until the message is captured again.
 
 Removing a project from the allowlist stops both capture and shadow reads.
-Messages edited while it is off keep stale shadows, so before adding the
-project back, recapture its messages with a backfill. Otherwise each such
-message fails its page as soon as the project is back on the allowlist.
+A message that already had a shadow and is edited while the project is off
+keeps a stale shadow, so before adding the project back, recapture its
+messages with a backfill. Otherwise each such message fails its page as soon
+as the project is back on the allowlist. Messages first written while it was
+off have no shadow and fall back to plaintext as usual.
 
 Any other read error, such as a failed key unwrap or a database error, also
 fails the page. Plaintext is never served in place of an existing shadow.
