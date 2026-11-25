@@ -120941,6 +120941,10 @@ components:
                     items:
                         type: string
                     description: Null means unknown; an empty array means no recorded grants.
+                hidden_server_count:
+                    type: integer
+                    description: Servers the binding applies to that the caller cannot read; they are not named. Returned by readEMA only.
+                    format: int64
                 issuer:
                     type: string
                 last_accepted_at:
@@ -120962,6 +120966,14 @@ components:
                 scopes_out_of_date:
                     type: boolean
                     description: True when connection_scopes differs from scopes; prepareEMA with the current expected_generation applies connection_scopes. Returned by readEMA and prepareEMA when a client is selected.
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityChainingServer'
+                    description: 'Live MCP servers in the project this binding applies to, whether or not it is on yet: their sign-in is the user session issuer and they serve the resource. Turning identity chaining on or off changes it for all of them. Lists only servers the caller can read (mcp:read). Returned by readEMA only.'
+                servers_complete:
+                    type: boolean
+                    description: 'Whether servers and hidden_server_count cover every server the binding applies to. False when only some could be found, for example before the binding is on while another server on the same sign-in and service could share it: those servers may then change too. Returned by readEMA only.'
                 stage:
                     type: string
                     enum:
@@ -120995,6 +121007,23 @@ components:
                 - resource
                 - scopes
                 - grant_source
+        IdentityChainingServer:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The MCP server id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The MCP server name. Empty when it has none.
+                slug:
+                    type: string
+                    description: The MCP server slug. Empty when it has none.
+            required:
+                - id
+                - name
+                - slug
         IdentityDirectory:
             type: object
             properties:

@@ -231,10 +231,10 @@ export function IdentityChainingSection({
     return (
       <IdentityChainingField
         userSessionIssuer={userSessionIssuer}
-        providers={providers}
         linkedClients={clients}
         resource={resource}
         remoteMcpServerId={remoteMcpServerId}
+        mcpServerId={mcpServer.id}
         onlyWhenOn
         frame={(content) => <Shell>{content}</Shell>}
       />
@@ -253,18 +253,18 @@ export function IdentityChainingSection({
         <SettingsSection.Body>
           <Alert variant="warning">
             <Text small>
-              Finish configuring the upstream credentials in Identity before
-              setting up Enterprise Managed Authorization.
+              Finish setting up Upstream credentials above before turning on
+              Enterprise Managed Authorization.
             </Text>
           </Alert>
         </SettingsSection.Body>
         {userSessionIssuer && resource && clients.length > 0 && (
           <IdentityChainingField
             userSessionIssuer={userSessionIssuer}
-            providers={providers ?? { external: false }}
             linkedClients={clients}
             resource={resource}
             remoteMcpServerId={remoteMcpServerId}
+            mcpServerId={mcpServer.id}
             onlyWhenOn
             frame={(content) => <>{content}</>}
           />
@@ -304,11 +304,11 @@ export function IdentityChainingSection({
       {providers ? (
         <IdentityChainingField
           userSessionIssuer={userSessionIssuer}
-          providers={providers}
           speakeasyIssuerUrl={speakeasyIssuer.data?.issuer}
           linkedClients={clients}
           resource={resource}
           remoteMcpServerId={remoteMcpServerId}
+          mcpServerId={mcpServer.id}
         />
       ) : projectSignIn ? (
         <SettingsSection.Body>

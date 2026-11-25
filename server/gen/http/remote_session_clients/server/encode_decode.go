@@ -2899,6 +2899,22 @@ func marshalTypesEMAProviderToEMAProviderResponseBody(v *types.EMAProvider) *EMA
 	return res
 }
 
+// marshalRemotesessionclientsIdentityChainingServerToIdentityChainingServerResponseBody
+// builds a value of type *IdentityChainingServerResponseBody from a value of
+// type *remotesessionclients.IdentityChainingServer.
+func marshalRemotesessionclientsIdentityChainingServerToIdentityChainingServerResponseBody(v *remotesessionclients.IdentityChainingServer) *IdentityChainingServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityChainingServerResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+		Slug: v.Slug,
+	}
+
+	return res
+}
+
 // marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody builds a
 // value of type *RemoteSessionClientResponseBody from a value of type
 // *types.RemoteSessionClient.

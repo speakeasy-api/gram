@@ -299,7 +299,7 @@ export async function attachOwnerConnections(
   );
   if (incomplete[0] && !skipMissing) {
     throw new Error(
-      `Finish upstream credential setup for ${incomplete[0].name} in Identity, then retry.`,
+      `Finish setting up upstream credentials for ${incomplete[0].name} in its Settings, under Upstream credentials, then retry.`,
     );
   }
   const groups = new Map<string, InventoryServer[]>();

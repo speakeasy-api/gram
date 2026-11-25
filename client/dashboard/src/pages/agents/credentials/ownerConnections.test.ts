@@ -433,7 +433,7 @@ describe("attachOwnerConnections", () => {
       });
       await expect(
         attachOwnerConnections(fake, "agent_new", [server]),
-      ).rejects.toThrow(/Finish upstream credential setup/);
+      ).rejects.toThrow(/Finish setting up upstream credentials/);
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
       expect(attachBinding).not.toHaveBeenCalled();
     });

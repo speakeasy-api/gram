@@ -131,7 +131,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 vi.mock("./IdentityChainingField", () => ({
   IdentityChainingField: (props: {
-    providers: { external: boolean };
     linkedClients: { id: string }[];
     speakeasyIssuerUrl?: string;
     resource: string;
@@ -146,7 +145,6 @@ vi.mock("./IdentityChainingField", () => ({
           .join(",")}
       >
         {JSON.stringify({
-          providers: props.providers,
           speakeasyIssuerUrl: props.speakeasyIssuerUrl,
           resource: props.resource,
           ...(props.onlyWhenOn ? { onlyWhenOn: true } : {}),
@@ -216,7 +214,6 @@ describe("IdentityChainingSection", () => {
     expect(
       JSON.parse(screen.getByTestId("identity-chaining").textContent!),
     ).toEqual({
-      providers: { external: false },
       speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
       resource: "https://mcp.vendor.example.com/mcp",
     });
@@ -314,7 +311,7 @@ describe("IdentityChainingSection", () => {
         wrapper: Router,
       });
       expect(
-        screen.getByText(/Finish configuring the upstream credentials/),
+        screen.getByText(/Finish setting up Upstream credentials above/),
       ).toBeTruthy();
       expect(screen.queryByTestId("identity-chaining")).toBeNull();
       expect(state.clientFilters).not.toContainEqual({
@@ -327,7 +324,7 @@ describe("IdentityChainingSection", () => {
     state.credentials.push({ clientType: "remote_session", enabled: true });
     render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
-      screen.getByText(/Finish configuring the upstream credentials/),
+      screen.getByText(/Finish setting up Upstream credentials above/),
     ).toBeTruthy();
     const control = screen.getByTestId("identity-chaining");
     expect(control.getAttribute("data-linked-clients")).toBe("client");
@@ -358,7 +355,7 @@ describe("IdentityChainingSection", () => {
         .getAttribute("data-linked-clients"),
     ).toBe("own");
     expect(
-      screen.queryByText(/Finish configuring the upstream credentials/),
+      screen.queryByText(/Finish setting up Upstream credentials above/),
     ).toBeNull();
     expect(state.clientFilters).not.toContainEqual({
       userSessionIssuerId: "issuer",
@@ -491,7 +488,6 @@ describe("IdentityChainingSection", () => {
     expect(
       JSON.parse(screen.getByTestId("identity-chaining").textContent!),
     ).toEqual({
-      providers: { external: false },
       resource: "https://mcp.vendor.example.com/mcp",
       onlyWhenOn: true,
     });

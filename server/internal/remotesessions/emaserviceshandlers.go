@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -11,11 +12,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -323,4 +326,97 @@ func emaServerPreferred(next, prev *orgissuersgen.EMAServiceServer) bool {
 		return nextRank > prevRank
 	}
 	return next.LastAcceptedAt != nil && (prev.LastAcceptedAt == nil || *next.LastAcceptedAt > *prev.LastAcceptedAt)
+}
+
+// emaBindingServers names the project's servers one binding target applies to that the caller can read, counts the rest, and says whether that is all of them.
+func (s *Service) emaBindingServers(ctx context.Context, in PreparationInput) ([]*clientsgen.IdentityChainingServer, int, bool, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, 0, false, errors.New("no project auth context")
+	}
+	reached, complete, ready, err := s.emaBindingReach(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, in)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	queries := repo.New(s.db)
+	rows, err := queries.ListEMABindingTargetServers(ctx, repo.ListEMABindingTargetServersParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		ReachedServerIds:    reached,
+		UserSessionIssuerID: uuid.NullUUID{UUID: in.UserSessionIssuerID, Valid: true},
+		Resource:            in.Resource,
+	})
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("list identity chaining binding servers: %w", err)
+	}
+	if !ready {
+		// Before the binding is on, the list is whole when every server it could reach is already in it.
+		candidates, err := queries.ListEMABindingCandidateServers(ctx, repo.ListEMABindingCandidateServersParams{
+			OrganizationID:      authCtx.ActiveOrganizationID,
+			ProjectID:           *authCtx.ProjectID,
+			UserSessionIssuerID: in.UserSessionIssuerID,
+			Resource:            in.Resource,
+		})
+		if err != nil {
+			return nil, 0, false, fmt.Errorf("list servers the binding could reach: %w", err)
+		}
+		complete = !slices.ContainsFunc(candidates, func(id uuid.UUID) bool {
+			return !slices.ContainsFunc(rows, func(row repo.ListEMABindingTargetServersRow) bool { return row.ID == id })
+		})
+	}
+	checks := make([]authz.Check, 0, len(rows))
+	for _, row := range rows {
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(row.ID, row.ToolsetID)), authz.ProjectIDOf(*authCtx.ProjectID)).Read())
+	}
+	readable, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("check MCP server read access: %w", err)
+	}
+	servers := []*clientsgen.IdentityChainingServer{}
+	hidden := 0
+	for i, row := range rows {
+		if !readable[i] {
+			hidden++
+			continue
+		}
+		servers = append(servers, &clientsgen.IdentityChainingServer{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+	}
+	return servers, hidden, complete, nil
+}
+
+// emaBindingReach is the servers a ready binding's writer links, including gateway and tunneled members; complete is false
+// when a same-origin server could also be covered, and ready is false before the binding is ready.
+func (s *Service) emaBindingReach(ctx context.Context, organizationID string, projectID uuid.UUID, in PreparationInput) (reached []uuid.UUID, complete bool, ready bool, err error) {
+	binding, err := repo.New(s.db).GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return []uuid.UUID{}, false, false, nil
+	case err != nil:
+		return nil, false, false, fmt.Errorf("read identity chaining binding: %w", err)
+	case binding.State.String != "ready" || !binding.RemoteSessionClientID.Valid:
+		return []uuid.UUID{}, false, false, nil
+	}
+	writer := authclientbackfill.New(s.db)
+	rows, err := writer.ListEMABindingServers(ctx, authclientbackfill.ListEMABindingServersParams{BindingID: binding.ID, OrganizationID: organizationID})
+	if err != nil {
+		return nil, false, false, fmt.Errorf("list servers the binding reaches: %w", err)
+	}
+	reached = make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		// The runtime refuses a server whose metadata leaves the issuer out.
+		if row.Match == "match" {
+			reached = append(reached, row.McpServerID)
+		}
+	}
+	plausible, err := writer.ListEMASameOriginServers(ctx, authclientbackfill.ListEMASameOriginServersParams{BindingID: binding.ID, OrganizationID: organizationID})
+	if err != nil {
+		return nil, false, false, fmt.Errorf("list same-origin servers the binding may reach: %w", err)
+	}
+	complete = true
+	for _, row := range plausible {
+		if !slices.Contains(reached, row.McpServerID) {
+			complete = false
+		}
+	}
+	return reached, complete, true, nil
 }

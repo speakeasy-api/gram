@@ -7466,6 +7466,65 @@ WHERE b.organization_id = @organization_id::text
 ORDER BY COALESCE(i.organization_id = @organization_id::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
   COALESCE(i.organization_id = @organization_id::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id;
 
+-- name: ListEMABindingTargetServers :many
+-- Live servers in the project a binding target reaches: those the binding writer matched, and remote servers on its sign-in naming its resource.
+SELECT m.id, m.toolset_id, COALESCE(m.name, '')::text AS name, COALESCE(m.slug, '')::text AS slug
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND (
+    m.id = ANY(@reached_server_ids::uuid[])
+    OR (r.id IS NOT NULL AND m.user_session_issuer_id = @user_session_issuer_id AND (
+      r.url = @resource::text
+      OR EXISTS (
+        SELECT 1 FROM remote_protected_resources rpr
+        WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
+          AND rpr.metadata->>'resource' = @resource::text
+      )
+    ))
+  )
+ORDER BY COALESCE(m.name, ''), m.id;
+
+-- name: ListEMABindingCandidateServers :many
+-- Live servers in the project a binding target could reach once on: a superset of ListEMABindingServers and ListEMASameOriginServers.
+SELECT m.id
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t ON t.id = m.tunneled_mcp_server_id AND t.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND (m.user_session_issuer_id = @user_session_issuer_id::uuid
+    OR @user_session_issuer_id::uuid = (
+      -- The gateways' issuer, as ListEMABindingServers reads it.
+      SELECT (array_agg(gi.id))[1]
+      FROM user_session_issuers AS gi
+      WHERE gi.organization_id = @organization_id::text
+        AND gi.project_id IS NULL
+        AND gi.deleted IS FALSE
+        AND EXISTS (
+          SELECT 1 FROM organization_features AS gf
+          WHERE gf.organization_id = @organization_id::text
+            AND gf.feature_name = 'organization_gateway_disabled'
+        )
+      HAVING count(*) = 1
+    ))
+  AND (
+    (r.id IS NOT NULL AND (
+      lower(substring(r.url from '^https?://[^/?#]+')) = lower(substring(@resource::text from '^https?://[^/?#]+'))
+      OR EXISTS (
+        SELECT 1 FROM remote_protected_resources rpr
+        WHERE rpr.project_id = m.project_id AND rpr.deleted IS FALSE
+          AND (rpr.resource_identifier = @resource::text OR rpr.metadata->>'resource' = @resource::text)
+          AND lower(substring(rpr.metadata_url from '^https?://[^/?#]+')) = lower(substring(r.url from '^https?://[^/?#]+'))
+      )
+    ))
+    OR (t.id IS NOT NULL AND t.resource_identifier = @resource::text)
+  )
+ORDER BY m.id;
+
 -- name: ListEMAProviderVendors :many
 -- Vendors with a saved provider order, whether or not a binding names them.
 SELECT DISTINCT vendor_issuer

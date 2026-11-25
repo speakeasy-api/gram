@@ -31,7 +31,18 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this binding from a provider that can serve it now, so chaining has worked for it. Omitted when none is recorded for a usable provider or acceptance could not be read. Returned by readEMA only.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("servers", ArrayOf(IdentityChainingServer), "Live MCP servers in the project this binding applies to, whether or not it is on yet: their sign-in is the user session issuer and they serve the resource. Turning identity chaining on or off changes it for all of them. Lists only servers the caller can read (mcp:read). Returned by readEMA only.")
+	Attribute("hidden_server_count", Int, "Servers the binding applies to that the caller cannot read; they are not named. Returned by readEMA only.")
+	Attribute("servers_complete", Boolean, "Whether servers and hidden_server_count cover every server the binding applies to. False when only some could be found, for example before the binding is on while another server on the same sign-in and service could share it: those servers may then change too. Returned by readEMA only.")
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
+})
+
+// IdentityChainingServer is one MCP server an identity chaining binding applies to.
+var IdentityChainingServer = Type("IdentityChainingServer", func() {
+	Attribute("id", String, "The MCP server id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The MCP server name. Empty when it has none.")
+	Attribute("slug", String, "The MCP server slug. Empty when it has none.")
+	Required("id", "name", "slug")
 })
 
 func identityChainingMethods() {

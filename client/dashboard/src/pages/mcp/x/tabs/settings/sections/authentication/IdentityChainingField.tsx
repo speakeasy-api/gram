@@ -61,6 +61,7 @@ import {
 } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { sharedImpactText, sharedServersText } from "./identityChainingShared";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import {
@@ -73,7 +74,6 @@ import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-que
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
 import { MCP_SESSIONS_SECTION_ID } from "../RemoteMcpSessionsSection";
-import { type ChainingProviders } from "./identityChainingGate";
 import {
   chainingBound,
   chainingGrantDeclaration,
@@ -113,25 +113,25 @@ function stateCopy(
     case "published_acceptance_unverified":
       return {
         label: `Waiting for ${vendor}`,
-        next: `Speakeasy published the client’s settings. ${vendor} hasn’t confirmed them yet. Try connecting from your MCP client.`,
+        next: `Speakeasy published the credential’s settings. ${vendor} hasn’t confirmed them yet. Try connecting from your MCP client.`,
         tone: "information",
       };
     case "configuration_required":
       return {
         label: "Needs setup",
-        next: "This server’s client needs a change first. Check the client in Identity above.",
+        next: "This server’s credential needs a change first. Check it in Upstream credentials above.",
         tone: "warning",
       };
     case "manual_setup_required":
       return {
         label: "Needs a manual step",
-        next: `${vendor} needs the client registered by hand. Register it in ${vendor}’s admin settings, then turn this on again.`,
+        next: `${vendor} needs the credential registered by hand. Register it in ${vendor}’s admin settings, then turn this on again.`,
         tone: "warning",
       };
     case "unknown_grants":
       return {
-        label: "Couldn’t check the client",
-        next: "Speakeasy couldn’t tell which sign-in methods the client allows. Confirm them below, then turn this on again.",
+        label: "Couldn’t check the credential",
+        next: "Speakeasy couldn’t tell which sign-in methods the credential allows. Confirm them below, then turn this on again.",
         tone: "warning",
       };
     case "incomplete_metadata":
@@ -272,16 +272,15 @@ const MAX_CONCURRENT_STALE_READS = 3;
 /** Rendered only for an organization issuer that an identity provider or Speakeasy can vouch for. */
 export function IdentityChainingField({
   userSessionIssuer,
-  providers,
   speakeasyIssuerUrl,
   linkedClients,
   resource,
   remoteMcpServerId,
+  mcpServerId,
   onlyWhenOn = false,
   frame = (content) => <>{content}</>,
 }: {
   userSessionIssuer: UserSessionIssuer;
-  providers: ChainingProviders;
   /** Speakeasy's issuer URL, which vendors trust for Speakeasy-signed grants. */
   speakeasyIssuerUrl?: string;
   linkedClients: RemoteSessionClient[];
@@ -289,6 +288,8 @@ export function IdentityChainingField({
   resource: string;
   /** Reuses the server's protected resource metadata probe for advertised scopes. */
   remoteMcpServerId?: string;
+  /** This server, left out of the other servers the setting is shared with. */
+  mcpServerId: string;
   /** Render nothing unless a binding is on, for when who can vouch is unknown. */
   onlyWhenOn?: boolean;
   /** Wraps whatever renders, so the caller's section shows only with it. */
@@ -429,6 +430,7 @@ export function IdentityChainingField({
             clientLabel:
               linkable.find((client) => client.id === data.clientId)
                 ?.clientId ?? data.externalClientId,
+            sharedImpact: sharedImpactText(data, mcpServerId, "off"),
           },
         ]
       : [];
@@ -447,7 +449,7 @@ export function IdentityChainingField({
     chainingBound(read.data) && read.data?.clientId !== selected?.id;
   const bound = chainingBound(read.data) && !switchingClient;
   const storedScopes = bound && read.data ? read.data.scopes : [];
-  // The connection's scopes are edited in Identity; chaining has no list of its own.
+  // The connection's scopes are edited with its credential in Upstream credentials; chaining has no list of its own.
   const scopes = bound
     ? sanitizeChainingScopes(storedScopes)
     : defaultChainingScopes(selected?.scope);
@@ -457,6 +459,7 @@ export function IdentityChainingField({
     ((bound && read.data?.scopesOutOfDate === true) ||
       chainingScopesAllowed(scopes, selected.scope));
   const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmEnable, setConfirmEnable] = useState(false);
 
   const vendorIssuer = useRemoteSessionIssuer(
     { id: picked?.remoteSessionIssuerId ?? "" },
@@ -506,6 +509,9 @@ export function IdentityChainingField({
           ...result,
           emaProviders: result.emaProviders ?? prev?.emaProviders,
           lastAcceptedAt: prev?.lastAcceptedAt,
+          servers: prev?.servers,
+          hiddenServerCount: prev?.hiddenServerCount,
+          serversComplete: prev?.serversComplete,
         }),
       );
       void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
@@ -656,6 +662,21 @@ export function IdentityChainingField({
     );
   };
 
+  // The binding is shared by every server with this sign-in and resource.
+  const sharedWith = sharedServersText(
+    read.data?.servers,
+    read.data?.hiddenServerCount,
+    mcpServerId,
+  );
+  const sharedListed = read.data?.hiddenServerCount !== undefined;
+  const sharedComplete = sharedListed && read.data?.serversComplete === true;
+  const enableImpact = sharedImpactText(
+    read.data,
+    mcpServerId,
+    switchingClient ? "switch" : "on",
+  );
+  const disableImpact = sharedImpactText(read.data, mcpServerId, "off");
+
   const [applyingScopes, setApplyingScopes] = useState(false);
   const pending =
     read.isFetching || prepare.isPending || unlink.isPending || applyingScopes;
@@ -693,7 +714,7 @@ export function IdentityChainingField({
   const lookupNotice =
     clientIssuers.isError && !!authorizationServers?.length ? (
       <Text key="issuer-lookup" muted small className="block">
-        Some clients aren’t shown, because Speakeasy couldn’t check their
+        Some credentials aren’t shown, because Speakeasy couldn’t check their
         authorization server. Reload the page to try again.
       </Text>
     ) : null;
@@ -706,6 +727,7 @@ export function IdentityChainingField({
         generation={binding.generation}
         knownState={binding.knownState}
         clientLabel={binding.clientLabel}
+        sharedImpact={binding.sharedImpact}
         unchecked={unchecked(binding.target.remoteSessionIssuerId)}
         vendor={vendor}
         projectId={project.id}
@@ -758,9 +780,10 @@ export function IdentityChainingField({
       <SettingsSection.Body>
         {staleNotices}
         <Text muted small>
-          {providers.external
-            ? "Link a client for this server’s identity provider in Identity above first."
-            : "Link a client registered with this server’s authorization server in Identity above first."}
+          {/* Turn on lists only credentials of the service's own authorization server, whoever vouches. */}
+          {orgAdmin
+            ? "First, use Add credential in Upstream credentials above to add a per-person credential registered with this server’s authorization server."
+            : "An organization admin must first add a per-person credential registered with this server’s authorization server in Upstream credentials above."}
         </Text>
       </SettingsSection.Body>,
     );
@@ -792,6 +815,20 @@ export function IdentityChainingField({
                 {status.detail}
               </Text>
             )}
+            {bound && sharedWith && (
+              <Text muted small className="block">
+                This setting also applies to {sharedWith}, on the same sign-in
+                and service. Turning it on or off here changes it there too.
+                {!sharedComplete &&
+                  " Other servers that use this sign-in and service may share it too."}
+              </Text>
+            )}
+            {bound && !sharedWith && sharedListed && !sharedComplete && (
+              <Text muted small className="block">
+                Other servers that use this sign-in and service may share this
+                setting. Turning it on or off here may change it there too.
+              </Text>
+            )}
             {status.technical && (
               <Collapsible>
                 <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
@@ -819,9 +856,11 @@ export function IdentityChainingField({
                 <Button
                   size="sm"
                   disabled={pending || !read.data || enableBlocked}
-                  onClick={enable}
+                  onClick={() =>
+                    enableImpact ? setConfirmEnable(true) : enable()
+                  }
                 >
-                  {switchingClient ? "Use this client instead" : "Turn on"}
+                  {switchingClient ? "Use this credential instead" : "Turn on"}
                 </Button>
               )}
               {canUnlink && (
@@ -1127,7 +1166,7 @@ export function IdentityChainingField({
           )}
         </ChainLink>
 
-        <ChainLink label="Remote session client" tone={clientTone}>
+        <ChainLink label="Upstream credential" tone={clientTone}>
           {candidates.length > 1 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <ClientPicker
@@ -1213,6 +1252,7 @@ export function IdentityChainingField({
             <Dialog.Description>
               People will sign in to their own {vendor} account the next time
               they use this server.
+              {disableImpact && ` ${disableImpact}`}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -1229,6 +1269,37 @@ export function IdentityChainingField({
               onClick={disable}
             >
               {unlink.isPending ? "Turning off…" : "Turn off"}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      <Dialog open={confirmEnable} onOpenChange={setConfirmEnable}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>
+              {switchingClient
+                ? "Use this credential instead?"
+                : "Turn on Enterprise Managed Authorization?"}
+            </Dialog.Title>
+            <Dialog.Description>
+              {enableImpact} On every server this changes, people without their
+              own {vendor} connection will be signed in to {vendor} through your
+              company sign-in.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={() => setConfirmEnable(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={pending || !read.data || enableBlocked}
+              onClick={() => {
+                setConfirmEnable(false);
+                enable();
+              }}
+            >
+              {switchingClient ? "Use this credential instead" : "Turn on"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
@@ -1361,6 +1432,7 @@ function StaleBinding({
   generation,
   knownState,
   clientLabel,
+  sharedImpact,
   unchecked,
   vendor,
   projectId,
@@ -1374,6 +1446,8 @@ function StaleBinding({
   generation: number;
   knownState: boolean;
   clientLabel: string | undefined;
+  /** What turning it off also changes, or null when nothing else. */
+  sharedImpact: string | null;
   /** Its authorization server couldn't be checked, so it may still be current. */
   unchecked: boolean;
   vendor: string;
@@ -1389,7 +1463,7 @@ function StaleBinding({
         queryKey: ["identityChaining", "readEMA"],
       });
       toast.success(
-        "Enterprise Managed Authorization is off for the old client",
+        "Enterprise Managed Authorization is off for the old credential",
       );
     },
     onError: () => undefined,
@@ -1401,17 +1475,17 @@ function StaleBinding({
           <Text small className="block">
             {knownState ? (
               <>
-                Enterprise Managed Authorization is still on for client{" "}
-                {clientLabel ?? "an earlier client"}.{" "}
+                Enterprise Managed Authorization is still on for credential{" "}
+                {clientLabel ?? "an earlier credential"}.{" "}
                 {unchecked
-                  ? "Speakeasy couldn’t check that client’s authorization server. You can still turn it off."
-                  : "This server no longer uses that client’s authorization server. Turn it off before you replace or remove the client."}
+                  ? "Speakeasy couldn’t check that credential’s authorization server. You can still turn it off."
+                  : "This server no longer uses that credential’s authorization server. Turn it off before you replace or remove the credential."}
               </>
             ) : (
               <>
-                Enterprise Managed Authorization has an unknown state for client{" "}
-                {clientLabel ?? "an earlier client"}. Refresh the page before
-                changing this setup.
+                Enterprise Managed Authorization has an unknown state for
+                credential {clientLabel ?? "an earlier credential"}. Refresh the
+                page before changing this setup.
               </>
             )}
           </Text>
@@ -1436,8 +1510,8 @@ function StaleBinding({
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title="Turn off Enterprise Managed Authorization for the old client?"
-        description={`People will sign in to their own ${vendor} account until you turn it on for this server’s current client.`}
+        title="Turn off Enterprise Managed Authorization for the old credential?"
+        description={`People will sign in to their own ${vendor} account until you turn it on for this server’s current credential.${sharedImpact ? ` ${sharedImpact}` : ""}`}
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={unlink.isPending}

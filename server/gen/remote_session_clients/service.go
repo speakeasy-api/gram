@@ -271,6 +271,28 @@ type IdentityChainingPreparation struct {
 	// recorded for a usable provider or acceptance could not be read. Returned by
 	// readEMA only.
 	LastAcceptedAt *string
+	// Live MCP servers in the project this binding applies to, whether or not it
+	// is on yet: their sign-in is the user session issuer and they serve the
+	// resource. Turning identity chaining on or off changes it for all of them.
+	// Lists only servers the caller can read (mcp:read). Returned by readEMA only.
+	Servers []*IdentityChainingServer
+	// Servers the binding applies to that the caller cannot read; they are not
+	// named. Returned by readEMA only.
+	HiddenServerCount *int
+	// Whether servers and hidden_server_count cover every server the binding
+	// applies to. False when only some could be found, for example before the
+	// binding is on while another server on the same sign-in and service could
+	// share it: those servers may then change too. Returned by readEMA only.
+	ServersComplete *bool
+}
+
+type IdentityChainingServer struct {
+	// The MCP server id.
+	ID string
+	// The MCP server name. Empty when it has none.
+	Name string
+	// The MCP server slug. Empty when it has none.
+	Slug string
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the

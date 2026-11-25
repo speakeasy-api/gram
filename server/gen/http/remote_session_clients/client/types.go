@@ -241,6 +241,19 @@ type PrepareEMAResponseBody struct {
 	// recorded for a usable provider or acceptance could not be read. Returned by
 	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+	// Live MCP servers in the project this binding applies to, whether or not it
+	// is on yet: their sign-in is the user session issuer and they serve the
+	// resource. Turning identity chaining on or off changes it for all of them.
+	// Lists only servers the caller can read (mcp:read). Returned by readEMA only.
+	Servers []*IdentityChainingServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Servers the binding applies to that the caller cannot read; they are not
+	// named. Returned by readEMA only.
+	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// Whether servers and hidden_server_count cover every server the binding
+	// applies to. False when only some could be found, for example before the
+	// binding is on while another server on the same sign-in and service could
+	// share it: those servers may then change too. Returned by readEMA only.
+	ServersComplete *bool `form:"servers_complete,omitempty" json:"servers_complete,omitempty" xml:"servers_complete,omitempty"`
 }
 
 // ReadEMAResponseBody is the type of the "remoteSessionClients" service
@@ -290,6 +303,19 @@ type ReadEMAResponseBody struct {
 	// recorded for a usable provider or acceptance could not be read. Returned by
 	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+	// Live MCP servers in the project this binding applies to, whether or not it
+	// is on yet: their sign-in is the user session issuer and they serve the
+	// resource. Turning identity chaining on or off changes it for all of them.
+	// Lists only servers the caller can read (mcp:read). Returned by readEMA only.
+	Servers []*IdentityChainingServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Servers the binding applies to that the caller cannot read; they are not
+	// named. Returned by readEMA only.
+	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// Whether servers and hidden_server_count cover every server the binding
+	// applies to. False when only some could be found, for example before the
+	// binding is on while another server on the same sign-in and service could
+	// share it: those servers may then change too. Returned by readEMA only.
+	ServersComplete *bool `form:"servers_complete,omitempty" json:"servers_complete,omitempty" xml:"servers_complete,omitempty"`
 }
 
 // UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
@@ -339,6 +365,19 @@ type UnlinkEMAResponseBody struct {
 	// recorded for a usable provider or acceptance could not be read. Returned by
 	// readEMA only.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+	// Live MCP servers in the project this binding applies to, whether or not it
+	// is on yet: their sign-in is the user session issuer and they serve the
+	// resource. Turning identity chaining on or off changes it for all of them.
+	// Lists only servers the caller can read (mcp:read). Returned by readEMA only.
+	Servers []*IdentityChainingServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Servers the binding applies to that the caller cannot read; they are not
+	// named. Returned by readEMA only.
+	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// Whether servers and hidden_server_count cover every server the binding
+	// applies to. False when only some could be found, for example before the
+	// binding is on while another server on the same sign-in and service could
+	// share it: those servers may then change too. Returned by readEMA only.
+	ServersComplete *bool `form:"servers_complete,omitempty" json:"servers_complete,omitempty" xml:"servers_complete,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -3176,6 +3215,17 @@ type EMAProviderResponseBody struct {
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
+// IdentityChainingServerResponseBody is used to define fields on response body
+// types.
+type IdentityChainingServerResponseBody struct {
+	// The MCP server id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The MCP server name. Empty when it has none.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug. Empty when it has none.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
@@ -3428,19 +3478,21 @@ func NewAttachKeySetRequestBody(p *remotesessionclients.AttachKeySetPayload) *At
 // service "prepareEMA" endpoint result from a HTTP "OK" response.
 func NewPrepareEMAIdentityChainingPreparationOK(body *PrepareEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
 	v := &remotesessionclients.IdentityChainingPreparation{
-		State:            *body.State,
-		Stage:            *body.Stage,
-		Remediation:      *body.Remediation,
-		Retryable:        *body.Retryable,
-		BindingID:        body.BindingID,
-		Generation:       *body.Generation,
-		ClientID:         body.ClientID,
-		ExternalClientID: body.ExternalClientID,
-		Issuer:           body.Issuer,
-		Resource:         *body.Resource,
-		ScopesOutOfDate:  body.ScopesOutOfDate,
-		GrantSource:      *body.GrantSource,
-		LastAcceptedAt:   body.LastAcceptedAt,
+		State:             *body.State,
+		Stage:             *body.Stage,
+		Remediation:       *body.Remediation,
+		Retryable:         *body.Retryable,
+		BindingID:         body.BindingID,
+		Generation:        *body.Generation,
+		ClientID:          body.ClientID,
+		ExternalClientID:  body.ExternalClientID,
+		Issuer:            body.Issuer,
+		Resource:          *body.Resource,
+		ScopesOutOfDate:   body.ScopesOutOfDate,
+		GrantSource:       *body.GrantSource,
+		LastAcceptedAt:    body.LastAcceptedAt,
+		HiddenServerCount: body.HiddenServerCount,
+		ServersComplete:   body.ServersComplete,
 	}
 	if body.GrantTypes != nil {
 		v.GrantTypes = make([]string, len(body.GrantTypes))
@@ -3460,6 +3512,16 @@ func NewPrepareEMAIdentityChainingPreparationOK(body *PrepareEMAResponseBody) *r
 	}
 	if body.EmaProviders != nil {
 		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
+	}
+	if body.Servers != nil {
+		v.Servers = make([]*remotesessionclients.IdentityChainingServer, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = unmarshalIdentityChainingServerResponseBodyToRemotesessionclientsIdentityChainingServer(val)
+		}
 	}
 
 	return v
@@ -3619,19 +3681,21 @@ func NewPrepareEMAGatewayError(body *PrepareEMAGatewayErrorResponseBody) *goa.Se
 // service "readEMA" endpoint result from a HTTP "OK" response.
 func NewReadEMAIdentityChainingPreparationOK(body *ReadEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
 	v := &remotesessionclients.IdentityChainingPreparation{
-		State:            *body.State,
-		Stage:            *body.Stage,
-		Remediation:      *body.Remediation,
-		Retryable:        *body.Retryable,
-		BindingID:        body.BindingID,
-		Generation:       *body.Generation,
-		ClientID:         body.ClientID,
-		ExternalClientID: body.ExternalClientID,
-		Issuer:           body.Issuer,
-		Resource:         *body.Resource,
-		ScopesOutOfDate:  body.ScopesOutOfDate,
-		GrantSource:      *body.GrantSource,
-		LastAcceptedAt:   body.LastAcceptedAt,
+		State:             *body.State,
+		Stage:             *body.Stage,
+		Remediation:       *body.Remediation,
+		Retryable:         *body.Retryable,
+		BindingID:         body.BindingID,
+		Generation:        *body.Generation,
+		ClientID:          body.ClientID,
+		ExternalClientID:  body.ExternalClientID,
+		Issuer:            body.Issuer,
+		Resource:          *body.Resource,
+		ScopesOutOfDate:   body.ScopesOutOfDate,
+		GrantSource:       *body.GrantSource,
+		LastAcceptedAt:    body.LastAcceptedAt,
+		HiddenServerCount: body.HiddenServerCount,
+		ServersComplete:   body.ServersComplete,
 	}
 	if body.GrantTypes != nil {
 		v.GrantTypes = make([]string, len(body.GrantTypes))
@@ -3651,6 +3715,16 @@ func NewReadEMAIdentityChainingPreparationOK(body *ReadEMAResponseBody) *remotes
 	}
 	if body.EmaProviders != nil {
 		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
+	}
+	if body.Servers != nil {
+		v.Servers = make([]*remotesessionclients.IdentityChainingServer, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = unmarshalIdentityChainingServerResponseBodyToRemotesessionclientsIdentityChainingServer(val)
+		}
 	}
 
 	return v
@@ -3810,19 +3884,21 @@ func NewReadEMAGatewayError(body *ReadEMAGatewayErrorResponseBody) *goa.ServiceE
 // service "unlinkEMA" endpoint result from a HTTP "OK" response.
 func NewUnlinkEMAIdentityChainingPreparationOK(body *UnlinkEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
 	v := &remotesessionclients.IdentityChainingPreparation{
-		State:            *body.State,
-		Stage:            *body.Stage,
-		Remediation:      *body.Remediation,
-		Retryable:        *body.Retryable,
-		BindingID:        body.BindingID,
-		Generation:       *body.Generation,
-		ClientID:         body.ClientID,
-		ExternalClientID: body.ExternalClientID,
-		Issuer:           body.Issuer,
-		Resource:         *body.Resource,
-		ScopesOutOfDate:  body.ScopesOutOfDate,
-		GrantSource:      *body.GrantSource,
-		LastAcceptedAt:   body.LastAcceptedAt,
+		State:             *body.State,
+		Stage:             *body.Stage,
+		Remediation:       *body.Remediation,
+		Retryable:         *body.Retryable,
+		BindingID:         body.BindingID,
+		Generation:        *body.Generation,
+		ClientID:          body.ClientID,
+		ExternalClientID:  body.ExternalClientID,
+		Issuer:            body.Issuer,
+		Resource:          *body.Resource,
+		ScopesOutOfDate:   body.ScopesOutOfDate,
+		GrantSource:       *body.GrantSource,
+		LastAcceptedAt:    body.LastAcceptedAt,
+		HiddenServerCount: body.HiddenServerCount,
+		ServersComplete:   body.ServersComplete,
 	}
 	if body.GrantTypes != nil {
 		v.GrantTypes = make([]string, len(body.GrantTypes))
@@ -3842,6 +3918,16 @@ func NewUnlinkEMAIdentityChainingPreparationOK(body *UnlinkEMAResponseBody) *rem
 	}
 	if body.EmaProviders != nil {
 		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
+	}
+	if body.Servers != nil {
+		v.Servers = make([]*remotesessionclients.IdentityChainingServer, len(body.Servers))
+		for i, val := range body.Servers {
+			if val == nil {
+				v.Servers[i] = nil
+				continue
+			}
+			v.Servers[i] = unmarshalIdentityChainingServerResponseBodyToRemotesessionclientsIdentityChainingServer(val)
+		}
 	}
 
 	return v
@@ -5736,6 +5822,13 @@ func ValidatePrepareEMAResponseBody(body *PrepareEMAResponseBody) (err error) {
 	if body.LastAcceptedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
 	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateIdentityChainingServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -5784,6 +5877,13 @@ func ValidateReadEMAResponseBody(body *ReadEMAResponseBody) (err error) {
 	if body.LastAcceptedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
 	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateIdentityChainingServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -5831,6 +5931,13 @@ func ValidateUnlinkEMAResponseBody(body *UnlinkEMAResponseBody) (err error) {
 	}
 	if body.LastAcceptedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateIdentityChainingServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -9388,6 +9495,24 @@ func ValidateEMAProviderResponseBody(body *EMAProviderResponseBody) (err error) 
 	}
 	if body.LastAcceptedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateIdentityChainingServerResponseBody runs the validations defined on
+// IdentityChainingServerResponseBody
+func ValidateIdentityChainingServerResponseBody(body *IdentityChainingServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }
