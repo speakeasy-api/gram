@@ -311,10 +311,7 @@ export function problemRule(problem: SuspectedProblem): string {
 }
 
 /** The headline with when it started, as the panel lists it. */
-export function problemHeadline(
-  problem: { headline: string; since: string; rule: string },
-  now: Date,
-): string {
+export function problemHeadline(problem: SuspectedProblem, now: Date): string {
   const since =
     problem.rule === "one_person"
       ? formatDayMonth(problem.since)

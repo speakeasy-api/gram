@@ -295,6 +295,21 @@ export interface ListSuspectedProblemsResponse {
   problemsTotal: number;
 }
 
+/** A problem listed project-wide, with the one page that lists it when there is one. */
+export type ProjectSuspectedProblem = SuspectedProblem & {
+  /** Set when every failure hit this one MCP server directly. */
+  server?: { id: string; name?: string; slug?: string };
+  /** Set when every failure belongs to this one MCP sign-in. */
+  userSessionIssuerId?: string;
+};
+
+export interface ListProjectSuspectedProblemsResponse {
+  loggingEnabled: boolean;
+  viewerScope: ViewerScope;
+  problems: ProjectSuspectedProblem[];
+  problemsTotal: number;
+}
+
 export interface SuspectedProblemDetail extends SuspectedProblem {
   source?: Source;
   /** At most the last 24 hours. */

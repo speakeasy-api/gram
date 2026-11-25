@@ -120,13 +120,10 @@ export default function Home(): JSX.Element {
 /**
  * Bento grid around the terminal: on wide screens the terminal takes the
  * right two of three columns and the top two rows; tiles fill the left column
- * and the bottom row. Viewers who get connection problems see Needs attention
- * over the top two rows and four tiles in the bottom row. Below `lg`
- * everything stacks, terminal first.
+ * and the bottom row. Below `lg` everything stacks, terminal first.
  */
 function TerminalHomeGrid(): JSX.Element {
-  // Set by who may see the rows, not by whether there are any, so the grid
-  // does not move when a problem appears or clears.
+  // Who may see connection problems, not whether any exist, so the grid stays put.
   const tall = useConnectionProblemsAccess() === "on";
   return (
     // On wide screens the grid fills the viewport below the header: three

@@ -5,16 +5,12 @@ import {
   dailyCost,
   heatmapKey,
 } from "./home-widget-data";
-import {
-  connectionProblemHref,
-  TALL_ATTENTION_ROWS,
-  useConnectionProblems,
-} from "./useConnectionProblems";
+import { useConnectionProblems } from "./useConnectionProblems";
+import { useLogsEnabled } from "./useLogsEnabled";
 import { useInsightsState } from "@/components/insights-context";
 import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -24,11 +20,11 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
 import { problemHeadline } from "@/pages/mcp-sessions/connection-health/format";
+import { connectionProblemHref } from "@/pages/mcp-sessions/connection-health/links";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -41,8 +37,11 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 // Rows in the most active list.
 const MOST_ACTIVE_LIMIT = 5;
-// Rows in Needs attention when it fills one grid cell.
+// Rows in Needs attention: one grid cell, or two when it lists connection problems.
 const ATTENTION_ROWS = 5;
+const TALL_ATTENTION_ROWS = 6;
+// Rows the tall card keeps for its own items under connection problems.
+const OWN_ROWS_KEPT = 2;
 // Widgets live in fixed-height grid rows on wide screens: the card clips and
 // its body scrolls.
 const WIDGET_CLASS = "min-h-0 overflow-hidden";
@@ -64,26 +63,6 @@ function useWeekWindow(): { from: Date; to: Date; prevFrom: Date } {
     }),
     [hour],
   );
-}
-
-function useLogsEnabled(): {
-  enabled: boolean;
-  pending: boolean;
-  error: boolean;
-  /** Confirmed off, not just unknown after a failed request. */
-  off: boolean;
-} {
-  const organization = useOrganization();
-  const { data, isPending, isError } = useProductFeatures({
-    organizationId: organization.id,
-  });
-  const enabled = data?.logsEnabled === true;
-  return {
-    enabled,
-    pending: isPending,
-    error: isError,
-    off: !isPending && !isError && !enabled,
-  };
 }
 
 function useWeekOverview() {
@@ -140,8 +119,6 @@ type AttentionItem = {
   label: string;
   detail: string;
   tone: "destructive" | "warning";
-  /** Full label on hover; the label wraps to two lines below `lg`. */
-  title?: string;
 } & ({ prompt: string } | { href: string });
 
 function NeedsAttention({ className }: { className?: string }): JSX.Element {
@@ -161,30 +138,11 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
     enabled: requestsEnabled,
     throwOnError: false,
   });
-  const connections = useConnectionProblems();
+  const connections = useConnectionProblems(TALL_ATTENTION_ROWS);
   const tall = connections.access === "on";
-  const rowCap = tall ? TALL_ATTENTION_ROWS : ATTENTION_ROWS;
   const now = new Date();
 
-  const items: AttentionItem[] = [
-    ...connections.problems.map((p) => {
-      const label = problemHeadline(
-        {
-          headline: p.headline,
-          since: p.since.toISOString(),
-          rule: p.suspectedProblemRule,
-        },
-        now,
-      );
-      return {
-        key: `connection:${p.id}`,
-        label,
-        title: label,
-        detail: p.fact,
-        tone: "destructive",
-        href: connectionProblemHref(routes, p, now),
-      } satisfies AttentionItem;
-    }),
+  const own: AttentionItem[] = [
     ...(signals.data?.signals ?? [])
       .filter((s) => s.severity === "critical" || s.severity === "high")
       .slice(0, 3)
@@ -221,41 +179,60 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
           href: `${orgRoutes.access.href()}?request=${r.id}`,
         }) satisfies AttentionItem,
     ),
+  ];
+  const rowCap = tall ? TALL_ATTENTION_ROWS : ATTENTION_ROWS;
+  // Problems never push out all of the card's own rows.
+  const shownProblems = connections.problems.slice(
+    0,
+    rowCap - Math.min(own.length, OWN_ROWS_KEPT),
+  );
+  const items: AttentionItem[] = [
+    ...shownProblems.map(
+      (p) =>
+        ({
+          key: `connection:${p.id}`,
+          label: problemHeadline(p, now),
+          detail: p.fact,
+          tone: "destructive",
+          href: connectionProblemHref(routes, p, connections.asOf),
+        }) satisfies AttentionItem,
+    ),
+    ...own,
   ].slice(0, rowCap);
-  const shownConnections = Math.min(connections.problems.length, rowCap);
 
   const pending =
     week.pending ||
     (isAdmin && signals.isPending && !signals.isError) ||
     (requestsEnabled && requests.isPending && !requests.isError) ||
     connections.pending;
-  const sources = [
-    { active: true, failed: week.error },
-    { active: isAdmin, failed: signals.isError },
-    { active: requestsEnabled, failed: requests.isError },
-    { active: tall, failed: connections.error },
-  ].filter((source) => source.active);
   // With a source down, an empty list does not mean all is well.
-  const error = sources.some((source) => source.failed);
-  const allFailed = sources.every((source) => source.failed);
+  const error =
+    week.error ||
+    (isAdmin && signals.isError) ||
+    (requestsEnabled && requests.isError) ||
+    connections.error;
 
   return (
     <Card.Dashboard
       title="Needs attention"
-      tooltip="High-risk signals, failing tools, and pending access requests from the last 7 days."
+      tooltip={
+        tall
+          ? "People who can't connect to an MCP server right now, then high-risk signals and failing tools from the last 7 days, and access requests waiting for a decision."
+          : "High-risk signals, failing tools, and pending access requests from the last 7 days."
+      }
       className={cn(WIDGET_CLASS, className)}
       bodyClassName={cn(WIDGET_BODY_CLASS, "p-0")}
       action={
-        !pending && connections.total > shownConnections ? (
+        !pending && connections.total > shownProblems.length ? (
           <ViewAllLink to={routes.mcpSessions.href()} />
         ) : undefined
       }
     >
       {pending ? (
         <ListSkeleton />
-      ) : items.length === 0 && allFailed ? (
+      ) : items.length === 0 && error ? (
         <LoadError />
-      ) : items.length === 0 && !error ? (
+      ) : items.length === 0 ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
           Nothing needs attention this week.
         </p>
@@ -269,7 +246,6 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
           {items.map((item) => (
             <li key={item.key}>
               <ActionRow
-                title={item.title}
                 {...("prompt" in item
                   ? { prompt: item.prompt }
                   : { href: item.href })}
@@ -285,16 +261,15 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
                 />
                 <span className="min-w-0 flex-1">
                   <span
-                    className={cn(
-                      "block text-sm",
-                      item.title
-                        ? "line-clamp-2 break-words lg:line-clamp-1"
-                        : "truncate",
-                    )}
+                    title={item.label}
+                    className="line-clamp-2 block text-sm break-words lg:line-clamp-1"
                   >
                     {item.label}
                   </span>
-                  <span className="text-muted-foreground block truncate text-xs">
+                  <span
+                    title={item.detail}
+                    className="text-muted-foreground block truncate text-xs"
+                  >
                     {item.detail}
                   </span>
                 </span>
@@ -424,7 +399,10 @@ function MoversWidget({ className }: { className?: string }): JSX.Element {
               <ActionRow
                 prompt={`Why did tool calls to the ${m.name} server change from ${m.prev} to ${m.curr} this week? Who and what is driving it?`}
               >
-                <span className="min-w-0 flex-1 truncate text-sm">
+                <span
+                  title={m.name}
+                  className="min-w-0 flex-1 truncate text-sm"
+                >
                   {m.name}
                 </span>
                 <span className="text-muted-foreground font-mono text-xs tabular-nums">
@@ -542,7 +520,10 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
                     className="text-muted-foreground size-4 shrink-0"
                   />
                 )}
-                <span className="min-w-0 flex-1 truncate text-sm">
+                <span
+                  title={agent?.name ?? row.userLabel}
+                  className="min-w-0 flex-1 truncate text-sm"
+                >
                   <ToolUsageIdentity
                     kind={row.userKind}
                     identityKey={row.userKey}
@@ -662,13 +643,10 @@ function ActionRow({
   children,
   prompt,
   href,
-  title,
 }: {
   children: ReactNode;
   prompt?: string;
   href?: string;
-  /** Shown on hover. */
-  title?: string;
 }): JSX.Element {
   const { sendPrompt } = useInsightsState();
   const className =
@@ -680,7 +658,7 @@ function ActionRow({
   );
   if (href) {
     return (
-      <Link to={href} title={title} className={cn(className, "no-underline")}>
+      <Link to={href} className={cn(className, "no-underline")}>
         {children}
         {hint}
       </Link>

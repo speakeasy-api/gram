@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -15,6 +17,9 @@ import { formatSince } from "@/pages/mcp-sessions/connection-health/format";
 const state = vi.hoisted(() => ({
   flag: "enabled" as "enabled" | "disabled" | "loading",
   scopes: ["log:read"] as string[],
+  rbacLoading: false,
+  logsEnabled: true,
+  projectId: "project-1",
   connections: {
     ok: true,
     loggingEnabled: true,
@@ -86,7 +91,7 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
-    data: { logsEnabled: true },
+    data: { logsEnabled: state.logsEnabled },
     isPending: false,
     isError: false,
   }),
@@ -121,13 +126,17 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (scope: string) => state.scopes.includes(scope),
-    isLoading: false,
+    // Project scopes count only for the project asked about.
+    hasScope: (scope: string, resourceId?: string) =>
+      !state.rbacLoading &&
+      state.scopes.includes(scope) &&
+      (scope === "org:admin" || resourceId === state.projectId),
+    isLoading: state.rbacLoading,
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
-  useProject: () => ({ id: "project-1", slug: "project" }),
+  useProject: () => ({ id: state.projectId, slug: "project" }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
@@ -150,14 +159,16 @@ vi.mock("@/components/ui/Card", () => ({
   Card: {
     Dashboard: ({
       title,
+      tooltip,
       action,
       children,
     }: {
       title: string;
+      tooltip?: string;
       action?: ReactNode;
       children: ReactNode;
     }) => (
-      <section aria-label={title}>
+      <section aria-label={title} data-tooltip={tooltip}>
         <header>{action}</header>
         {children}
       </section>
@@ -166,6 +177,7 @@ vi.mock("@/components/ui/Card", () => ({
 }));
 
 import { HomeWidgets } from "./HomeWidgets";
+import { useConnectionProblemsAccess } from "./useConnectionProblems";
 
 const NOW = new Date(2026, 10, 20, 12, 0);
 const today = (h: number, m: number) => new Date(2026, 10, 20, h, m);
@@ -189,18 +201,33 @@ function problem(
   };
 }
 
-function renderWidgets(): void {
+function renderWidgets(): { rerender: () => void } {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  render(
+  const tree = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <HomeWidgets classNames={["", "", "", "", ""]} />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree());
+  return { rerender: () => view.rerender(tree()) };
 }
+
+const failingTool = {
+  gramUrn: "tools:http:x:search",
+  failureCount: 3,
+  failureRate: 0.5,
+  callCount: 6,
+};
+const criticalSignal = {
+  ruleId: "rule-1",
+  description: "Agent reads secrets",
+  findings: 4,
+  severity: "critical",
+};
 
 const card = () => screen.getByRole("region", { name: "Needs attention" });
 const rows = () => within(card()).queryAllByRole("link");
@@ -223,6 +250,9 @@ afterEach(() => {
   vi.useRealTimers();
   state.flag = "enabled";
   state.scopes = ["log:read"];
+  state.rbacLoading = false;
+  state.logsEnabled = true;
+  state.projectId = "project-1";
   state.connections = {
     ok: true,
     loggingEnabled: true,
@@ -242,9 +272,16 @@ describe("Needs attention connection rows", () => {
     state.flag = "loading";
     state.connections.problems = [problem("a")];
     renderWidgets();
-    await new Promise((r) => {
-      setTimeout(r, 20);
-    });
+    await act(async () => {});
+    expect(within(card()).getAllByTestId("skeleton").length).toBeGreaterThan(0);
+    expect(state.connectionCalls).toHaveLength(0);
+  });
+
+  it("waits on the viewer's permissions and does not read problems while they load", async () => {
+    state.rbacLoading = true;
+    state.connections.problems = [problem("a")];
+    renderWidgets();
+    await act(async () => {});
     expect(within(card()).getAllByTestId("skeleton").length).toBeGreaterThan(0);
     expect(state.connectionCalls).toHaveLength(0);
   });
@@ -266,6 +303,57 @@ describe("Needs attention connection rows", () => {
     expect(state.connectionCalls).toHaveLength(0);
     expect(rows()).toHaveLength(0);
     expect(within(card()).getByText(EMPTY)).toBeTruthy();
+  });
+
+  it("reads nothing with log:read on another project only", async () => {
+    state.projectId = "project-2";
+    state.scopes = [];
+    renderWidgets();
+    await settled();
+    expect(state.connectionCalls).toHaveLength(0);
+  });
+
+  it("reads nothing with logs off for the organization", async () => {
+    state.logsEnabled = false;
+    state.connections.problems = [problem("a")];
+    renderWidgets();
+    await settled();
+    expect(state.connectionCalls).toHaveLength(0);
+    expect(rows()).toHaveLength(0);
+  });
+
+  it("reads the problems again for another project", async () => {
+    state.connections.problems = [problem("a")];
+    const view = renderWidgets();
+    await settled();
+    expect(rows().map((l) => l.textContent)).toEqual([
+      expect.stringContaining("Problem a"),
+    ]);
+    state.projectId = "project-2";
+    state.scopes = ["log:read"];
+    state.connections.problems = [problem("b")];
+    view.rerender();
+    await waitFor(() =>
+      expect(rows().map((l) => l.textContent)).toEqual([
+        expect.stringContaining("Problem b"),
+      ]),
+    );
+    expect(state.connectionCalls).toHaveLength(2);
+  });
+
+  it("names connection problems in the tooltip only for viewers who get them", async () => {
+    renderWidgets();
+    await settled();
+    expect(card().getAttribute("data-tooltip")).toMatch(
+      /^People who can't connect/,
+    );
+    cleanup();
+    state.flag = "disabled";
+    renderWidgets();
+    await settled();
+    expect(card().getAttribute("data-tooltip")).toBe(
+      "High-risk signals, failing tools, and pending access requests from the last 7 days.",
+    );
   });
 
   it("asks for the rows the tall card holds when the flag is on", async () => {
@@ -297,14 +385,7 @@ describe("Needs attention connection rows", () => {
   });
 
   it("shows no placeholder for zero problems", async () => {
-    state.failingTools = [
-      {
-        gramUrn: "tools:http:x:search",
-        failureCount: 3,
-        failureRate: 0.5,
-        callCount: 6,
-      },
-    ];
+    state.failingTools = [failingTool];
     renderWidgets();
     await settled();
     const list = within(card()).getAllByRole("listitem");
@@ -314,14 +395,7 @@ describe("Needs attention connection rows", () => {
 
   it("lists connection rows first, in the API's order, then the card's own", async () => {
     state.scopes = ["log:read", "org:admin"];
-    state.signals = [
-      {
-        ruleId: "rule-1",
-        description: "Agent reads secrets",
-        findings: 4,
-        severity: "critical",
-      },
-    ];
+    state.signals = [criticalSignal];
     state.connections.problems = [
       problem("b", { server: { id: "srv-b", slug: "wiki" } }),
       problem("a", {
@@ -339,8 +413,9 @@ describe("Needs attention connection rows", () => {
       expect.stringContaining("Agent reads secrets"),
     ]);
     const headline = `Problem b since ${formatSince(today(9, 5).toISOString(), NOW)}`;
-    expect(links[0]!.getAttribute("title")).toBe(headline);
-    expect(links[0]!.textContent).toContain("Fact b");
+    expect(within(links[0]!).getByTitle(headline).textContent).toBe(headline);
+    expect(within(links[0]!).getByTitle("Fact b")).toBeTruthy();
+    expect(links[0]!.hasAttribute("title")).toBe(false);
     expect(links[0]!.textContent).toContain("today");
     expect(links[1]!.textContent).not.toContain("16:05");
   });
@@ -352,6 +427,7 @@ describe("Needs attention connection rows", () => {
         userSessionIssuerId: "iss-1",
       }),
       problem("no-slug", { server: { id: "srv-2" } }),
+      problem("reserved-slug", { server: { id: "srv-3", slug: "add" } }),
       problem("sign-in", {
         suspectedProblemPart: "speakeasy",
         userSessionIssuerId: "iss-1",
@@ -368,16 +444,17 @@ describe("Needs attention connection rows", () => {
     const base = "/org/projects/project";
     expect(hrefs[0]).toBe(`${base}/mcp/wiki/sessions?problem=on-server`);
     expect(hrefs[1]).toBe(`${base}/mcp/srv-2/sessions?problem=no-slug`);
-    expect(hrefs[2]).toBe(
+    expect(hrefs[2]).toBe(`${base}/mcp/srv-3/sessions?problem=reserved-slug`);
+    expect(hrefs[3]).toBe(
       `${base}/mcp-sessions/iss-1/overview?problem=sign-in`,
     );
-    const logs = new URL(hrefs[3]!, "http://localhost");
+    const logs = new URL(hrefs[4]!, "http://localhost");
     expect(logs.pathname).toBe(`${base}/mcp-sessions/iss-2/connection-logs`);
     expect(logs.searchParams.get("from")).toBe(today(9, 0).toISOString());
     expect(logs.searchParams.get("server")).toBe("gw-1");
     expect(logs.searchParams.get("message")).toBe("r1");
     expect(logs.searchParams.has("problem")).toBe(false);
-    expect(hrefs[4]).toBe(`${base}/mcp-sessions`);
+    expect(hrefs[5]).toBe(`${base}/mcp-sessions`);
   });
 
   it("offers View all only when there are more problems than shown", async () => {
@@ -396,6 +473,27 @@ describe("Needs attention connection rows", () => {
     );
   });
 
+  it("keeps room for the card's own rows and offers View all for the problems cut", async () => {
+    state.scopes = ["log:read", "org:admin"];
+    state.signals = [criticalSignal];
+    state.connections.problems = ["1", "2", "3", "4", "5", "6"].map((id) =>
+      problem(id),
+    );
+    renderWidgets();
+    await settled();
+    const texts = rows()
+      .filter((l) => l.textContent !== "View all")
+      .map((l) => l.textContent);
+    expect(texts).toHaveLength(6);
+    expect(texts.slice(0, 5)).toEqual(
+      ["1", "2", "3", "4", "5"].map((id) =>
+        expect.stringContaining(`Problem ${id} since`),
+      ),
+    );
+    expect(texts[5]).toContain("Agent reads secrets");
+    expect(within(card()).getByRole("link", { name: "View all" })).toBeTruthy();
+  });
+
   it("has no View all when every problem is shown", async () => {
     state.connections.problems = [problem("1"), problem("2")];
     renderWidgets();
@@ -403,37 +501,46 @@ describe("Needs attention connection rows", () => {
     expect(within(card()).queryByRole("link", { name: "View all" })).toBeNull();
   });
 
-  it("shows the partial-load line, never an empty state, when the read fails", async () => {
+  it("shows the load error, never an empty state, when the read fails and nothing else has rows", async () => {
     state.connections.ok = false;
     renderWidgets();
     await settled();
-    expect(within(card()).getByText(PARTIAL)).toBeTruthy();
+    expect(within(card()).getByText(LOAD_ERROR)).toBeTruthy();
     expect(within(card()).queryByText(EMPTY)).toBeNull();
-    expect(within(card()).queryByText(LOAD_ERROR)).toBeNull();
   });
 
   it("keeps the other sources' rows under the partial-load line", async () => {
     state.connections.ok = false;
-    state.failingTools = [
-      {
-        gramUrn: "tools:http:x:search",
-        failureCount: 3,
-        failureRate: 0.5,
-        callCount: 6,
-      },
-    ];
+    state.failingTools = [failingTool];
     renderWidgets();
     await settled();
     expect(within(card()).getByText(PARTIAL)).toBeTruthy();
     expect(within(card()).getByText("search is failing")).toBeTruthy();
   });
 
-  it("shows the load error when every source failed", async () => {
-    state.connections.ok = false;
-    state.weekFails = true;
+  it("shows the load error as before for an admin without connection rows whose risk signals fail", async () => {
+    state.flag = "disabled";
+    state.scopes = ["org:admin"];
+    state.signalsFail = true;
     renderWidgets();
     await settled();
+    expect(state.connectionCalls).toHaveLength(0);
     expect(within(card()).getByText(LOAD_ERROR)).toBeTruthy();
     expect(within(card()).queryByText(PARTIAL)).toBeNull();
+  });
+});
+
+describe("useConnectionProblemsAccess", () => {
+  it.each([
+    ["on", {}],
+    ["off", { logsEnabled: false }],
+    ["off", { flag: "disabled" as const }],
+    ["off", { scopes: [] }],
+    ["pending", { flag: "loading" as const }],
+    ["pending", { rbacLoading: true }],
+  ])("is %s for %o", (want, patch) => {
+    Object.assign(state, patch);
+    const { result } = renderHook(() => useConnectionProblemsAccess());
+    expect(result.current).toBe(want);
   });
 });
