@@ -674,6 +674,82 @@ describe("SkillManifestDialog", () => {
       expect(new TextDecoder().decode(sent[0]?.content)).toBe("print(1)");
     });
 
+    it("saves real bytes for files kept from an over-limit upload", async () => {
+      testState.create.mutateAsync.mockResolvedValue(validResult);
+      const entries: Record<string, string> = {
+        "example/SKILL.md": VALID_MANIFEST,
+      };
+      for (let i = 0; i <= 100; i += 1) {
+        entries[`example/refs/${String(i).padStart(3, "0")}.md`] = `ref ${i}`;
+      }
+      render(
+        <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,
+      );
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: { files: [zipFile(entries)] },
+      });
+      expect(
+        await screen.findByText(/at most 100 supporting files/),
+      ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove refs/100.md" }),
+      );
+      expect(screen.queryByText(/at most 100 supporting files/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
+
+      await waitFor(() =>
+        expect(testState.create.mutateAsync).toHaveBeenCalledOnce(),
+      );
+      const body = testState.create.mutateAsync.mock.calls[0]?.[0] as {
+        request: {
+          createSkillRequestBody: {
+            files: { path: string; content: Uint8Array }[];
+          };
+        };
+      };
+      const sent = body.request.createSkillRequestBody.files;
+      expect(sent).toHaveLength(100);
+      for (const file of sent) {
+        const index = Number(/refs\/(\d+)\.md/.exec(file.path)?.[1]);
+        expect(new TextDecoder().decode(file.content)).toBe(`ref ${index}`);
+      }
+    });
+
+    it("blocks saving the previous draft after an upload fails", async () => {
+      testState.create.mutateAsync.mockResolvedValue(validResult);
+      render(
+        <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,
+      );
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: {
+          files: [
+            zipFile({
+              "example/SKILL.md": VALID_MANIFEST,
+              "example/notes.md": "a",
+            }),
+          ],
+        },
+      });
+      expect(await screen.findByText("notes.md")).toBeTruthy();
+
+      const oversized = zipFile({ "example/SKILL.md": VALID_MANIFEST });
+      Object.defineProperty(oversized, "size", { value: 33 * 1024 * 1024 });
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: { files: [oversized] },
+      });
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("Archives must be 32 MB or smaller");
+      const save = screen.getByRole("button", { name: "Add skill" });
+      expect(save.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(save);
+      expect(testState.create.mutateAsync).not.toHaveBeenCalled();
+
+      fireEvent.click(within(alert).getByRole("button", { name: "Dismiss" }));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(save.hasAttribute("disabled")).toBe(false);
+    });
+
     it("reports a zip without SKILL.md", async () => {
       render(
         <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,

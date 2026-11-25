@@ -6,6 +6,7 @@ import {
   isLikelyTextFile,
   isSkillScript,
   languageForPath,
+  loadDraftFileContent,
   manifestNameFromContent,
   MAX_SKILL_FILE_BYTES,
   MAX_SKILL_FILES,
@@ -132,12 +133,15 @@ describe("readSkillZip", () => {
   it("inflates no supporting files when the set breaks the total limit", () => {
     // Each file is under the per-file cap, but together they exceed 10 MB.
     const chunk = new Uint8Array(4 * 1024 * 1024);
-    const zip = zipSync({
-      "SKILL.md": strToU8(MANIFEST),
-      "assets/a.bin": chunk,
-      "assets/b.bin": chunk,
-      "assets/c.bin": chunk,
-    });
+    const zip = zipSync(
+      {
+        "SKILL.md": strToU8(MANIFEST),
+        "assets/a.bin": chunk,
+        "assets/b.bin": chunk,
+        "assets/c.bin": chunk,
+      },
+      { level: 0 },
+    );
     const entries = readSkillZip(zip);
     expect(entries.find((e) => e.path === "SKILL.md")?.content).not.toBeNull();
     for (const name of ["a", "b", "c"]) {
@@ -163,8 +167,38 @@ describe("readSkillZip", () => {
     expect(parsed.manifest).toBe(MANIFEST);
     expect(parsed.files).toHaveLength(MAX_SKILL_FILES + 1);
     expect(
-      parsed.files.every((f) => f.kind === "new" && f.content.byteLength === 0),
+      parsed.files.every((f) => f.kind === "new" && f.content === null),
     ).toBe(true);
+  });
+
+  it("reads deferred entries from the archive once needed", async () => {
+    const files: Record<string, Uint8Array> = { "SKILL.md": strToU8(MANIFEST) };
+    for (let i = 0; i <= MAX_SKILL_FILES; i += 1) {
+      files[`refs/${i}.md`] = strToU8(`ref ${i}`);
+    }
+    const zip = zipSync(files);
+    const archive = {
+      size: zip.byteLength,
+      arrayBuffer: () => Promise.resolve(zip.slice().buffer),
+    };
+    const parsed = parseSkillUpload(await readSkillZipFile(archive));
+    const ref = parsed.files.find((f) => f.path === "refs/7.md");
+    if (ref?.kind !== "new") throw new Error("expected an uploaded file");
+    expect(ref.content).toBeNull();
+    expect(new TextDecoder().decode(await loadDraftFileContent(ref))).toBe(
+      "ref 7",
+    );
+  });
+
+  it("never returns empty bytes for an unread file", async () => {
+    await expect(
+      loadDraftFileContent({
+        kind: "new",
+        path: "assets/a.bin",
+        content: null,
+        sizeBytes: 4,
+      }),
+    ).rejects.toThrow("Unable to read assets/a.bin. Upload the skill again.");
   });
 
   it("refuses an archive over the size cap without reading it", async () => {

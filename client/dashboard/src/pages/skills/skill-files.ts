@@ -12,15 +12,50 @@ export const SKILL_MANIFEST_PATH = "SKILL.md";
 /** A file read from an uploaded folder or zip, before the skill is parsed. */
 export type SkillUploadEntry = {
   path: string;
-  /** Bytes, or null when the file was too large to read. */
+  /**
+   * Bytes, or null when they were not read: the file is over the per-file
+   * limit, or the whole upload broke the count or total-size limit.
+   */
   content: Uint8Array | null;
+  /** Reads the bytes from the original source when `content` is null. */
+  read?: () => Promise<Uint8Array>;
   sizeBytes: number;
 };
 
-/** A supporting file in the dialog: either new bytes or a file kept from the base version. */
+/**
+ * A supporting file in the dialog: either an uploaded file or a file kept
+ * from the base version. An uploaded file's bytes may be unread (null) when
+ * the upload was over the limits; `read` loads them once the set fits.
+ */
 export type DraftSkillFile =
-  | { kind: "new"; path: string; content: Uint8Array; sizeBytes: number }
+  | {
+      kind: "new";
+      path: string;
+      content: Uint8Array | null;
+      read?: () => Promise<Uint8Array>;
+      sizeBytes: number;
+    }
   | { kind: "existing"; path: string; sizeBytes: number; contentType: string };
+
+export class SkillUploadError extends Error {}
+
+/**
+ * Returns the bytes of an uploaded file, reading them from the original
+ * source if they were deferred. Throws rather than return empty bytes, so a
+ * file is never saved without its contents.
+ */
+export async function loadDraftFileContent(
+  file: Extract<DraftSkillFile, { kind: "new" }>,
+): Promise<Uint8Array> {
+  if (file.content) return file.content;
+  const bytes = file.read ? await file.read() : null;
+  if (!bytes || bytes.byteLength !== file.sizeBytes) {
+    throw new SkillUploadError(
+      `Unable to read ${file.path}. Upload the skill again.`,
+    );
+  }
+  return bytes;
+}
 
 export type ParsedSkillUpload = {
   manifest: string;
@@ -28,8 +63,6 @@ export type ParsedSkillUpload = {
   /** The single top-level folder the upload was wrapped in, if any. */
   rootDir: string | null;
 };
-
-export class SkillUploadError extends Error {}
 
 /** Metadata the dashboard needs to compare or list files. */
 export type SkillFileMeta = {
@@ -166,9 +199,10 @@ export function parseSkillUpload(
     .map((entry) => ({
       kind: "new" as const,
       path: entry.path,
-      // Oversized files keep their size so validation can name them; their
-      // bytes are never read.
-      content: entry.content ?? new Uint8Array(),
+      // Unread files keep their size so validation can name them, and a way
+      // to read them later once the set fits the limits.
+      content: entry.content,
+      read: entry.read,
       sizeBytes: entry.sizeBytes,
     }))
     .sort((a, b) => compareStrings(a.path, b.path));
@@ -342,7 +376,26 @@ export async function readSkillZipFile(
       `The .zip is ${formatFileSize(file.size)}. Archives must be ${formatFileSize(MAX_SKILL_ZIP_BYTES)} or smaller.`,
     );
   }
-  return readSkillZip(new Uint8Array(await file.arrayBuffer()));
+  const entries = readSkillZip(new Uint8Array(await file.arrayBuffer()));
+  // Entries left unread can be inflated later, one at a time, from the
+  // archive, so removing files until the set fits never loses their bytes.
+  return entries.map((entry) =>
+    entry.content === null && entry.sizeBytes <= MAX_SKILL_FILE_BYTES
+      ? { ...entry, read: () => readZipEntry(file, entry.path) }
+      : entry,
+  );
+}
+
+async function readZipEntry(
+  file: Pick<Blob, "arrayBuffer">,
+  name: string,
+): Promise<Uint8Array> {
+  const unzipped = unzipSync(new Uint8Array(await file.arrayBuffer()), {
+    filter: (entry) => entry.name === name,
+  });
+  const bytes = unzipped[name];
+  if (!bytes) throw new SkillUploadError(`Unable to read ${name}.`);
+  return bytes;
 }
 
 /**
@@ -364,6 +417,7 @@ export async function readSkillFolder(
       content: toRead.has(path)
         ? new Uint8Array(await file.arrayBuffer())
         : null,
+      read: async () => new Uint8Array(await file.arrayBuffer()),
       sizeBytes,
     })),
   );

@@ -30,6 +30,7 @@ import {
   formatFileSize,
   type SkillUploadEntry,
   isSkillScript,
+  loadDraftFileContent,
   parseSkillUpload,
   readSkillFolder,
   readSkillZipFile,
@@ -124,6 +125,10 @@ export function SkillManifestDialog({
   const [filesRevision, setFilesRevision] = useState(0);
   const [uploadRootDir, setUploadRootDir] = useState<string | null>(null);
   const [filesErrors, setFilesErrors] = useState<string[]>([]);
+  // A folder or zip that could not be read. Saving stays blocked until the
+  // user uploads again or dismisses it, so the previous draft is never saved
+  // by mistake in its place.
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [noOpFilesRevision, setNoOpFilesRevision] = useState<number | null>(
     null,
   );
@@ -159,6 +164,7 @@ export function SkillManifestDialog({
     setFilesRevision(0);
     setUploadRootDir(null);
     setFilesErrors([]);
+    setUploadError(null);
     fileReadSeq.current += 1;
     setReadingFile(false);
     createMutation.reset();
@@ -174,10 +180,21 @@ export function SkillManifestDialog({
 
   const resolveFileInputs = async (): Promise<SkillFileInput[] | undefined> => {
     if (!managesFiles || !filesChanged) return undefined;
+    // Uploaded files left unread (the upload was over the limits before
+    // files were removed) are read now, one at a time, since a zip entry is
+    // re-inflated from the whole archive.
+    const uploaded = new Map<string, Uint8Array>();
+    for (const file of draftFiles) {
+      if (file.kind === "new") {
+        uploaded.set(file.path, await loadDraftFileContent(file));
+      }
+    }
     return Promise.all(
       draftFiles.map(async (file): Promise<SkillFileInput> => {
         if (file.kind === "new") {
-          return { path: file.path, content: file.content };
+          const content = uploaded.get(file.path);
+          if (!content) throw new Error(`Unable to read ${file.path}.`);
+          return { path: file.path, content };
         }
         // A kept file's bytes live on the server; fetch them so the request
         // can carry the complete new set.
@@ -202,6 +219,7 @@ export function SkillManifestDialog({
   };
 
   const submit = async (): Promise<void> => {
+    if (uploadError) return;
     const validationError = validateManifestContent(content);
     setFieldError(validationError);
     setMutationError(null);
@@ -333,6 +351,7 @@ export function SkillManifestDialog({
     try {
       const parsed = parseSkillUpload(await read());
       if (seq !== fileReadSeq.current) return;
+      setUploadError(null);
       setContent(parsed.manifest);
       setDraftFiles(parsed.files);
       setFilesRevision((revision) => revision + 1);
@@ -343,7 +362,7 @@ export function SkillManifestDialog({
       setFilesErrors(validateSkillFiles(parsed.files));
     } catch (error) {
       if (seq !== fileReadSeq.current) return;
-      setFieldError(
+      setUploadError(
         error instanceof SkillUploadError
           ? error.message
           : "Unable to read the selected files.",
@@ -512,6 +531,27 @@ export function SkillManifestDialog({
             </div>
           </div>
 
+          {uploadError && (
+            <div
+              role="alert"
+              className="border-destructive/40 flex items-start justify-between gap-3 border px-3 py-2"
+            >
+              <Text small className="text-destructive">
+                {uploadError} Upload again, or dismiss this to keep the current
+                draft.
+              </Text>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="xs"
+                className="h-auto shrink-0 p-0"
+                onClick={() => setUploadError(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
+
           {managesFiles && (
             <SupportingFilesField
               files={draftFiles}
@@ -548,6 +588,7 @@ export function SkillManifestDialog({
             disabled={
               isBusy ||
               readingFile ||
+              uploadError !== null ||
               savedInvalid ||
               unchangedNoOp ||
               approvalUncertain
