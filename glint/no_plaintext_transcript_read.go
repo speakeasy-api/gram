@@ -284,7 +284,8 @@ var (
 	sqlChatMessagesRef = regexp.MustCompile(`\bchat_messages\b`)
 	sqlChatMessagesAs  = regexp.MustCompile(`\bchat_messages\s+(?:as\s+)?([a-z_][a-z0-9_]*)`)
 	sqlInsertColumns   = regexp.MustCompile(`\binsert\s+into\s+[a-z0-9_.]+\s*(?:as\s+[a-z_][a-z0-9_]*\s*)?\([^)]*\)`)
-	sqlSetClause       = regexp.MustCompile(`\bset\b(?s:(.*?))(\bwhere\b|\bfrom\b|\breturning\b|;|$)`)
+	sqlSetKeyword      = regexp.MustCompile(`\bset\b`)
+	sqlSetTerminator   = regexp.MustCompile(`^(where|from|returning)\b`)
 	sqlSetTarget       = regexp.MustCompile(`^\s*[a-z_][a-z0-9_]*\s*=`)
 	sqlColumnRef       = regexp.MustCompile(`(\bas\s+)?(?:([a-z_][a-z0-9_]*)\s*\.\s*)?\b(` + strings.Join(plaintextTranscriptColumns, "|") + `)\b`)
 	// sqlQualifiedStar matches "alias.*"; sqlBareStar matches a bare "*" in a
@@ -328,7 +329,7 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 	}
 
 	s = sqlInsertColumns.ReplaceAllString(s, " ")
-	s = sqlSetClause.ReplaceAllStringFunc(s, stripSetTargets)
+	s = stripSetClauses(s)
 
 	if sqlBareStar.MatchString(s) {
 		return true
@@ -349,6 +350,57 @@ func sqlReadsPlaintextTranscript(sql string) bool {
 		}
 	}
 	return false
+}
+
+// stripSetClauses runs stripSetTargets over each SET clause. A clause ends at
+// the first WHERE, FROM, RETURNING or ";" outside parentheses, so a subquery
+// on an assignment's right-hand side does not end it early.
+func stripSetClauses(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	rest := s
+	for {
+		loc := sqlSetKeyword.FindStringIndex(rest)
+		if loc == nil {
+			b.WriteString(rest)
+			return b.String()
+		}
+		b.WriteString(rest[:loc[0]])
+		end := setClauseEnd(rest, loc[1])
+		b.WriteString(stripSetTargets(rest[loc[0]:end]))
+		rest = rest[end:]
+	}
+}
+
+// setClauseEnd returns where the SET clause starting at from ends.
+func setClauseEnd(s string, from int) int {
+	depth := 0
+	for i := from; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+			continue
+		case ')':
+			depth--
+			continue
+		case ';':
+			if depth == 0 {
+				return i
+			}
+			continue
+		}
+		if depth != 0 || (i > 0 && isIdentByte(s[i-1])) {
+			continue
+		}
+		if sqlSetTerminator.MatchString(s[i:]) {
+			return i
+		}
+	}
+	return len(s)
+}
+
+func isIdentByte(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9'
 }
 
 // stripSetTargets blanks the target of each assignment in a SET clause, so
