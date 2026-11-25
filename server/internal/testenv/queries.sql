@@ -2899,3 +2899,6 @@ UPDATE cimd_client_candidates SET status = @status WHERE url = @url;
 
 -- name: InsertCimdClientCandidateFixture :exec
 INSERT INTO cimd_client_candidates (url) VALUES (@url);
+
+-- name: SetUserSessionClientCIMDFetchedAtFixture :exec
+UPDATE user_session_clients SET client_id_metadata_fetched_at = @fetched_at WHERE id = @id;

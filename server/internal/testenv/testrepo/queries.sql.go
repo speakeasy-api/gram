@@ -8439,6 +8439,20 @@ func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPl
 	return err
 }
 
+const setUserSessionClientCIMDFetchedAtFixture = `-- name: SetUserSessionClientCIMDFetchedAtFixture :exec
+UPDATE user_session_clients SET client_id_metadata_fetched_at = $1 WHERE id = $2
+`
+
+type SetUserSessionClientCIMDFetchedAtFixtureParams struct {
+	FetchedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetUserSessionClientCIMDFetchedAtFixture(ctx context.Context, arg SetUserSessionClientCIMDFetchedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionClientCIMDFetchedAtFixture, arg.FetchedAt, arg.ID)
+	return err
+}
+
 const setUserSessionIssuerAuthorizationServerModeFixture = `-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
 UPDATE user_session_issuers AS issuer
 SET authorization_server_mode = $1,

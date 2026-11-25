@@ -594,3 +594,27 @@ func TestBackfill_JoiningSpendsTheBudget(t *testing.T) {
 	require.Equal(t, cimdcandidates.BackfillCounts{Scanned: 2, Recorded: 1, Skipped: 1}, counts, "joining the existing candidate spends the last unit of budget")
 	sightingTime(t, conn, uncoveredURL, issuer.id)
 }
+
+func TestBackfill_OrdersFirstAndLastSeen(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t, "cimd_candidates_backfill_order")
+	issuer := seedIssuer(t, conn, "issuer", admission.ModeOpen)
+	row := seedClient(t, conn, issuer, uncoveredURL)
+	fetchedAt := row.CreatedAt.Time.Add(-time.Hour)
+	require.NoError(t, testrepo.New(conn).SetUserSessionClientCIMDFetchedAtFixture(ctx, testrepo.SetUserSessionClientCIMDFetchedAtFixtureParams{
+		FetchedAt: conv.ToPGTimestamptz(fetchedAt),
+		ID:        row.ID,
+	}))
+
+	_, err := cimdcandidates.Backfill(ctx, testenv.NewLogger(t), conn, testCatalog(), testOrigin(t))
+	require.NoError(t, err)
+
+	candidates, err := testrepo.New(conn).ListCimdClientCandidatesFixture(ctx)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.True(t, candidates[0].FirstSeenAt.Time.Equal(fetchedAt), "first seen is the earlier timestamp")
+	require.True(t, candidates[0].LastSeenAt.Time.Equal(row.CreatedAt.Time), "last seen is the later timestamp")
+	require.True(t, sightingTime(t, conn, uncoveredURL, issuer.id).Equal(row.CreatedAt.Time))
+}

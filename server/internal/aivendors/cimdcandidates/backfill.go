@@ -273,10 +273,15 @@ func writeBatch(ctx context.Context, q *repo.Queries, rows []repo.ListCIMDClient
 	}
 	batch := repo.BackfillSightingsParams{Urls: nil, ClientNames: nil, FirstSeenAts: nil, LastSeenAts: nil, UserSessionIssuerIds: nil}
 	for _, c := range rows {
+		// A row's last fetch can predate its created_at, so order the two.
+		first, last := c.CreatedAt, c.LastSeenAt
+		if last.Time.Before(first.Time) {
+			first, last = last, first
+		}
 		batch.Urls = append(batch.Urls, c.Url)
 		batch.ClientNames = append(batch.ClientNames, c.ClientName)
-		batch.FirstSeenAts = append(batch.FirstSeenAts, c.CreatedAt)
-		batch.LastSeenAts = append(batch.LastSeenAts, c.LastSeenAt)
+		batch.FirstSeenAts = append(batch.FirstSeenAts, first)
+		batch.LastSeenAts = append(batch.LastSeenAts, last)
 		batch.UserSessionIssuerIds = append(batch.UserSessionIssuerIds, c.UserSessionIssuerID)
 	}
 	n, err := q.BackfillSightings(ctx, batch)
