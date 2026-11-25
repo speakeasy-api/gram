@@ -6,7 +6,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
@@ -18,11 +21,44 @@ import (
 
 func newTranscriptShadowStore(t *testing.T, ti *chatTestInstance) *transcriptstore.Store {
 	t.Helper()
+	store, _ := newMeteredTranscriptShadowStore(t, ti)
+	return store
+}
+
+// newMeteredTranscriptShadowStore also returns a reader for the store's
+// metrics, so a test can prove which messages were served from shadows.
+func newMeteredTranscriptShadowStore(t *testing.T, ti *chatTestInstance) (*transcriptstore.Store, *sdkmetric.ManualReader) {
+	t.Helper()
 	keys := orgencryptiontest.New(t, ti.conn)
 	require.NoError(t, keys.Provisioner.EnsureUseCase(t.Context(), ti.orgID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
-	store, err := transcriptstore.New(ti.conn, keys.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	reader := sdkmetric.NewManualReader()
+	store, err := transcriptstore.New(ti.conn, keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
-	return store
+	return store, reader
+}
+
+// readMessagesByOutcome sums the chat.transcript_shadow.read.messages counter
+// by outcome.
+func readMessagesByOutcome(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	counts := map[string]int64{}
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "chat.transcript_shadow.read.messages" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				outcome, ok := point.Attributes.Value(attr.OutcomeKey)
+				require.True(t, ok)
+				counts[outcome.AsString()] += point.Value
+			}
+		}
+	}
+	return counts
 }
 
 func captureTranscriptShadows(t *testing.T, ti *chatTestInstance, store *transcriptstore.Store, messageIDs ...uuid.UUID) {
@@ -44,7 +80,7 @@ func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
 	first := seedMessageContent(t, ctx, ti, chatID, "first sealed message")
 	second := seedMessageContent(t, ctx, ti, chatID, "second sealed message")
 
-	store := newTranscriptShadowStore(t, ti)
+	store, reader := newMeteredTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, first, second)
 	ti.service.WithTranscriptShadowReads(store, ti.projectID)
 
@@ -60,6 +96,10 @@ func TestLoadChat_ReadEnabledProjectOpensEncryptedShadows(t *testing.T) {
 		first.String():  "first sealed message",
 		second.String(): "second sealed message",
 	}, contents)
+	// A current shadow opens to the same text as the plaintext, so the body
+	// alone cannot show where it came from. The read metric proves both
+	// messages were opened from shadows, with no plaintext fallback.
+	require.Equal(t, map[string]int64{"success": 2}, readMessagesByOutcome(t, reader))
 }
 
 func TestLoadChat_ReadEnabledProjectServesPlaintextWhenNoShadowExists(t *testing.T) {
@@ -119,16 +159,22 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "plaintext reads")
-	seedMessageContent(t, ctx, ti, chatID, "never captured")
+	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
 
-	// The store reads only for another project, so this one has no shadows
-	// and still loads.
-	ti.service.WithTranscriptShadowReads(newTranscriptShadowStore(t, ti), uuid.New())
+	// The message has a shadow that is now stale. A project that captures
+	// shadows would fail this load; this project does not, so it must
+	// keep serving plaintext without touching the shadow.
+	store, reader := newMeteredTranscriptShadowStore(t, ti)
+	captureTranscriptShadows(t, ti, store, edited)
+	_, err := fixturerepo.New(ti.conn).ChangeContent(t.Context(), edited, uuid.NullUUID{UUID: ti.projectID, Valid: true})
+	require.NoError(t, err)
+	ti.service.WithTranscriptShadowReads(store, uuid.New())
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Len(t, result.Messages, 1)
 	var text string
 	require.NoError(t, json.Unmarshal(result.Messages[0].Content, &text))
-	require.Equal(t, "never captured", text)
+	require.Equal(t, "changed", text)
+	require.Empty(t, readMessagesByOutcome(t, reader))
 }

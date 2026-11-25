@@ -365,7 +365,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
-	flags = append(flags, transcriptShadowFlag(), transcriptShadowReadFlag())
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -879,7 +879,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			assistantsCore.SetTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...)
+			assistantsCore.SetTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...)
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
