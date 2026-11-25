@@ -220,8 +220,15 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 		} else {
 			patch.ToolCalls = []byte(`[{"id":"new-call"}]`)
 		}
-		_, err := (*transcriptstore.Transcripts)(nil).PatchKitProjectionMessage(t.Context(), db, row, patch)
+		// The patch compares against the previous row, so lock and read it in
+		// the same transaction as the write, the way the writer does.
+		tx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the lock-and-compare contract needs the read and the patch in one caller-owned transaction.
 		require.NoError(t, err)
+		locked, err := (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), tx, project, row.ID)
+		require.NoError(t, err)
+		_, err = (*transcriptstore.Transcripts)(nil).PatchKitProjectionMessage(t.Context(), tx, locked, patch)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(t.Context()))
 		row, err = (*transcriptstore.Transcripts)(nil).GetKitProjectionMessage(t.Context(), db, project, row.ID)
 		require.NoError(t, err)
 		require.False(t, row.RiskAnalyzedAt.Valid, field)

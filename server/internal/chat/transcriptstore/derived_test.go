@@ -111,6 +111,16 @@ func TestFindAssistantToolCallUsesShadowIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacy, id, "a shadow without an index falls back to plaintext")
 
+	// An element of another shape does not hide the IDs of its siblings.
+	mixed := uuid.New()
+	f.add(t, mixed)
+	_, err = fixtures.SetToolCalls(t.Context(), []byte(`[{"id":"mixed"},"text",{"id":7}]`), mixed, project(f.project))
+	require.NoError(t, err)
+	f.capture(t, mixed)
+	id, err = find(enabled, "mixed")
+	require.NoError(t, err)
+	require.Equal(t, mixed, id, "found by the shadow's index")
+
 	off := NewTranscripts(f.store)
 	_, err = find(off, "example")
 	require.ErrorIs(t, err, pgx.ErrNoRows)

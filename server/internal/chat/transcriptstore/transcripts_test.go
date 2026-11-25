@@ -29,6 +29,9 @@ func TestMetadataOf(t *testing.T) {
 		{name: "double encoded null", toolCalls: `"null"`, count: 0, ids: []string{}},
 		{name: "unparseable string", toolCalls: `"not json"`, count: 1, ids: []string{}},
 		{name: "object", toolCalls: `{"id":"call_a"}`, count: 0, ids: []string{}},
+		{name: "mixed shapes", toolCalls: `[{"id":"call_a"},"text",{"id":7},null,{"id":"call_b"}]`, count: 5, ids: []string{"call_a", "call_b"}},
+		{name: "double encoded mixed shapes", toolCalls: `"[{\"id\":\"call_a\"},1]"`, count: 2, ids: []string{"call_a"}},
+		{name: "json null", toolCalls: `null`, count: 0, ids: []string{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

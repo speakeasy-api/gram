@@ -80,6 +80,12 @@ func TestPlatformShapeBlanksFlaggedFields(t *testing.T) {
 	require.Empty(t, m.Content)
 	require.Nil(t, m.ContentRaw)
 	require.Equal(t, []byte(`[]`), []byte(m.ToolCalls))
+
+	m = transcriptcrypto.Message{Content: "content", ContentRaw: []byte(`"raw"`), ToolCalls: []byte(`[{"id":"a"}]`)}
+	platformShape(false, true, false)(&m)
+	require.Equal(t, "content", m.Content)
+	require.Equal(t, []byte(`"raw"`), []byte(m.ContentRaw))
+	require.Nil(t, m.ToolCalls)
 }
 
 func TestJudgeToolCallsOf(t *testing.T) {

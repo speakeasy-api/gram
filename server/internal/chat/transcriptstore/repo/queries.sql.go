@@ -118,7 +118,7 @@ WHERE tc.chat_id = $1
   AND tc.project_id = $3
   AND m.chat_id = $1
   AND m.role = 'assistant'
-ORDER BY m.created_at DESC
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
 LIMIT 1
 `
 

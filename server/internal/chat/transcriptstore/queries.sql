@@ -78,7 +78,7 @@ WHERE tc.chat_id = @chat_id
   AND tc.project_id = @project_id
   AND m.chat_id = @chat_id
   AND m.role = 'assistant'
-ORDER BY m.created_at DESC
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
 LIMIT 1;
 
 -- name: LockChatMessage :exec

@@ -29,7 +29,7 @@ WHERE m.project_id = $1
     FROM jsonb_array_elements(m.tool_calls) tc
     WHERE tc->>'id' = $4::text
   )
-ORDER BY m.created_at DESC
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
 LIMIT 1
 `
 

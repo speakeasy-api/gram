@@ -913,5 +913,5 @@ WHERE m.project_id = sqlc.arg(project_id)
     FROM jsonb_array_elements(m.tool_calls) tc
     WHERE tc->>'id' = sqlc.arg(tool_call_id)::text
   )
-ORDER BY m.created_at DESC
+ORDER BY m.created_at DESC, m.seq DESC, m.id DESC
 LIMIT 1;
