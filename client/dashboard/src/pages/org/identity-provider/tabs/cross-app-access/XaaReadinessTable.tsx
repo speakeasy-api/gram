@@ -161,18 +161,18 @@ function RefusalNotesRow({
       className="[grid-column:1/-1] grid [grid-template-columns:subgrid] border-b last:border-none"
     >
       <td aria-hidden />
-      <td
-        colSpan={span - 1}
-        className="[grid-column:2/-1] flex flex-col gap-1 px-4 pb-3"
-      >
-        {notes.map((refusal) => (
-          <StateNote
-            key={refusal.summary}
-            tooltip={refusal.tooltip}
-            summary={refusal.summary}
-            clamp={false}
-          />
-        ))}
+      <td colSpan={span - 1} className="[grid-column:2/-1] px-4 pb-3">
+        {/* Full width: the table centers its cells' content. */}
+        <div className="flex w-full flex-col items-start gap-1">
+          {notes.map((refusal) => (
+            <StateNote
+              key={refusal.summary}
+              tooltip={refusal.tooltip}
+              summary={refusal.summary}
+              clamp={false}
+            />
+          ))}
+        </div>
       </td>
     </tr>
   );
