@@ -137,6 +137,6 @@ Product families and reported-name aliases stay in the compiled registry by
 design: they change with plugin and telemetry code, so the database does not
 store them and snapshots leave them empty.
 
-Platform MCP parity: this package adds no reader, permission, or tool contract,
-so no Platform MCP tool changes. Platform MCP only lists the inventory and
-library, which leave removed products out as before; it has no decision tool.
+Platform MCP parity: Platform MCP only lists the inventory and library; it has
+no decision tool. Both list a removed product that still has a decision on
+file, flagged with `catalog_status`, and leave other removed products out.
