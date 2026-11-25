@@ -352,6 +352,9 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 		return true
 	case server == "wiki" && !t.Before(g.clk.wikiBrokenFrom()) && slices.Contains([]string{"ken", "ivy", "theo", "amara"}, p.key):
 		return true
+	// Far enough back that a blip's recovery and served request land before storyNow's failure.
+	case p.key == "felix" && server == "notion" && t.After(g.clk.now.Add(-45*time.Minute)):
+		return true
 	}
 	return false
 }

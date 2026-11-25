@@ -21,29 +21,31 @@ import (
 // The seeded connection health lists the Cursor, Internal Wiki and Dana problems, and not
 // the people who recovered from this morning's Linear errors: at the hours around the
 // story's switch to today, any other hour, and 23 hours after seeding, the read just
-// before the next daily reseed.
+// before the next daily reseed. Each weekday is seeded, since weekends change the baseline's draws.
 func TestSeededConnectionHealthListsTheIntendedProblems(t *testing.T) {
 	t.Parallel()
-	local := time.Now().AddDate(0, 0, -2)
-	at := func(hour, minute int) time.Time {
-		return time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, time.Local).UTC()
-	}
-	for _, c := range []struct {
-		name      string
-		seeded    time.Time
-		readAfter time.Duration
-	}{
-		{"just before the switch", at(11, 44), time.Minute},
-		{"just after the switch", at(11, 46), time.Minute},
-		{"just after midnight", at(0, 5), time.Minute},
-		{"evening", at(18, 0), time.Minute},
-		{"23 hours later", at(11, 46), 23 * time.Hour},
-		{"23 hours after an evening seed", at(18, 0), 23 * time.Hour},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			seededProblems(t, c.seeded, c.seeded.Add(c.readAfter))
-		})
+	for daysAgo := 2; daysAgo < 9; daysAgo++ {
+		local := time.Now().AddDate(0, 0, -daysAgo)
+		at := func(hour, minute int) time.Time {
+			return time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, time.Local).UTC()
+		}
+		for _, c := range []struct {
+			name      string
+			seeded    time.Time
+			readAfter time.Duration
+		}{
+			{"just before the switch", at(11, 44), time.Minute},
+			{"just after the switch", at(11, 46), time.Minute},
+			{"just after midnight", at(0, 5), time.Minute},
+			{"evening", at(18, 0), time.Minute},
+			{"23 hours later", at(11, 46), 23 * time.Hour},
+			{"23 hours after an evening seed", at(18, 0), 23 * time.Hour},
+		} {
+			t.Run(local.Weekday().String()+"/"+c.name, func(t *testing.T) {
+				t.Parallel()
+				seededProblems(t, c.seeded, c.seeded.Add(c.readAfter))
+			})
+		}
 	}
 }
 
