@@ -106,6 +106,8 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "system", latest.ActorType)
 	require.Equal(t, "plugin-api-key-reaper", latest.ActorID)
+	require.NotNil(t, latest.ActingSurface)
+	require.Equal(t, string(audit.SurfaceSystem), *latest.ActingSurface)
 
 	reaped, err = keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 100)
 	require.NoError(t, err)

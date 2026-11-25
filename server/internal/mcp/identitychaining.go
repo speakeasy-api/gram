@@ -242,6 +242,9 @@ func (s *Service) routeDirectUpstreamToken(ctx context.Context, w http.ResponseW
 	case err != nil:
 		return upstreamToken, oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 	}
+	if upstreamToken.Token == "" && authentication.chosenClient.Valid {
+		return upstreamToken, s.rejectRemoteSession(ctx, w, authentication, remotesessions.ErrNoValidToken)
+	}
 	return upstreamToken, nil
 }
 

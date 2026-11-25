@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/sigint/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/readings"
@@ -20,7 +21,7 @@ func validProbability(p float64) bool {
 
 func TestSeededSigintDefinitionsExplainReadings(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec()}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
 	for _, sensor := range demoSigintSensors {
 		if !sensor.enabled {
 			continue
@@ -59,7 +60,7 @@ func TestSeededSigintDefinitionsExplainReadings(t *testing.T) {
 // CHECK constraints, so this holds them to the parser's rules.
 func TestSeededSigintReadingsSatisfyWriterRules(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec(), q: nil, logger: nil, now: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot(), q: nil, logger: nil, now: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)}
 	rows, err := s.sigintReadingRows()
 	require.NoError(t, err)
 	require.Len(t, rows, (signalMessageCount+sigintManualRuns*sigintManualMessages)*3)

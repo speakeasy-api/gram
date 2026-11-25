@@ -693,15 +693,13 @@ type IntentContractResponseBody struct {
 type IntentConditionResponseBody struct {
 	// Links the clause to the previous one; empty on the first clause.
 	Join *string `form:"join,omitempty" json:"join,omitempty" xml:"join,omitempty"`
-	// Label key the clause reads. Empty for a shell command pattern.
+	// Label key the clause reads.
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// How the label compares to values.
 	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
 	// Values compared: "true" for a yes/no label, else option keys. Several read
 	// as any of.
 	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
-	// Regular expression a shell command must match, for a pattern clause.
-	Pattern *string `form:"pattern,omitempty" json:"pattern,omitempty" xml:"pattern,omitempty"`
 }
 
 // IntentEvaluatorDescriptorResponseBody is used to define fields on response
@@ -2275,17 +2273,14 @@ func ValidateIntentConditionResponseBody(body *IntentConditionResponseBody) (err
 	if body.Values == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
 	}
-	if body.Pattern == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("pattern", "body"))
-	}
 	if body.Join != nil {
 		if !(*body.Join == "" || *body.Join == "and" || *body.Join == "or") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.join", *body.Join, []any{"", "and", "or"}))
 		}
 	}
 	if body.Op != nil {
-		if !(*body.Op == "" || *body.Op == "is" || *body.Op == "is not" || *body.Op == "includes" || *body.Op == "includes anything other than") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"", "is", "is not", "includes", "includes anything other than"}))
+		if !(*body.Op == "is" || *body.Op == "is not" || *body.Op == "includes" || *body.Op == "includes anything other than") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"is", "is not", "includes", "includes anything other than"}))
 		}
 	}
 	return

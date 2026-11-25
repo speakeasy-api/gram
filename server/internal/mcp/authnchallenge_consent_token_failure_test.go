@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -30,7 +31,9 @@ func TestServeConsentMCP_ConfiguredChainPreservesTokenFailure(t *testing.T) {
 				t.Parallel()
 				ctx, fx, issuer := seedChainedConsentEndpoint(t, "consent-"+name)
 				g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+				clientType := authz.AuthClientTypeRemoteSession
 				if self {
+					clientType = authz.AuthClientTypeServiceAccount
 					markConsentClientSelf(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
 					sourceErr := remotesessions.ErrTokenEndpointConfiguration
 					if unavailable {
@@ -50,10 +53,12 @@ func TestServeConsentMCP_ConfiguredChainPreservesTokenFailure(t *testing.T) {
 					})
 				}
 
+				offer := seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, clientType)
 				req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)).WithContext(ctx)
 				req.Header.Set("Accept", "application/json, text/event-stream")
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Gram-Consent-State", fx.stateID)
+				req.Header.Set("Gram-Consent-Auth-Client", offer.String())
 				req.Header.Set("Gram-Consent-Csrf", "csrf-token")
 				req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
 				w := httptest.NewRecorder()

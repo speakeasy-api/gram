@@ -281,6 +281,20 @@ func TestProductFeaturesService_SetProductFeatureRefusesUpstreamAuthEnforcement(
 	})
 	require.NoError(t, err)
 	require.False(t, enabled, "refused toggle must not write the feature row")
+
+	require.NoError(t, ti.client.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureUpstreamAuthEnforced, true))
+	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureUpstreamAuthEnforced),
+		Enabled:        false,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	enabled, err = repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.True(t, enabled, "refused toggle must not clear enforcement")
 }
 
 // Org admins keep self-serve control of the logs toggle even with the

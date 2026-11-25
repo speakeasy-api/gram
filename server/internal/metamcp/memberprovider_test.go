@@ -100,7 +100,7 @@ func TestMemberProvider_AddAndRemoveFollowTheAssociationNotTheColumn(t *testing.
 	f.setColumn(t, ctx, server, conv.ToNullUUID(stale))
 
 	member := f.add(t, ctx, server)
-	require.Equal(t, 1, f.bound(t, ctx, f.gatewayIssuerID, provider), "add binds the associated provider")
+	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
 	require.Equal(t, 0, f.bound(t, ctx, f.gatewayIssuerID, stale), "add ignores the column")
 
 	f.remove(t, ctx, member)
@@ -116,7 +116,7 @@ func TestMemberProvider_ColumnNullStillWiresConsent(t *testing.T) {
 	f.setColumn(t, ctx, server, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	f.add(t, ctx, server)
-	require.Equal(t, 1, f.bound(t, ctx, f.gatewayIssuerID, provider))
+	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
 }
 
 func TestMemberProvider_SeveralProvidersWireNothing(t *testing.T) {
@@ -160,7 +160,7 @@ func TestMemberProvider_IssuerChangeBindsTheAssociatedProvider(t *testing.T) {
 		UserSessionIssuerID: conv.PtrEmpty(newIssuer.String()),
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, f.bound(t, ctx, newIssuer, provider))
+	require.Zero(t, f.bound(t, ctx, newIssuer, provider))
 	require.Equal(t, 0, f.bound(t, ctx, newIssuer, stale))
 }
 
@@ -179,7 +179,7 @@ func TestMemberProvider_RemoveKeepsBindingForAnAssociatedConsumer(t *testing.T) 
 	f.setColumn(t, ctx, staying, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	f.remove(t, ctx, leavingMember)
-	require.Equal(t, 1, f.bound(t, ctx, f.gatewayIssuerID, provider), "the remaining member is associated with the provider")
+	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
 }
 
 func TestMemberProvider_RemoveIgnoresAConsumerNamedOnlyByTheColumn(t *testing.T) {
@@ -220,8 +220,7 @@ func TestMemberProvider_AttachUsesTheAssociatedClientNotTheMemberIssuer(t *testi
 		OrganizationID:      conv.ToPGText(f.organizationID),
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, associated, rows[0].ClientID)
+	require.Empty(t, rows)
 }
 
 func TestMemberProvider_ClientOnMemberIssuerWithoutAssociationIsNotAttached(t *testing.T) {
@@ -246,8 +245,7 @@ func TestMemberProvider_ClientOnMemberIssuerWithoutAssociationIsNotAttached(t *t
 		OrganizationID:      conv.ToPGText(f.organizationID),
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.NotEqual(t, other, rows[0].ClientID)
+	require.Empty(t, rows)
 }
 
 func TestMemberProvider_SeveralClientsOfOneProviderPreferTheMemberIssuer(t *testing.T) {
@@ -274,8 +272,7 @@ func TestMemberProvider_SeveralClientsOfOneProviderPreferTheMemberIssuer(t *test
 		OrganizationID:      conv.ToPGText(f.organizationID),
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, own, rows[0].ClientID)
+	require.Empty(t, rows)
 }
 
 func TestMemberProvider_RemoveKeepsBindingWhileAServerSharesTheGatewayIssuer(t *testing.T) {
@@ -312,10 +309,9 @@ func TestMemberProvider_RemoveKeepsBindingWhileAServerSharesTheGatewayIssuer(t *
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = writer.RemoveMember(ctx, tx, metamcp.Actor{OrganizationID: f.organizationID, ProjectID: f.projectID, UserID: "user", Email: nil}, meta, memberID)
-	require.NoError(t, err, "the violation is reported, not returned")
+	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 
-	require.Equal(t, 1, f.bound(t, ctx, f.gatewayIssuerID, provider), "the outsider may depend on the binding")
-	require.Contains(t, logs.String(), "level=ERROR")
-	require.Contains(t, logs.String(), "no MCP server signs in directly through a gateway's issuer")
+	require.Zero(t, f.bound(t, ctx, f.gatewayIssuerID, provider))
+	require.Empty(t, logs.String(), "removal no longer attempts issuer unlink")
 }

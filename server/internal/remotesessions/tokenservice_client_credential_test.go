@@ -128,6 +128,28 @@ func seedSelfClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug 
 	}
 }
 
+func TestResolveHostedRegistrationAccessTokens_SelfClientDoesNotNeedIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	source := &fakeClientCredentials{answers: []clientCredentialAnswer{{token: "hosted-self-token"}}}
+	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
+	fx := seedSelfClient(t, ctx, ti.conn, "hosted-self")
+	otherSignIn := createUserSessionIssuer(t, ctx, ti.conn, "hosted-self-other-sign-in")
+	req := remotesessions.AuthClientTokenRequest{
+		ProjectID: fx.projectID, OrganizationID: fx.organizationID, UserSessionIssuerID: otherSignIn,
+		Subject: urn.NewAgentSubject(uuid.New()), RegistrationID: fx.clientID, SkipUnusable: false,
+		Attribution: remotesessions.RefreshAttribution{},
+	}
+	tokens, err := mgr.ResolveHostedRegistrationAccessTokens(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, "hosted-self-token", tokens[fx.remoteIssuerID].Token)
+	require.Equal(t, fx.clientID, tokens[fx.remoteIssuerID].RemoteSessionClientID)
+	require.Empty(t, tokens[fx.remoteIssuerID].Resource)
+	reconnect, err := mgr.HostedRegistrationNeedsReconnect(ctx, req)
+	require.NoError(t, err)
+	require.False(t, reconnect)
+}
+
 func TestResolveAccessTokens_SelfClientPresentsClientCredential(t *testing.T) {
 	t.Parallel()
 

@@ -38,9 +38,10 @@ func (s *Service) handleMetaConnectionStatusCall(
 ) (json.RawMessage, error) {
 	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
 	requiresAuth := s.memberAuthRequirements(gate.organizationID, members)
+	canReview := s.memberReviewableAuthChoices(gate, members)
 	for _, member := range members {
 		memberCtx := contextvalues.WithConnectionReferenceSlot(ctx)
-		row := s.memberSignInStatus(memberCtx, logger, gate, member, requiresAuth)
+		row := s.memberSignInStatus(memberCtx, logger, gate, member, requiresAuth, canReview)
 		row.Slug, row.Name = member.slug, member.name
 		withStatusReference(memberCtx, &row)
 		servers = append(servers, row)
@@ -183,7 +184,7 @@ func notConnectedRow(gate *metaGateContext, oauthSignIn bool) metamcp.Connection
 // remote_session_issuer) needs no sign-in. A remote member can still receive
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
-func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) metamcp.ConnectionStatusServer {
+func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error), canReview func(context.Context, uuid.UUID) bool) metamcp.ConnectionStatusServer {
 	if gate.catalog != nil {
 		// Live discovery checks the approval too, so a refused call never reads as ready.
 		approval := s.checkCatalogApproval(ctx, logger, gate, member)
@@ -209,18 +210,47 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 	}
 	if member.backend == metaMemberBackendHosted {
-		if !member.remoteSessionIssuerID.Valid {
+		// The admitted snapshot already has the exact assignment. Token
+		// resolution still rechecks it live, so a changed assignment cannot
+		// report the newly selected sibling's credential as connected.
+		if member.associatedClients == nil || len(member.associatedClients) > 1 {
+			return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+		}
+		if len(member.associatedClients) == 0 {
+			id, err := s.hostedRegistration(ctx, gate.organizationID, member.projectID, member.serverID)
+			if err != nil {
+				logger.WarnContext(ctx, "check live hosted no-upstream state", attr.SlogError(err))
+				return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+			}
+			if id != uuid.Nil {
+				return notConnectedRow(gate, true)
+			}
 			return signInRow(metamcp.SignInNotRequired, "", nil)
 		}
-		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
-		if err != nil {
-			return memberFailureSignIn(ctx, *gate, member, err)
+		var registrationID uuid.UUID
+		for id := range member.associatedClients {
+			registrationID = id
 		}
-		tokens, err := hostedMemberTokens(gateTokens, member)
+		tokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
+			switch {
+			case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
+				errors.Is(err, remotesessions.ErrStoredSignInUnreadable), errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+				return memberFailureSignIn(ctx, *gate, member, metaMemberClientCredentialError(member, err))
+			case errors.Is(err, remotesessions.ErrChosenClientUnbound), errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
+				return signInRow(metamcp.SignInActionRequired, "Ask an administrator to check this server's upstream registration.", nil)
+			case errors.Is(err, remotesessions.ErrNoValidToken):
+				return notConnectedRow(gate, true)
+			default:
+				return memberFailureSignIn(ctx, *gate, member, err)
+			}
+		}
+		entry, ok := assignedHostedToken(tokens, registrationID)
+		if ok && entry.ClientCredentialErr != nil {
+			err := metaMemberClientCredentialError(member, entry.ClientCredentialErr)
 			return memberFailureSignIn(ctx, *gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
 		}
-		if len(tokens) == 0 {
+		if !ok || entry.Token == "" {
 			return notConnectedRow(gate, true)
 		}
 		return signInRow(metamcp.SignInConnected, "", nil)
@@ -232,6 +262,18 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	if err != nil {
 		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 			return s.staleMemberStatus(ctx, logger, gate, member)
+		}
+		if gate.caller.kind == gatewayCallerPerson && gate.connectURL != "" && member.authClient != nil && member.authClient.outcome == authClientGap {
+			// Routing adds a link to this error, so inspect the original gap.
+			if _, missingChoice := errors.AsType[memberChoiceGapError](member.upstreamUnavailable); missingChoice {
+				return signInRow(metamcp.SignInNeedsConsent, "Choose a connection for this server when you sign in to the gateway.", nil)
+			}
+			switch member.authClient.reason {
+			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
+				if canReview != nil && canReview(ctx, member.serverID) {
+					return signInRow(metamcp.SignInNeedsConsent, "Choose a current connection for this server when you sign in to the gateway.", nil)
+				}
+			}
 		}
 		return memberFailureSignIn(ctx, *gate, member, err)
 	}
@@ -256,6 +298,73 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		return notConnectedRow(gate, dial.oauthSignIn)
 	}
 	return signInRow(metamcp.SignInNotRequired, "", nil)
+}
+
+// assignedHostedToken cannot select an issuer sibling or a resource-qualified
+// grant. The registration can appear at most once in an exact resolver result.
+func assignedHostedToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, registrationID uuid.UUID) (remotesessions.UpstreamToken, bool) {
+	var entry remotesessions.UpstreamToken
+	found := false
+	if registrationID == uuid.Nil {
+		return entry, false
+	}
+	for _, token := range tokens {
+		if token.RemoteSessionClientID != registrationID || token.Resource != "" {
+			continue
+		}
+		if found {
+			// A registration belongs to one upstream issuer, the map key used
+			// by the resolver. Refuse inconsistent results rather than using
+			// either credential.
+			var none remotesessions.UpstreamToken
+			return none, false
+		}
+		entry, found = token, true
+	}
+	return entry, found
+}
+
+// memberReviewableAuthChoices loads the consent options lazily for all retryable
+// gaps together. Status does not need the picker’s remembered selection.
+func (s *Service) memberReviewableAuthChoices(gate *metaGateContext, members []metaMember) func(context.Context, uuid.UUID) bool {
+	var reviewable map[uuid.UUID]bool
+	return func(ctx context.Context, id uuid.UUID) bool {
+		if reviewable != nil {
+			return reviewable[id]
+		}
+		reviewable = make(map[uuid.UUID]bool)
+		if gate.authentication == nil || gate.caller.kind != gatewayCallerPerson {
+			return false
+		}
+		var candidates []metaMember
+		var ids []uuid.UUID
+		for _, member := range members {
+			if member.backend != metaMemberBackendProxied || member.authClient == nil || member.authClient.outcome != authClientGap {
+				continue
+			}
+			switch member.authClient.reason {
+			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
+				candidates = append(candidates, member)
+				ids = append(ids, member.serverID)
+			}
+		}
+		offers, err := s.configuredAuthOffers(ctx, gate.organizationID, ids)
+		if err != nil {
+			return false
+		}
+		for _, member := range candidates {
+			for _, offer := range offers[member.serverID].clients {
+				// A failed check leaves this option unavailable without
+				// suppressing a valid option on this or another server.
+				res, err := s.resolveAuthClientChoiceForConsent(ctx, gate.organizationID, member.serverID, member.projectID, offer.AuthClientID.UUID, gate.authentication.subject)
+				if err == nil && (res.outcome == authClientResolved || res.outcome == authClientLegacy) {
+					reviewable[member.serverID] = true
+					break
+				}
+			}
+		}
+		return reviewable[id]
+	}
 }
 
 // memberAuthRequirements reports whether a proxied member offers an enabled
@@ -294,10 +403,17 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 	}
 }
 
+type memberNotConnectedError struct{ memberCredentialError }
+
+func (e memberNotConnectedError) Unwrap() error { return e.memberCredentialError }
+
 // memberFailureSignIn keeps an outage from reading as a broken sign-in. On an
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+	if _, notConnected := errors.AsType[memberNotConnectedError](err); notConnected {
+		return signInRow(metamcp.SignInNotConnected, "", nil)
+	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
 		if gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)

@@ -14,6 +14,7 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -68,7 +69,7 @@ func TestAuthStackE2E_PostCommitBindingResync(t *testing.T) {
 						payload.UserSessionIssuerIds = []string{userIssuerID.String()}
 						return ti.service.CreateRemoteSessionClient(ctx, payload)
 					}
-					return ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+					return ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 						ID: clientID, UserSessionIssuerID: userIssuerID.String(),
 					})
 				}

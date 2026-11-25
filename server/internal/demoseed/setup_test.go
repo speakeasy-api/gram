@@ -12,12 +12,17 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var infra *testenv.Environment
+
+// otherTenantWrites keeps tests that write non-demo ClickHouse rows out of TestDemoSeedSafety,
+// which fingerprints every non-demo row in the shared test database.
+var otherTenantWrites sync.RWMutex
 
 // testAssistantIssuerURL stands in for the deployment's signing issuer origin.
 const testAssistantIssuerURL = "https://issuer.demoseed.test"

@@ -22,13 +22,13 @@ import (
 // kept so tests can inspect rows that appear between snapshots.
 type PostgresSnapshot map[string]map[string]int
 
-// SnapshotPostgres fingerprints every row of every public base table. Row
+// SnapshotPostgres fingerprints every row of every base table in the current schema. Row
 // identity is the record's JSON representation, so ANY column change, delete,
 // or insert is visible in the multiset.
 func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, error) {
 	rows, err := db.Query(ctx, `
 		SELECT table_name FROM information_schema.tables
-		WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+		WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
 		ORDER BY table_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list postgres tables: %w", err)
@@ -49,7 +49,7 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 	snap := make(PostgresSnapshot, len(tables))
 	for _, table := range tables {
 		hashes := map[string]int{}
-		q := fmt.Sprintf(`SELECT to_jsonb(t)::text FROM %s t`, pgx.Identifier{"public", table}.Sanitize())
+		q := fmt.Sprintf(`SELECT to_jsonb(t)::text FROM %s t`, pgx.Identifier{table}.Sanitize())
 		rows, err := db.Query(ctx, q)
 		if err != nil {
 			return nil, fmt.Errorf("hash rows of %s: %w", table, err)
@@ -72,7 +72,7 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 
 // ProjectOrganizationMismatchCounts reports seeded project rows whose
 // denormalized organization_id does not match the owning project. It checks
-// every public table that carries both tenant columns so new seeded row types
+// every table in the current schema that carries both tenant columns so new seeded row types
 // are covered automatically.
 func ProjectOrganizationMismatchCounts(
 	ctx context.Context,
@@ -85,7 +85,7 @@ func ProjectOrganizationMismatchCounts(
 		JOIN information_schema.tables t
 		  ON t.table_schema = c.table_schema
 		 AND t.table_name = c.table_name
-		WHERE c.table_schema = 'public'
+		WHERE c.table_schema = current_schema()
 		  AND t.table_type = 'BASE TABLE'
 		  AND c.column_name IN ('project_id', 'organization_id')
 		GROUP BY c.table_name
@@ -116,7 +116,7 @@ func ProjectOrganizationMismatchCounts(
 			JOIN projects AS project ON project.id = seeded.project_id
 			WHERE project.id::text = ANY($1::text[])
 			  AND seeded.organization_id IS DISTINCT FROM project.organization_id`,
-			pgx.Identifier{"public", table}.Sanitize())
+			pgx.Identifier{table}.Sanitize())
 
 		var count int64
 		if err := db.QueryRow(ctx, q, projectIDs).Scan(&count); err != nil {
@@ -265,7 +265,7 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	// duplicated row is built column by column from the non-generated set.
 	colRows, err := db.Query(ctx, `
 		SELECT column_name FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'chats' AND is_generated = 'NEVER'
+		WHERE table_schema = current_schema() AND table_name = 'chats' AND is_generated = 'NEVER'
 		ORDER BY ordinal_position`)
 	if err != nil {
 		return fmt.Errorf("list chats columns: %w", err)

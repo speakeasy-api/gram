@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -55,7 +56,7 @@ func seedDisabledFunctionsServer(t *testing.T) (context.Context, *testInstance, 
 		Scale: pgtype.Int4{Int32: 1, Valid: true},
 	})
 	require.NoError(t, err)
-	_, err = deployments.CreateDeploymentFunctionsAccess(ctx, deploymentsrepo.CreateDeploymentFunctionsAccessParams{
+	_, err = testrepo.New(ti.conn).CreateFunctionsAccessFixture(ctx, testrepo.CreateFunctionsAccessFixtureParams{
 		ProjectID: projectID, DeploymentID: deploymentID, FunctionID: function.ID,
 		EncryptionKey: conv.NewSecret([]byte("unused-runner-key")), BearerFormat: conv.ToPGText("v1"),
 	})
