@@ -337,7 +337,7 @@ func identityChainingError(outcome identitychaining.Outcome, service string) err
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
 	if verdict, ok := chainingVerdictOf(outcome); ok && verdict.message != nil {
-		return oops.E(oops.CodeForbidden, nil, "%s", verdict.message.text(service))
+		return oops.E(oops.CodeForbidden, nil, "%s", verdict.message.description(service))
 	}
 	return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Contact your administrator.")
 }

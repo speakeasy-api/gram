@@ -72,7 +72,7 @@ func (g *consentGovernor) RefreshDecision(_ context.Context, req identitychainin
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.refreshed = append(g.refreshed, req)
-	return identitychaining.RefreshVerdict{Decision: g.refresh, RemoteSessionIssuerID: g.issuer, Provider: "", Reason: g.refused.Reason, Stage: g.refused.Stage}
+	return identitychaining.RefreshVerdict{Decision: g.refresh, RemoteSessionIssuerID: g.issuer, Provider: g.refused.Provider, Reason: g.refused.Reason, Stage: g.refused.Stage}
 }
 
 func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {

@@ -110,8 +110,10 @@ Then call `get_xaa_readiness` with the project's `project_slug` and the exact
 server's own ID as `mcp_server_id`, never another identifier, and do not
 substitute generic MCP readiness for this check.
 A verified state can still come with `recent_refusals`: report each one, and
-say Connection Logs list who was refused. For `identity_provider`, check the
-people are assigned to the app in the identity provider; for `service`, check
+say Connection Logs list who was refused. For `identity_provider`, use the
+Connection Log details to check the people are assigned to the app, have the
+required permissions, and can access the target server in the identity
+provider; for `service`, check
 the service accepts sign-ins from the organization's identity provider and that
 its client is set up.
 An enabled issuer or a saved vendor setting does not prove live user access.

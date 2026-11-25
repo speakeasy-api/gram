@@ -32,9 +32,14 @@ const (
 )
 
 type xaaReaderStub struct {
-	result *srv.ListOktaResourceConnectionsResult
-	err    error
-	calls  int
+	result   *srv.ListOktaResourceConnectionsResult
+	err      error
+	calls    int
+	refusals []*srv.OktaResourceConnectionRefusal
+}
+
+func (s *xaaReaderStub) RecentRefusals(context.Context, string, uuid.UUID, uuid.UUID) []*srv.OktaResourceConnectionRefusal {
+	return s.refusals
 }
 
 func (s *xaaReaderStub) List(_ context.Context, payload *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error) {
@@ -470,7 +475,7 @@ func TestXAAReadinessReportsProvidersWithoutOkta(t *testing.T) {
 		name   string
 		reader *xaaReaderStub
 	}{
-		{name: "no Okta connection", reader: &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}},
+		{name: "no Okta connection", reader: &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition), refusals: []*srv.OktaResourceConnectionRefusal{{RefusedBy: "service", People: 3, LastRefusedAt: "2026-01-01T00:00:00Z"}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -486,6 +491,7 @@ func TestXAAReadinessReportsProvidersWithoutOkta(t *testing.T) {
 			require.Empty(t, signIn.orgs, "Okta sign-in is not read for another provider")
 			require.Equal(t, issuer, identity.issuer)
 			require.Equal(t, server.resource, identity.resource)
+			require.Equal(t, []XAARefusal{{RefusedBy: "service", People: 3, LastRefusedAt: "2026-01-01T00:00:00Z"}}, output.RecentRefusals, "a Speakeasy-vouched server reports refusals without Okta")
 
 			identity.chaining = XAAIdentityChaining{Served: false, NotServedReason: new("provider_unavailable"), Providers: speakeasy, Bindings: []XAAIdentityChainingBinding{}}
 			output = xaaOutput(t, xaaCall(t, session, xaaProjectSlug, xaaServerID))

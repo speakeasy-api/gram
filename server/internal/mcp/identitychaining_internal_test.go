@@ -156,6 +156,10 @@ func TestIdentityChainingError(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, shareable.Code, "an explicit binding never falls back to interactive authorization")
 	require.Equal(t, "Your identity provider didn't allow access to Example. Ask your administrator, or use your own Example account.", shareable.Error())
 
+	unquotable := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}, "Example\" <b>evil.example</b>")
+	require.ErrorAs(t, unquotable, &shareable)
+	require.Equal(t, "Your identity provider didn't allow access to the service. Ask your administrator, or use your own account for the service.", shareable.Error(), "a name that can't be quoted reads neutrally")
+
 	rejected := identityChainingError(identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidGrant, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""}, "")
 	require.ErrorAs(t, rejected, &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)

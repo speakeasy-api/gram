@@ -623,28 +623,50 @@ func (s *Service) addRecentRefusals(ctx context.Context, logger *slog.Logger, or
 			projects = append(projects, project)
 		}
 	}
+	for _, r := range s.readRefusals(ctx, logger, organizationID, projects, ids) {
+		if sv, ok := byID[r.ServerID]; ok {
+			sv.RecentRefusals = append(sv.RecentRefusals, refusalRow(r))
+		}
+	}
+}
+
+// RecentRefusals reads one server's recent refusals the way List reports them,
+// for organizations without an Okta connection. It is advisory like List.
+func (s *Service) RecentRefusals(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) []*srv.OktaResourceConnectionRefusal {
+	if s.refusals == nil {
+		return nil
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	var out []*srv.OktaResourceConnectionRefusal
+	for _, r := range s.readRefusals(ctx, logger, organizationID, []uuid.UUID{projectID}, []string{serverID.String()}) {
+		if r.ServerID == serverID.String() {
+			out = append(out, refusalRow(r))
+		}
+	}
+	return out
+}
+
+func (s *Service) readRefusals(ctx context.Context, logger *slog.Logger, organizationID string, projects []uuid.UUID, ids []string) []mcpconnectionattempts.Refusals {
 	ctx, cancel := context.WithTimeout(ctx, refusalReadTimeout)
 	defer cancel()
 	// The window matches verifiedHold, so a refusal a held verified result hides is still shown.
 	refusals, err := s.refusals(ctx, mcpconnectionattempts.RefusalFilter{OrganizationID: organizationID, ProjectIDs: projects, ServerIDs: ids, Since: time.Now().Add(-verifiedHold)})
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
-		return
+		return nil
 	case err != nil:
 		logger.WarnContext(ctx, "read recent cross app access refusals", attr.SlogError(err))
-		return
+		return nil
 	}
-	for _, r := range refusals {
-		sv, ok := byID[r.ServerID]
-		if !ok {
-			continue
-		}
-		people, _ := conv.ClampedUint64ToInt(r.People)
-		sv.RecentRefusals = append(sv.RecentRefusals, &srv.OktaResourceConnectionRefusal{
-			RefusedBy:     string(r.RefusedBy),
-			People:        people,
-			LastRefusedAt: r.LastRefusedAt.UTC().Format(time.RFC3339),
-		})
+	return refusals
+}
+
+func refusalRow(r mcpconnectionattempts.Refusals) *srv.OktaResourceConnectionRefusal {
+	people, _ := conv.ClampedUint64ToInt(r.People)
+	return &srv.OktaResourceConnectionRefusal{
+		RefusedBy:     string(r.RefusedBy),
+		People:        people,
+		LastRefusedAt: r.LastRefusedAt.UTC().Format(time.RFC3339),
 	}
 }
 
