@@ -145,7 +145,17 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 
 	target, matched := aitargets.MatchGatewayCaller(list.Snapshot.Targets(), caller)
 	if !matched {
-		return nil
+		// A removed or disabled catalog document still names its product, so a block on it keeps applying.
+		last, known := snapshot.LastKnown(clientID)
+		if !known {
+			return nil
+		}
+		if entry, ok := list.Entry(last.ProductID); ok && entry.Source == aitargets.SourceOrganization {
+			return nil
+		}
+		target = aitargets.ZeroTarget()
+		target.ID = last.ProductID
+		target.DisplayName = last.DisplayName
 	}
 	blockedIDs := make(map[string]struct{}, len(blocked))
 	for _, id := range blocked {

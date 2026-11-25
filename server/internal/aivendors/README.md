@@ -38,18 +38,39 @@ refresh.
 
 ## Removing a product or document
 
-A removed or disabled row no longer identifies its client. An organization's
-block on that client then no longer applies: the client is unknown, and an issuer that admits
-unknown clients lets it in. Before soft-deleting or disabling a row, check for
-blocks on it:
+A removed or disabled row stops admitting its client on presets issuers, stops
+attributing it, and leaves the scan list and the presets list. An
+organization's block on the product keeps applying. Each load also reads, in
+the same transaction, the soft-deleted documents and every document of a
+soft-deleted product, most recently removed first, up to
+`maxRetiredDocuments`. When no live target matches a client at sign-in,
+`Snapshot.LastKnown` names the product that last published its client ID: a
+disabled live document first, then a removed exact URL, then the most specific
+removed pattern. An enabled live document always wins, so a URL re-added under
+another product follows that product. Nothing else reads these documents: they
+never admit, never appear in presets, scan lists or device payloads, never
+change attribution, and never count in validation. A malformed removed pattern
+is dropped. The built-in fallback keeps them too, except when nothing is
+removed or the removals would leave no product, where the built-in catalog
+already lists every product.
+
+An organization can still change or clear its existing decision on a removed
+product, but cannot add a new one. A decision on a product whose documents are
+all disabled stays editable for the same reason.
+
+Before removing a row, check two things. A block only keeps applying while
+the removed document stays within the cap, so hard-deleting rows or removing
+more than `maxRetiredDocuments` documents drops the oldest blocks. And a
+re-added URL under a different product moves the client to that product's
+decision. To find the organizations affected:
 
 ```sql
 SELECT count(*) FROM ai_scan_targets
 WHERE (ai_product_id = '<PRODUCT_ID>' OR id = '<PRODUCT_ID>') AND status = 'blocked';
 ```
 
-If any exist, fix the row in place instead of removing it, or tell the
-organizations first. Nothing refuses the removal for you.
+The inventory reads a removed product as unreviewed even while its block
+applies, so tell affected organizations if they need to clear one.
 
 Every load rejects an empty catalog, a malformed enabled pattern, more
 products, documents per product, client info names or enabled patterns than the
@@ -78,8 +99,8 @@ Validation keeps overlapping patterns of different products strictly nested,
 so a tie can only be between one product's own patterns, and goes to the lower
 URL. The database's `is_pattern` discriminator is authoritative. A malformed
 disabled pattern is logged and omitted; that is a successful partial load,
-distinct from a database failure. Documents of soft-deleted products are never
-read.
+distinct from a database failure. Documents of soft-deleted products are read
+only for block enforcement.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.
@@ -89,4 +110,5 @@ design: they change with plugin and telemetry code, so the database does not
 store them and snapshots leave them empty.
 
 Platform MCP parity: this package adds no reader, permission, or tool contract,
-so no Platform MCP tool changes.
+so no Platform MCP tool changes. Platform MCP only lists the inventory and
+library, which leave removed products out as before; it has no decision tool.

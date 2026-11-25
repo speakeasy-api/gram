@@ -169,6 +169,16 @@ func (s *Service) FailAIToolBlockedIDsRead(err error) {
 	}
 }
 
+// CheckAIToolGatewayBlock runs the gateway block check against one catalog snapshot.
+func (s *Service) CheckAIToolGatewayBlock(ctx context.Context, snapshot *aivendors.Snapshot, organizationID string, clientID string) error {
+	return s.checkAIToolGatewayBlock(ctx, s.logger, snapshot, organizationID, clientID)
+}
+
+// SetAICatalog replaces the AI client catalog store only in the test binary.
+func (s *Service) SetAICatalog(store *aivendors.Store) {
+	s.aiCatalog = store
+}
+
 // FailAIToolCatalogRead makes the scan-target catalog read behind the gateway
 // block check fail with err, leaving the blocked-ids read intact.
 func (s *Service) FailAIToolCatalogRead(err error) {

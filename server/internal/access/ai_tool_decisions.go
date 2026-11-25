@@ -2,8 +2,10 @@ package access
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -16,6 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// removedAIToolMessage refuses a new decision about a product staff removed from the catalog.
+const removedAIToolMessage = "This AI client was removed from the catalog. You can change or clear an existing decision, but not add a new one."
 
 // SetAIToolDecision records whether a detected AI tool may reach the
 // organization's MCP gateway.
@@ -63,7 +68,26 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	// knows: nothing would ever match a caller to an id that is not in it,
 	// and a row nobody can act on is worse than a clear rejection.
 	entry, known := list.Entry(targetID)
-	if !known {
+	state, err := queries.GetAIScanTargetCatalogState(ctx, agentrepo.GetAIScanTargetCatalogStateParams{
+		OrganizationID: organizationID,
+		ID:             targetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read AI target catalog state").LogError(ctx, s.logger)
+	}
+	// A removed product's block keeps applying at the gateway, so its existing decision stays editable.
+	removed := state.ProductRemoved && (!known || entry.Source == aitargets.SourceDefault)
+	if removed {
+		row, err := queries.GetAIScanTargetForUpdate(ctx, agentrepo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: targetID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeFailedPrecondition, nil, "%s", removedAIToolMessage).LogWarn(ctx, s.logger)
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read ai tool decision").LogError(ctx, s.logger)
+		}
+		entry = aitargets.EntryFromRow(row)
+		entry.DisplayName = state.ProductDisplayName
+	} else if !known {
 		return nil, oops.E(oops.CodeNotFound, nil, "%q is not an AI detection target in this organization's catalog", targetID)
 	}
 
@@ -78,19 +102,16 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	// like it did nothing; and a block stored against a tool that later starts
 	// publishing a document would silently begin enforcing months after
 	// somebody set it.
-	if !aitargets.Enforceable(entry.Target) {
+	//
+	// An existing decision on a built-in stays editable even so: a disabled
+	// document still enforces it, and the organization must be able to clear it.
+	editingExisting := entry.Source == aitargets.SourceDefault && entry.Customized
+	if !removed && !editingExisting && !aitargets.Enforceable(entry.Target) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Speakeasy cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
 	}
 
 	productID := pgtype.Text{String: "", Valid: false}
-	if entry.Source == aitargets.SourceDefault {
-		state, err := queries.GetAIScanTargetCatalogState(ctx, agentrepo.GetAIScanTargetCatalogStateParams{
-			OrganizationID: organizationID,
-			ID:             targetID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "read AI target catalog state").LogError(ctx, s.logger)
-		}
+	if !removed && entry.Source == aitargets.SourceDefault {
 		if !state.HasDefinition {
 			if !state.ProductExists {
 				return nil, oops.E(oops.CodeUnavailable, nil, "Speakeasy cannot save a decision about this tool yet because it is not in the AI tool catalog. Try again later, or contact Speakeasy support if this continues.").LogWarn(ctx, s.logger)

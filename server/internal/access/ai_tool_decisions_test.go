@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,8 +14,11 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
+	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -312,24 +316,118 @@ func TestService_SetAIToolDecision_WaitsForCatalog(t *testing.T) {
 	require.Empty(t, rows)
 }
 
-func TestService_SetAIToolDecision_WaitsForDeletedProduct(t *testing.T) {
+var productRemovedAt = pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true, InfinityModifier: pgtype.Finite}
+
+// removeProduct soft-deletes a seeded product and, when fresh, serves the catalog pods load afterwards.
+func removeProduct(t *testing.T, ctx context.Context, ti *testInstance, id string, name string, fresh bool) {
+	t.Helper()
+	require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{ID: id, DisplayName: name, DeletedAt: productRemovedAt}))
+	if fresh {
+		snapshot, err := aivendors.Load(ctx, ti.conn, testenv.NewLogger(t), aitargets.ValidateCatalog)
+		require.NoError(t, err)
+		_, listed := aitargets.DefaultByID(snapshot, id)
+		require.False(t, listed)
+		ti.service.aiCatalog = aivendors.NewStore(snapshot)
+	}
+}
+
+func TestService_SetAIToolDecision_RefusesNewDecisionForRemovedProduct(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		fresh bool
+	}{
+		{name: "catalog not yet refreshed", fresh: false},
+		{name: "catalog refreshed", fresh: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+			require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+			removeProduct(t, ctx, ti, "claude-code", "Claude Code", tc.fresh)
+			_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+				TargetID: "claude-code", Decision: "blocked",
+			})
+			var shareableErr *oops.ShareableError
+			require.ErrorAs(t, err, &shareableErr)
+			require.Equal(t, oops.CodeFailedPrecondition, shareableErr.Code)
+			require.Equal(t, removedAIToolMessage, shareableErr.Error())
+			response := httptest.NewRecorder()
+			encode := accessserver.EncodeSetAIToolDecisionError(goahttp.ResponseEncoder, nil)
+			require.NoError(t, encode(ctx, response, shareableErr.AsGoa(ctx)))
+			require.Less(t, response.Code, http.StatusInternalServerError, "the refusal is not retryable")
+			rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
+			require.NoError(t, err)
+			require.Empty(t, rows)
+		})
+	}
+}
+
+func TestService_SetAIToolDecision_EditsExistingDecisionForRemovedProduct(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		fresh bool
+	}{
+		{name: "catalog not yet refreshed", fresh: false},
+		{name: "catalog refreshed", fresh: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+			require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+			_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: "blocked"})
+			require.NoError(t, err)
+			removeProduct(t, ctx, ti, "claude-code", "Claude Code", tc.fresh)
+
+			for _, decision := range []string{"approved", "unreviewed"} {
+				saved, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "claude-code", Decision: decision})
+				require.NoError(t, err)
+				require.Equal(t, "claude-code", saved.TargetID)
+				rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
+				require.NoError(t, err)
+				require.Len(t, rows, 1)
+				require.Equal(t, decision, rows[0].Status)
+				require.Equal(t, conv.ToPGText("claude-code"), rows[0].AiProductID, "the catalog link is kept")
+			}
+			record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAIToolDecisionSet)
+			require.NoError(t, err)
+			require.Equal(t, "Claude Code", record.SubjectDisplay)
+		})
+	}
+}
+
+func TestService_SetAIToolDecision_EditsExistingDecisionWhenEveryDocumentIsDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAccessService(t)
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
-	require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
-		ID: "claude-code", DisplayName: "Claude Code",
-		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
-	}))
-	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
-		TargetID: "claude-code", Decision: "blocked",
-	})
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeUnavailable, shareableErr.Code)
+	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "blocked"})
+	require.NoError(t, err)
+	docs, err := seedrepo.New(ti.conn).ListDocuments(ctx)
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.AiProductID == "zed" || d.AiProductID == "goose" {
+			require.NoError(t, testrepo.New(ti.conn).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
+		}
+	}
+	snapshot, err := aivendors.Load(ctx, ti.conn, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	ti.service.aiCatalog = aivendors.NewStore(snapshot)
+
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "unreviewed"})
+	require.NoError(t, err, "a disabled document still enforces the block, so it stays clearable")
 	rows, err := agentrepo.New(ti.conn).ListAIScanTargets(ctx, orgID)
 	require.NoError(t, err)
-	require.Empty(t, rows)
+	require.Len(t, rows, 1)
+	require.Equal(t, "unreviewed", rows[0].Status)
+
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "goose", Decision: "blocked"})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeBadRequest, shareableErr.Code, "a new decision still needs a document Speakeasy can recognize")
 }
 
 func TestService_SetAIToolDecision_LinksExistingDecision(t *testing.T) {

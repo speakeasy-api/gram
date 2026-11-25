@@ -175,3 +175,47 @@ func (q *Queries) ListRemovedDocumentURLs(ctx context.Context) ([]ListRemovedDoc
 	}
 	return items, nil
 }
+
+const listRetiredCatalogDocuments = `-- name: ListRetiredCatalogDocuments :many
+SELECT d.url, d.is_pattern, d.ai_product_id, p.display_name AS product_display_name
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+WHERE d.deleted IS TRUE OR p.deleted IS TRUE
+ORDER BY LEAST(d.deleted_at, p.deleted_at) DESC, d.url COLLATE "C", d.ai_product_id COLLATE "C"
+LIMIT $1
+`
+
+type ListRetiredCatalogDocumentsRow struct {
+	Url                string
+	IsPattern          bool
+	AiProductID        string
+	ProductDisplayName string
+}
+
+// Documents that no longer identify a live client: soft-deleted documents and
+// every document of a soft-deleted product. Read only so an organization's
+// block keeps applying; most recently removed first.
+func (q *Queries) ListRetiredCatalogDocuments(ctx context.Context, maxRows int64) ([]ListRetiredCatalogDocumentsRow, error) {
+	rows, err := q.db.Query(ctx, listRetiredCatalogDocuments, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRetiredCatalogDocumentsRow
+	for rows.Next() {
+		var i ListRetiredCatalogDocumentsRow
+		if err := rows.Scan(
+			&i.Url,
+			&i.IsPattern,
+			&i.AiProductID,
+			&i.ProductDisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

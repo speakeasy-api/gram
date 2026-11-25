@@ -77,6 +77,14 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read AI catalog documents: %w", err)
 	}
+	retiredRows, err := q.ListRetiredCatalogDocuments(ctx, maxRetiredDocuments)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read removed AI catalog documents for blocks: %w", err)
+	}
+	retired := make([]retiredDocument, 0, len(retiredRows))
+	for _, r := range retiredRows {
+		retired = append(retired, retiredDocument{ProductID: r.AiProductID, DisplayName: r.ProductDisplayName, URL: r.Url, Pattern: r.IsPattern})
+	}
 	products := make([]Product, 0, len(rows))
 	byID := make(map[string]int, len(rows))
 	for _, p := range rows {
@@ -119,6 +127,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
 	snapshot := NewSnapshot(products)
+	snapshot.retire(retired)
 	rejection := errors.Join(malformed...)
 	if rejection != nil {
 		rejection = fmt.Errorf("%w: %w", errInvalidCatalog, rejection)
@@ -128,7 +137,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		rejection = err
 	}
 	if rejection != nil {
-		fallback, err := readFallback(ctx, q)
+		fallback, err := readFallback(ctx, q, retired)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -140,8 +149,9 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	return snapshot, skipped, nil
 }
 
-// readFallback builds the built-in catalog minus what the database removed.
-func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
+// readFallback builds the built-in catalog minus what the database removed,
+// keeping the removed documents for block enforcement.
+func readFallback(ctx context.Context, q *repo.Queries, retired []retiredDocument) (*Snapshot, error) {
 	products, err := q.ListDeletedProductIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read removed AI catalog products: %w", err)
@@ -165,6 +175,7 @@ func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
 	if len(fallback.products) == 0 {
 		return CompiledSnapshot(), nil
 	}
+	fallback.retire(retired)
 	return fallback, nil
 }
 

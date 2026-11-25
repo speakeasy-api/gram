@@ -39,15 +39,42 @@ type Preset struct {
 // IsPattern reports the stored document discriminator.
 func (p Preset) IsPattern() bool { return p.Pattern }
 
+// LastKnownProduct is the product a client ID belonged to before the live catalog stopped admitting it.
+type LastKnownProduct struct {
+	// ProductID is the product id decisions are recorded against.
+	ProductID string
+
+	// DisplayName is the product's name when it was last listed.
+	DisplayName string
+}
+
+// retiredDocument is a soft-deleted document, or a document of a soft-deleted product.
+type retiredDocument struct {
+	// ProductID is the product that published the document.
+	ProductID string `json:"product_id"`
+
+	// DisplayName is that product's name.
+	DisplayName string `json:"display_name"`
+
+	// URL is the exact client ID or pattern.
+	URL string `json:"url"`
+
+	// Pattern is the stored document discriminator.
+	Pattern bool `json:"pattern"`
+}
+
 // Snapshot owns one immutable catalog revision. Accessors return copies.
 type Snapshot struct {
-	products    []Product
-	presets     []Preset
-	exact       map[string]Preset
-	patterns    []Preset
-	vendors     map[string]int
-	fingerprint string
-	builtIn     bool
+	products []Product
+	presets  []Preset
+	exact    map[string]Preset
+	patterns []Preset
+	vendors  map[string]int
+	// retiredExact and retiredPatterns serve block enforcement only.
+	retiredExact    map[string]retiredDocument
+	retiredPatterns []retiredDocument
+	fingerprint     string
+	builtIn         bool
 	// skipped are the rows the load that built this snapshot left out.
 	skipped []string
 	derived sync.Map // values other packages compute once per snapshot
@@ -58,15 +85,17 @@ type Snapshot struct {
 // only on content.
 func NewSnapshot(products []Product) *Snapshot {
 	s := &Snapshot{
-		products:    make([]Product, 0, len(products)),
-		presets:     nil,
-		exact:       make(map[string]Preset),
-		patterns:    nil,
-		vendors:     make(map[string]int),
-		fingerprint: "",
-		builtIn:     false,
-		skipped:     nil,
-		derived:     sync.Map{},
+		products:        make([]Product, 0, len(products)),
+		presets:         nil,
+		exact:           make(map[string]Preset),
+		patterns:        nil,
+		vendors:         make(map[string]int),
+		retiredExact:    nil,
+		retiredPatterns: nil,
+		fingerprint:     "",
+		builtIn:         false,
+		skipped:         nil,
+		derived:         sync.Map{},
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -113,6 +142,33 @@ func NewSnapshot(products []Product) *Snapshot {
 	hash := sha256.Sum256(data)
 	s.fingerprint = hex.EncodeToString(hash[:])
 	return s
+}
+
+// retire indexes removed documents for LastKnown, most recently removed first,
+// and folds them into the fingerprint. Malformed patterns are omitted.
+func (s *Snapshot) retire(docs []retiredDocument) {
+	if len(docs) == 0 {
+		return
+	}
+	s.retiredExact = make(map[string]retiredDocument, len(docs))
+	for _, d := range docs {
+		if !d.Pattern {
+			if _, taken := s.retiredExact[d.URL]; !taken {
+				s.retiredExact[d.URL] = d
+			}
+			continue
+		}
+		if validatePattern(d.URL) == nil {
+			s.retiredPatterns = append(s.retiredPatterns, d)
+		}
+	}
+	slices.SortStableFunc(s.retiredPatterns, func(a, b retiredDocument) int {
+		return cmp.Compare(patternSpecificity(b.URL), patternSpecificity(a.URL))
+	})
+	// retiredDocument contains only JSON-encodable value fields.
+	data, _ := json.Marshal(docs)
+	hash := sha256.Sum256(append([]byte(s.fingerprint), data...))
+	s.fingerprint = hex.EncodeToString(hash[:])
 }
 
 // patternSpecificity counts a pattern's literal path segments.
@@ -244,6 +300,44 @@ func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
 		}
 	}
 	return Preset{ProductID: "", VendorKey: "", DisplayName: "", URL: "", Enabled: false, Pattern: false}, false
+}
+
+// LastKnown resolves a client ID the live catalog does not admit to the
+// product that last published it, for block enforcement only. Live attribution
+// wins: an enabled live document returns false, a disabled one returns its
+// product, and only a client ID no live document matches falls through to
+// removed documents, exact URLs first, then the most specific pattern.
+func (s *Snapshot) LastKnown(clientID string) (LastKnownProduct, bool) {
+	none := LastKnownProduct{ProductID: "", DisplayName: ""}
+	live, matched := s.exact[clientID]
+	if !matched {
+		for _, p := range s.patterns {
+			if matchesPattern(p.URL, clientID) {
+				live, matched = p, true
+				break
+			}
+		}
+	}
+	if matched {
+		if live.Enabled {
+			return none, false
+		}
+		for _, p := range s.products {
+			if p.ID == live.ProductID {
+				return LastKnownProduct{ProductID: p.ID, DisplayName: p.DisplayName}, true
+			}
+		}
+		return none, false
+	}
+	if d, ok := s.retiredExact[clientID]; ok {
+		return LastKnownProduct{ProductID: d.ProductID, DisplayName: d.DisplayName}, true
+	}
+	for _, d := range s.retiredPatterns {
+		if matchesPattern(d.URL, clientID) {
+			return LastKnownProduct{ProductID: d.ProductID, DisplayName: d.DisplayName}, true
+		}
+	}
+	return none, false
 }
 
 // BlockableVendorKey requires exactly one live product and an enabled document.

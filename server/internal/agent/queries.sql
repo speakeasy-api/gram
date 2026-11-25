@@ -626,6 +626,8 @@ SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organizatio
 -- name: GetAIScanTargetCatalogState :one
 SELECT
   EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id AND p.deleted IS FALSE) AS product_exists,
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = @id AND p.deleted IS TRUE) AS product_removed,
+  COALESCE((SELECT p.display_name FROM ai_products p WHERE p.id = @id), '')::text AS product_display_name,
   EXISTS (
     SELECT 1 FROM ai_scan_targets t
     WHERE t.organization_id = @organization_id AND t.id = @id
