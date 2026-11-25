@@ -266,7 +266,11 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			if err != nil {
 				return nil, fmt.Errorf("resolve consent auth client: %w", err)
 			}
-			res = enforcedCompatibility(res)
+			// Browser consent can only preview choices that exact serving accepts.
+			// Browserless callers apply their own serving policy.
+			if !deferPersonal {
+				res = enforcedCompatibility(res)
+			}
 			if res.outcome == authClientNoAccess {
 				denied++
 				continue

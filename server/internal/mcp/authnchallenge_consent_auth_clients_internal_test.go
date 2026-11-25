@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -158,6 +160,28 @@ func TestConsentAuthChoices(t *testing.T) {
 
 		auth = choices(t, f, user, nil, uuid.Nil)
 		require.Equal(t, consentClientSetup, auth.Options[0].State, "a registration this sign-in cannot connect needs setup")
+	})
+
+	t.Run("gateway never picks a refused connection during an outage", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		shared := staticClient(f)
+		personal := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID}
+		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "source", backend: metaMemberBackendProxied}}
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?auth_client.source="+personal.String(), nil)
+		cards := []remoteSessionCard{{ClientID: f.registration.String(), Connected: true, Unavailable: true}}
+
+		got, err := f.service.gatewayConsentAuthChoices(t.Context(), r, endpoint, user, members, cards)
+		require.NoError(t, err)
+		require.NotNil(t, got[f.serverID].Selected())
+		require.Equal(t, personal, got[f.serverID].Selected().ID, "an explicitly picked outage option is still eligible")
+
+		cards[0].Rejected = true
+		got, err = f.service.gatewayConsentAuthChoices(t.Context(), r, endpoint, user, members, cards)
+		require.NoError(t, err)
+		require.NotNil(t, got[f.serverID].Selected())
+		require.Equal(t, shared, got[f.serverID].Selected().ID, "the rejected option cannot be picked even during the outage")
 	})
 
 	t.Run("an expired personal connection asks to be reconnected", func(t *testing.T) {
