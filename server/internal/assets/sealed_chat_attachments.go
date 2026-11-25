@@ -19,37 +19,30 @@ import (
 )
 
 // sealedChatAttachments keeps encrypted copies of chat attachments for the
-// projects on the chat transcript shadow allowlists. The plaintext object
-// stays in place; the encrypted copy sits next to it.
+// projects on the chat transcript shadow allowlist. The plaintext object stays
+// in place; the encrypted copy sits next to it.
 type sealedChatAttachments struct {
 	store *transcriptstore.AssetStore
-	// capture are the projects whose uploads also write an encrypted copy.
-	capture map[uuid.UUID]struct{}
-	// read are the projects whose downloads serve the encrypted copy when one
-	// exists. Each also captures.
-	read map[uuid.UUID]struct{}
+	// projects are the projects whose uploads also write an encrypted copy and
+	// whose downloads serve it when one exists.
+	projects map[uuid.UUID]struct{}
 }
 
-// WithSealedChatAttachments seals chat attachments uploaded to the capture
-// projects and serves the read projects' downloads from the encrypted copy.
-// An attachment with no encrypted copy, such as one uploaded before capture
-// began, is served from plaintext. A nil store leaves every project on
-// plaintext.
-func (s *Service) WithSealedChatAttachments(store *transcriptstore.AssetStore, captureProjectIDs, readProjectIDs []uuid.UUID) *Service {
+// WithSealedChatAttachments seals chat attachments uploaded to the given
+// projects and serves their downloads from the encrypted copy. An attachment
+// with no encrypted copy, such as one uploaded before capture began, is served
+// from plaintext. A nil store leaves every project on plaintext.
+func (s *Service) WithSealedChatAttachments(store *transcriptstore.AssetStore, projectIDs ...uuid.UUID) *Service {
 	if store == nil {
 		s.sealed = nil
 		return s
 	}
 	sealed := &sealedChatAttachments{
-		store:   store,
-		capture: make(map[uuid.UUID]struct{}, len(captureProjectIDs)),
-		read:    make(map[uuid.UUID]struct{}, len(readProjectIDs)),
+		store:    store,
+		projects: make(map[uuid.UUID]struct{}, len(projectIDs)),
 	}
-	for _, id := range captureProjectIDs {
-		sealed.capture[id] = struct{}{}
-	}
-	for _, id := range readProjectIDs {
-		sealed.read[id] = struct{}{}
+	for _, id := range projectIDs {
+		sealed.projects[id] = struct{}{}
 	}
 	s.sealed = sealed
 	return s
@@ -66,7 +59,7 @@ func (s *Service) sealChatAttachment(ctx context.Context, organizationID string,
 	if s.sealed == nil {
 		return nil
 	}
-	if _, enabled := s.sealed.capture[projectID]; !enabled {
+	if _, enabled := s.sealed.projects[projectID]; !enabled {
 		return nil
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
@@ -90,7 +83,7 @@ func (s *Service) sealExistingChatAttachment(ctx context.Context, organizationID
 	if s.sealed == nil {
 		return nil
 	}
-	if _, enabled := s.sealed.capture[projectID]; !enabled {
+	if _, enabled := s.sealed.projects[projectID]; !enabled {
 		return nil
 	}
 	id, err := uuid.Parse(assetID)
@@ -131,15 +124,16 @@ func (s *Service) sealExistingChatAttachment(ctx context.Context, organizationID
 	return s.sealChatAttachment(ctx, organizationID, projectID, objectPath, contentHash, file)
 }
 
-// openSealedChatAttachment returns the attachment's encrypted copy for a read
-// project. found is false when the project reads plaintext or the attachment
+// openSealedChatAttachment returns the attachment's encrypted copy for a
+// project that keeps encrypted copies. found is false when the project reads
+// plaintext or the attachment
 // has no encrypted copy. An encrypted copy that does not open is an error and
 // is never replaced by plaintext.
 func (s *Service) openSealedChatAttachment(ctx context.Context, projectID uuid.UUID, row repo.GetChatAttachmentAssetURLRow, assetURL *url.URL) (body io.ReadCloser, found bool, err error) {
 	if s.sealed == nil {
 		return nil, false, nil
 	}
-	if _, enabled := s.sealed.read[projectID]; !enabled {
+	if _, enabled := s.sealed.projects[projectID]; !enabled {
 		return nil, false, nil
 	}
 	if !row.OrganizationID.Valid || row.OrganizationID.String == "" || !transcriptcrypto.IsContentHash(row.Sha256) {

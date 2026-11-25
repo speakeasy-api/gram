@@ -104,7 +104,7 @@ func TestService_SealedChatAttachment_ServedFromEncryptedCopy(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	store, projectID := sealedAttachmentStore(t, ctx, ti)
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	ti.service.WithSealedChatAttachments(store, projectID)
 
 	assetID, objectURL := uploadAttachment(t, ctx, ti, inventedAttachment)
 	sealed := readStored(t, ctx, ti, transcriptstore.SealedAssetURL(objectURL))
@@ -129,31 +129,33 @@ func TestService_SealedChatAttachment_PlaintextWithoutEncryptedCopy(t *testing.T
 	require.NoError(t, err)
 	require.False(t, exists)
 
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	ti.service.WithSealedChatAttachments(store, projectID)
 	authenticated, signed := serveBoth(t, ctx, ti, projectID, assetID)
 	require.Equal(t, inventedAttachment, authenticated)
 	require.Equal(t, inventedAttachment, signed)
 }
 
-func TestService_SealedChatAttachment_CaptureOnlyProjectServesPlaintext(t *testing.T) {
+func TestService_SealedChatAttachment_OtherProjectsServePlaintext(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	store, projectID := sealedAttachmentStore(t, ctx, ti)
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, nil)
+	ti.service.WithSealedChatAttachments(store, uuid.New())
 
 	assetID, objectURL := uploadAttachment(t, ctx, ti, inventedAttachment)
-	replaceStored(t, ctx, ti, objectURL, []byte("plaintext object was served"))
+	exists, err := ti.storage.Exists(ctx, transcriptstore.SealedAssetURL(objectURL))
+	require.NoError(t, err)
+	require.False(t, exists, "uploads to other projects are not sealed")
 
 	authenticated, signed := serveBoth(t, ctx, ti, projectID, assetID)
-	require.Equal(t, "plaintext object was served", authenticated)
-	require.Equal(t, "plaintext object was served", signed)
+	require.Equal(t, inventedAttachment, authenticated)
+	require.Equal(t, inventedAttachment, signed)
 }
 
 func TestService_SealedChatAttachment_UnopenableCopyFailsTheDownload(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	store, projectID := sealedAttachmentStore(t, ctx, ti)
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	ti.service.WithSealedChatAttachments(store, projectID)
 
 	assetID, objectURL := uploadAttachment(t, ctx, ti, inventedAttachment)
 	replaceStored(t, ctx, ti, transcriptstore.SealedAssetURL(objectURL), []byte("not a sealed object"))
@@ -181,7 +183,7 @@ func TestService_SealedChatAttachment_DeduplicatedUploadSealsTheReusedAsset(t *t
 	require.False(t, exists)
 
 	// The same bytes uploaded again reuse the asset and seal it.
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	ti.service.WithSealedChatAttachments(store, projectID)
 	reusedID, _ := uploadAttachment(t, ctx, ti, inventedAttachment)
 	require.Equal(t, assetID, reusedID)
 	require.NotContains(t, string(readStored(t, ctx, ti, transcriptstore.SealedAssetURL(objectURL))), "orchard")
@@ -196,7 +198,7 @@ func TestService_SealedChatAttachment_UnverifiableRowFailsWhenACopyExists(t *tes
 	t.Parallel()
 	ctx, ti := newTestAssetsService(t)
 	store, projectID := sealedAttachmentStore(t, ctx, ti)
-	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	ti.service.WithSealedChatAttachments(store, projectID)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 

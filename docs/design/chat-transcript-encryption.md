@@ -8,7 +8,7 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
 **Only the dashboard chat load (`chat.load`) and chat attachment downloads can
-read through shadows, and only for projects on the read allowlist; data without
+read through shadows, and only for projects that capture shadows; data without
 a shadow falls back to plaintext. Every other reader still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
@@ -101,12 +101,10 @@ rollout, migrate those writes too and establish a fenced plaintext-removal proto
 
 ## Shadow reads
 
-`--chat-transcript-shadow-read-project-ids`
-(`GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS`) is a second, server-only
-allowlist. Every project on it must also be on the capture allowlist, or the
-server refuses to start. For these projects `chat.load` opens each page's message
-bodies with `Store.LoadMany` and serves the opened `content`, `content_raw` and
-`tool_calls` in place of the plaintext columns.
+Reads use the capture allowlist, so no project reads shadows that capture
+stopped keeping current. For every project that captures shadows, `chat.load`
+opens each page's message bodies with `Store.LoadMany` and serves the opened
+`content`, `content_raw` and `tool_calls` in place of the plaintext columns.
 
 `LoadMany` leaves out any message that has no shadow at all, and `chat.load`
 serves that message's plaintext body. Messages written before capture began, or
@@ -132,7 +130,7 @@ outcome) and `transcriptstore.Capture` / `transcriptstore.LoadMany` spans.
 ## Encrypted asset copies
 
 Message bodies, `chat_content_parts` bodies and chat attachments are also
-stored as objects in asset storage. For the same two allowlists, those objects
+stored as objects in asset storage. For the same allowlist, those objects
 get encrypted copies. No schema change is needed.
 
 **Where ciphertext lives.** The encrypted copy is a sibling object at the
@@ -179,7 +177,7 @@ copy is never overwritten, so repair needs a delete first. The local filesystem
 backend overwrites in place. Uploading the same bytes again also seals a
 plaintext object written before capture began.
 
-**Reads.** For read-allowlist projects, `chat.load` opens the copy of each page
+**Reads.** For projects that capture shadows, `chat.load` opens the copy of each page
 message that has no inline `content_raw`, and of each content part. The asset
 service does the same for authenticated and signed attachment downloads. If no
 copy exists, the plaintext object is served (`plaintext_fallback`). A copy that

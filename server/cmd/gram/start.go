@@ -740,7 +740,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
-	flags = append(flags, transcriptShadowFlag(), transcriptShadowReadFlag())
+	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",
@@ -1328,7 +1328,7 @@ func newStartCommand() *cli.Command {
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
-				WithTranscriptShadowReads(shadow.Store, shadow.ReadProjectIDs...).
+				WithTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...).
 				WithSealedAssetReads(shadow.Assets).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
 				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
@@ -1875,7 +1875,7 @@ func newStartCommand() *cli.Command {
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
 			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger, functionsAvailable).
-				WithSealedChatAttachments(shadow.Assets, shadow.ProjectIDs, shadow.ReadProjectIDs)
+				WithSealedChatAttachments(shadow.Assets, shadow.ProjectIDs...)
 			assets.Attach(mux, assetsService)
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
 				return fmt.Errorf("ensure native catalog source: %w", err)
