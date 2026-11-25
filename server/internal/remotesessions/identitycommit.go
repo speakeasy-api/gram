@@ -213,7 +213,7 @@ type IdentityPlan struct {
 	Client ClientChoice
 
 	// Bound is what happens to clients already bound to the user session
-	// issuer: ReplaceBound or ReuseBound.
+	// issuer: ReplaceBound, ReuseBound, or OfferNewClient.
 	Bound BoundPolicy
 
 	// Replacement, with ReplaceBound, is the administrator's explicit choice to
@@ -329,6 +329,11 @@ const (
 	// ReuseBound keeps a client already bound for the plan's provider, which
 	// makes a retried commit idempotent.
 	ReuseBound
+	// OfferNewClient never infers a registration from other servers' sign-in
+	// bindings. Catalog callers check for an existing typed offer themselves.
+	// The commit still writes compatibility mirrors and refuses to create a
+	// second mirror for the same sign-in and provider.
+	OfferNewClient
 )
 
 // ResourceDisplay is a protected resource's RFC 9728 display members. They are
@@ -558,6 +563,8 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 				return err
 			}
 		}
+	case OfferNewClient:
+		return c.checkNewOfferMirrorBindings(bound)
 	case ReuseBound:
 		if c.provider.ID != uuid.Nil {
 			switch countProviderClients(bound, c.provider.ID) {
@@ -568,6 +575,26 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 				return identityRefusal(ErrIdentityInvariant, nil, "more than one client is bound to this user session issuer for the same Remote Identity Provider")
 			}
 		}
+	}
+	return nil
+}
+
+// checkNewOfferMirror protects the existing one-client-per-provider invariant
+// while other writers still maintain that mirror. It does not select a client.
+func (c *IdentityCommit) checkNewOfferMirror(ctx context.Context, q *repo.Queries) error {
+	if c.provider.ID == uuid.Nil {
+		return nil
+	}
+	bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
+	if err != nil {
+		return err
+	}
+	return c.checkNewOfferMirrorBindings(bound)
+}
+
+func (c *IdentityCommit) checkNewOfferMirrorBindings(bound []repo.RemoteSessionClient) error {
+	if c.provider.ID != uuid.Nil && countProviderClients(bound, c.provider.ID) != 0 {
+		return identityRefusal(ErrIdentityConflict, nil, "offer an existing User Identity client on this MCP server before retrying")
 	}
 	return nil
 }
@@ -1045,6 +1072,10 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 				// made one upstream, which is now left behind there.
 				c.recordOrphanedRegistration(ctx)
 			}
+		}
+	case OfferNewClient:
+		if err := c.checkNewOfferMirror(ctx, tx.q); err != nil {
+			return err
 		}
 	case ReuseBound:
 		row, found, err := c.boundClient(ctx, tx)
@@ -1607,6 +1638,7 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 	if err := tx.q.LockRemoteSessionClientUserSessionIssuerLink(ctx, repo.LockRemoteSessionClientUserSessionIssuerLinkParams{
 		RemoteSessionClientID: client.ID,
 		UserSessionIssuerID:   c.plan.UserSessionIssuerID,
+		OrganizationID:        c.plan.Scope.OrganizationID,
 	}); err != nil {
 		return fmt.Errorf("lock client binding to user session issuer: %w", err)
 	}

@@ -3,12 +3,11 @@ package authz
 import (
 	"maps"
 	"slices"
-	"sort"
 )
 
 // This file uses only long-standing API, so an older evaluator can answer the
 // same cases and the snapshots can be compared. API that may differ lives in
-// decision_snapshot_refs_test.go.
+// the two helpers at the end of decision_snapshot_test.go.
 
 type snapshotFile struct {
 	Grants []snapshotGrant `json:"grants"`
@@ -176,7 +175,7 @@ func buildDecisionSnapshot() snapshotFile {
 
 func (b *snapshotBuilder) everyPermission() {
 	scopes := slices.Collect(maps.Keys(scopeExpansions))
-	sort.Slice(scopes, func(i, j int) bool { return scopes[i] < scopes[j] })
+	slices.Sort(scopes)
 	for _, scope := range scopes {
 		// authClients covers mcp:auth, which needs client dimensions.
 		if scope == ScopeRoot || scope == ScopeMCPAuth || IsBlocklistScope(scope) {

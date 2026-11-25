@@ -312,6 +312,14 @@ type CreateSessionHandoffResponseBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// ListPendingAccessRequestsResponseBody is the type of the "agent" service
+// "listPendingAccessRequests" endpoint HTTP response body.
+type ListPendingAccessRequestsResponseBody struct {
+	// Pending requests, newest first. At most 50. Empty for a user who is not an
+	// organization administrator.
+	Requests []*AgentPendingAccessRequestResponseBody `form:"requests,omitempty" json:"requests,omitempty" xml:"requests,omitempty"`
+}
+
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
 // "getPlugins" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginsUnauthorizedResponseBody struct {
@@ -3423,6 +3431,196 @@ type CreateSessionHandoffGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPendingAccessRequestsUnauthorizedResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPendingAccessRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsForbiddenResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "forbidden" error.
+type ListPendingAccessRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsBadRequestResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "bad_request" error.
+type ListPendingAccessRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsNotFoundResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "not_found" error.
+type ListPendingAccessRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsConflictResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "conflict" error.
+type ListPendingAccessRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsUnsupportedMediaResponseBody is the type of the
+// "agent" service "listPendingAccessRequests" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPendingAccessRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsInvalidResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "invalid" error.
+type ListPendingAccessRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsInvariantViolationResponseBody is the type of the
+// "agent" service "listPendingAccessRequests" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPendingAccessRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsUnexpectedResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "unexpected" error.
+type ListPendingAccessRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPendingAccessRequestsGatewayErrorResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPendingAccessRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -3875,6 +4073,33 @@ type AgentCrashRollbackRequestBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// Version restored.
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// AgentPendingAccessRequestResponseBody is used to define fields on response
+// body types.
+type AgentPendingAccessRequestResponseBody struct {
+	// Access request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The requester's display name, or their email when they have none.
+	RequesterDisplayName *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
+	// The scope asked for.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// The scope's name as the role editor shows it.
+	PermissionLabel *string `form:"permission_label,omitempty" json:"permission_label,omitempty" xml:"permission_label,omitempty"`
+	// The resource's name, as it was when the request was made.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// The requester's note to the administrators.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
+	CreatedAt      *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the request lapses.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// Dashboard page that opens the request to approve or deny it.
+	DecideURL *string `form:"decide_url,omitempty" json:"decide_url,omitempty" xml:"decide_url,omitempty"`
 }
 
 // NewHideMcpServerRequestBody builds the HTTP request body from the payload of
@@ -6797,6 +7022,172 @@ func NewCreateSessionHandoffGatewayError(body *CreateSessionHandoffGatewayErrorR
 	return v
 }
 
+// NewListPendingAccessRequestsResultOK builds a "agent" service
+// "listPendingAccessRequests" endpoint result from a HTTP "OK" response.
+func NewListPendingAccessRequestsResultOK(body *ListPendingAccessRequestsResponseBody) *agent.ListPendingAccessRequestsResult {
+	v := &agent.ListPendingAccessRequestsResult{}
+	v.Requests = make([]*agent.AgentPendingAccessRequest, len(body.Requests))
+	for i, val := range body.Requests {
+		if val == nil {
+			v.Requests[i] = nil
+			continue
+		}
+		v.Requests[i] = unmarshalAgentPendingAccessRequestResponseBodyToAgentAgentPendingAccessRequest(val)
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsUnauthorized builds a agent service
+// listPendingAccessRequests endpoint unauthorized error.
+func NewListPendingAccessRequestsUnauthorized(body *ListPendingAccessRequestsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsForbidden builds a agent service
+// listPendingAccessRequests endpoint forbidden error.
+func NewListPendingAccessRequestsForbidden(body *ListPendingAccessRequestsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsBadRequest builds a agent service
+// listPendingAccessRequests endpoint bad_request error.
+func NewListPendingAccessRequestsBadRequest(body *ListPendingAccessRequestsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsNotFound builds a agent service
+// listPendingAccessRequests endpoint not_found error.
+func NewListPendingAccessRequestsNotFound(body *ListPendingAccessRequestsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsConflict builds a agent service
+// listPendingAccessRequests endpoint conflict error.
+func NewListPendingAccessRequestsConflict(body *ListPendingAccessRequestsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsUnsupportedMedia builds a agent service
+// listPendingAccessRequests endpoint unsupported_media error.
+func NewListPendingAccessRequestsUnsupportedMedia(body *ListPendingAccessRequestsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsInvalid builds a agent service
+// listPendingAccessRequests endpoint invalid error.
+func NewListPendingAccessRequestsInvalid(body *ListPendingAccessRequestsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsInvariantViolation builds a agent service
+// listPendingAccessRequests endpoint invariant_violation error.
+func NewListPendingAccessRequestsInvariantViolation(body *ListPendingAccessRequestsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsUnexpected builds a agent service
+// listPendingAccessRequests endpoint unexpected error.
+func NewListPendingAccessRequestsUnexpected(body *ListPendingAccessRequestsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPendingAccessRequestsGatewayError builds a agent service
+// listPendingAccessRequests endpoint gateway_error error.
+func NewListPendingAccessRequestsGatewayError(body *ListPendingAccessRequestsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetPluginsResponseBody runs the validations defined on
 // GetPluginsResponseBody
 func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
@@ -7032,6 +7423,22 @@ func ValidateCreateSessionHandoffResponseBody(body *CreateSessionHandoffResponse
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsResponseBody runs the validations defined
+// on ListPendingAccessRequestsResponseBody
+func ValidateListPendingAccessRequestsResponseBody(body *ListPendingAccessRequestsResponseBody) (err error) {
+	if body.Requests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requests", "body"))
+	}
+	for _, e := range body.Requests {
+		if e != nil {
+			if err2 := ValidateAgentPendingAccessRequestResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -11120,6 +11527,248 @@ func ValidateCreateSessionHandoffGatewayErrorResponseBody(body *CreateSessionHan
 	return
 }
 
+// ValidateListPendingAccessRequestsUnauthorizedResponseBody runs the
+// validations defined on listPendingAccessRequests_unauthorized_response_body
+func ValidateListPendingAccessRequestsUnauthorizedResponseBody(body *ListPendingAccessRequestsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsForbiddenResponseBody runs the validations
+// defined on listPendingAccessRequests_forbidden_response_body
+func ValidateListPendingAccessRequestsForbiddenResponseBody(body *ListPendingAccessRequestsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsBadRequestResponseBody runs the validations
+// defined on listPendingAccessRequests_bad_request_response_body
+func ValidateListPendingAccessRequestsBadRequestResponseBody(body *ListPendingAccessRequestsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsNotFoundResponseBody runs the validations
+// defined on listPendingAccessRequests_not_found_response_body
+func ValidateListPendingAccessRequestsNotFoundResponseBody(body *ListPendingAccessRequestsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsConflictResponseBody runs the validations
+// defined on listPendingAccessRequests_conflict_response_body
+func ValidateListPendingAccessRequestsConflictResponseBody(body *ListPendingAccessRequestsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listPendingAccessRequests_unsupported_media_response_body
+func ValidateListPendingAccessRequestsUnsupportedMediaResponseBody(body *ListPendingAccessRequestsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsInvalidResponseBody runs the validations
+// defined on listPendingAccessRequests_invalid_response_body
+func ValidateListPendingAccessRequestsInvalidResponseBody(body *ListPendingAccessRequestsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsInvariantViolationResponseBody runs the
+// validations defined on
+// listPendingAccessRequests_invariant_violation_response_body
+func ValidateListPendingAccessRequestsInvariantViolationResponseBody(body *ListPendingAccessRequestsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsUnexpectedResponseBody runs the validations
+// defined on listPendingAccessRequests_unexpected_response_body
+func ValidateListPendingAccessRequestsUnexpectedResponseBody(body *ListPendingAccessRequestsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPendingAccessRequestsGatewayErrorResponseBody runs the
+// validations defined on listPendingAccessRequests_gateway_error_response_body
+func ValidateListPendingAccessRequestsGatewayErrorResponseBody(body *ListPendingAccessRequestsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAgentMarketplaceResponseBody runs the validations defined on
 // AgentMarketplaceResponseBody
 func ValidateAgentMarketplaceResponseBody(body *AgentMarketplaceResponseBody) (err error) {
@@ -11865,6 +12514,48 @@ func ValidateAgentCrashRollbackRequestBody(body *AgentCrashRollbackRequestBody) 
 		if utf8.RuneCountInString(*body.To) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.to", *body.To, utf8.RuneCountInString(*body.To), 64, false))
 		}
+	}
+	return
+}
+
+// ValidateAgentPendingAccessRequestResponseBody runs the validations defined
+// on AgentPendingAccessRequestResponseBody
+func ValidateAgentPendingAccessRequestResponseBody(body *AgentPendingAccessRequestResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.RequesterDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_display_name", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.PermissionLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("permission_label", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.DecideURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("decide_url", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RequestedUntil != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	if body.DecideURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decide_url", *body.DecideURL, goa.FormatURI))
 	}
 	return
 }

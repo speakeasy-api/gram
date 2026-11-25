@@ -31,7 +31,7 @@ export type OrganizationClients = {
  * The client documents an organization allows on one provider, beyond
  * Speakeasy's catalog. An organization-wide provider keeps them through the
  * organization and a project's own through that project, so both lists are
- * set up and only the one this provider uses is read.
+ * set up and only the one this MCP sign-in uses is read.
  */
 export function useOrganizationClients(
   issuer: UserSessionIssuer,

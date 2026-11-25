@@ -186,16 +186,8 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
     isError: false,
   }),
 }));
-// The organization's upstream auth enforcement state and the server's
-// credentials status, read by the sidebar's Identity summary.
+// The typed offer status read by the sidebar's Identity summary.
 const identityGate = vi.hoisted(() => ({
-  features: {
-    isPending: false,
-    isError: false,
-    data: { upstreamAuthEnforced: false } as
-      | { upstreamAuthEnforced?: boolean }
-      | undefined,
-  },
   authentication: {
     isPending: false,
     isError: false,
@@ -204,16 +196,6 @@ const identityGate = vi.hoisted(() => ({
       | undefined,
   },
   probe: vi.fn((_remoteMcpServerId: string, _enabled: boolean) => "idle"),
-}));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => identityGate.features,
-}));
-vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
-  useServerClientAssociations: () => ({
-    data: { requiredClientIds: [] },
-    isError: false,
-    isLoading: false,
-  }),
 }));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => identityGate.authentication,
@@ -485,7 +467,7 @@ describe("MCP server readiness", () => {
     render(<DetailChrome />, { wrapper: MemoryRouter });
     for (const label of [
       "Server URL",
-      "Authentication",
+      "Sign-in",
       "Source",
       "Included in a plugin",
     ]) {
@@ -514,18 +496,13 @@ describe("MCP server readiness", () => {
   });
 });
 
-describe("remote MCP server readiness under enforcement", () => {
+describe("remote MCP server readiness from typed offers", () => {
   const remote = {
     id: "server-a",
     name: "Server",
     remoteMcpServerId: "remote-source-a",
   };
   afterEach(() => {
-    identityGate.features = {
-      isPending: false,
-      isError: false,
-      data: { upstreamAuthEnforced: false },
-    };
     identityGate.authentication = {
       isPending: false,
       isError: false,
@@ -534,7 +511,7 @@ describe("remote MCP server readiness under enforcement", () => {
   });
 
   function authenticationCheck(): HTMLElement {
-    return screen.getByText("Authentication");
+    return screen.getByText("Sign-in");
   }
 
   it.each([
@@ -546,11 +523,6 @@ describe("remote MCP server readiness under enforcement", () => {
     ],
   ])("reads %s from the credentials status", (status, ready, description) => {
     state.mcpServer = remote;
-    identityGate.features = {
-      isPending: false,
-      isError: false,
-      data: { upstreamAuthEnforced: true },
-    };
     identityGate.authentication = {
       isPending: false,
       isError: false,
@@ -561,9 +533,20 @@ describe("remote MCP server readiness under enforcement", () => {
     expect(authenticationCheck().getAttribute("title")).toBe(description);
   });
 
-  it("is still checking and does not probe the upstream while enforcement loads", () => {
+  it("does not mark an unknown typed status as an open step", () => {
     state.mcpServer = remote;
-    identityGate.features = {
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status: "future_status", clients: [] },
+    };
+    render(<DetailChrome />, { wrapper: MemoryRouter });
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("null");
+  });
+
+  it("is still checking and does not probe the upstream while typed offers load", () => {
+    state.mcpServer = remote;
+    identityGate.authentication = {
       isPending: true,
       isError: false,
       data: undefined,

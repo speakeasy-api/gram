@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -103,6 +102,9 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 		// The private ingress has already established its own network admission,
 		// workload identity, organization, namespace, and Host authority. A custom
 		// domain's public-edge IP allowlist does not govern this separate surface.
+		// Endpoint resolution on this surface only admits endpoints owned by
+		// the ingress's organization, so it attributes the exchange directly.
+		metering.AttributeMCPBandwidth(ctx, origin.OrganizationID, projectID)
 		return false, nil
 	}
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
@@ -746,8 +748,8 @@ func (s *Service) resolveUpstreamResource(
 // its own OAuth where applicable).
 //
 // upstream is the resolved credential forwarded to the remote server. It's
-// only populated when the caller ran the issuer gate; otherwise it's empty
-// and the proxy does not forward an Authorization header upstream. A self
+// populated by issuer-gated resolution or a selected ungated agent key.
+// Without a credential, the proxy forwards no Authorization header. A self
 // client's credential is replaced and retried once when the upstream rejects
 // it, and a rejection that survives answers with the administrator's repair.
 //
@@ -775,7 +777,7 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.SnapshotFor(ctx), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -798,8 +800,8 @@ func (s *Service) serveRemoteBackend(
 }
 
 // agentKeyUngatedUpstream serves an agent key's credential choice for a
-// private server reached without an issuer gate, once the organization
-// enforces, through the same resolution as a gated request. Any other caller,
+// server reached without an issuer gate, through the same resolution as a
+// gated request. Any other caller,
 // server or organization keeps upstream and buildOptions as given.
 func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
@@ -823,13 +825,6 @@ func (s *Service) agentKeyUngatedUpstream(
 	agentID, err := uuid.Parse(actor.ID)
 	if err != nil {
 		return upstream, buildOptions, nil //nolint:nilerr // an actor id that does not parse is no agent key
-	}
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return upstream, buildOptions, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
-	}
-	if mode != feature.AuthClientResolverEnforced {
-		return upstream, buildOptions, nil
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(endpoint, mcpServer, organizationID, mcproute.MCP)
 	selector, err := s.agentKeySelectorFor(ctx, resolved)
@@ -1002,7 +997,7 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, s.aiCatalog.SnapshotFor(ctx), r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,
@@ -1016,7 +1011,7 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoRoute) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeTunnelUnavailable, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		tagTunnelOutage(w, err)
 		return err
@@ -1132,7 +1127,7 @@ func (s *Service) prepareProxyBackendContext(
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		if mcpaccess.IsServerPermissionDenied(err) {
-			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
+			s.recordRequestOutcome(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, r, callerSubject(ctx), s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))
 		}
 		return nil, "", err
 	}

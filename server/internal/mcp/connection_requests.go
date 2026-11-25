@@ -4,21 +4,25 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Per-request rows record refusals and failures only: a served request writes nothing.
+// Per-request rows record refusals and failures. A served request is kept apart, once per connection, by Recorder.Served.
 
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
@@ -88,17 +92,25 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 }
 
 // directConnectionOptions records a caller who presented a credential; anonymous calls stay in metrics.
-func directConnectionOptions(ctx context.Context, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken, client mcpconnectionattempts.Option) []remotemcp.BuildOption {
+func directConnectionOptions(ctx context.Context, catalog *aivendors.Snapshot, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken, client mcpconnectionattempts.Option) []remotemcp.BuildOption {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
 	}
 	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
-		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
-		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client},
-		UpstreamFailures: true,
+		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx, catalog)),
+		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client, mcpconnectionattempts.RemoteSessionClient(ownSignInClient(upstream))},
+		UpstreamOutcomes: true,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		Request:          r,
 	})}
+}
+
+// ownSignInClient is the service client of the person's own stored sign-in the call sends, else uuid.Nil.
+func ownSignInClient(upstream remotesessions.UpstreamToken) uuid.UUID {
+	if upstream.Token == "" || upstream.CredentialOwner == remotesessions.CredentialOwnerSelf {
+		return uuid.Nil
+	}
+	return upstream.RemoteSessionClientID
 }
 
 // callerSubject preserves the authenticated actor, not the human authorizing an agent.
@@ -106,7 +118,8 @@ func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
 	return mcpconnectionattempts.Subject(resolvedCaller(ctx))
 }
 
-// resolvedCaller is the authenticated actor, or the user when there is none. Nil when neither resolves.
+// resolvedCaller is the authenticated actor, else the user, else the API key of a session whose
+// subject is one, as the gate's rows name it. Nil when none resolves.
 func resolvedCaller(ctx context.Context) *urn.SessionSubject {
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
 		subject, err := urn.ParseSessionSubject(actor.String())
@@ -116,11 +129,18 @@ func resolvedCaller(ctx context.Context) *urn.SessionSubject {
 		return nil
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.UserID == "" {
+	if !ok || authCtx == nil {
 		return nil
 	}
-	subject := urn.NewUserSubject(authCtx.UserID)
-	return &subject
+	if authCtx.UserID != "" {
+		subject := urn.NewUserSubject(authCtx.UserID)
+		return &subject
+	}
+	if keyID, err := uuid.Parse(authCtx.APIKeyID); err == nil {
+		subject := urn.NewAPIKeySubject(keyID)
+		return &subject
+	}
+	return nil
 }
 
 func (g *metaGateContext) connectionSubject(ctx context.Context) mcpconnectionattempts.Option {
@@ -143,24 +163,68 @@ func authClientGapHappened(reason string) mcpconnectionattempts.Code {
 	return mcpconnectionattempts.CodeInvalidRemoteSession
 }
 
+// memberConnection names a member's connection on every row, with the service client of the person's own sign-in when one is sent.
+func (s *Service) memberConnection(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID) []mcpconnectionattempts.Option {
+	return []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate), mcpconnectionattempts.RemoteSessionClient(serviceClient)}
+}
+
 // memberConnectionOption records a member proxy's refused tool calls under its gateway.
-func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
+func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID) remotemcp.BuildOption {
 	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
-		Scope:            gate.connectionScope(ctx),
-		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)},
-		UpstreamFailures: false,
+		Scope:            gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)),
+		Details:          s.memberConnection(ctx, gate, member, serviceClient),
+		UpstreamOutcomes: false,
 		SelfCredential:   false,
 		Request:          gate.request,
 	})
 }
 
-// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
-func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause. serviceClient
+// is the service client of the person's own sign-in the call sent, uuid.Nil for none.
+func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)), what, gate.request, append(s.memberConnection(ctx, gate, member, serviceClient), opts...)...)
+}
+
+// recordMemberServed records a member call its own server answered without an error, on the connection its failures name.
+func (s *Service) recordMemberServed(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID) {
+	s.connections.Served(ctx, gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)), true, append(s.memberConnection(ctx, gate, member, serviceClient), mcpconnectionattempts.FromRequest(gate.request))...)
+}
+
+// gatewayMemberCallsKey holds a gateway request's member tool calls.
+type gatewayMemberCallsKey struct{}
+
+// gatewayMemberCalls counts a gateway request's member tool calls and those whose result was not an error.
+type gatewayMemberCalls struct{ called, succeeded atomic.Int32 }
+
+// withGatewayMemberCalls starts counting the member tool calls of the gateway request on ctx.
+func withGatewayMemberCalls(ctx context.Context) context.Context {
+	return context.WithValue(ctx, gatewayMemberCallsKey{}, &gatewayMemberCalls{called: atomic.Int32{}, succeeded: atomic.Int32{}})
+}
+
+// noteGatewayMemberCall counts a member tool call of the request. A Code Mode program's calls are not the request's own.
+func noteGatewayMemberCall(ctx context.Context, succeeded bool) {
+	calls, ok := ctx.Value(gatewayMemberCallsKey{}).(*gatewayMemberCalls)
+	if !ok || ctx.Value(metaCodeInvocationKey{}) != nil {
+		return
+	}
+	calls.called.Add(1)
+	if succeeded {
+		calls.succeeded.Add(1)
+	}
+}
+
+// recordGatewayServed records a gateway request served without an error. Speakeasy answered it,
+// so it names no member: a member call also writes its own row. A member tool call that failed or
+// returned an error result writes nothing.
+func (s *Service) recordGatewayServed(ctx context.Context, gate *metaGateContext) {
+	if calls, ok := ctx.Value(gatewayMemberCallsKey{}).(*gatewayMemberCalls); ok && calls.called.Load() > 0 && calls.succeeded.Load() == 0 {
+		return
+	}
+	s.connections.Served(ctx, gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)), false, gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate), mcpconnectionattempts.FromRequest(gate.request))
 }
 
 // consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
@@ -231,8 +295,19 @@ func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcp
 	if code == mcpconnectionattempts.CodeProviderRejected && resolvedCaller(ctx) == nil {
 		return
 	}
-	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
+	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))
 	s.recordRequestOutcome(ctx, scope, code, payload.request, callerSubject(ctx), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
+}
+
+// recordHostedServed records a hosted request served without an error, under the scope its
+// failures use: its fronting server, else its toolset. A tool call or resource read counts only
+// when its result is not an error.
+func (s *Service) recordHostedServed(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, payload *mcpInputs, method string) {
+	if (method == mcpversions.MethodToolsCall || method == mcpversions.MethodResourcesRead) && !payload.resultSucceeded {
+		return
+	}
+	s.connections.Served(ctx, hostedConnectionScope(ctx, s.aiCatalog.SnapshotFor(ctx), toolset, cfg), payload.backendAnswered,
+		callerSubject(ctx), s.reportedClient(ctx, payload.request, toolset.ProjectID, toolset.Slug), mcpconnectionattempts.FromRequest(payload.request))
 }
 
 func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {

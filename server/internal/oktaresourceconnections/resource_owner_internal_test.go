@@ -48,7 +48,7 @@ func TestResourceScopesFollowTypedOffersUnderEnforcement(t *testing.T) {
 		ID: uuid.New(), ProjectID: project, IssuerID: issuer,
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		RemoteUrl:           pgtype.Text{String: upstream, Valid: true},
-		TypedAuthEnforced:   true, OfferedClientIds: []uuid.UUID{offered},
+		UsesTypedOffers:     true, OfferedClientIds: []uuid.UUID{offered},
 	}
 	snap := &snapshot{
 		resources: map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{

@@ -51,6 +51,7 @@ var shippedManagedAssistantInstructions = map[string]struct{}{
 	"2c9926a47e4ff5c3d100c6a1dd60daebf0aa8bcafa57ee4d26cca5436cfa5e48": {},
 	"05c5372488ef5589f93df91b1fe5f23ead57e9a78a21cb8105c658354ef2ccf0": {},
 	"5611c835404ef600152cce9eb90a494780524ad6894d598c5c41205b5222a81d": {},
+	"9b65268d8c2a00603873bd6aaba80c6f91d4bc1b165bfd688f1444231e2d528b": {},
 }
 
 // currentAssistantInstructions returns the current managed prompt when stored
@@ -133,7 +134,7 @@ func (s *ServiceCore) EnableManagedAssistant(
 			// Repair any bound agent, including a suspended or revoked one, so
 			// the ceiling is in place when it becomes active again.
 			if provisionIdentity && existing.IdentityState != string(assistantidentity.NeverConfigured) {
-				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, createdByUserID); err != nil {
+				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, urn.NewPrincipal(urn.PrincipalTypeUser, createdByUserID)); err != nil {
 					return err
 				}
 			}
@@ -350,7 +351,7 @@ func (s *ServiceCore) createManagedAssistant(
 		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
 		}
-		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, createdByUserID); err != nil {
+		if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, record.ID, urn.NewPrincipal(urn.PrincipalTypeUser, createdByUserID)); err != nil {
 			return assistantRecord{}, err
 		}
 	}

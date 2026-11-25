@@ -118,6 +118,9 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"unknown provider otherwise ready", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider" })}, networkIngressNextUnsupportedProvider},
 		{"unknown provider missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "future-provider"; i.CredentialsConfigured = false })}, networkIngressNextUnsupportedProvider},
 		{"missing provider", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Provider = "" })}, networkIngressNextUnsupportedProvider},
+		{"row no provider hosts", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "unsupported_provider", ""
+		})}, networkIngressNextUnsupportedProvider},
 		{"missing credentials", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.CredentialsConfigured = false })}, networkIngressNextAddCredentials},
 		{"disabled", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Enabled = false; i.Status = "disabled" })}, networkIngressNextEnable},
 		{"error", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "error" })}, networkIngressNextRepair},
@@ -194,10 +197,13 @@ func TestGetNetworkIngressReportsLiveStateWithoutCredentials(t *testing.T) {
 		CustomDomainID:         uuid.NullUUID{},
 		Enabled:                true,
 		IdentityRequired:       false,
-		CredentialsEncrypted:   pgtype.Text{String: credentialSentinel, Valid: true},
 		AttestorNamespace:      attestor,
 		AttestorServiceAccount: attestor,
 		ProviderResources:      []byte(`{"tailnet_key":"` + resourceSentinel + `"}`),
+	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).SetNetworkIngressCredentialCopiesFixture(ctx, networkingressrepo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: pgtype.Text{String: credentialSentinel, Valid: true}, OrgCopy: pgtype.Text{}, ID: created.ID, OrganizationID: principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	got, err = service.Get(ctx, principal)
@@ -258,9 +264,13 @@ func TestGetNetworkIngressDoesNotReportUnknownProviderReady(t *testing.T) {
 	created, err := networkingressrepo.New(conn).CreateNetworkIngress(ctx, networkingressrepo.CreateNetworkIngressParams{
 		ID: uuid.New(), OrganizationID: principal.OrganizationID,
 		Provider: "future-provider", Hostname: "private-mcp", EndpointNamespaceKind: "platform",
-		Enabled: true, CredentialsEncrypted: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true},
+		Enabled:           true,
 		AttestorNamespace: attestor, AttestorServiceAccount: attestor,
 		ProviderResources: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	created, err = networkingressrepo.New(conn).SetNetworkIngressCredentialCopiesFixture(ctx, networkingressrepo.SetNetworkIngressCredentialCopiesFixtureParams{
+		PlatformCopy: pgtype.Text{String: "sentinel-encrypted-credentials", Valid: true}, OrgCopy: pgtype.Text{}, ID: created.ID, OrganizationID: principal.OrganizationID,
 	})
 	require.NoError(t, err)
 	updated, err := networkingressrepo.New(conn).RecordNetworkIngressObservation(ctx, networkingressrepo.RecordNetworkIngressObservationParams{

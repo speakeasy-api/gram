@@ -107,6 +107,9 @@ const SUBSEQUENCE_CONTIGUITY_WEIGHT = 0.2;
 const UNMATCHED_PENALTY = 0.5;
 const SHORT_TITLE_BONUS = 0.02;
 const SHORT_TITLE_LENGTH = 40;
+// A keyword that is the whole multi-word query outranks the same words
+// matched separately.
+const WHOLE_KEYWORD_BONUS = 0.05;
 
 /**
  * Fraction of adjacent matched positions when `token` is matched greedily as
@@ -198,6 +201,18 @@ export function fuzzyScore(
   if (unmatched) score *= UNMATCHED_PENALTY;
   score +=
     SHORT_TITLE_BONUS * Math.max(0, 1 - c.title.length / SHORT_TITLE_LENGTH);
+  const phrase = queryTokens.join(" ");
+  if (
+    queryTokens.length > 1 &&
+    c.keywords.some(
+      (keyword) =>
+        tokens(keyword)
+          .filter((token) => !STOP_WORDS.has(token))
+          .join(" ") === phrase,
+    )
+  ) {
+    score += WHOLE_KEYWORD_BONUS;
+  }
   return score;
 }
 

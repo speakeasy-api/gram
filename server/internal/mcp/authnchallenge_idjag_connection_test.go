@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -121,7 +122,7 @@ func TestIDJAGExchangeRecordsSignIn(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
 	require.Empty(t, row.Reason)
 	require.Equal(t, urn.NewUserSubject(mockidp.MockUserID).String(), row.SubjectURN)
-	require.Equal(t, mcpconnectionattempts.AppOf(codexCIMDClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), codexCIMDClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 	require.Equal(t, f.issuerID.String(), row.UserSessionIssuerID)
 	require.NotEmpty(t, row.UserSessionClientID)
 	require.NotEmpty(t, row.UserSessionID)
@@ -222,15 +223,15 @@ func TestIDJAGExchangeRecordsRefusals(t *testing.T) {
 			status: http.StatusBadRequest, body: `{"error":"invalid_target","error_description":"resource is not available to this user"}`,
 			what: mcpconnectionattempts.CodeNoServerAccess, who: mcpconnectionattempts.WhoAdmin, detail: "resource_not_available", subject: true,
 		},
-		"upstream choice the organization does not take": {
+		"upstream choice for an unreachable server": {
 			granted: true,
 			form: func(f idJAGOutageFixture, assertion string) url.Values {
 				form := idJAGForm(f.clientID, assertion)
 				form.Set("upstream_auth_client", uuid.NewString()+":none")
 				return form
 			},
-			status: http.StatusBadRequest, body: `{"error":"invalid_request","error_description":"upstream_auth_client is not accepted for this organization yet"}`,
-			what: mcpconnectionattempts.CodeUpstreamCredentialChoice, who: mcpconnectionattempts.WhoApp, detail: "choice_not_accepted", subject: true,
+			status: http.StatusBadRequest, body: `{"error":"invalid_request","error_description":"upstream_auth_client names a server this token does not reach"}`,
+			what: mcpconnectionattempts.CodeCredentialChoiceInvalid, who: mcpconnectionattempts.WhoApp, detail: "choice_server_not_reached", subject: true,
 		},
 		"malformed upstream choice": {
 			granted: true,
@@ -600,7 +601,7 @@ func TestIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			status: http.StatusBadRequest, body: `{"error":"invalid_client","error_description":"this client ID metadata document URL is not permitted by the server's client policy; the server operator must allow it"}`,
 			what: mcpconnectionattempts.CodeCIMDAdmissionDenied,
 			app: func(f idJAGClientFixture) string {
-				return mcpconnectionattempts.AppOf(f.ds.clientID, mcpconnectionattempts.ClientIDNotAdmitted).String()
+				return mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), f.ds.clientID, mcpconnectionattempts.ClientIDNotAdmitted).String()
 			},
 		},
 		"document fetch fails": {
@@ -608,7 +609,7 @@ func TestIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			status: http.StatusServiceUnavailable, body: `{"error":"temporarily_unavailable","error_description":"failed to fetch client metadata document"}`,
 			what: mcpconnectionattempts.CodeCIMDFetchFailed,
 			app: func(f idJAGClientFixture) string {
-				return mcpconnectionattempts.AppOf(f.ds.clientID, mcpconnectionattempts.ClientIDNotAdmitted).String()
+				return mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), f.ds.clientID, mcpconnectionattempts.ClientIDNotAdmitted).String()
 			},
 		},
 		"blocked AI tool": {
@@ -616,7 +617,7 @@ func TestIDJAGExchangeRecordsClientRefusals(t *testing.T) {
 			status: http.StatusBadRequest,
 			what:   mcpconnectionattempts.CodeAIToolBlocked,
 			app: func(idJAGClientFixture) string {
-				return mcpconnectionattempts.AppOf(codexCIMDClientID, mcpconnectionattempts.ClientIDAdmitted).String()
+				return mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), codexCIMDClientID, mcpconnectionattempts.ClientIDAdmitted).String()
 			},
 		},
 		"client without a metadata document": {

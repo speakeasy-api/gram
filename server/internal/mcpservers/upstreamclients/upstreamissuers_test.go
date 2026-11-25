@@ -2,12 +2,10 @@ package upstreamclients_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -110,26 +108,6 @@ var upstreamIssuerReaders = map[string]func(t *testing.T, ctx context.Context, f
 		sole, err := testrepo.New(f.conn).GetMCPServerSoleUpstreamIssuerFixture(ctx, f.serverID)
 		require.NoError(t, err)
 		return sole
-	},
-	"ListEligibleServers": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
-		t.Helper()
-		rows, err := oktarepo.New(f.conn).ListEligibleServers(ctx, oktarepo.ListEligibleServersParams{TypedAuthEnforced: false, OrganizationID: f.organizationID})
-		require.NoError(t, err)
-		for _, row := range rows {
-			if row.ID == f.serverID {
-				return uuid.NullUUID{UUID: row.IssuerID, Valid: true}
-			}
-		}
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	},
-	"GetEligibleServer": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
-		t.Helper()
-		row, err := oktarepo.New(f.conn).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: f.organizationID, McpServerID: f.serverID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		}
-		require.NoError(t, err)
-		return uuid.NullUUID{UUID: row.IssuerID, Valid: true}
 	},
 	"ListMemberProviderIdentities": func(t *testing.T, ctx context.Context, f issuerFixture) uuid.NullUUID {
 		t.Helper()

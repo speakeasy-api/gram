@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1016,6 +1017,13 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, lifecycleLockError(err)
 	}
 	existing.RemoteSessionClient = locked
+	attached, err := lockAttachmentParentForUnlink(ctx, txRepo, authCtx.ActiveOrganizationID, clientID, userIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+	}
+	if attached {
+		return nil, oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
 	removed, err := txRepo.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
 		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
@@ -1178,17 +1186,17 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
-	// The bindings and associations are read before the writer scope, which
-	// has to name every project the deletion re-decides and be held before any
-	// row lock. The resync checks the scope still covers them.
-	scopeIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	// Check project ownership before discovering or locking a registration's
+	// potentially organization-wide writer scope.
+	if _, err := txRepo.GetProjectOwnedRegistrationForDelete(ctx, repo.GetProjectOwnedRegistrationForDeleteParams{ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check registration ownership").LogError(ctx, logger)
 	}
-	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, scopeIssuerIDs)
+
+	// Lock the projects and registration gates of actual association/offer
+	// writers, before locking the registration and checking for scope growth.
+	associationScope, err := upstreamclients.LockClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, []uuid.UUID{*authCtx.ProjectID})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock client deletion writer scope").LogError(ctx, logger)
 	}
@@ -1205,6 +1213,10 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "lock project remote session client").LogError(ctx, logger)
 	}
 
+	stamps, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read registration server scope").LogError(ctx, logger)
+	}
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return err
 	}
@@ -1220,29 +1232,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	// Read the bindings before the purge removes them, so the resync knows
-	// which issuers to recompute.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
-	}
-
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
-		ctx,
-		repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
-			RemoteSessionClientID: deleted.ID,
-			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-		},
-	); err != nil {
-		return oops.E(
-			oops.CodeUnexpected,
-			err,
-			"failed to delete user session issuer attachments for remote session client %s",
-			deleted.ID,
-		).LogError(ctx, logger)
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -1264,7 +1255,15 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	// The deleted client's associations and the typed links derived from them
 	// go with it, in every project that used it.
-	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, boundUserIssuerIDs, uuid.Nil); err != nil {
+	// Prune rechecks the same association/offer discovery under the client
+	// lock, before deriving stamps in any of those projects.
+	if err := associationScope.PruneInLockedTransaction(ctx, dbtx); err != nil {
+		return bindingSyncError(ctx, logger, err)
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID)}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
+	}
+	if err := stamps.Derive(ctx, dbtx); err != nil {
 		return bindingSyncError(ctx, logger, err)
 	}
 

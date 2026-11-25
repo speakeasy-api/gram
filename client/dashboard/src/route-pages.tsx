@@ -157,6 +157,7 @@ import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
 import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
+import IntentPolicies from "./pages/security/intent-policies/IntentPolicies";
 import {
   ShadowAIRoot,
   ShadowAISectionRedirect,
@@ -379,6 +380,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           teamAccess: {},
           guardrails: {},
           sessions: {},
+          feedback: {},
           settings: {},
           authentication: {},
           performance: {},
@@ -426,7 +428,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       provider: {
         component: McpSessionsProvider,
         subPages: {
+          overview: {},
           connections: {},
+          connectionLogs: {},
           mcpServers: {},
           settings: {},
         },
@@ -609,6 +613,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   riskEvents: {
     component: RiskEventsPage,
+  },
+  intentPolicies: {
+    component: IntentPolicies,
   },
   shadowAI: {
     component: ShadowAIRoot,

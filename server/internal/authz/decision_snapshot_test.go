@@ -18,10 +18,6 @@ import (
 //
 // and the file's diff lists the answers it changes.
 
-const decisionSnapshotPath = "testdata/decision_snapshot.json"
-
-var writeDecisionSnapshot = flag.Bool("write-decision-snapshot", false, "regenerate "+decisionSnapshotPath)
-
 func TestDecisionSnapshot(t *testing.T) {
 	t.Parallel()
 	fresh := buildDecisionSnapshot()
@@ -76,6 +72,10 @@ func TestDecisionSnapshot(t *testing.T) {
 		t.Errorf("... %d answers changed in all", changed)
 	}
 }
+
+const decisionSnapshotPath = "testdata/decision_snapshot.json"
+
+var writeDecisionSnapshot = flag.Bool("write-decision-snapshot", false, "regenerate "+decisionSnapshotPath)
 
 func sameSnapshotCases(a, b snapshotFile) bool {
 	if !reflect.DeepEqual(a.Grants, b.Grants) || !reflect.DeepEqual(a.Checks, b.Checks) || len(a.Groups) != len(b.Groups) {
@@ -170,4 +170,15 @@ func encodeDecisionSnapshot(snapshot snapshotFile) ([]byte, error) {
 	}
 	out.WriteString("]\n}\n")
 	return out.Bytes(), nil
+}
+
+// The two helpers below depend on the current API. To compare with an older
+// evaluator, copy decision_snapshot_cases_test.go there and rewrite these two.
+
+func snapshotMCPServer(id, project string) MCPServerRef {
+	return MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project))
+}
+
+func snapshotRawCheck(scope Scope, kind, id string, dimensions map[string]string) Check {
+	return Check{Scope: scope, ResourceKind: kind, ResourceID: id, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }

@@ -21,11 +21,14 @@ import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { ScopeBadge } from "@/lib/remote-identity";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { UserSessionIssuerMcpServer } from "@gram/client/models/components/usersessionissuermcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organizationUserSessionIssuer.js";
 import { useOrganizationUserSessionIssuerMcpServersInfinite } from "@gram/client/react-query/organizationUserSessionIssuerMcpServers.js";
@@ -36,7 +39,6 @@ import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 import { ClientAccessSection } from "./ClientAccessSection";
-import { ClientDriftWarning } from "./ClientDriftWarning";
 import { SessionLengthSection } from "./SessionLengthSection";
 import {
   authorizationServerModeLabel,
@@ -63,13 +65,13 @@ export default function UserSessionIssuerDetail(): JSX.Element {
 type IssuerDetailLinks = {
   /** Where "not found" sends people back to. */
   listHref: string;
-  /** Another MCP Authentication Provider's page, after consolidating into it. */
+  /** Another MCP sign-in's page, after consolidating into it. */
   detailHref: (issuerId: string) => string;
 };
 
 /**
- * One MCP Authentication Provider, shared by the organization page and a
- * project's MCP Sessions configuration. `editableProjectId` names the project
+ * One MCP sign-in, shared by the organization page and a
+ * project's MCP Sign-in configuration. `editableProjectId` names the project
  * whose own providers this page may change; organization-wide ones are always
  * changed through the organization.
  */
@@ -99,14 +101,14 @@ function IssuerDetailContent({
       notFound={
         missing
           ? {
-              title: "MCP Authentication Provider not found",
+              title: "MCP sign-in not found",
               description:
                 "It may have been consolidated into another one or removed.",
               backTo: listHref,
             }
           : query.isError && !issuer
             ? {
-                title: "Couldn't load this MCP Authentication Provider",
+                title: "Couldn't load this MCP sign-in",
                 description: "Reload the page to try again.",
                 backTo: listHref,
               }
@@ -175,7 +177,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
       <Page.Eyebrow />
       <div className="flex items-center gap-3">
         <Text small muted>
-          MCP Authentication Provider
+          MCP sign-in
         </Text>
         <ScopeBadge
           projectId={issuer.projectId}
@@ -190,7 +192,7 @@ function IssuerHero({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
 }
 
 /**
- * How clients reach this provider to sign in. Rarely needed, so it stays
+ * How clients reach this MCP sign-in to sign in. Rarely needed, so it stays
  * closed; only a broken sign-in address shows without opening it.
  */
 export function AdvancedSection({
@@ -274,10 +276,13 @@ export function AdvancedSection({
 export function McpServersSection({
   issuer,
   titled = true,
+  linkRows = false,
 }: {
   issuer: UserSessionIssuer;
   /** Off where a tab already names the list. */
   titled?: boolean;
+  /** Each row opens its server's Clients and Sessions tab. */
+  linkRows?: boolean;
 }): JSX.Element {
   const query = useOrganizationUserSessionIssuerMcpServersInfinite(
     { userSessionIssuerId: issuer.id },
@@ -312,7 +317,7 @@ export function McpServersSection({
     body = (
       <InlineEmptyState
         icon="server"
-        heading="No MCP servers use this MCP Authentication Provider"
+        heading="No MCP servers use this MCP sign-in"
         description="Choose it in an MCP server's settings to have clients sign in here."
       />
     );
@@ -322,25 +327,13 @@ export function McpServersSection({
         <DotTable
           headers={[{ label: "Name" }, { label: "Project" }, { label: "Type" }]}
         >
-          {servers.map((server) => (
-            <DotRow key={server.id}>
-              <td className="px-3 py-3">
-                <Text small as="div" className="truncate">
-                  {server.name}
-                </Text>
-              </td>
-              <td className="px-3 py-3">
-                <Text small muted>
-                  {server.projectName}
-                </Text>
-              </td>
-              <td className="px-3 py-3">
-                <Text small muted>
-                  {server.kind === "meta_mcp_server" ? "Gateway" : "MCP server"}
-                </Text>
-              </td>
-            </DotRow>
-          ))}
+          {servers.map((server) =>
+            linkRows ? (
+              <LinkedMcpServerRow key={server.id} server={server} />
+            ) : (
+              <McpServerRow key={server.id} server={server} />
+            ),
+          )}
         </DotTable>
         {query.hasNextPage ? (
           <Stack direction="horizontal" justify="center" className="py-3">
@@ -360,20 +353,73 @@ export function McpServersSection({
     );
   }
 
-  const drift = <ClientDriftWarning issuerId={issuer.id} />;
-  if (!titled) {
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-end">{drift}</div>
-        {body}
-      </div>
-    );
-  }
+  if (!titled) return body;
+  return <InfoSection title="MCP servers">{body}</InfoSection>;
+}
+
+function McpServerRow({
+  server,
+  href,
+}: {
+  server: UserSessionIssuerMcpServer;
+  href?: string;
+}): JSX.Element {
+  const gateway = server.kind === "meta_mcp_server";
   return (
-    <InfoSection title="MCP servers" adornment={drift}>
-      {body}
-    </InfoSection>
+    <DotRow
+      href={href}
+      ariaLabel={
+        href
+          ? `Open ${gateway ? "gateway" : "MCP server"} ${server.name}`
+          : undefined
+      }
+    >
+      <td className="px-3 py-3">
+        <Text small as="div" className="truncate">
+          {server.name}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <Text small muted>
+          {server.projectName}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <Text small muted>
+          {gateway ? "Gateway" : "MCP server"}
+        </Text>
+      </td>
+    </DotRow>
   );
+}
+
+/** Links through the server's own project, which need not be this one. */
+function LinkedMcpServerRow({
+  server,
+}: {
+  server: UserSessionIssuerMcpServer;
+}): JSX.Element {
+  const organization = useOrganization();
+  const projectSlug = organization.projects.find(
+    (project) => project.id === server.projectId,
+  )?.slug;
+  const routes = useRoutes({ projectSlug });
+  return (
+    <McpServerRow
+      server={server}
+      href={projectSlug ? mcpServerSessionsHref(routes, server) : undefined}
+    />
+  );
+}
+
+// A toolset's slug resolves on the server page too (ToolsetRedirectPage).
+function mcpServerSessionsHref(
+  routes: ReturnType<typeof useRoutes>,
+  server: UserSessionIssuerMcpServer,
+): string {
+  return server.kind === "meta_mcp_server"
+    ? routes.mcp.gateway.sessions.href(server.id)
+    : routes.mcp.details.sessions.href(mcpServerRouteParam(server));
 }
 
 export function ActionsSection({

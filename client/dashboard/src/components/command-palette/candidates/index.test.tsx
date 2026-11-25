@@ -471,8 +471,13 @@ function renderCandidates(
   );
 }
 
+/** Resource candidates of a kind, without their "· Inspect" actions. */
 function byKind(list: LauncherCandidate[], kind: LauncherCandidate["kind"]) {
-  return list.filter((c) => c.kind === kind);
+  return list.filter((c) => c.kind === kind && !c.id.includes("-inspect:"));
+}
+
+function inspectActions(list: LauncherCandidate[]) {
+  return list.filter((c) => c.id.includes("-inspect:"));
 }
 
 function catalogServer(title: string | undefined, registrySpecifier: string) {
@@ -558,12 +563,38 @@ describe("useGatewayCandidates", () => {
     );
   });
 
+  it("offers an Inspect action per gateway that opens its Inspect tab", () => {
+    mocks.gateways = [
+      { id: "gateway-1", name: "Support Gateway" },
+      { id: "gateway-2", name: "Sales Gateway" },
+    ];
+    const { result } = renderCandidates();
+
+    const actions = inspectActions(result.current);
+    expect(actions.map((c) => c.id)).toEqual([
+      "gateway-inspect:gateway-1",
+      "gateway-inspect:gateway-2",
+    ]);
+    const [inspect] = actions;
+    expect(inspect?.kind).toBe("gateway");
+    expect(inspect?.title).toBe("Support Gateway · Inspect");
+    expect(inspect?.keywords).toEqual(
+      expect.arrayContaining(["gateway-1", "inspect", "tools"]),
+    );
+    expect(inspect?.verbs).toEqual(["open"]);
+    void inspect?.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/default/mcp/gateway/gateway-1/inspect",
+    );
+  });
+
   it("stays hidden, and does not fetch, without mcp:read or mcp:write", () => {
     mocks.scopes = ["project:read"];
     mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
     const { result } = renderCandidates();
 
     expect(byKind(result.current, "gateway")).toHaveLength(0);
+    expect(inspectActions(result.current)).toHaveLength(0);
     for (const args of mocks.calls["useMetaMcpServers"] ?? []) {
       expect(optionsOf(args).enabled).toBe(false);
     }
@@ -597,6 +628,46 @@ describe("useMcpServerCandidates", () => {
   // reader scope and adds mcp:write where the verbs need it.
   beforeEach(() => {
     mocks.scopes = ["mcp:read"];
+  });
+
+  it("offers an Inspect action per proxied server that opens its Inspect tab", () => {
+    mocks.mcpServers = [
+      mcpServer("Slack", "slack-a1", "private"),
+      mcpServer("Jira", "jira-b2", "disabled"),
+    ];
+    const { result } = renderCandidates();
+
+    const actions = inspectActions(result.current);
+    expect(actions.map((c) => c.id)).toEqual([
+      "mcp-inspect:server-slack-a1",
+      "mcp-inspect:server-jira-b2",
+    ]);
+    const [inspect] = actions;
+    expect(inspect?.kind).toBe("mcp_server");
+    expect(inspect?.title).toBe("Slack · Inspect");
+    expect(inspect?.keywords).toEqual(
+      expect.arrayContaining(["slack-a1", "inspect", "tools"]),
+    );
+    // Inspect only reads, so writers get no enable/disable on it either.
+    expect(inspect?.verbs).toEqual(["open"]);
+    void inspect?.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/default/mcp/slack-a1/inspect",
+    );
+  });
+
+  // Mirrors the tab: an unproxied server's page has no Inspect tab.
+  it("offers no Inspect action for an unproxied server", () => {
+    mocks.mcpServers = [
+      {
+        ...mcpServer("Slack", "slack-a1", "private"),
+        unproxiedMcpServerId: "unproxied-1",
+      },
+    ];
+    const { result } = renderCandidates();
+
+    expect(byKind(result.current, "mcp_server")).toHaveLength(1);
+    expect(inspectActions(result.current)).toHaveLength(0);
   });
 
   it("reads visibility into detail and offers only open without mcp:write", () => {
@@ -1908,9 +1979,7 @@ describe("useLauncherCandidates", () => {
     const { result } = renderCandidates();
 
     expect(
-      result.current
-        .filter((candidate) => candidate.kind === "mcp_server")
-        .map((candidate) => candidate.id),
+      byKind(result.current, "mcp_server").map((candidate) => candidate.id),
     ).toEqual([
       "mcp:11111111-1111-4111-8111-111111111111",
       "mcp:different-server",

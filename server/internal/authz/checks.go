@@ -1,6 +1,9 @@
 package authz
 
-import "slices"
+import (
+	"context"
+	"slices"
+)
 
 // validateCheckOperation holds a check to the operation it was built as.
 // Only a tool call carries a tool or a disposition: a check that names a tool
@@ -73,7 +76,9 @@ func RequiredCheckDimensions(resourceKind string) []string {
 }
 
 // validateCheckDimensions rejects dimension values no concrete request can
-// carry: an empty string, the wildcard and the represented-user marker.
+// carry: an empty string, the wildcard, the represented-user marker and a
+// disposition the registry does not know. A block limited to one disposition
+// would never match an unknown one.
 func validateCheckDimensions(c Check) error {
 	for key, value := range c.Dimensions {
 		switch value {
@@ -81,6 +86,9 @@ func validateCheckDimensions(c Check) error {
 			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
 		case WildcardResource, SelectorValueRepresentedUser:
 			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		}
+		if key == SelectorKeyDisposition && !validDispositions[value] {
+			return invalidCheckReason(c.Scope, c.ResourceID, "unknown disposition "+value)
 		}
 	}
 	return nil
@@ -224,4 +232,16 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 // It always carries project_id, so a project-bounded grant covers only its project.
 func InferenceExecuteCheck(projectID string) Check {
 	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+}
+
+// RequirePluginWrite authorizes project-scoped plugin content mutations and
+// publishing, without granting edits to the referenced skills or MCP servers.
+// Keep the org-admin alternative for existing roles, whose grants are not
+// rewritten when new default capabilities are introduced. Explicit exclusions
+// still win over either allow alternative.
+func (e *Engine) RequirePluginWrite(ctx context.Context, organizationID, projectID string) error {
+	return e.RequireAnyUnblocked(ctx,
+		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+	)
 }

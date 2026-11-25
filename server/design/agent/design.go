@@ -657,6 +657,30 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createSessionHandoff")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentSessionHandoff"}`)
 	})
+
+	Method("listPendingAccessRequests", func() {
+		Description("List the organization's pending access requests for an organization administrator, newest first, at most 50, each with a link that opens it in the dashboard to decide. Decisions are made in the dashboard or Slack, never from the device agent. A user who is not an administrator gets an empty list. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+
+		Result(ListPendingAccessRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/agent.listPendingAccessRequests")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPendingAccessRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listPendingAccessRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentPendingAccessRequests"}`)
+	})
 })
 
 // --- Types ---
@@ -1010,6 +1034,37 @@ var AgentServerConnectionModel = Type("AgentServerConnection", func() {
 		Format(FormatURI)
 	})
 	Attribute("hidden", Boolean, "True when the user hid this server, from the gateway consent page or the device agent. Absent when not hidden.")
+})
+
+var ListPendingAccessRequestsResult = Type("ListPendingAccessRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(AgentPendingAccessRequestModel), "Pending requests, newest first. At most 50. Empty for a user who is not an organization administrator.")
+})
+
+var AgentPendingAccessRequestModel = Type("AgentPendingAccessRequest", func() {
+	Description("A pending access request an organization administrator can decide in the dashboard.")
+	Required("id", "requester_display_name", "scope", "permission_label", "created_at", "expires_at", "decide_url")
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_display_name", String, "The requester's display name, or their email when they have none.")
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("permission_label", String, "The scope's name as the role editor shows it.")
+	Attribute("resource_name", String, "The resource's name, as it was when the request was made.")
+	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("requested_duration_seconds", Int, "How long the requester asked to have the access, in seconds counted from approval.")
+	Attribute("requested_until", String, "When the requester asked to have the access until.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the request lapses.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("decide_url", String, "Dashboard page that opens the request to approve or deny it.", func() {
+		Format(FormatURI)
+	})
 })
 
 // Enumerated report values (layer, outcome, pending_reason, error_kind,

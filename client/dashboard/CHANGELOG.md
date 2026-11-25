@@ -1,5 +1,59 @@
 # dashboard
 
+## 0.156.0
+
+### Minor Changes
+
+- b598d9f: Add an Intent-based policies page, rolled out to selected people, that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.
+- 65d5577: Add agent feedback for MCP servers. Turning it on from a server's new Agent Feedback tab adds one tool to the server, `submit_feedback` by default, that agents call to report what blocked or confused them. Nothing else needs configuring, and the tool's name and instructions can be changed. Reports are stored with secrets and personal data masked, and the tab shows 30-day counts by severity, the tools named most often, and every report. Reports can also be sent on: a new "MCP feedback" data export delivers each one as an OTLP log, and a new `mcp_feedback.submitted_v1` webhook event carries it to subscribers. It is available on MCP servers built from an OpenAPI document or functions.
+- 640125d: The Suspected problems panel on an MCP sign-in's Overview and on an MCP server's page now shows real problems instead of sample data. Each problem counts only the MCP sign-in's own servers. A problem that is no longer listed says so. Connection Logs can filter by more than one server or person, so a problem's link shows its attempts.
+
+### Patch Changes
+
+- bd8bc93: The shared authorization server step of agent setup now says where the chosen server is managed (the MCP Sign-in page) and links to it. It also no longer claims the agent's servers already use the recommended server when none of them do.
+- 4e7b2a9: When the Shadow AI policy saves but an AI tool decision does not, one toast now says the tool keeps the decision it had before, instead of calling it unreviewed and showing a second raw error.
+- e9190f0: A click anywhere inside a filter chip, including its padding, now opens it. Before, only a click on its text or coloured square did.
+- 8859e99: The MCP access pages count each tool under the one disposition the server matches it by. A read-only tool that is also idempotent no longer shows as covered by an idempotent rule, and role suggestions now leave out a role whose broader block takes the requested access away.
+- 4f04cf7: The MCP access pages now count and match each tool under its one disposition everywhere, including the tool picker and the Team Access narrowing dialog. A rule for unannotated tools now covers tools that declare no annotation.
+- 47a777e: The refresh button on an MCP sign-in connection now spins while it checks, then says what it found: still expired (reauthenticate), working, not connected yet, or that the check failed.
+- bb2b7ea: An MCP connection whose upstream token never expires now reads as "Never expires" on the agent sign-in step. Before, the server sent a zero date for the missing expiry, so the dashboard marked the connection as expired and said it ended almost 2026 years ago.
+- a14fba5: The Platform MCP install-method cards are clearer: the marketplace option shows a "Recommended" badge beside its title, and the manual option no longer labels itself a recovery option.
+- 609b076: The private network setup sheet always shows the tailnet gateway's Tailscale steps. It no longer waits for a rollout flag or switches to the Kubernetes operator's policy and tags.
+- 3a22595: The MCP Sessions page and the organization's MCP Authentication page are now both called MCP Sign-in, and what they list, formerly an MCP Authentication Provider or user session issuer, is now an MCP sign-in; page addresses stay the same.
+  
+  An agent's step and tab for how Speakeasy signs in to its MCP servers is now called Server sign-in, so it is not confused with MCP sign-in.
+- 74c0a9f: In the role editor, ticking one more tool on an MCP server whose Connect is limited to tool kinds (for example read-only and unannotated tools) now adds that tool beside the kinds instead of turning them into a list of tool names, so tools of those kinds added later stay covered. When a save does remove a kind rule, the review dialog lists it.
+- 23d78ce: The Shadow AI scan targets page no longer shows a library version number, and saving a target now simply confirms the save.
+- 2f31319: Opening a Shadow MCP server shows the app's page loader until the server is loaded, instead of a placeholder title, the raw URL slug and a skeleton table.
+- 1ebbf66: Clicking "Make official" on a Shadow MCP server no longer shifts the buttons beside it. The button keeps its size and shows a spinner while the link saves, and the official server panel fades in when it replaces the options.
+- 14c6536: On a Shadow MCP server's access review, "Who asked, and why" and "Have we decided on this before?" now end at the same height. An empty list is drawn in the same frame as a full one, so the two columns read as a matching pair.
+- 9a86ffe: MCP server Identity settings and agent setup now show the upstream credentials offered by each proxied server. Catalog setup shows a warning when upstream sign-in cannot be verified.
+
+## 0.155.0
+
+### Minor Changes
+
+- 715566e: Adds MCP connection health to MCP Sessions behind the `mcp-connection-health` flag: an Overview tab with the sign-in summary, denied clients and recent sign-in activity, Connection Logs beside Active Sessions with filters, reference search and an attempt's details, the same view locked to one server on its Clients and Sessions tab, and an "Ask AI to investigate" button. Suspected problems show sample data until their API ships.
+
+### Patch Changes
+
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+- 1d69491: MCP Sessions is no longer listed under In Beta.
+- bb368b3: The time range picker now shows the times of a custom range that doesn't start and end at midnight, so a range dragged across the Tool Logs timeline reads "Nov 16, 11:34 AM – Nov 17, 11:34 PM" instead of "Nov 16 – Nov 17", matching the rows below it. Picking days in the Tool Logs calendar now includes the last selected day; before, "Nov 16 – Nov 17" listed only Nov 16.
+
+## 0.154.2
+
+### Patch Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- bed51b1: Full-page Project Assistant conversations now fill the window, with the composer pinned to the bottom instead of scrolling with the transcript.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 05c5f3f: The tool narrowing dialog on an MCP server's Team Access tab now counts each tool once, under the one annotation access is checked against, so an OpenAPI GET that is also idempotent and open-world counts only as read-only. A selected annotation stays visible even when no tool carries it, so it can still be cleared.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- bed51b1: Keep the assistant's working indicator on screen for the whole turn. The chat no longer looks idle after the assistant finishes a paragraph and before its next step starts, or while it writes the heading for its first batch of tool calls.
+
 ## 0.154.1
 
 ### Patch Changes

@@ -93,7 +93,6 @@ import {
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
@@ -109,7 +108,10 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
-import { connectionSelectable } from "./ownerConnections";
+import {
+  connectionSelectable,
+  usesTypedOwnerConnections,
+} from "./ownerConnections";
 import { missingSignInsSentence } from "./connectionAttention";
 import { attachOwnerConnections } from "./ownerConnections";
 import {
@@ -940,6 +942,14 @@ export function CredentialsWizard({
             ? "Could not check that you can reach the servers you chose. Check again above the list."
             : "Checking that you can reach the servers you chose…"
           : null;
+  // The rows the picker offers. Under "All servers" they are the ones those
+  // wildcards reach, so an organization-wide one shows every project's;
+  // otherwise it is the project the agent is bound to.
+  const listedServers = inventory.servers.filter((server) =>
+    allServers
+      ? reachCoversProject(allServersProjectIDs, server.projectId)
+      : scopedProjectID === undefined || server.projectId === scopedProjectID,
+  );
   // The blanket sign-in grant is written only for an agent that reaches a
   // server: one that reaches nothing has no auth client to use. A new agent
   // gets it when created, an edited one when it holds no mcp:auth yet.
@@ -951,7 +961,6 @@ export function CredentialsWizard({
     (editing
       ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
       : !existing);
-  const enforcement = useUpstreamAuthEnforcement();
   const authCheck = useQuery({
     queryKey: ["agent-auth-check", organization.id, user.id, agentId ?? null],
     queryFn: async ({ signal }) => {
@@ -978,37 +987,20 @@ export function CredentialsWizard({
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
-  // Which registrations a connection is assigned through depends on whether
-  // the organization enforces upstream auth, so nothing is written until that
-  // is known. An unreadable answer assigns through each server's own
-  // credentials, which never attach another server's sign-in.
-  const enforcementPending = enforcement === "loading";
-  const enforcementPendingNote =
-    "Checking how this organization's servers sign in…";
-  const typedConnections = enforcement !== "legacy";
-  // Where the organization enforces mcp:auth, an agent without it cannot sign
-  // in to any upstream, so a refused grant stops the flow before anything is
-  // written. Elsewhere sign-in does not need it yet, so the grant is left out
-  // instead of failing the save. An unknown answer keeps the grant, and the
-  // server decides.
-  const authStop = !authRefused
-    ? null
-    : enforcement === "loading"
-      ? "Checking whether this organization requires sign-in permission…"
-      : enforcement !== "enforced"
-        ? null
-        : authCheck.data?.limitedBy === "owner"
-          ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator to review the owner's access.`
-          : `You cannot give this agent ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator for access.`;
-  const includeAuthGrant = !(authRefused && enforcement === "legacy");
-  // The rows the picker offers. Under "All servers" they are the ones those
-  // wildcards reach, so an organization-wide one shows every project's;
-  // otherwise it is the project the agent is bound to.
-  const listedServers = inventory.servers.filter((server) =>
-    allServers
-      ? reachCoversProject(allServersProjectIDs, server.projectId)
-      : scopedProjectID === undefined || server.projectId === scopedProjectID,
-  );
+  // Hosted servers can still use the issuer-registration path without this
+  // grant. A proxied target needs it to use its typed upstream credentials.
+  const requiresAuthGrant = allServers
+    ? inventory.isLoading ||
+      inventory.isError ||
+      listedServers.some(usesTypedOwnerConnections)
+    : selected.some(({ server }) => usesTypedOwnerConnections(server));
+  const includeAuthGrant = !authRefused || requiresAuthGrant;
+  const authStop =
+    !authRefused || !requiresAuthGrant
+      ? null
+      : authCheck.data?.limitedBy === "owner"
+        ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
+        : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
   // New agents attach the creator's connections as part of provisioning.
   const offersConnections = !editing && !existing;
   const connectionServers = [
@@ -1174,11 +1166,6 @@ export function CredentialsWizard({
         "Your permissions are still loading. Try again in a moment.",
       );
     }
-    if (enforcementPending) {
-      throw new Error(
-        "Checking how this organization's servers sign in. Try again in a moment.",
-      );
-    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -1267,7 +1254,7 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving || authPending || enforcementPending) return;
+    if (!reconciled || saving || authPending) return;
     if (authStop) {
       setError(authStop);
       return;
@@ -1502,24 +1489,9 @@ export function CredentialsWizard({
         user.id,
         agent.id,
       );
-      // As when creating: the editor's usable connection is assigned to every
-      // server that needs one. Valid assignments, someone else's included,
-      // are kept; only ended or unavailable ones are replaced.
-      const missing = await attachOwnerConnections(
-        sdk,
-        agent.id,
-        (allServers
-          ? listedServers
-          : selected.map((entry) => entry.server)
-        ).filter(usesOwnConnection),
-        undefined,
-        true,
-        typedConnections,
-      );
-      if (missing.length)
-        toast.warning(
-          `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
-        );
+      // Unlike creating, a save assigns no connection: the editor's own
+      // reaches an existing agent only when they assign it on its row
+      // (`assignConnection`), never as a side effect of another change.
       await queryClient.invalidateQueries({
         queryKey: ["owner-connections"],
       });
@@ -1546,12 +1518,12 @@ export function CredentialsWizard({
   const requestSave = () => setSavePending(true);
   useEffect(() => {
     if (!savePending || saving || !reconciled) return;
-    if (authPending || enforcementPending) return;
+    if (authPending) return;
     setSavePending(false);
     void save();
     // save is rebuilt every render; these are what decide when it may run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePending, saving, reconciled, authPending, enforcementPending]);
+  }, [savePending, saving, reconciled, authPending]);
 
   // The picker changes a draft until Continue saves it. Back puts the saved
   // selection back, so a change abandoned there is not saved by the next one.
@@ -1595,6 +1567,49 @@ export function CredentialsWizard({
             entry.server,
         );
 
+  // Assigns the editor's own connection to one server of an existing agent,
+  // and nothing else: the one change the editor asked for on that row.
+  const [assigning, setAssigning] = useState<ReadonlySet<string>>(new Set());
+  const assignConnection = async (serverId: string): Promise<void> => {
+    const server = connectionReach().find((entry) => entry.id === serverId);
+    if (!agent || !server || assigning.has(serverId)) return;
+    // A working connection already assigned stays, someone else's included:
+    // replacing it would take the agent's grant away from its owner unasked.
+    // Say so rather than report an assignment that did not happen.
+    const assigned = connections.assignedByServer?.get(serverId);
+    if (assigned?.status === "ready") {
+      const mine = assigned.sessions.every(
+        (session) => session.subjectUrn === `user:${user.id}`,
+      );
+      if (mine) {
+        toast.success(`${agent.name} uses your connection to ${server.name}`);
+        return;
+      }
+      toast.info(
+        `${agent.name} already uses another member's working connection to ${server.name}, so yours was not assigned.`,
+      );
+      return;
+    }
+    setAssigning((current) => new Set(current).add(serverId));
+    try {
+      await attachOwnerConnections(sdk, agent.id, [server]);
+      toast.success(`${agent.name} now uses your connection to ${server.name}`);
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error
+          ? failure.message
+          : `Could not assign your connection to ${server.name}. Try again.`,
+      );
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
+      setAssigning((current) => {
+        const next = new Set(current);
+        next.delete(serverId);
+        return next;
+      });
+    }
+  };
+
   const attachSelectedConnections = async (
     targetId: string,
     reach: InventoryServer[],
@@ -1608,7 +1623,6 @@ export function CredentialsWizard({
           reach.filter(usesOwnConnection),
           signal,
           allServers,
-          typedConnections,
         );
         if (missing.length)
           toast.warning(
@@ -2172,8 +2186,20 @@ export function CredentialsWizard({
                 setSelected(selected.filter((entry) => entry.server.id !== id));
               if (section) requestSave();
             }}
-            // A new connection is assigned to the agent by a save.
-            onConnected={section ? requestSave : undefined}
+            // A connection made here is for this agent, so it is assigned
+            // as soon as it works; one the editor already had is assigned
+            // only from its row.
+            onConnected={
+              section
+                ? (serverId) => void assignConnection(serverId)
+                : undefined
+            }
+            onAssign={
+              section
+                ? (serverId) => void assignConnection(serverId)
+                : undefined
+            }
+            assigning={assigning}
             // On the tab only servers whose keys wait for the answer ask it:
             // a key's credential is fixed when the server is added to it.
             credentialChoice={
@@ -2360,7 +2386,6 @@ export function CredentialsWizard({
                 "Renaming an agent is recorded in the organization audit log.")
               : (authStop ??
                 (authPending ? authPendingNote : null) ??
-                (enforcementPending ? enforcementPendingNote : null) ??
                 refusedChoice ??
                 (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
@@ -2383,8 +2408,7 @@ export function CredentialsWizard({
                   !reconciled ||
                   refusedChoice !== null ||
                   authStop !== null ||
-                  authPending ||
-                  enforcementPending
+                  authPending
                 }
                 onClick={() => void save()}
               >

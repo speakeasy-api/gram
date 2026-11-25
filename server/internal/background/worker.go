@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -113,7 +115,17 @@ type WorkerOptions struct {
 	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
 	// organization encryption. Nil handles them as a process without
 	// organization encryption.
-	UpstreamTokens  *upstreamtokens.Tokens
+	UpstreamTokens *upstreamtokens.Tokens
+
+	// AIProviderKeys opens AI provider and model keys over the process's
+	// organization encryption. Nil opens them as a process without
+	// organization encryption.
+	AIProviderKeys *aiproviderkeys.Keys
+
+	// RunnerKeys stores and opens Speakeasy Functions runner keys over the
+	// process's organization encryption. Nil handles them as a process
+	// without organization encryption.
+	RunnerKeys      *runnerkeys.Keys
 	FeatureProvider feature.Provider
 	AssetStorage    assets.BlobStore
 	SlackClient     *slack_client.SlackClient
@@ -188,6 +200,11 @@ type WorkerOptions struct {
 	// disables unused managed ones; nil sweeps nothing.
 	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
 
+	// OrganizationEncryptionMigrator backfills, verifies and sweeps the use
+	// cases moving to organization keys; nil does nothing hourly and rejects
+	// on-demand runs.
+	OrganizationEncryptionMigrator OrganizationEncryptionMigrator
+
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
 	StartupSeeds []activitiespkg.StartupSeed
@@ -252,6 +269,8 @@ func ForDeploymentProcessing(
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -262,6 +281,7 @@ func ForDeploymentProcessing(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -361,6 +381,8 @@ func NewTemporalWorker(
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -396,6 +418,7 @@ func NewTemporalWorker(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -427,6 +450,8 @@ func NewTemporalWorker(
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
 			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
+			AIProviderKeys:                 conv.Default(o.AIProviderKeys, opts.AIProviderKeys),
+			RunnerKeys:                     conv.Default(o.RunnerKeys, opts.RunnerKeys),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -463,6 +488,7 @@ func NewTemporalWorker(
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
+			OrganizationEncryptionMigrator: conv.Default(o.OrganizationEncryptionMigrator, opts.OrganizationEncryptionMigrator),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -537,6 +563,13 @@ func NewTemporalWorker(
 		}
 	}
 
+	// Workers wired without the process's seam (test workers) open AI
+	// provider keys as a process without organization encryption.
+	aiProviderKeys := opts.AIProviderKeys
+	if aiProviderKeys == nil {
+		aiProviderKeys = aiproviderkeys.WithoutOrganizationEncryption(logger, opts.DB, opts.EncryptionClient)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -547,6 +580,8 @@ func NewTemporalWorker(
 		opts.EncryptionClient,
 		opts.ClientSecrets,
 		opts.UpstreamTokens,
+		aiProviderKeys,
+		opts.RunnerKeys,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -631,6 +666,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
 	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
+	organizationEncryptionBackfill := NewOrganizationEncryptionBackfillActivities(logger, opts.OrganizationEncryptionMigrator)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.Backfill, activity.RegisterOptions{Name: OrganizationEncryptionBackfillActivityName})
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.BackfillOrganization, activity.RegisterOptions{Name: OrganizationEncryptionBackfillOrganizationActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -709,6 +747,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.ReapStalePluginAPIKeys)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
@@ -822,6 +861,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
 	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillOrganizationWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -880,6 +921,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(PluginAPIKeyReapWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
@@ -1019,6 +1061,14 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
 	}
 
+	// The backfill seals values under organization keys and destroys
+	// platform-key copies. Preview databases clone dev's keys, so only the
+	// shared queue may run it hourly; previews can still start one
+	// organization's run on demand.
+	if err := AddOrganizationEncryptionBackfillSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption backfill schedule", attr.SlogError(err))
+	}
+
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -1089,6 +1139,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddPluginAPIKeyReapSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add plugin API key reaper schedule", attr.SlogError(err))
 	}
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {

@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -59,16 +59,16 @@ func ValidSlots() []string {
 // Disabling resolution requires disabling or deleting the keys themselves.
 type Resolver struct {
 	db       *pgxpool.Pool
-	enc      *encryption.Client
+	keys     *aiproviderkeys.Keys
 	platform openrouter.PlatformKeyResolver
 }
 
 var _ openrouter.KeyResolver = (*Resolver)(nil)
 
-func NewResolver(db *pgxpool.Pool, enc *encryption.Client, provisioner openrouter.Provisioner) *Resolver {
+func NewResolver(db *pgxpool.Pool, keys *aiproviderkeys.Keys, provisioner openrouter.Provisioner) *Resolver {
 	return &Resolver{
 		db:       db,
-		enc:      enc,
+		keys:     keys,
 		platform: openrouter.PlatformKeyResolver{Provisioner: provisioner},
 	}
 }
@@ -93,7 +93,7 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("invalid project id for key resolution: %w", err)
 	}
 
-	encryptedKey, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
+	stored, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
 		ProjectID:     projectUUID,
 		Slots:         []string{string(slot), SlotDefault},
 		PreferredSlot: string(slot),
@@ -114,11 +114,11 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("read model provider keys: %w", err)
 	}
 
-	key, err := r.enc.Decrypt(encryptedKey.String)
+	key, err := r.keys.Open(ctx, nil, stored.OrganizationID, aiproviderkeys.ModelProviderKeys, aiproviderkeys.Stored(stored.ApiKeyEncrypted, stored.ApiKeyOrgEncrypted))
 	if err != nil {
-		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
+		return openrouter.ResolvedKey{}, fmt.Errorf("open model provider key: %w", err)
 	}
-	return openrouter.ResolvedKey{Key: key, Customer: true}, nil
+	return openrouter.ResolvedKey{Key: string(key), Customer: true}, nil
 }
 
 // internalBYOKSlots lists the platform-initiated (KeyTypeInternal) slots a

@@ -89,11 +89,14 @@ func connectMeta(t *testing.T, prefix string, count int) (context.Context, conne
 		issuerID := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
 
 		upstream := fmt.Sprintf("https://%s.example.com/mcp", name)
+		seeded := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i))
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, seeded.mcpServerID, clientID, "remote_session")
+		seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, seeded.mcpServerID)
 		members = append(members, connectedMetaMember{
 			upstreamURL: upstream,
 			accessToken: accessToken,
 			clientID:    clientID,
-			seeded:      createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, name+"-member", upstream, issuerID, int32(i)),
+			seeded:      seeded,
 			exchanged:   &captured[i],
 		})
 	}

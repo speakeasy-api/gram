@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.154.1",
+  "version": "0.156.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -25,7 +25,7 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.98",
+    "@ai-sdk/mcp": "2.0.101",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-ai-sdk": "~1.4.23",
@@ -55,7 +55,7 @@
     "@radix-ui/react-tooltip": "^1.4.1",
     "@rive-app/canvas": "2.45.1",
     "@rive-app/react-canvas": "4.37.1",
-    "@stripe/react-stripe-js": "7.0.1",
+    "@stripe/react-stripe-js": "7.1.0",
     "@stripe/stripe-js": "10.3.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-form": "^1.33.5",
@@ -85,7 +85,7 @@
     "react-error-boundary": "^6.1.2",
     "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.12.2",
+    "react-resizable-panels": "^4.24.0",
     "react-router": "^8.5.2",
     "recharts": "^3.9.2",
     "remark-gfm": "^4.0.1",
@@ -108,7 +108,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.9",
+    "@testing-library/user-event": "^14.6.12",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.13.3",
     "@types/react": "catalog:",

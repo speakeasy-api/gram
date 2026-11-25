@@ -670,13 +670,13 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 }
 
 // callMemberTool lets the SDK validate the response and correlate the call,
-// then returns the accepted raw result without a lossy typed round trip.
-func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, error) {
+// then returns the accepted raw result without a lossy typed round trip, and whether it is marked isError.
+func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, bool, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.dispatched = true
 	}
 	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil, refusal: nil}
-	_, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
+	called, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
 	if err != nil {
 		capture.mu.Lock()
 		refusal := capture.refusal
@@ -695,12 +695,12 @@ func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp
 			(refusal.Code == jsonrpc.CodeInvalidParams || refusal.Code == jsonrpc.CodeMethodNotFound) {
 			invocation.rejected = true
 		}
-		return nil, fmt.Errorf("call member tool: %w", err)
+		return nil, false, fmt.Errorf("call member tool: %w", err)
 	}
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	if len(capture.raw) == 0 {
-		return nil, errors.New("member tool response has no captured result")
+		return nil, false, errors.New("member tool response has no captured result")
 	}
-	return capture.raw, nil
+	return capture.raw, called != nil && called.IsError, nil
 }

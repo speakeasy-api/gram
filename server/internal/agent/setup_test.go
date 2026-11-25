@@ -18,10 +18,12 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -91,6 +93,10 @@ type testInstance struct {
 	deviceAgentTokens *deviceagenttoken.Issuer
 	// redis backs rate limiters a test attaches to the service.
 	redis *redis.Client
+	// sessions and authz are the dependencies an access service attached to
+	// the agent service is built from.
+	sessions *sessions.Manager
+	authz    *authz.Engine
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -140,7 +146,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens, marketplacetokenstest.Tokens(t, conn))
+	svc := agent.NewService(aivendorstest.NewStore(), logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:           svc,
@@ -152,6 +158,8 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
 		redis:             redisClient,
+		sessions:          sessionManager,
+		authz:             authzEngine,
 	}
 }
 

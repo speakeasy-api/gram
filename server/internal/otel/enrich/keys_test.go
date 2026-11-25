@@ -27,6 +27,7 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		"speakeasy.mcp_connections",
 		"speakeasy.future.key",
 		"speakeasy.mcp_connection.outcome",
+		"speakeasy.mcp_feedback.severity",
 		string(TokensCountKey),
 		string(TokensCodecKey),
 		string(GramUserRolesKey),
@@ -83,6 +84,26 @@ func TestIsMcpConnectionKey(t *testing.T) {
 	require.True(t, IsMcpConnectionKey("speakeasy.mcp_connection.outcome"))
 	require.False(t, IsMcpConnectionKey("speakeasy.mcp_connections"))
 	require.False(t, IsMcpConnectionKey("speakeasy.project.id"))
+}
+
+func TestIsMcpFeedbackKey(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsMcpFeedbackKey("speakeasy.mcp_feedback.severity"))
+	require.False(t, IsMcpFeedbackKey("speakeasy.mcp_feedbacks"))
+	require.False(t, IsMcpFeedbackKey("speakeasy.mcp_connection.outcome"))
+	require.False(t, IsMcpFeedbackKey("speakeasy.project.id"))
+}
+
+func TestIsReservedLogKeyLetsOnlyTheFeedbackRecorderWriteItsKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, source := range []string{"speakeasy", "", "test", dialect.ConnectionLogSource} {
+		require.True(t, IsReservedLogKey(source, "speakeasy.mcp_feedback.severity"), source)
+	}
+	require.False(t, IsReservedLogKey(dialect.FeedbackLogSource, "speakeasy.mcp_feedback.severity"))
+	require.True(t, IsReservedLogKey(dialect.FeedbackLogSource, string(ProjectIDKey)), "the recorder may not claim a tenant either")
+	require.True(t, IsReservedLogKey(dialect.FeedbackLogSource, "speakeasy.mcp_connection.outcome"), "nor write another recorder's keys")
 }
 
 func TestIsReservedLogKeyLetsOnlyTheConnectionRecorderWriteItsKeys(t *testing.T) {

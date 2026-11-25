@@ -39,6 +39,14 @@ func (*logDirectory) Name() string {
 }
 
 func (e *logDirectory) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+	// A feedback report names its sender only under keys a destination that
+	// excludes sensitive data redacts. Directory attributes, groups and roles
+	// would name them again under keys it keeps, and a report needs who sent
+	// it rather than where they sit, so feedback is not enriched.
+	if record.GetProvenance().GetSource() == dialect.FeedbackLogSource {
+		return nil, nil
+	}
+
 	organizationID := record.GetProvenance().GetOrganizationId()
 	_, email, err := dialect.ForLog(record).ExternalUserEmail(record)
 	if err != nil {

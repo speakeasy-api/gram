@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -75,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
@@ -84,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -584,8 +587,6 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// The dashboard shows every flag on in local dev, so the server lets local
 	// orgs create tool approval policies too. A CSV row can still turn it off.
 	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
-	// Local development runs the tailnet gateway, not the operator.
-	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -980,6 +981,7 @@ func newAdminOpenRouter(
 		guardianPolicy,
 		db,
 		env,
+		PullPartition(ctx),
 		provisioningKey,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
@@ -1104,7 +1106,7 @@ func newFunctionOrchestrator(
 	db *pgxpool.Pool,
 	assetStore assets.BlobStore,
 	tigrisStore *assets.TigrisStore,
-	enc *encryption.Client,
+	runnerKeys *runnerkeys.Keys,
 ) (functions.Orchestrator, func(context.Context) error, error) {
 	nilShutdown := noopShutdown
 
@@ -1167,7 +1169,7 @@ func newFunctionOrchestrator(
 			assetStore,
 			tigrisStore,
 			imgSelector,
-			enc,
+			runnerKeys,
 			functions.FlyRunnerOptions{
 				ServiceName:        "gram",
 				ServiceVersion:     GitSHA,
@@ -2051,10 +2053,63 @@ func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encrypt
 	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
 }
 
+// AIProviderKeys builds the seam for AI provider and model keys over the
+// process's organization encryption.
+func (d orgEncryptionDeps) AIProviderKeys(logger *slog.Logger, platform *encryption.Client) *aiproviderkeys.Keys {
+	return aiproviderkeys.New(logger, d.Cipher(logger, platform))
+}
+
 // MarketplaceTokens builds the plugin marketplace token seam over the
 // process's organization encryption and transition state.
 func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
 	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// RunnerKeys builds the Speakeasy Functions runner key seam over the process's
+// organization encryption and transition state.
+func (d orgEncryptionDeps) RunnerKeys(logger *slog.Logger, platform *encryption.Client) *runnerkeys.Keys {
+	return runnerkeys.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// NetworkIngressCredentials builds the seal and storage seam for network
+// ingress provider credentials over the process's organization encryption and
+// transition state. It is nil without a platform key, which keeps the
+// reconciler's missing-key gate and teardown without credentials working.
+func (d orgEncryptionDeps) NetworkIngressCredentials(logger *slog.Logger, platform *encryption.Client) *ingresscredentials.Credentials {
+	if platform == nil {
+		return nil
+	}
+	return ingresscredentials.New(logger, d.Cipher(logger, platform))
+}
+
+// Migrator builds the background side of moving the OAuth use cases to
+// organization keys, with the copy stores of every value each use case holds.
+// It is a nil interface when organization encryption is not configured: the
+// backfill can neither seal nor open organization-key copies without it, and
+// resuming a clear needs a provisioner.
+func (d orgEncryptionDeps) Migrator(logger *slog.Logger, db *pgxpool.Pool, platform *encryption.Client, meterProvider metric.MeterProvider) (background.OrganizationEncryptionMigrator, error) {
+	if d.Service == nil || d.Provisioner == nil {
+		return nil, nil
+	}
+
+	runner := orgencryption.NewRunner(logger, db, d.Cipher(logger, platform), meterProvider)
+	migrator, err := orgencryption.NewMigrator(logger, db, runner, d.Transitions, orgEncryptionUseCaseStores(db), meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("build organization encryption migrator: %w", err)
+	}
+
+	return migrator, nil
+}
+
+// orgEncryptionUseCaseStores lists every use case that moves from the platform
+// key to organization keys, with the copy stores of every value it holds. The
+// background migrator and the admin API share it, so both reach the same
+// values.
+func orgEncryptionUseCaseStores(db *pgxpool.Pool) []orgencryption.UseCaseStores {
+	return []orgencryption.UseCaseStores{
+		{UseCase: orgencryption.UseCaseOAuthClientSecrets, Stores: []orgencryption.CopyStore{clientsecrets.NewCopyStore(db)}},
+		{UseCase: orgencryption.UseCaseOAuthSessionTokens, Stores: upstreamtokens.CopyStores(db)},
+	}
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.
