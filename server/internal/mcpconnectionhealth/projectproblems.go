@@ -143,7 +143,7 @@ func (s *Service) projectProblems(ctx context.Context, c caller, recordedSince t
 	if err != nil {
 		return out, err
 	}
-	pages := pageLists{signIns: si, grouped: g, lists: map[uuid.UUID][]problems.Problem{}, listed: map[string]map[string]bool{}}
+	pages := pageLists{signIns: si, grouped: g, lists: map[uuid.UUID][]problems.Problem{}, listed: map[string]map[string]problems.Problem{}}
 	for _, p := range ps {
 		view, _ := problemView(n, p, "")
 		item := &gen.ProjectSuspectedProblem{
@@ -318,8 +318,8 @@ type pageLists struct {
 	grouped problems.Grouped
 	// lists are each MCP sign-in's problems, nil when its read cannot be rebuilt.
 	lists map[uuid.UUID][]problems.Problem
-	// listed are the ids each page list shows, by MCP sign-in and filter.
-	listed map[string]map[string]bool
+	// listed are the problems each page list shows by id, by MCP sign-in and filter.
+	listed map[string]map[string]problems.Problem
 }
 
 func (pl pageLists) signIn(issuer uuid.UUID) []problems.Problem {
@@ -335,31 +335,33 @@ func (pl pageLists) signIn(issuer uuid.UUID) []problems.Problem {
 	return ps
 }
 
-// shows reports whether the MCP sign-in's list, filtered as a page filters it and capped, has the problem.
-func (pl pageLists) shows(issuer uuid.UUID, filter string, keep func(problems.Problem) bool, id string) bool {
+// shows reports whether the MCP sign-in's list, filtered as a page filters it and capped, has the problem as the project read grouped it.
+func (pl pageLists) shows(issuer uuid.UUID, filter string, keep func(problems.Problem) bool, p problems.Problem) bool {
 	key := issuer.String() + "\x00" + filter
-	ids, ok := pl.listed[key]
+	listed, ok := pl.listed[key]
 	if !ok {
-		kept := slices.DeleteFunc(slices.Clone(pl.signIn(issuer)), func(p problems.Problem) bool { return !keep(p) })
+		kept := slices.DeleteFunc(slices.Clone(pl.signIn(issuer)), func(q problems.Problem) bool { return !keep(q) })
 		kept, _ = capProblems(kept, maxProblems)
-		ids = map[string]bool{}
-		for _, p := range kept {
-			ids[p.ID] = true
+		listed = map[string]problems.Problem{}
+		for _, q := range kept {
+			listed[q.ID] = q
 		}
-		pl.listed[key] = ids
+		pl.listed[key] = listed
 	}
-	return ids[id]
+	// An id names a scope and a way, not who is in it: the page's problem must be grouped from the same episodes.
+	q, ok := listed[p.ID]
+	return ok && q.SameAs(p)
 }
 
 // onSignIn checks the MCP sign-in's Overview for a sign-in problem, else its whole list.
 func (pl pageLists) onSignIn(issuer uuid.UUID, p problems.Problem) bool {
 	if partOf(p.Part) == partSpeakeasy {
-		return pl.shows(issuer, string(partSpeakeasy), func(q problems.Problem) bool { return partOf(q.Part) == partSpeakeasy }, p.ID)
+		return pl.shows(issuer, string(partSpeakeasy), func(q problems.Problem) bool { return partOf(q.Part) == partSpeakeasy }, p)
 	}
-	return pl.shows(issuer, "", func(problems.Problem) bool { return true }, p.ID)
+	return pl.shows(issuer, "", func(problems.Problem) bool { return true }, p)
 }
 
 // onServer checks the server's Sessions tab: the MCP sign-in's problems with people on it.
 func (pl pageLists) onServer(issuer uuid.UUID, server string, p problems.Problem) bool {
-	return pl.shows(issuer, "server:"+server, func(q problems.Problem) bool { return peopleOn(q, server) > 0 }, p.ID)
+	return pl.shows(issuer, "server:"+server, func(q problems.Problem) bool { return peopleOn(q, server) > 0 }, p)
 }

@@ -3,6 +3,7 @@ package mcpconnectionhealth_test
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -94,7 +95,18 @@ func idsOf[T any](ps []*T, id func(*T) string) []string {
 }
 
 func projectID(p *gen.ProjectSuspectedProblem) string { return p.ID }
-func signInID(p *gen.SuspectedProblem) string         { return p.ID }
+
+// requireSameRow asserts the page lists the project row's problem with the same words and counts.
+func requireSameRow(t *testing.T, row *gen.ProjectSuspectedProblem, page []*gen.SuspectedProblem, msg string) {
+	t.Helper()
+	i := slices.IndexFunc(page, func(p *gen.SuspectedProblem) bool { return p.ID == row.ID })
+	require.GreaterOrEqual(t, i, 0, msg)
+	require.Equal(t, row.Headline, page[i].Headline, msg)
+	require.Equal(t, row.Fact, page[i].Fact, msg)
+	require.Equal(t, row.PeopleCount, page[i].PeopleCount, msg)
+	require.Equal(t, row.Filters, page[i].Filters, msg)
+}
+func signInID(p *gen.SuspectedProblem) string { return p.ID }
 
 func TestListProjectSuspectedProblems_NotFoundWhenTheFlagIsOff(t *testing.T) {
 	t.Parallel()
@@ -333,7 +345,7 @@ func TestListProjectSuspectedProblems_LinksToPagesThatListIt(t *testing.T) {
 			require.Equal(t, gen.SuspectedProblemRule(tc.rule), p.Rule)
 			require.NotNil(t, p.UserSessionIssuerID)
 			require.Equal(t, w.issuer.String(), *p.UserSessionIssuerID)
-			require.Contains(t, idsOf(ti.listFor(t, ctx, w.issuer), signInID), p.ID, "the MCP sign-in lists it")
+			requireSameRow(t, p, ti.listFor(t, ctx, w.issuer), "the MCP sign-in lists it")
 			if w.server == uuid.Nil {
 				require.Nil(t, p.Server)
 				return
@@ -343,7 +355,7 @@ func TestListProjectSuspectedProblems_LinksToPagesThatListIt(t *testing.T) {
 			require.NotNil(t, p.Server.Slug)
 			onServer, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: w.issuer.String(), ServerID: new(w.server.String()), Part: nil})
 			require.NoError(t, err)
-			require.Contains(t, idsOf(onServer.Problems, signInID), p.ID, "the server's Sessions tab lists it")
+			requireSameRow(t, p, onServer.Problems, "the server's Sessions tab lists it")
 		})
 	}
 }
@@ -683,4 +695,35 @@ func TestSuspectedProblems_LogsTurnedOffMidRequestShowNothing(t *testing.T) {
 			require.Zero(t, shown)
 		})
 	}
+}
+
+// The same id on the MCP sign-in can group other failures; a link needs the page's problem to be the same one.
+func TestListProjectSuspectedProblems_NoLinkWhenThePageGroupsTheIDDifferently(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withServerRead(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, _ := ti.provider(t, "Notion")
+	first := ti.mcpServer(t, ti.project, ti.issuer, "linear", "https://linear.example.com/mcp")
+	second := ti.mcpServer(t, ti.project, ti.issuer, "github", "https://github.example.com/mcp")
+	theirs := ti.mcpServer(t, ti.project, otherIssuer, "notion", "https://notion.example.com/mcp")
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	for _, ago := range []time.Duration{30 * time.Hour, time.Hour} {
+		ti.failDirectWith(t, first, p, ago, mcpconnectionattempts.FamilyCursor, "2.0.1")
+		ti.failDirectWith(t, second, p, ago, mcpconnectionattempts.FamilyClaudeCode, "2.1.0")
+	}
+	ti.failDirectWith(t, theirs, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.FamilyCursor, "2.0.1")
+	ti.servedOn(t, first, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
+	ti.servedOn(t, theirs, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
+
+	res := ti.listProject(t, ctx, nil)
+	require.Len(t, res.Problems, 2)
+	i := slices.IndexFunc(res.Problems, func(p *gen.ProjectSuspectedProblem) bool { return p.Rule == "one_person" })
+	require.GreaterOrEqual(t, i, 0, "the app version across MCP sign-ins takes the first server and leaves the second")
+	alone := res.Problems[i]
+	require.Nil(t, alone.UserSessionIssuerID)
+	require.Nil(t, alone.Server)
+	onSignIn := ti.listFor(t, ctx, ti.issuer)
+	j := slices.IndexFunc(onSignIn, func(p *gen.SuspectedProblem) bool { return p.ID == alone.ID })
+	require.GreaterOrEqual(t, j, 0, "the MCP sign-in has the same id")
+	require.NotEqual(t, alone.Headline, onSignIn[j].Headline, "with both servers in it")
 }
