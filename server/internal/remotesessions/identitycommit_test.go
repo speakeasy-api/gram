@@ -162,7 +162,6 @@ func seedLiveAgentBindingInProject(t *testing.T, ctx context.Context, ti *testIn
 	require.NoError(t, err)
 	subject := urn.NewUserSubject(authCtx.UserID)
 	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
-	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	_, err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
 		ProjectID:             attachmentProjectID,
 		OrganizationID:        authCtx.ActiveOrganizationID,

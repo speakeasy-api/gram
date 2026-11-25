@@ -54,15 +54,10 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 	source := createUserSessionIssuer(t, ctx, ti.conn, "attachment-source")
 	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "attachment-client")
 	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
-	ensureAttachmentParent(t, ctx, ti.conn, session.RemoteSessionClientID, config)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 	require.NoError(t, err)
+	requireNoAttachmentParent(t, ctx, ti, session.RemoteSessionClientID, config)
 	fixtures := testrepo.New(ti.conn)
-	// Compatibility rows no longer own attachments. Exercise both live
-	// lookup and every invalidation path without the parent row.
-	unlinked, err := fixtures.UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: config})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, unlinked)
 	org := auth.ActiveOrganizationID
 	project := *auth.ProjectID
 	if !checkRecheck {

@@ -5932,25 +5932,6 @@ func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
-const probeAttachmentParentLockFixture = `-- name: ProbeAttachmentParentLockFixture :one
-SELECT remote_session_client_id FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1::uuid
-  AND user_session_issuer_id = $2::uuid
-FOR UPDATE NOWAIT
-`
-
-type ProbeAttachmentParentLockFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) ProbeAttachmentParentLockFixture(ctx context.Context, arg ProbeAttachmentParentLockFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, probeAttachmentParentLockFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	var remote_session_client_id uuid.UUID
-	err := row.Scan(&remote_session_client_id)
-	return remote_session_client_id, err
-}
-
 const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
 WITH deleted AS (
     DELETE FROM trials AS doomed

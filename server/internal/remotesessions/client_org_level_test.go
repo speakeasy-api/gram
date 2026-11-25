@@ -251,7 +251,7 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "orgwide-detach-issuer")
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid")
-	ensureAttachmentParent(t, ctx, ti.conn, orgClient, userIssuer)
+	seedLegacyIssuerClientLink(t, ctx, ti.conn, orgClient, userIssuer)
 
 	_, err := ti.service.DetachLegacyIssuerForTest(withoutOrganizationAdmin(t, ctx), &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
