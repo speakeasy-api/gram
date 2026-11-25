@@ -6102,6 +6102,162 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 	return i, err
 }
 
+const recordIssuedAuthClientChoices = `-- name: RecordIssuedAuthClientChoices :execrows
+WITH session_issuer AS (
+    SELECT usi.id, usi.project_id, COALESCE(usi.organization_id, p.organization_id) AS organization_id
+    FROM user_session_issuers AS usi
+    LEFT JOIN projects AS p ON p.id = usi.project_id
+    WHERE usi.id = $3 AND usi.deleted IS FALSE
+),
+reachable AS (
+    SELECT s.id, s.project_id, si.organization_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id
+    FROM mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
+    JOIN session_issuer AS si ON si.organization_id = p.organization_id
+    WHERE s.deleted IS FALSE
+      AND ($4::uuid[] IS NULL
+           OR s.id = ANY($4::uuid[]))
+      AND ($5::uuid[] IS NULL
+           OR NOT s.id = ANY($5::uuid[]))
+      AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
+      AND (s.user_session_issuer_id = si.id OR si.project_id IS NULL OR EXISTS (
+        SELECT 1
+        FROM meta_mcp_server_members AS m
+        JOIN meta_mcp_servers AS g ON g.id = m.meta_mcp_server_id AND g.deleted IS FALSE
+        WHERE m.mcp_server_id = s.id AND m.deleted IS FALSE AND g.user_session_issuer_id = si.id
+      ))
+),
+picked AS (
+    SELECT unnest($6::uuid[]) AS mcp_server_id,
+           NULLIF(unnest($7::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id,
+           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+           unnest($9::boolean[]) AS explicitly_chosen
+),
+offered AS (
+    SELECT r.id AS mcp_server_id, ac.id, ac.attachment_scope, ac.client_type,
+           ac.remote_session_client_id, reg.attachment_scope AS registration_scope,
+           (reg.id IS NOT NULL AND rsi.id IS NOT NULL) AS registration_live,
+           count(*) OVER (PARTITION BY r.id) AS offer_count
+    FROM reachable AS r
+    JOIN mcp_server_auth_clients AS l ON l.mcp_server_id = r.id
+      AND l.project_id = r.project_id AND l.organization_id = r.organization_id AND l.deleted IS FALSE
+    JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = r.organization_id
+      AND (ac.project_id IS NULL OR ac.project_id = r.project_id) AND ac.deleted IS FALSE AND ac.enabled
+    LEFT JOIN remote_session_clients AS reg ON reg.id = ac.remote_session_client_id AND reg.deleted IS FALSE
+      AND (reg.project_id = r.project_id
+           OR (reg.project_id IS NULL AND (reg.organization_id IS NULL OR reg.organization_id = r.organization_id)))
+    LEFT JOIN remote_session_issuers AS rsi ON rsi.id = reg.remote_session_issuer_id AND rsi.deleted IS FALSE
+)
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth, auth_client_id, auth_client_attachment_scope, source
+)
+SELECT r.project_id, r.organization_id, 'user_session', $1::uuid, r.id,
+       chosen.remote_session_client_id, chosen.registration_scope, chosen.id IS NULL,
+       chosen.id, chosen.attachment_scope, 'issuance'
+FROM reachable AS r
+LEFT JOIN picked AS pick ON pick.mcp_server_id = r.id
+LEFT JOIN offered AS chosen ON chosen.mcp_server_id = r.id
+  AND (chosen.remote_session_client_id IS NULL OR chosen.registration_live)
+  AND (
+    (pick.auth_client_id = chosen.id AND pick.registration_id IS NOT DISTINCT FROM chosen.remote_session_client_id
+        AND (chosen.client_type <> 'ema' OR pick.explicitly_chosen))
+    OR (pick.mcp_server_id IS NULL AND $2::boolean AND chosen.offer_count = 1 AND chosen.client_type <> 'ema')
+  )
+WHERE chosen.id IS NOT NULL
+   OR ((pick.mcp_server_id IS NULL OR (pick.auth_client_id IS NULL AND pick.registration_id IS NULL))
+       AND NOT EXISTS (SELECT 1 FROM offered WHERE offered.mcp_server_id = r.id)
+       -- Match GetAuthClientSelection's upstream_auth_pending check. Legacy
+       -- setup evidence can prevent no-auth, but never chooses a credential.
+       AND NOT (
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = r.id
+             AND pend_link.project_id = r.project_id
+             AND pend_link.organization_id = r.organization_id
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             JOIN remote_session_clients AS pend_client
+               ON pend_client.id = pend_assoc.remote_session_client_id
+              AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
+              AND pend_client.deleted IS FALSE
+             JOIN remote_session_issuers AS pend_issuer
+               ON pend_issuer.id = pend_client.remote_session_issuer_id
+              AND pend_issuer.deleted IS FALSE
+              AND (pend_issuer.project_id = pend_assoc.project_id
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
+             WHERE pend_assoc.mcp_server_id = r.id
+               AND pend_assoc.project_id = r.project_id
+               AND pend_assoc.organization_id = r.organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             JOIN remote_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.remote_mcp_server_id
+              AND pend_source.project_id = r.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.remote_mcp_server_id = r.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             JOIN tunneled_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.tunneled_mcp_server_id
+              AND pend_source.project_id = r.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.tunneled_mcp_server_id = r.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       ))
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type RecordIssuedAuthClientChoicesParams struct {
+	CredentialID        uuid.UUID
+	AllowSoleOffer      bool
+	UserSessionIssuerID uuid.UUID
+	ScopeMcpServerIds   []uuid.UUID
+	ExcludeMcpServerIds []uuid.UUID
+	PickedMcpServerIds  []uuid.UUID
+	PickedAuthClientIds []uuid.UUID
+	PickedClientIds     []uuid.UUID
+	PickedExplicit      []bool
+}
+
+// Persist validated typed picks without inferring from issuer links. Dashboard
+// minting may select the sole offered non-EMA client without an approval page;
+// the resolver still checks permission and readiness before releasing material.
+// An invalid pick never becomes a different choice or a no-auth choice. The
+// registration columns mirror the typed choice for storage compatibility.
+func (q *Queries) RecordIssuedAuthClientChoices(ctx context.Context, arg RecordIssuedAuthClientChoicesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordIssuedAuthClientChoices,
+		arg.CredentialID,
+		arg.AllowSoleOffer,
+		arg.UserSessionIssuerID,
+		arg.ScopeMcpServerIds,
+		arg.ExcludeMcpServerIds,
+		arg.PickedMcpServerIds,
+		arg.PickedAuthClientIds,
+		arg.PickedClientIds,
+		arg.PickedExplicit,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordUpstreamClientSelections = `-- name: RecordUpstreamClientSelections :execrows
 WITH session_issuer AS (
     SELECT usi.id,

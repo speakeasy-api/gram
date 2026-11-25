@@ -575,6 +575,12 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			var permitCallers func() []string
 			if tc.typedAuth {
 				permitCallers = ti.service.RecordAuthClientPermitCallers()
+			} else {
+				ti.service.SetAuthClientPermitted(true)
+			}
+			// Reconnect now records only typed offers; a legacy association alone
+			// cannot authorize the newly reviewed credential.
+			{
 				fixtures := authclientfixtures.New(ti.conn)
 				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
 				require.NoError(t, err)
