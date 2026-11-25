@@ -136,9 +136,7 @@ export function OktaOverview({
               emaReady && mcpAuthenticationHref ? (
                 <Button variant="secondary" size="sm" asChild>
                   <Link to={mcpAuthenticationHref}>
-                    <Button.Text>
-                      Choose an MCP Authentication Provider
-                    </Button.Text>
+                    <Button.Text>Choose an MCP sign-in</Button.Text>
                   </Link>
                 </Button>
               ) : null

@@ -120,17 +120,17 @@ func (c *CopyStore) Count(ctx context.Context, organizationID string) (orgencryp
 
 // ClearPlatformCopies destroys up to limit of the organization's platform-key
 // copies after finalize.
-func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (int64, error) {
+func (c *CopyStore) ClearPlatformCopies(ctx context.Context, organizationID string, generation int64, limit int32) (orgencryption.ClearedCopies, error) {
 	cleared, err := repo.New(c.db).ClearRunnerKeyPlatformCopies(ctx, repo.ClearRunnerKeyPlatformCopiesParams{
 		OrganizationID:    organizationID,
 		LimitValue:        limit,
 		DecidedGeneration: generation,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("clear function runner key platform copies: %w", err)
+		return orgencryption.ClearedCopies{}, fmt.Errorf("clear function runner key platform copies: %w", err)
 	}
 
-	return cleared, nil
+	return orgencryption.ClearedCopies{PlatformOnly: cleared.PlatformOnly, BesideOrgCopy: cleared.BesideOrgCopy, Empty: 0}, nil
 }
 
 // parseAfter parses a page cursor: "" for the first page, otherwise the RowID

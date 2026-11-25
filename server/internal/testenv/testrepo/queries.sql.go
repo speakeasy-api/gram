@@ -36,6 +36,22 @@ func (q *Queries) AddAttachmentReplacementOwnerMembershipFixture(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const addNullArrayElementsToProductFixture = `-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = $1
+`
+
+// Appends a NULL to every array column, which the schema allows.
+func (q *Queries) AddNullArrayElementsToProductFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, addNullArrayElementsToProductFixture, id)
+	return err
+}
+
 const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
 UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = $1 AND project_id = $2
 `
@@ -786,6 +802,19 @@ type CountSkillScanRecordsParams struct {
 // recorded scan counts, clean coverage rows included.
 func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanRecordsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countSkillScanRecords, arg.ProjectID, arg.SkillName, arg.FoundOnly)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUserSessionIssuerCompatibilityParentsFixture = `-- name: CountUserSessionIssuerCompatibilityParentsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE user_session_issuer_id = $1
+`
+
+func (q *Queries) CountUserSessionIssuerCompatibilityParentsFixture(ctx context.Context, userSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserSessionIssuerCompatibilityParentsFixture, userSessionIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1551,6 +1580,24 @@ type DeleteOrganizationUserRelationshipFixtureParams struct {
 
 func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context, arg DeleteOrganizationUserRelationshipFixtureParams) error {
 	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationshipFixture, arg.OrganizationID, arg.UserID)
+	return err
+}
+
+const deleteRegistrationJunctionFixture = `-- name: DeleteRegistrationJunctionFixture :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.project_id IS NOT DISTINCT FROM $2::uuid
+`
+
+type DeleteRegistrationJunctionFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.NullUUID
+}
+
+func (q *Queries) DeleteRegistrationJunctionFixture(ctx context.Context, arg DeleteRegistrationJunctionFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRegistrationJunctionFixture, arg.RemoteSessionClientID, arg.ProjectID)
 	return err
 }
 
@@ -3691,6 +3738,33 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertDocumentFixture = `-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDocumentFixtureParams struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+// Inserts even where a soft-deleted row holds the URL, unlike the seed.
+func (q *Queries) InsertDocumentFixture(ctx context.Context, arg InsertDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDocumentFixture,
+		arg.ID,
+		arg.AiProductID,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.IsPattern,
+	)
+	return err
+}
+
 const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
 INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -5823,6 +5897,18 @@ func (q *Queries) MutateAttachmentSuspendedAgentFixture(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const nestProductBinariesFixture = `-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = $1
+`
+
+// Stores binaries as a nested array, which the schema allows.
+func (q *Queries) NestProductBinariesFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, nestProductBinariesFixture, id)
+	return err
+}
+
 const orphanDelegationSessionFixture = `-- name: OrphanDelegationSessionFixture :exec
 UPDATE trusted_issuer_sessions SET remote_session_client_id = NULL, organization_id = NULL WHERE id = $1
 `
@@ -5844,6 +5930,25 @@ WHERE s.device_integration_schedule_id = sch.id
 func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, pauseDeviceIntegrationSyncsFixture, deviceIntegrationConfigID)
 	return err
+}
+
+const probeAttachmentParentLockFixture = `-- name: ProbeAttachmentParentLockFixture :one
+SELECT remote_session_client_id FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1::uuid
+  AND user_session_issuer_id = $2::uuid
+FOR UPDATE NOWAIT
+`
+
+type ProbeAttachmentParentLockFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) ProbeAttachmentParentLockFixture(ctx context.Context, arg ProbeAttachmentParentLockFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, probeAttachmentParentLockFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	var remote_session_client_id uuid.UUID
+	err := row.Scan(&remote_session_client_id)
+	return remote_session_client_id, err
 }
 
 const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec

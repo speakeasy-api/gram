@@ -26,7 +26,7 @@ const (
 	// disabled reasoning configuration.
 	geminiReasoningEffort = "low"
 
-	// geminiTimeout bounds one labeling call. Seven labels with rationales
+	// geminiTimeout bounds one labeling call. Six labels with rationales
 	// take a few seconds; the margin absorbs provider queueing.
 	geminiTimeout = 60 * time.Second
 
@@ -34,7 +34,7 @@ const (
 	// does not reserve the model's full output ceiling against the key.
 	geminiMaxTokens = 8192
 
-	geminiPromptVersion = "intent-labels-v1"
+	geminiPromptVersion = "intent-labels-v2"
 )
 
 // GeminiEvaluator labels calls with a Gemini model under a strict JSON schema.
@@ -69,7 +69,7 @@ func GeminiSystemPrompt(qs []LabelQuestion) string {
 		case KindNoul:
 			b.WriteString(" Value is true or false.")
 		case KindMultiNoul:
-			b.WriteString(" Value is the list of every effect class that applies (empty when none):")
+			b.WriteString(" Value is the list of every option that applies (empty when none):")
 			for _, o := range q.Options {
 				fmt.Fprintf(&b, "\n  - %s: %s", o.Key, o.Description)
 			}

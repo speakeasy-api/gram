@@ -19,17 +19,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// enforcedCallerFixture is an enforcing organization whose server is reached
+// enforcedCallerFixture has no serving rollout row and is reached
 // through a sign-in that links no upstream client: only typed auth clients
 // say how the server authenticates.
 type enforcedCallerFixture struct {
@@ -48,7 +52,6 @@ func newEnforcedCallerFixture(t *testing.T, pool *pgxpool.Pool) *enforcedCallerF
 	require.NoError(t, err)
 	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
 	f.service.metrics = mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))
-	f.enforce()
 	fixture := &enforcedCallerFixture{authClientFixture: f, signIn: uuid.New(), consentedUnder: uuid.New()}
 	for _, id := range []uuid.UUID{fixture.signIn, fixture.consentedUnder} {
 		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: id, ProjectID: validUUID(f.projectID), Slug: "usi-" + id.String()[:8]}))
@@ -251,12 +254,12 @@ func TestEnforcedMemberCompatibilityPathNeedsNoSignInLink(t *testing.T) {
 	apply := func(t *testing.T, f *enforcedCallerFixture, selector *upstreamSelector) (*memberChoices, metaMember) {
 		t.Helper()
 		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: f.signIn}
-		choices := &memberChoices{selector: selector, enforced: true, subject: subject, byServer: map[uuid.UUID]*memberTokens{}}
+		choices := &memberChoices{selector: selector, subject: subject, byServer: map[uuid.UUID]*memberTokens{}}
 		choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, subject, true, member)
+			return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, subject, member)
 		}
 		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
-		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
+		choices.apply(t.Context(), testenv.NewLogger(t), members)
 		return choices, members[0]
 	}
 
@@ -321,6 +324,7 @@ func TestEnforcedRefreshIsDecidedByTheResolver(t *testing.T) {
 	setup := func(t *testing.T, choice func(f *enforcedCallerFixture) uuid.NullUUID) (*enforcedCallerFixture, *ResolvedMcpEndpoint) {
 		t.Helper()
 		f := newEnforcedCallerFixture(t, pool)
+		f.enforce() // Refresh issuance retains its existing rollout.
 		f.service.sessionPolicyCache = cache.NewTypedObjectCache[sessionPolicyEntry](testenv.NewLogger(t), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone)
 		selector := f.choose(choice(f))
 		jti := "jti-" + uuid.NewString()
@@ -482,9 +486,11 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 		f := newEnforcedCallerFixture(t, pool)
 		f.sourceHeader("X-Upstream-Key", true, text("stored"), pgtype.Text{})
 		authentication, _, selected, header, err := serve(t, f)
-		require.Error(t, err)
+		var setup *oops.ShareableError
+		require.ErrorAs(t, err, &setup)
+		require.Equal(t, oops.CodeFailedPrecondition, setup.Code)
 		require.True(t, selected)
-		require.NotEmpty(t, header.Get("WWW-Authenticate"))
+		require.Empty(t, header.Get("WWW-Authenticate"))
 		require.False(t, authentication.chosenNoAuth)
 	})
 
@@ -513,6 +519,21 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 		require.Nil(t, authentication.authClient)
 	})
 
+	t.Run("missing authorization never releases a configured credential", func(t *testing.T) {
+		t.Parallel()
+		f := newEnforcedCallerFixture(t, pool)
+		client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+		f.copyHeader(client, "X-Api-Key", true, false, text("configured"), pgtype.Text{})
+		f.service.authClientPermitter = nil
+		f.service.authz = nil
+		authentication, _, selected, _, err := serve(t, f)
+		require.Error(t, err)
+		require.ErrorContains(t, errors.Unwrap(err), "authorization engine")
+		require.True(t, selected)
+		require.Nil(t, authentication.authClient)
+		require.False(t, authentication.chosenNoAuth)
+	})
+
 	t.Run("a client the caller may not use is refused", func(t *testing.T) {
 		t.Parallel()
 		f := newEnforcedCallerFixture(t, pool)
@@ -529,6 +550,40 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 
 // A gateway reached by a caller with no credential choice decides each member
 // by what the member offers.
+func TestTypedOrganizationGatewayServesWhenLegacyBindingsCannotBeRead(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_gateway_binding_isolation")
+	require.NoError(t, err)
+	f := newEnforcedCallerFixture(t, pool)
+	require.NoError(t, testrepo.New(pool).SetMCPServerVisibilityFixture(t.Context(), testrepo.SetMCPServerVisibilityFixtureParams{Visibility: mcpservers.VisibilityPublic, ID: f.serverID, ProjectID: f.projectID}))
+	client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+	f.copyHeader(client, "X-Upstream-Key", true, false, text("typed-fixture-key"), pgtype.Text{})
+	f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	unavailableDB, err := pgxpool.NewWithConfig(t.Context(), pool.Config())
+	require.NoError(t, err)
+	unavailableDB.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), unavailableDB, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	ctx := sessionContext(t, f.orgID)
+	_, _, _, err = f.service.resolveOrganizationMemberSnapshot(ctx, f.service.logger, mandatorySurfaceGatewayMember, f.orgID, true, f.signIn, f.projectID, false)
+	require.ErrorContains(t, err, "list gateway sign-in clients", "the legacy binding dependency is unavailable")
+
+	ctx, members, denied, err := f.service.resolveOrganizationMemberSnapshot(ctx, f.service.logger, mandatorySurfaceGatewayMember, f.orgID, true, f.signIn, f.projectID, true)
+	require.NoError(t, err)
+	require.Empty(t, denied)
+	require.Len(t, members, 1)
+	require.Equal(t, f.serverID, members[0].serverID)
+	require.Nil(t, members[0].associatedClients, "typed serving must not load legacy associations")
+	authentication := f.authentication(urn.NewUserSubject("user_1"))
+	choices := f.service.unchosenMemberChoices(authentication.endpoint, authentication.subject)
+	choices.apply(ctx, f.service.logger, members)
+	require.NoError(t, members[0].upstreamUnavailable)
+	require.NotNil(t, members[0].authClient)
+	require.Equal(t, client, members[0].authClient.clientID)
+	require.Len(t, members[0].authClient.headers, 1)
+}
+
 func TestEnforcedGatewayWithoutChoicesDecidesEachMemberByWhatItOffers(t *testing.T) {
 	t.Parallel()
 
@@ -558,7 +613,7 @@ func TestEnforcedGatewayWithoutChoicesDecidesEachMemberByWhatItOffers(t *testing
 	for _, id := range []uuid.UUID{personal, open, shared, ambiguous} {
 		members = append(members, metaMember{serverID: id, projectID: f.projectID, slug: "member-" + id.String()[:8], backend: metaMemberBackendProxied})
 	}
-	choices.apply(t.Context(), testenv.NewLogger(t), members, false)
+	choices.apply(t.Context(), testenv.NewLogger(t), members)
 
 	require.NoError(t, members[0].upstreamUnavailable)
 	require.Equal(t, validUUID(f.registration), members[0].chosenClientID)
@@ -591,7 +646,7 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		f.adminClient(authClientTypeServiceAccount, validUUID(f.registration))
 		target := agentServerTarget{organizationID: f.orgID, agentID: uuid.New(), serverID: f.serverID, projectID: f.projectID, slug: "server"}
 
-		clients, err := f.service.agentServerClients(t.Context(), target, f.signIn)
+		clients, err := f.service.agentServerClients(t.Context(), target)
 		require.NoError(t, err)
 		require.Len(t, clients, 1)
 		require.Equal(t, f.registration, clients[0].ID)
@@ -618,7 +673,7 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: disabled}))
 		target := agentServerTarget{organizationID: f.orgID, agentID: uuid.New(), serverID: f.serverID, projectID: f.projectID, slug: "server"}
 
-		clients, err := f.service.agentServerClients(t.Context(), target, f.signIn)
+		clients, err := f.service.agentServerClients(t.Context(), target)
 		require.NoError(t, err)
 		require.Len(t, clients, 1)
 		require.Equal(t, f.registration, clients[0].ID)
@@ -636,7 +691,7 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: f.signIn}))
 		target := agentServerTarget{organizationID: f.orgID, agentID: uuid.New(), serverID: f.serverID, projectID: f.projectID, slug: "server"}
 
-		clients, err := f.service.agentServerClients(t.Context(), target, f.signIn)
+		clients, err := f.service.agentServerClients(t.Context(), target)
 		require.NoError(t, err)
 		require.Empty(t, clients)
 	})
@@ -764,7 +819,7 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		ctx, choices, members := setup(t, f)
 		choose(t, f, choices, chosen)
 
-		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		choices.apply(ctx, testenv.NewLogger(t), members)
 		require.NoError(t, members[0].upstreamUnavailable)
 		require.Equal(t, chosen, members[0].authClient.clientID)
 	})
@@ -778,7 +833,7 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		choose(t, f, choices, chosen)
 		require.NoError(t, f.q.SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: chosen}))
 
-		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		choices.apply(ctx, testenv.NewLogger(t), members)
 		require.Error(t, members[0].upstreamUnavailable)
 		require.False(t, members[0].upstreamNoAuth)
 	})
@@ -791,7 +846,7 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		f.service.authClientPermitter = denyPermitter{}
 		ctx, choices, members := setup(t, f)
 
-		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		choices.apply(ctx, testenv.NewLogger(t), members)
 		require.Error(t, members[0].upstreamUnavailable)
 		_, err := choices.tokens(ctx, members[0])
 		require.Error(t, err)
@@ -808,7 +863,7 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		f.connect(urn.NewUserSubject("user_owner"), "authorizer-token")
 		ctx, choices, members := setup(t, f)
 
-		choices.apply(ctx, testenv.NewLogger(t), members, false)
+		choices.apply(ctx, testenv.NewLogger(t), members)
 		require.NoError(t, members[0].upstreamUnavailable)
 		require.Equal(t, "user_owner", members[0].authClient.authorizerOwner)
 		tokens, err := choices.tokens(ctx, members[0])

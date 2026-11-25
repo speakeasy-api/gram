@@ -79,7 +79,7 @@ func TestRefreshSweepProviderScope(t *testing.T) {
 						sessionID := o.grant(t, ctx, signIn, true, true)
 						seedGramSession(t, ctx, ti, o.subject, signIn, "provider-scope", 24*time.Hour)
 						window := newSweepWindow()
-						allowed := scope == "same-project" || scope == "same-org" || scope == "global"
+						allowed := reach == "offered" && (scope == "same-project" || scope == "same-org" || scope == "global")
 
 						// Each operation has its own grant, so either can fail independently.
 						if operation == "recheck" {

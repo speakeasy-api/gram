@@ -328,10 +328,10 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 		require.False(t, stale.Usable, "a detached client makes the choice unusable rather than switching clients")
 		require.True(t, f.selection(issuer, later, server).Usable)
 
-		// Unbinding the client from the credential's issuer makes it unusable
-		// too, though it stays associated with the server.
+		// The compatibility row does not govern a choice backed by a live
+		// server association.
 		require.NoError(t, f.q.UnbindClientFixture(t.Context(), UnbindClientFixtureParams{RemoteSessionClientID: second, UserSessionIssuerID: issuer}))
-		require.False(t, f.selection(issuer, later, server).Usable)
+		require.True(t, f.selection(issuer, later, server).Usable)
 	})
 
 	t.Run("another organization's servers are not reached", func(t *testing.T) {
@@ -686,7 +686,7 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 	})
 
-	t.Run("an offered client the issuer does not bind is left to a person", func(t *testing.T) {
+	t.Run("a sole typed offer needs no issuer binding", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
 		issuer := f.projectIssuer()
@@ -696,12 +696,14 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 
 		credential := f.session(issuer)
 		f.recordPickedFrom(issuer, credential, nil, true)
-		require.Empty(t, f.selections(credential), "no-auth is not recorded while the server offers an OAuth client")
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 
+		pickedCredential := f.session(issuer)
 		n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
 			UserSessionIssuerID: issuer,
 			CredentialKind:      upstreamclients.CredentialKindUserSession,
-			CredentialID:        credential,
+			CredentialID:        pickedCredential,
 			Source:              upstreamclients.SelectionSourceIssuance,
 			PickedMcpServerIds:  []uuid.UUID{server},
 			PickedClientIds:     []uuid.UUID{registration},
@@ -709,23 +711,22 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 			TypedOnly:           true,
 		})
 		require.NoError(t, err)
-		require.Equal(t, int64(1), n)
-		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID, "a pick on the consent page does not need the binding")
+		require.EqualValues(t, 1, n)
+		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(pickedCredential, server).AuthClientID)
 	})
 
-	t.Run("the one bound client of several offered is chosen", func(t *testing.T) {
+	t.Run("an issuer binding cannot disambiguate competing typed offers", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
 		issuer := f.projectIssuer()
 		bound, unbound := f.client(issuer), f.client()
 		server := f.server(issuer)
-		authClient := f.authClient("remote_session", bound, server)
+		f.authClient("remote_session", bound, server)
 		f.authClient("remote_session", unbound, server)
 
 		credential := f.session(issuer)
 		f.recordPickedFrom(issuer, credential, nil, true)
-		require.Equal(t, map[uuid.UUID]uuid.UUID{server: bound}, f.selections(credential), "a dashboard mint has no consent page to pick on")
-		require.Equal(t, uuid.NullUUID{UUID: authClient, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+		require.Empty(t, f.selections(credential), "neither offer is chosen without an explicit pick")
 	})
 
 	t.Run("several bound clients are left to a pick among them", func(t *testing.T) {
@@ -879,19 +880,20 @@ func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
 		require.Empty(t, settled.Gaps)
 	})
 
-	t.Run("an offered client the issuer does not bind is a gap", func(t *testing.T) {
+	t.Run("a sole typed offer is covered without an issuer binding", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
 		issuer := f.projectIssuer()
 		server := f.server(issuer)
-		f.authClient("remote_session", f.client(), server)
+		registration := f.client()
+		f.authClient("remote_session", registration, server)
 		f.enforce(f.orgID)
 		credential := f.session(issuer)
 
 		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
 		require.NoError(t, err)
-		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeUnreachableClient}}, report.Gaps)
-		require.Empty(t, f.selections(credential))
+		require.Empty(t, report.Gaps)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
 	})
 
 	t.Run("a choice whose registration was deleted is not covered", func(t *testing.T) {

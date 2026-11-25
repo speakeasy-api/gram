@@ -13,8 +13,6 @@ distinct_id,flag,enabled,variant
 #
 #   select id, slug from organization_metadata;
 #
-# <your-organization-id>,assistant-platform-mcp,true,platformmcp
-#
 # gram-risk-llm-analyzer is multivariate: off | shadow | llm. The variant
 # selects the risk engine mode for that organization: off keeps the gitleaks /
 # Presidio / prompt-injection / destructive-tool engines, shadow keeps them

@@ -42,14 +42,9 @@ const (
 )
 
 const (
-	mandatoryOutcomeAllow   = "allow"
-	mandatoryOutcomeDeny    = "deny"
-	mandatoryOutcomeError   = "error"
-	mandatoryOutcomeSkipped = "skipped"
-
-	// mandatoryReasonResolverOff is an auth client used without the typed
-	// resolver, so no client was evaluated.
-	mandatoryReasonResolverOff = "resolver_off"
+	mandatoryOutcomeAllow = "allow"
+	mandatoryOutcomeDeny  = "deny"
+	mandatoryOutcomeError = "error"
 
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
@@ -283,25 +278,13 @@ func (m *mandatoryShadow) recordDecision(ctx context.Context, surface string, le
 	if err == nil {
 		decision, err = decide()
 	}
-	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err, "")
+	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err)
 }
 
-// recordSkipped records a decision today's path made that the mandatory
-// check cannot evaluate yet, such as an auth client chosen without the
-// typed resolver. A skipped check is never an allow.
-func (m *mandatoryShadow) recordSkipped(ctx context.Context, surface string, legacyAllowed bool, reason, resourceID, projectID string) {
-	if m == nil {
-		return
-	}
-	m.emit(ctx, surface, legacyAllowed, resourceID, projectID, authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: authz.MandatoryDenyReasonNone}, nil, reason)
-}
-
-func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowed bool, resourceID, projectID string, decision authz.MandatoryDecision, err error, skipped string) {
+func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowed bool, resourceID, projectID string, decision authz.MandatoryDecision, err error) {
 	s := m.service
 	outcome, reason := mandatoryOutcomeDeny, string(decision.Reason)
 	switch {
-	case skipped != "":
-		outcome, reason = mandatoryOutcomeSkipped, skipped
 	case err != nil:
 		outcome = mandatoryOutcomeError
 	case decision.Allowed:
@@ -339,7 +322,7 @@ func (m *mandatoryShadow) emit(ctx context.Context, surface string, legacyAllowe
 		attribute.String(string(attr.ResourceIDKey), resourceID),
 	))
 
-	agreed := err == nil && skipped == "" && decision.Allowed == legacyAllowed
+	agreed := err == nil && decision.Allowed == legacyAllowed
 	fields := []any{
 		attr.SlogOrganizationID(m.organizationID),
 		attr.SlogMandatoryAuthzSurface(surface),

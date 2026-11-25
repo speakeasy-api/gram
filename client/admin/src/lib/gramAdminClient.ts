@@ -29,18 +29,25 @@ import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-clien
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
-import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
-import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
-import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
-import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
 import { buildAdminListTailscaleOAuthMigrationQuery } from "@gram/admin-client/react-query/adminListTailscaleOAuthMigration.core";
 import { buildAdminRunTailscaleOAuthMigrationStepMutation } from "@gram/admin-client/react-query/adminRunTailscaleOAuthMigrationStep";
 import type { AdminTailscaleOAuthMigrationOrganization } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganization";
 import type { AdminTailscaleOAuthMigrationOrganizations } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganizations";
 import type { Step as TailscaleOAuthMigrationStep } from "@gram/admin-client/models/components/runtailscaleoauthmigrationsteprequestbody";
+import { buildAdminGetOrganizationEncryptionQuery } from "@gram/admin-client/react-query/adminGetOrganizationEncryption.core";
+import { buildAdminListOrganizationEncryptionTransitionsQuery } from "@gram/admin-client/react-query/adminListOrganizationEncryptionTransitions.core";
+import { buildAdminEnrollOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminEnrollOrganizationEncryption";
+import { buildAdminRollbackOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminRollbackOrganizationEncryption";
+import { buildAdminRunOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminRunOrganizationEncryption";
+import { buildAdminFinalizeOrganizationEncryptionMutation } from "@gram/admin-client/react-query/adminFinalizeOrganizationEncryption";
+import type { AdminOrganizationEncryption } from "@gram/admin-client/models/components/adminorganizationencryption";
+import type { AdminOrganizationEncryptionFinalizeResult } from "@gram/admin-client/models/components/adminorganizationencryptionfinalizeresult";
+import type { AdminOrganizationEncryptionTransitionList } from "@gram/admin-client/models/components/adminorganizationencryptiontransitionlist";
+import type { AdminOrganizationEncryptionUseCase } from "@gram/admin-client/models/components/adminorganizationencryptionusecase";
+import type { AdminListOrganizationEncryptionTransitionsRequest } from "@gram/admin-client/models/operations/adminlistorganizationencryptiontransitions";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
@@ -1150,21 +1157,6 @@ export function runTailscaleOAuthMigrationStep(
   );
 }
 
-const generatedRunUpstreamOAuthMigrationMutation =
-  buildAdminRunUpstreamOAuthMigrationMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function runUpstreamOAuthMigration(
-  organizationID: string,
-): Promise<AdminUpstreamOAuthMigrationRun> {
-  return redirecting(
-    generatedRunUpstreamOAuthMigrationMutation.mutationFn({
-      request: { organizationId: organizationID },
-    }),
-  );
-}
-
 const generatedEnableUpstreamAuthEnforcementMutation =
   buildAdminEnableUpstreamAuthEnforcementMutation(redirectingClient, {
     retries: { strategy: "none" },
@@ -1269,12 +1261,111 @@ export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult
     retry: false,
   });
 }
+export function organizationEncryptionQuery(
+  organizationID: string,
+): UseQueryOptions<AdminOrganizationEncryption> {
+  const generated = buildAdminGetOrganizationEncryptionQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
 
-const generatedBackfillMcpAuthGrantsMutation =
-  buildAdminBackfillMcpAuthGrantsMutation(redirectingClient, {
+export function organizationEncryptionTransitionsQuery(
+  request: AdminListOrganizationEncryptionTransitionsRequest,
+): UseQueryOptions<AdminOrganizationEncryptionTransitionList> {
+  const generated = buildAdminListOrganizationEncryptionTransitionsQuery(
+    redirectingClient,
+    request,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+// The query key every organization encryption list shares, for invalidating
+// all of them after a change, whatever their filters.
+export const organizationEncryptionTransitionsKeyPrefix =
+  buildAdminListOrganizationEncryptionTransitionsQuery(
+    redirectingClient,
+    {},
+  ).queryKey.slice(0, 3);
+
+const generatedEnrollOrganizationEncryptionMutation =
+  buildAdminEnrollOrganizationEncryptionMutation(redirectingClient, {
     retries: { strategy: "none" },
   });
 
-export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
-  return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
+export function enrollOrganizationEncryption(
+  organizationID: string,
+  useCase: string,
+): Promise<AdminOrganizationEncryptionUseCase> {
+  return redirecting(
+    generatedEnrollOrganizationEncryptionMutation.mutationFn({
+      request: { organizationId: organizationID, useCase },
+    }),
+  );
+}
+
+const generatedRollbackOrganizationEncryptionMutation =
+  buildAdminRollbackOrganizationEncryptionMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function rollbackOrganizationEncryption(
+  organizationID: string,
+  useCase: string,
+): Promise<AdminOrganizationEncryptionUseCase> {
+  return redirecting(
+    generatedRollbackOrganizationEncryptionMutation.mutationFn({
+      request: { organizationId: organizationID, useCase },
+    }),
+  );
+}
+
+const generatedRunOrganizationEncryptionMutation =
+  buildAdminRunOrganizationEncryptionMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function runOrganizationEncryption(
+  organizationID: string,
+  useCase: string,
+): Promise<AdminOrganizationEncryptionUseCase> {
+  return redirecting(
+    generatedRunOrganizationEncryptionMutation.mutationFn({
+      request: { organizationId: organizationID, useCase },
+    }),
+  );
+}
+
+const generatedFinalizeOrganizationEncryptionMutation =
+  buildAdminFinalizeOrganizationEncryptionMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function finalizeOrganizationEncryption(request: {
+  organizationID: string;
+  useCase: string;
+  confirmation: string;
+  acknowledgedUnreadableValues: number;
+}): Promise<AdminOrganizationEncryptionFinalizeResult> {
+  return redirecting(
+    generatedFinalizeOrganizationEncryptionMutation.mutationFn({
+      request: {
+        organizationId: request.organizationID,
+        useCase: request.useCase,
+        confirmation: request.confirmation,
+        acknowledgedUnreadableValues: request.acknowledgedUnreadableValues,
+      },
+    }),
+  );
 }

@@ -186,7 +186,7 @@ export type OktaSignInSetupInput = {
   agentId: string;
   existingClient: RemoteSessionClient | undefined;
   keySet: KeySetChoice | undefined;
-  /** Undefined creates a new sign-in issuer with `newIssuerSlug`. */
+  /** Undefined creates a new MCP sign-in with `newIssuerSlug`. */
   userSessionIssuer: UserSessionIssuer | undefined;
   newIssuerSlug: string;
   /** Lets a retry reuse a set created by a failed attempt. */
@@ -287,7 +287,7 @@ export type SignInIssuerRow = {
   trustsStale: boolean;
 };
 
-/** Organization sign-in issuers and whether each trusts the Okta sign-in pair. */
+/** Organization MCP sign-ins and whether each trusts the Okta sign-in pair. */
 export function signInIssuerRows(
   issuers: UserSessionIssuer[],
   remoteSessionIssuerId: string,
@@ -330,7 +330,7 @@ export function signInIssuerSlugError(
   return taken ? "An organization issuer already uses this slug." : null;
 }
 
-/** The slug a new sign-in issuer defaults to: the first free okta-sign-in variant. */
+/** The slug a new MCP sign-in defaults to: the first free okta-sign-in variant. */
 export function freeSignInIssuerSlug(issuers: UserSessionIssuer[]): string {
   const taken = new Set(
     issuers.filter((issuer) => issuer.projectId === "").map((i) => i.slug),

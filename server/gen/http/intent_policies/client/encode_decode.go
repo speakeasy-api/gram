@@ -791,10 +791,9 @@ func unmarshalIntentContractResponseBodyToIntentpoliciesIntentContract(v *Intent
 // *IntentConditionResponseBody.
 func unmarshalIntentConditionResponseBodyToIntentpoliciesIntentCondition(v *IntentConditionResponseBody) *intentpolicies.IntentCondition {
 	res := &intentpolicies.IntentCondition{
-		Join:    *v.Join,
-		Label:   *v.Label,
-		Op:      *v.Op,
-		Pattern: *v.Pattern,
+		Join:  *v.Join,
+		Label: *v.Label,
+		Op:    *v.Op,
 	}
 	res.Values = make([]string, len(v.Values))
 	for i, val := range v.Values {

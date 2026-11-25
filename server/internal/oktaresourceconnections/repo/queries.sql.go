@@ -303,24 +303,8 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , ($1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
-  , ARRAY(
-      SELECT oc.id
-      FROM mcp_server_auth_clients AS ol
-      JOIN mcp_auth_clients AS oa
-        ON oa.id = ol.auth_client_id
-       AND oa.organization_id = ol.organization_id
-       AND oa.deleted IS FALSE
-       AND oa.enabled
-       AND oa.client_type IN ('ema', 'remote_session')
-      JOIN remote_session_clients AS oc
-        ON oc.id = oa.remote_session_client_id
-       AND oc.deleted IS FALSE
-      WHERE ol.mcp_server_id = ms.id
-        AND ol.project_id = ms.project_id
-        AND ol.deleted IS FALSE
-      ORDER BY oc.id
-    )::uuid[] AS offered_client_ids
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
+  , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -331,27 +315,39 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $2
+ AND p.organization_id = $1
  AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT
+        array_agg(DISTINCT c.id ORDER BY c.id) AS client_ids
+      , (array_agg(c.remote_session_issuer_id ORDER BY (ac.client_type = 'ema') DESC, c.id))[1] AS issuer_id
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = offer.auth_client_id
+     AND ac.organization_id = offer.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('ema', 'remote_session')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id IS NULL OR c.project_id = ms.project_id)
+     AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+     AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+     AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
+    WHERE offer.mcp_server_id = ms.id
+      AND offer.project_id = ms.project_id
+      AND offer.organization_id = p.organization_id
+      AND offer.deleted IS FALSE
+      AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)
+) AS offers ON true
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
-       SELECT oc.remote_session_issuer_id
-       FROM mcp_server_auth_clients AS ol
-       JOIN mcp_auth_clients AS oa
-         ON oa.id = ol.auth_client_id
-        AND oa.organization_id = ol.organization_id
-        AND oa.deleted IS FALSE
-        AND oa.enabled
-        AND oa.client_type IN ('ema', 'remote_session')
-       JOIN remote_session_clients AS oc
-         ON oc.id = oa.remote_session_client_id
-        AND oc.deleted IS FALSE
-       WHERE ol.mcp_server_id = ms.id
-         AND ol.project_id = ms.project_id
-         AND ol.deleted IS FALSE
-       ORDER BY (oa.client_type = 'ema') DESC, oc.id
-       LIMIT 1
-     ) ELSE (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL
+    THEN offers.issuer_id ELSE (
        SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
                    THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
        FROM mcp_server_remote_session_clients AS a
@@ -367,7 +363,7 @@ JOIN remote_session_issuers AS i
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $2)
+   OR (i.project_id IS NULL AND i.organization_id = $1)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -375,7 +371,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $2)
+   OR (usi.project_id IS NULL AND usi.organization_id = $1)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -391,7 +387,7 @@ LEFT JOIN unproxied_mcp_servers AS u
   ON u.id = ms.unproxied_mcp_server_id
  AND u.project_id = ms.project_id
  AND u.deleted IS FALSE
-WHERE ms.id = $3
+WHERE ms.id = $2
   AND ms.deleted IS FALSE
   AND ms.visibility <> 'disabled'
   AND ms.toolset_id IS NULL
@@ -400,9 +396,8 @@ WHERE ms.id = $3
 `
 
 type GetEligibleServerParams struct {
-	TypedAuthEnforced bool
-	OrganizationID    string
-	McpServerID       uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
 }
 
 type GetEligibleServerRow struct {
@@ -413,7 +408,7 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	TypedAuthEnforced                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
@@ -427,7 +422,7 @@ type GetEligibleServerRow struct {
 // One eligible, discovered server by id, re-read inside the write
 // transaction; ids outside the organization do not resolve.
 func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerParams) (GetEligibleServerRow, error) {
-	row := q.db.QueryRow(ctx, getEligibleServer, arg.TypedAuthEnforced, arg.OrganizationID, arg.McpServerID)
+	row := q.db.QueryRow(ctx, getEligibleServer, arg.OrganizationID, arg.McpServerID)
 	var i GetEligibleServerRow
 	err := row.Scan(
 		&i.ID,
@@ -437,7 +432,7 @@ func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerPa
 		&i.Name,
 		&i.Slug,
 		&i.IssuerID,
-		&i.TypedAuthEnforced,
+		&i.UsesTypedOffers,
 		&i.OfferedClientIds,
 		&i.Issuer,
 		&i.MetadataFetchedAt,
@@ -737,24 +732,8 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , ($1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
-  , ARRAY(
-      SELECT oc.id
-      FROM mcp_server_auth_clients AS ol
-      JOIN mcp_auth_clients AS oa
-        ON oa.id = ol.auth_client_id
-       AND oa.organization_id = ol.organization_id
-       AND oa.deleted IS FALSE
-       AND oa.enabled
-       AND oa.client_type IN ('ema', 'remote_session')
-      JOIN remote_session_clients AS oc
-        ON oc.id = oa.remote_session_client_id
-       AND oc.deleted IS FALSE
-      WHERE ol.mcp_server_id = ms.id
-        AND ol.project_id = ms.project_id
-        AND ol.deleted IS FALSE
-      ORDER BY oc.id
-    )::uuid[] AS offered_client_ids
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
+  , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -765,27 +744,39 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $2
+ AND p.organization_id = $1
  AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT
+        array_agg(DISTINCT c.id ORDER BY c.id) AS client_ids
+      , (array_agg(c.remote_session_issuer_id ORDER BY (ac.client_type = 'ema') DESC, c.id))[1] AS issuer_id
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = offer.auth_client_id
+     AND ac.organization_id = offer.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('ema', 'remote_session')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id IS NULL OR c.project_id = ms.project_id)
+     AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+     AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+     AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
+    WHERE offer.mcp_server_id = ms.id
+      AND offer.project_id = ms.project_id
+      AND offer.organization_id = p.organization_id
+      AND offer.deleted IS FALSE
+      AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)
+) AS offers ON true
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
-       SELECT oc.remote_session_issuer_id
-       FROM mcp_server_auth_clients AS ol
-       JOIN mcp_auth_clients AS oa
-         ON oa.id = ol.auth_client_id
-        AND oa.organization_id = ol.organization_id
-        AND oa.deleted IS FALSE
-        AND oa.enabled
-        AND oa.client_type IN ('ema', 'remote_session')
-       JOIN remote_session_clients AS oc
-         ON oc.id = oa.remote_session_client_id
-        AND oc.deleted IS FALSE
-       WHERE ol.mcp_server_id = ms.id
-         AND ol.project_id = ms.project_id
-         AND ol.deleted IS FALSE
-       ORDER BY (oa.client_type = 'ema') DESC, oc.id
-       LIMIT 1
-     ) ELSE (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL
+    THEN offers.issuer_id ELSE (
        SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
                    THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
        FROM mcp_server_remote_session_clients AS a
@@ -801,7 +792,7 @@ JOIN remote_session_issuers AS i
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $2)
+   OR (i.project_id IS NULL AND i.organization_id = $1)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -809,7 +800,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $2)
+   OR (usi.project_id IS NULL AND usi.organization_id = $1)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -832,11 +823,6 @@ WHERE ms.deleted IS FALSE
 ORDER BY ms.name ASC NULLS LAST, ms.id ASC
 `
 
-type ListEligibleServersParams struct {
-	TypedAuthEnforced bool
-	OrganizationID    string
-}
-
 type ListEligibleServersRow struct {
 	ID                                  uuid.UUID
 	ProjectID                           uuid.UUID
@@ -845,7 +831,7 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	TypedAuthEnforced                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
@@ -858,23 +844,17 @@ type ListEligibleServersRow struct {
 
 // Servers the organization owns (tenancy through projects, since mcp_servers
 // has no organization column) with a live backend and an authorization server
-// the organization can see. The authorization server comes from the server's
-// live client associations; a server with none or several is left out. Whether
+// the organization can see. A proxied server needs a live typed offer; an
+// unproxied server retains its single derived authorization server. Whether
 // Speakeasy fronts the user login does not matter: readiness is about the
 // upstream authorization server. Undiscovered issuers are returned so the list
 // can count them; whether the issuer advertises ID-JAG is decided in Go so the
 // derivation stays pure.
-// Typed auth clients choose upstream authentication only for proxied servers.
-// Unproxied servers have no typed offers and retain their derived issuer and clients.
-// The enforced-and-proxied predicate appears four times in this file, twice per
-// query, and changes with them and with Go code that gates typed auth clients on
-// remote or tunneled backends.
-// Where typed auth clients apply (typed_auth_enforced),
-// a server's authorization server is the one its personal or identity-provider
-// auth clients offer: an identity-provider client's if it offers one, else the
-// first by id. Elsewhere it is the one its live client associations name.
-func (q *Queries) ListEligibleServers(ctx context.Context, arg ListEligibleServersParams) ([]ListEligibleServersRow, error) {
-	rows, err := q.db.Query(ctx, listEligibleServers, arg.TypedAuthEnforced, arg.OrganizationID)
+// Only proxied servers use typed offers; unproxied servers retain their
+// derived issuer and clients. Keep this predicate identical in both reads.
+// Prefer a live, reachable EMA offer before personal registrations.
+func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string) ([]ListEligibleServersRow, error) {
+	rows, err := q.db.Query(ctx, listEligibleServers, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -890,7 +870,7 @@ func (q *Queries) ListEligibleServers(ctx context.Context, arg ListEligibleServe
 			&i.Name,
 			&i.Slug,
 			&i.IssuerID,
-			&i.TypedAuthEnforced,
+			&i.UsesTypedOffers,
 			&i.OfferedClientIds,
 			&i.Issuer,
 			&i.MetadataFetchedAt,
@@ -922,18 +902,16 @@ SELECT
   , i.scopes_supported AS issuer_scopes_supported
   , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
-      SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-      FROM remote_session_client_user_session_issuers AS link
-      JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-      WHERE link.remote_session_client_id = c.id
-        AND usi.deleted IS FALSE
-        AND (
-          (usi.project_id IS NULL AND usi.organization_id = $1::text)
-          OR usi.project_id IN (
-            SELECT id FROM projects
-            WHERE organization_id = $1::text AND deleted IS FALSE
-          )
-        )
+      SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+      FROM mcp_server_remote_session_clients AS link
+      JOIN mcp_servers AS server ON server.id = link.mcp_server_id
+        AND server.project_id = link.project_id AND NOT server.deleted
+      JOIN projects AS project ON project.id = server.project_id
+        AND project.organization_id = link.organization_id AND NOT project.deleted
+      JOIN user_session_issuers AS usi ON usi.id = server.user_session_issuer_id AND NOT usi.deleted
+      WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+        AND link.organization_id = $1::text
+        AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE

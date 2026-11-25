@@ -297,7 +297,8 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	const derived = "https://mcp.example.com/mcp"
 	// The refreshing client's sole attached upstream, so RefreshNow derives
 	// this resource: the value under test is never a caller-supplied string.
-	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
+	associateClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, clientID)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
 	require.NoError(t, err)
@@ -342,21 +343,17 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 	return server.ID
 }
 
-// attachClientUpstream gives one client a private user session issuer carrying
-// a single remote MCP server, so the client derives mcpURL and its siblings on
-// the shared issuer derive nothing from it.
+// attachClientUpstream associates one client with a remote MCP server, so
+// that registration, not its siblings, derives mcpURL.
 func attachClientUpstream(t *testing.T, ctx context.Context, ti *testInstance, clientID uuid.UUID, slug, mcpURL string) {
 	t.Helper()
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerID,
-	}))
-	seedRemoteMCPServerForIssuer(t, ctx, ti, issuerID, slug+"-mcp", mcpURL)
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, issuerID, slug+"-mcp", mcpURL)
+	associateClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), serverID, clientID)
 }
 
-// Two clients bound to one issuer, each fronting a different upstream: the
+// Two clients reachable from one sign-in, each associated with a different upstream: the
 // backfill must stamp the refreshed client's own derived resource. Before the
 // derivation was per-client one endpoint-level resource reached every client,
 // so refreshing one could stamp a sibling's upstream onto its row — a
@@ -432,7 +429,8 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	require.False(t, row.Resource.Valid)
 
 	const mcpURL = "https://mcp.example.com/mcp"
-	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-sweep-mcp", mcpURL)
+	serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-sweep-mcp", mcpURL)
+	offerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, clientID)
 
 	// Make the row a due keepalive candidate: stale, org-enforced, live Speakeasy session.
 	require.NoError(t, repo.New(ti.conn).SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{

@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	unproxiedrepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 )
 
 var infra *testenv.Environment
@@ -218,7 +220,7 @@ func createServerWithBackend(t *testing.T, ctx context.Context, si *instance, pr
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
-	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
+	offerIssuerClient(t, ctx, si, projectID, id, issuerID)
 	return id, backendID
 }
 
@@ -226,6 +228,48 @@ func createServerWithBackend(t *testing.T, ctx context.Context, si *instance, pr
 // client association, reusing a client the server's project can see so that
 // tests counting the issuer's clients keep their expected number.
 func associateServerIssuer(t *testing.T, ctx context.Context, si *instance, projectID, serverID, issuerID uuid.UUID) {
+	t.Helper()
+	clientID := issuerClient(t, ctx, si, projectID, issuerID)
+	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        si.orgID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
+}
+
+func dropFixtureOffers(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, authclientbackfill.New(si.conn).SoftDeleteServerAuthClientLinksFixture(ctx, serverID))
+}
+
+func createServerWithLegacyIssuer(t *testing.T, ctx context.Context, si *instance, projectID, issuerID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
+	id := createServer(t, ctx, si, projectID, issuerID, name)
+	dropFixtureOffers(t, ctx, si, id)
+	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
+	return id
+}
+
+func createUnproxiedLegacyServer(t *testing.T, ctx context.Context, si *instance, projectID, issuerID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
+	slug := strings.ToLower(name) + "-" + uuid.NewString()[:8]
+	backend, err := unproxiedrepo.New(si.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(name), Slug: conv.ToPGText(slug), Url: "https://" + slug + ".example/mcp"})
+	require.NoError(t, err)
+	id, err := si.q.CreateEligibleMCPServerFixture(ctx, repo.CreateEligibleMCPServerFixtureParams{ProjectID: projectID, Name: conv.ToPGText(name), Slug: conv.ToPGText(slug), UnproxiedMcpServerID: conv.ToNullUUID(backend.ID), RemoteSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: "private"})
+	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
+	return id
+}
+
+func legacyCapableServer(t *testing.T, ctx context.Context, si *instance, name string) fixture {
+	t.Helper()
+	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
+	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
+	return fixture{projectID: projectID, issuerID: issuerID, serverID: createUnproxiedLegacyServer(t, ctx, si, projectID, issuerID, name)}
+}
+
+func issuerClient(t *testing.T, ctx context.Context, si *instance, projectID, issuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	clients, err := si.q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: si.orgID, IssuerIds: []uuid.UUID{issuerID}})
 	require.NoError(t, err)
@@ -239,12 +283,21 @@ func associateServerIssuer(t *testing.T, ctx context.Context, si *instance, proj
 	if clientID == uuid.Nil {
 		clientID = addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaassociated"+uuid.NewString()[:8])
 	}
-	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
-		ProjectID:             projectID,
-		OrganizationID:        si.orgID,
-		McpServerID:           serverID,
-		RemoteSessionClientID: clientID,
-	}))
+	return clientID
+}
+
+func offerIssuerClient(t *testing.T, ctx context.Context, si *instance, projectID, serverID, issuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return offerClient(t, ctx, si, projectID, serverID, issuerClient(t, ctx, si, projectID, issuerID))
+}
+
+func offerClient(t *testing.T, ctx context.Context, si *instance, projectID, serverID, clientID uuid.UUID) uuid.UUID {
+	t.Helper()
+	fixtures := authclientbackfill.New(si.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: si.orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: si.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	return authClientID
 }
 
 func createUserSessionIssuer(t *testing.T, ctx context.Context, si *instance) uuid.UUID {

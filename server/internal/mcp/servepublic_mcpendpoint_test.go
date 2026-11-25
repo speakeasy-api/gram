@@ -109,6 +109,8 @@ func createToolsetMcpEndpointWithID(
 	})
 	require.NoError(t, err)
 
+	markHostedDownstreamOnly(t, ctx, conn, mcpServer.ID)
+
 	// The new server takes the slug from the toolset's canonical server when that holds it.
 	endpoints := mcpendpointsrepo.New(conn)
 	held, err := endpoints.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{Slug: slug, CustomDomainID: customDomainID})

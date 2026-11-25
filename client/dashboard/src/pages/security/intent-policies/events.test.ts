@@ -144,7 +144,7 @@ describe("secretSinceEvent", () => {
       call({
         toolCallId: "t1",
         labels: [
-          label("touches_credential_store", true),
+          label("target_locations", ["credential_store"]),
           label("effect_class", ["read"]),
         ],
       }),

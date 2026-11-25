@@ -658,3 +658,22 @@ func TestGroup_EpisodeOrderIsTotal(t *testing.T) {
 		require.Equal(t, want[0].Episodes, problems.Group("org-a", shuffled, nil, nil, now)[0].Episodes)
 	}
 }
+
+// People on the same server failing another way are counted beside the problem, not in it.
+func TestGroup_CountsOthersOnTheScope(t *testing.T) {
+	t.Parallel()
+	got := problems.Group("org", []mcpconnectionattempts.FailingPerson{
+		badKey("p1", s1, time.Hour),
+		badKey("p2", s1, time.Hour),
+		signedOut("p3", s1, time.Hour),
+		badKey("p4", s2, 30*time.Hour),
+	}, nil, nil, now)
+	require.Len(t, got, 2)
+	byRule := func(rule problems.Rule) problems.Problem {
+		i := slices.IndexFunc(got, func(p problems.Problem) bool { return p.Rule == rule })
+		require.GreaterOrEqual(t, i, 0, rule)
+		return got[i]
+	}
+	require.Equal(t, 1, byRule(problems.RuleSameServer).OthersOnScope, "p3 fails on the same server another way")
+	require.Equal(t, 0, byRule(problems.RuleOnePerson).OthersOnScope)
+}

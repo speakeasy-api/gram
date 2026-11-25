@@ -2082,6 +2082,36 @@ func (d orgEncryptionDeps) NetworkIngressCredentials(logger *slog.Logger, platfo
 	return ingresscredentials.New(logger, d.Cipher(logger, platform))
 }
 
+// Migrator builds the background side of moving the OAuth use cases to
+// organization keys, with the copy stores of every value each use case holds.
+// It is a nil interface when organization encryption is not configured: the
+// backfill can neither seal nor open organization-key copies without it, and
+// resuming a clear needs a provisioner.
+func (d orgEncryptionDeps) Migrator(logger *slog.Logger, db *pgxpool.Pool, platform *encryption.Client, meterProvider metric.MeterProvider) (background.OrganizationEncryptionMigrator, error) {
+	if d.Service == nil || d.Provisioner == nil {
+		return nil, nil
+	}
+
+	runner := orgencryption.NewRunner(logger, db, d.Cipher(logger, platform), meterProvider)
+	migrator, err := orgencryption.NewMigrator(logger, db, runner, d.Transitions, orgEncryptionUseCaseStores(db), meterProvider)
+	if err != nil {
+		return nil, fmt.Errorf("build organization encryption migrator: %w", err)
+	}
+
+	return migrator, nil
+}
+
+// orgEncryptionUseCaseStores lists every use case that moves from the platform
+// key to organization keys, with the copy stores of every value it holds. The
+// background migrator and the admin API share it, so both reach the same
+// values.
+func orgEncryptionUseCaseStores(db *pgxpool.Pool) []orgencryption.UseCaseStores {
+	return []orgencryption.UseCaseStores{
+		{UseCase: orgencryption.UseCaseOAuthClientSecrets, Stores: []orgencryption.CopyStore{clientsecrets.NewCopyStore(db)}},
+		{UseCase: orgencryption.UseCaseOAuthSessionTokens, Stores: upstreamtokens.CopyStores(db)},
+	}
+}
+
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.
 func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.OrganizationEncryptionSweeper {
 	if provisioner == nil {

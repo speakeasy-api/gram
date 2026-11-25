@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -34,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -310,49 +310,24 @@ func createRemoteSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 	return client.ID
 }
 
-// stampAndWireMemberClient binds a client to the member server's own issuer and
-// stamps the server with it, mirroring the state AddMetaMcpMember's auto-attach
-// reads from.
-func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, serverID, clientID uuid.UUID) {
+// seedMemberOffer records OAuth configuration directly on one member.
+func seedMemberOffer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, serverID, registrationID uuid.UUID) uuid.UUID {
 	t.Helper()
-
-	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-		ID:        serverID,
-		ProjectID: projectID,
+	q := authclientbackfill.New(conn)
+	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: organizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: authclientbackfill.TypeRemoteSession,
+		Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID),
 	})
 	require.NoError(t, err)
-	require.True(t, server.UserSessionIssuerID.Valid)
-
-	require.NoError(t, remotesessionsrepo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: "admin",
 	}))
-	stamped, err := testrepo.New(conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
-		ProjectID:             projectID,
-		OrganizationID:        organizationID,
-		McpServerID:           serverID,
-		RemoteSessionClientID: clientID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), stamped)
+	return id
 }
 
-// countGatewayClientsForUpstream counts provider-client bindings on the gateway
-// issuer for a given upstream AS.
-func countGatewayClientsForUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, gatewayIssuerID, remoteIssuerID uuid.UUID) int {
+func requireMemberOffers(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID, want ...uuid.UUID) {
 	t.Helper()
-
-	rows, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: gatewayIssuerID,
-		ProjectID:           conv.ToNullUUID(projectID),
-		OrganizationID:      conv.ToPGText(organizationID),
-	})
+	offers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, serverID)
 	require.NoError(t, err)
-	count := 0
-	for _, row := range rows {
-		if row.RemoteSessionIssuerID == remoteIssuerID {
-			count++
-		}
-	}
-	return count
+	require.ElementsMatch(t, want, offers)
 }

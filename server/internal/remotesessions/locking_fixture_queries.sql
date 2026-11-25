@@ -102,3 +102,22 @@ SELECT count(*)
 					AND client.organization_id=sqlc.arg(organization_id)::text AND client.remote_session_client_id=sqlc.arg(client_id)::uuid
 					AND NOT link.deleted AND NOT client.deleted AND client.enabled
 					AND client.client_type='remote_session';
+
+-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
+-- Lock the join-table row an agent attachment's foreign key check reads, before
+-- the caller checks for attachments that deleting the row would cascade to. A
+-- concurrent attachment either commits first, and the check sees it, or waits
+-- for this transaction to end.
+SELECT 1
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+WHERE l.remote_session_client_id = @remote_session_client_id
+  AND l.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )
+FOR UPDATE OF l;

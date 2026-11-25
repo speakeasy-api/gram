@@ -1140,7 +1140,7 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.getByText("First MCP")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Loading" })).toBeTruthy();
     expect(
-      screen.queryByText("Shadow MCP inventory could not be loaded"),
+      screen.queryByText("Shadow MCP servers could not be loaded"),
     ).toBeFalsy();
   });
 
@@ -1162,7 +1162,7 @@ describe("ShadowMCPInventoryTable", () => {
 
     expect(screen.getByText("First MCP")).toBeTruthy();
     expect(
-      screen.queryByText("Shadow MCP inventory could not be loaded"),
+      screen.queryByText("Shadow MCP servers could not be loaded"),
     ).toBeFalsy();
     expect(screen.getByText("More servers could not be loaded.")).toBeTruthy();
 

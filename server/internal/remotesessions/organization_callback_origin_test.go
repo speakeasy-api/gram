@@ -141,7 +141,7 @@ func TestIdentityCommitOrganizationOrigin(t *testing.T) {
 
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-origin-usi")
 			providerID := createServerIdentityProvider(t, ctx, ti, "dcr-origin-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-			plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
+			plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
 			plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
 			commit := committer.Prepare(plan)
 			require.NoError(t, commit.Preflight(ctx))
@@ -230,7 +230,7 @@ func TestIdentityCommitResolvesOriginBeforeBegin(t *testing.T) {
 			committer.SetCallbackOrigins(organizationCallbackOrigins(t))
 			usi := createUserSessionIssuer(t, ctx, ti.conn, "origin-before-begin")
 			provider := createServerIdentityProvider(t, ctx, ti, "origin-provider", "", cimd, []string{"none", "client_secret_basic"})
-			plan := linkPlan(t, ctx, usi, provider, uuid.Nil)
+			plan := linkPlan(t, ctx, ti, usi, provider, uuid.Nil)
 			plan.Client = remotesessions.ManualClient(remotesessions.ClientCredentials{ClientID: "manual-origin", ClientSecret: "test-secret"})
 			if cimd {
 				plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{AllowCIMD: true})

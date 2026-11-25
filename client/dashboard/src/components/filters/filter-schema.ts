@@ -142,6 +142,8 @@ interface BaseDimension<K extends FilterKind> {
 interface MultiselectDimension extends BaseDimension<"multiselect"> {
   /** Once set, the chip counts its values: "Message: 3". */
   chipCount?: boolean;
+  /** Most values that can be picked; picking stops there, removing still works. */
+  maxSelected?: number;
 }
 type SelectDimension = BaseDimension<"select">;
 interface TextDimension extends BaseDimension<"text"> {
@@ -192,6 +194,17 @@ export function defineFilters<const T extends readonly FilterDimension[]>(
 export type FilterValues<T extends readonly FilterDimension[]> = {
   [D in T[number] as D["id"]]: FilterValueByKind[D["kind"]];
 };
+
+/** Whether a multiselect change stays within its cap; removing values always does. */
+export function withinMaxSelected(
+  max: number | undefined,
+  current: string[],
+  next: string[],
+): boolean {
+  return (
+    max === undefined || next.length <= max || next.length <= current.length
+  );
+}
 
 /** Per-dimension default ("empty") value, used for clearing. */
 export function defaultValueForDimension(

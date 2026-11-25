@@ -977,6 +977,8 @@ tags:
     description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
+  - name: mcpFeedback
+    description: Managing the feedback tool an MCP server can offer the agents that use it, and reading the feedback they sent.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: registryDiscovery

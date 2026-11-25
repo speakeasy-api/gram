@@ -13,22 +13,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-const clearRunnerKeyPlatformCopies = `-- name: ClearRunnerKeyPlatformCopies :execrows
-UPDATE functions_access AS fa
-SET encryption_key = NULL
-WHERE fa.id IN (
-    SELECT target.id FROM functions_access AS target
-    WHERE target.organization_id = $1::text
-      AND target.encryption_key IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND fa.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearRunnerKeyPlatformCopies = `-- name: ClearRunnerKeyPlatformCopies :one
+WITH cleared AS (
+    UPDATE functions_access AS fa
+    SET encryption_key = NULL
+    WHERE fa.id IN (
+        SELECT target.id FROM functions_access AS target
+        WHERE target.organization_id = $1::text
+          AND target.encryption_key IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND fa.organization_id = $1::text
+      AND fa.encryption_key IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = fa.organization_id AND t.use_case = 'function-runner-keys'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (fa.encryption_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearRunnerKeyPlatformCopiesParams struct {
@@ -37,14 +45,22 @@ type ClearRunnerKeyPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearRunnerKeyPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the organization's runner keys
 // after finalize. The organization-key copy stays.
-func (q *Queries) ClearRunnerKeyPlatformCopies(ctx context.Context, arg ClearRunnerKeyPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRunnerKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearRunnerKeyPlatformCopies(ctx context.Context, arg ClearRunnerKeyPlatformCopiesParams) (ClearRunnerKeyPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearRunnerKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearRunnerKeyPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countRunnerKeyCopies = `-- name: CountRunnerKeyCopies :one

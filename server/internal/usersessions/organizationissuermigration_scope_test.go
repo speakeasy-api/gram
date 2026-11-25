@@ -33,7 +33,9 @@ func TestOrganizationUserSessionIssuerMigrateLockScopeCoversSelectionReach(t *te
 	orgIssuer, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "scope-org", AuthnChallengeMode: "chain", SessionDurationHours: 24})
 	require.NoError(t, err)
 	orgID := uuid.MustParse(orgIssuer.ID)
-	direct, transferredRegistration := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, sourceID)
+	direct := impactSeedServer(t, ctx, ti, sourceID)
+	transferredRegistration := seedMigrationRemoteClient(t, ctx, ti, "scope-offered-without-link")
+	seedMigrationTypedOffer(t, ctx, ti, projectID, direct, transferredRegistration)
 	member, _ := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, otherID)
 	recorded, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, projectID, otherID)
 	hosted := seedHostedServerOnIssuer(t, ctx, ti, projectID, auth.ActiveOrganizationID, projectIssuer, "scope-hosted")
@@ -101,16 +103,14 @@ func TestOrganizationUserSessionIssuerMigrateLockScopeCoversSelectionReach(t *te
 			require.True(t, locked[crossProject])
 			require.True(t, locked[unowned], "org reach includes servers without direct issuers")
 			require.False(t, needsSync[unowned], "unowned unrelated server has non-null false sync flag")
-			require.True(t, needsSync[targetOnly], "EMA-only offers do not satisfy a new legacy OAuth choice's typed state")
+			require.False(t, needsSync[targetOnly], "an unrelated target consumer is not repaired from legacy associations")
 		}
 	}
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: orgIssuer.ID})
 	require.NoError(t, err)
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: orgIssuer.ID, ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 	require.NoError(t, err)
-	choice, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(session), McpServerID: targetOnly})
-	require.NoError(t, err)
-	require.True(t, choice.AuthClientID.Valid, "a missing choice for an existing target consumer must gain typed state")
+
 }
 
 // A binding writer's shared reach gate precedes its issuer locks. Consolidation
@@ -157,8 +157,13 @@ func TestOrganizationUserSessionIssuerMigratePreflightsGlobalRegistrations(t *te
 	fixtures := selectionbackfill.New(ti.conn)
 	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, selectionbackfill.SeedRemoteSessionIssuerFixtureParams{ID: provider, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "global-provider", Issuer: "https://global.example.com"}))
 	require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, selectionbackfill.SeedRemoteSessionClientFixtureParams{ID: registration, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: pgtype.Text{String: "", Valid: false}, RemoteSessionIssuerID: provider, ClientID: "global-client"}))
-	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: issuer}))
-	registrations, err := usersessionsrepo.New(ti.conn).ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, usersessionsrepo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{IssuerIds: []uuid.UUID{issuer}, OrganizationID: auth.ActiveOrganizationID})
+	server := impactSeedServer(t, ctx, ti, issuer)
+	seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, server, registration)
+	offers, err := usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, usersessionsrepo.ListIssuerMigrationOAuthOffersParams{ServerIds: []uuid.UUID{server}, OrganizationID: auth.ActiveOrganizationID})
 	require.NoError(t, err)
-	require.Contains(t, registrations, registration, "global registration scope follows its tenant-owned issuer binding")
+	require.Len(t, offers, 1)
+	require.Equal(t, registration, offers[0].RemoteSessionClientID, "global registration scope follows the tenant's explicit offer")
+	foreignOffers, err := usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, usersessionsrepo.ListIssuerMigrationOAuthOffersParams{ServerIds: []uuid.UUID{server}, OrganizationID: uuid.NewString()})
+	require.NoError(t, err)
+	require.Empty(t, foreignOffers, "a globally scoped registration is not a globally scoped offer")
 }

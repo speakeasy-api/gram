@@ -9,6 +9,12 @@
 -- organization_id. A row without one (a session under a global client) finds
 -- no transition row and reads generation 0, the only generation such a row is
 -- sealed under.
+--
+-- A platform-key copy of '' stores no value: rows written before
+-- remote_sessions.access_token_encrypted became nullable can hold it. The
+-- waiting, sealed and count queries compare platform-key copies with <> '',
+-- which also excludes NULL, so such a copy is never waiting, unreadable,
+-- unattributed or counted. Clearing platform-key copies still removes it.
 
 -- name: SetRemoteSessionTokens :one
 -- Stores the access token, and the refresh token when replace_refresh_token
@@ -45,7 +51,7 @@ RETURNING *;
 SELECT s.id, s.access_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -74,7 +80,7 @@ WHERE s.id = @id
 SELECT s.id, s.access_token_encrypted::text AS platform_copy, s.access_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.access_token_encrypted IS NOT NULL
+  AND s.access_token_encrypted <> ''
   AND s.access_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -90,23 +96,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
           AND s.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.access_token_encrypted IS NOT NULL OR s.access_token_org_encrypted IS NOT NULL)
+          AND (s.access_token_encrypted <> '' OR s.access_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.access_token_encrypted IS NOT NULL
+          AND s.access_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -120,24 +126,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND COALESCE(p.organization_id, c.organization_id) = @organization_id::text);
 
--- name: ClearRemoteSessionAccessTokenPlatformCopies :execrows
+-- name: ClearRemoteSessionAccessTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's access
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_sessions AS s
-SET access_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET access_token_encrypted = NULL
+    FROM (
+        SELECT target.id, target.access_token_encrypted = '' AS was_empty
+        FROM remote_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.access_token_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.access_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: ListRemoteSessionRefreshTokensWaiting :many
 -- Refresh tokens of the organization with a platform-key copy and no
@@ -145,7 +170,7 @@ WHERE s.id IN (
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -172,7 +197,7 @@ WHERE s.id = @id
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM remote_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -184,23 +209,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM remote_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -214,24 +239,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND COALESCE(p.organization_id, c.organization_id) = @organization_id::text);
 
--- name: ClearRemoteSessionRefreshTokenPlatformCopies :execrows
+-- name: ClearRemoteSessionRefreshTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's refresh
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM remote_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE remote_sessions AS s
+    SET refresh_token_encrypted = NULL
+    FROM (
+        SELECT target.id, target.refresh_token_encrypted = '' AS was_empty
+        FROM remote_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.refresh_token_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: SetEMACredentialAccessToken :one
 -- Stores an EMA credential's access token as the copies sealed under the
@@ -260,7 +304,7 @@ RETURNING c.id, c.organization_id, c.updated_at, c.access_token_encrypted, c.acc
 SELECT c.id, c.access_token_encrypted::text AS platform_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = @organization_id::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
 ORDER BY c.id
@@ -288,7 +332,7 @@ WHERE c.id = @id
 SELECT c.id, c.access_token_encrypted::text AS platform_copy, c.access_token_org_encrypted::text AS org_copy
 FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = @organization_id::text
-  AND c.access_token_encrypted IS NOT NULL
+  AND c.access_token_encrypted <> ''
   AND c.access_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR c.id > sqlc.narg('after')::uuid)
 ORDER BY c.id
@@ -301,17 +345,17 @@ LIMIT @limit_value;
 -- unattributed: it stays on the platform key.
 SELECT
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
-        WHERE c.access_token_encrypted IS NOT NULL
+        WHERE c.access_token_encrypted <> ''
           AND c.access_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     0::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.access_token_encrypted IS NOT NULL)::bigint AS platform_copies
+    COUNT(*) FILTER (WHERE c.access_token_encrypted <> '')::bigint AS platform_copies
 FROM remote_session_ema_credentials AS c
 LEFT JOIN organization_encryption_unreadable_values AS u
   ON u.organization_id = c.organization_id
@@ -321,24 +365,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
   AND u.platform_ciphertext_sha256 = sha256(convert_to(c.access_token_encrypted, 'UTF8'))
 WHERE c.organization_id = @organization_id::text;
 
--- name: ClearEMACredentialAccessTokenPlatformCopies :execrows
+-- name: ClearEMACredentialAccessTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's EMA access
 -- tokens after finalize. The organization-key copy stays.
-UPDATE remote_session_ema_credentials AS c
-SET access_token_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM remote_session_ema_credentials AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.access_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE remote_session_ema_credentials AS c
+    SET access_token_encrypted = NULL
+    FROM (
+        SELECT target.id, target.access_token_encrypted = '' AS was_empty
+        FROM remote_session_ema_credentials AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.access_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE c.id = picked.id
+      AND c.organization_id = @organization_id::text
+      AND c.access_token_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.access_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: SetTrustedIssuerSessionTokens :one
 -- Stores, keeps or erases each value of a trusted issuer session as the
@@ -390,7 +453,7 @@ RETURNING *;
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -418,7 +481,7 @@ WHERE s.id = @id
 SELECT s.id, s.identity_assertion_encrypted::text AS platform_copy, s.identity_assertion_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND s.identity_assertion_encrypted <> ''
   AND s.identity_assertion_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -431,23 +494,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
           AND s.identity_assertion_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
+          AND (s.identity_assertion_encrypted <> '' OR s.identity_assertion_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.identity_assertion_encrypted IS NOT NULL
+          AND s.identity_assertion_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -460,24 +523,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionIdentityAssertionPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET identity_assertion_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.identity_assertion_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET identity_assertion_encrypted = NULL
+    FROM (
+        SELECT target.id, target.identity_assertion_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.identity_assertion_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.identity_assertion_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.identity_assertion_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionRefreshTokensWaiting :many
 -- Trusted issuer session refresh tokens of the organization with a platform-key copy
@@ -485,7 +567,7 @@ WHERE s.id IN (
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -513,7 +595,7 @@ WHERE s.id = @id
 SELECT s.id, s.refresh_token_encrypted::text AS platform_copy, s.refresh_token_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND s.refresh_token_encrypted <> ''
   AND s.refresh_token_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -526,23 +608,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
           AND s.refresh_token_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
+          AND (s.refresh_token_encrypted <> '' OR s.refresh_token_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.refresh_token_encrypted IS NOT NULL
+          AND s.refresh_token_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -555,24 +637,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionRefreshTokenPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET refresh_token_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.refresh_token_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET refresh_token_encrypted = NULL
+    FROM (
+        SELECT target.id, target.refresh_token_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.refresh_token_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.refresh_token_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.refresh_token_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionUpstreamSubjectsWaiting :many
 -- Trusted issuer session upstream subjects of the organization with a platform-key copy
@@ -580,7 +681,7 @@ WHERE s.id IN (
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -608,7 +709,7 @@ WHERE s.id = @id
 SELECT s.id, s.upstream_subject_encrypted::text AS platform_copy, s.upstream_subject_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.upstream_subject_encrypted IS NOT NULL
+  AND s.upstream_subject_encrypted <> ''
   AND s.upstream_subject_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -621,23 +722,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
           AND s.upstream_subject_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.upstream_subject_encrypted IS NOT NULL OR s.upstream_subject_org_encrypted IS NOT NULL)
+          AND (s.upstream_subject_encrypted <> '' OR s.upstream_subject_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.upstream_subject_encrypted IS NOT NULL
+          AND s.upstream_subject_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -650,24 +751,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionUpstreamSubjectPlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET upstream_subject_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.upstream_subject_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET upstream_subject_encrypted = NULL
+    FROM (
+        SELECT target.id, target.upstream_subject_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.upstream_subject_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.upstream_subject_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.upstream_subject_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: ListTrustedIssuerSessionNoncesWaiting :many
 -- Trusted issuer session nonces of the organization with a platform-key copy
@@ -675,7 +795,7 @@ WHERE s.id IN (
 SELECT s.id, s.nonce_encrypted::text AS platform_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -703,7 +823,7 @@ WHERE s.id = @id
 SELECT s.id, s.nonce_encrypted::text AS platform_copy, s.nonce_org_encrypted::text AS org_copy
 FROM trusted_issuer_sessions AS s
 WHERE s.organization_id = @organization_id::text
-  AND s.nonce_encrypted IS NOT NULL
+  AND s.nonce_encrypted <> ''
   AND s.nonce_org_encrypted IS NOT NULL
   AND (sqlc.narg('after')::uuid IS NULL OR s.id > sqlc.narg('after')::uuid)
 ORDER BY s.id
@@ -716,23 +836,23 @@ LIMIT @limit_value;
 SELECT
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NULL
     )::bigint AS waiting,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
           AND s.nonce_org_encrypted IS NULL
           AND u.id IS NOT NULL
     )::bigint AS unreadable,
     COUNT(*) FILTER (
         WHERE s.organization_id IS NULL
-          AND (s.nonce_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL)
+          AND (s.nonce_encrypted <> '' OR s.nonce_org_encrypted IS NOT NULL)
     )::bigint AS unattributed,
     COUNT(*) FILTER (
         WHERE s.organization_id = @organization_id::text
-          AND s.nonce_encrypted IS NOT NULL
+          AND s.nonce_encrypted <> ''
     )::bigint AS platform_copies
 FROM trusted_issuer_sessions AS s
 LEFT JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
@@ -745,24 +865,43 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE s.organization_id = @organization_id::text
    OR (s.organization_id IS NULL AND c.organization_id = @organization_id::text);
 
--- name: ClearTrustedIssuerSessionNoncePlatformCopies :execrows
+-- name: ClearTrustedIssuerSessionNoncePlatformCopies :one
 -- Destroys up to limit platform-key copies of the value after finalize. The
 -- organization-key copy stays.
-UPDATE trusted_issuer_sessions AS s
-SET nonce_encrypted = NULL
-WHERE s.id IN (
-    SELECT target.id FROM trusted_issuer_sessions AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.nonce_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND s.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted. A copy of '' stores no value: it is cleared too, but
+-- counted apart as empty. The picked rows are locked before they are
+-- classified, so a row a concurrent writer changes is classified as the
+-- version this statement clears.
+WITH cleared AS (
+    UPDATE trusted_issuer_sessions AS s
+    SET nonce_encrypted = NULL
+    FROM (
+        SELECT target.id, target.nonce_encrypted = '' AS was_empty
+        FROM trusted_issuer_sessions AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.nonce_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+        FOR UPDATE
+      ) AS picked
+    WHERE s.id = picked.id
+      AND s.organization_id = @organization_id::text
+      AND s.nonce_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = s.organization_id AND t.use_case = 'oauth-session-tokens'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (s.nonce_org_encrypted IS NULL) AS platform_only, picked.was_empty
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only AND NOT cleared.was_empty)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only AND NOT cleared.was_empty)::bigint AS beside_org_copy,
+    COUNT(*) FILTER (WHERE cleared.was_empty)::bigint AS empty
+FROM cleared;
 
 -- name: GetRemoteSessionRowFixture :one
 -- Test fixture: the session row as stored, soft-deleted or not.

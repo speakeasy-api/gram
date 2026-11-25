@@ -69,6 +69,10 @@ type metaToolCallAttempt struct {
 	// call's tool_call row.
 	logged bool
 
+	// localTool is set when the call names one of the member's local tools,
+	// whose calls are not written to the tool logs.
+	localTool bool
+
 	// proxied is set once a proxied member's tools/call is sent upstream,
 	// where the remotemcp interceptor writes the row. A dial or session
 	// failure before that is logged from the attempt.
@@ -92,6 +96,7 @@ func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 	return &metaToolCallAttempt{
 		start:        start,
 		member:       nil,
+		localTool:    false,
 		toolsetSlug:  "",
 		descriptor:   nil,
 		logged:       false,
@@ -150,6 +155,9 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
+	if attempt.localTool {
+		return
+	}
 	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false, source: ""})
 	if params == nil {
 		return

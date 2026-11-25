@@ -171,6 +171,62 @@ func matchesPattern(pattern, clientID string) bool {
 	return true
 }
 
+// parsedPattern is a pattern split once into the parts overlap checks compare.
+type parsedPattern struct {
+	prefix, suffix string
+	segments       []string
+}
+
+func parsePattern(pattern string) (parsedPattern, bool) {
+	prefix, rest, ok := splitAuthorityAndPath(pattern)
+	if !ok {
+		return parsedPattern{prefix: "", suffix: "", segments: nil}, false
+	}
+	path, suffix := splitPathAndSuffix(rest)
+	return parsedPattern{prefix: prefix, suffix: suffix, segments: strings.Split(path, "/")}, true
+}
+
+// overlaps reports whether one client ID can match both: same scheme, authority,
+// suffix and segment count, and no position where both segments are literal and differ.
+func (a parsedPattern) overlaps(b parsedPattern) bool {
+	if a.prefix != b.prefix || a.suffix != b.suffix || len(a.segments) != len(b.segments) {
+		return false
+	}
+	for i, segment := range a.segments {
+		if segment != "*" && b.segments[i] != "*" && segment != b.segments[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// within reports whether b matches every client ID a matches.
+func (a parsedPattern) within(b parsedPattern) bool {
+	if !a.overlaps(b) {
+		return false
+	}
+	for i, segment := range a.segments {
+		if b.segments[i] != "*" && b.segments[i] != segment {
+			return false
+		}
+	}
+	return true
+}
+
+// PatternsOverlap reports whether one client ID can match both valid patterns.
+func PatternsOverlap(a, b string) bool {
+	pa, okA := parsePattern(a)
+	pb, okB := parsePattern(b)
+	return okA && okB && pa.overlaps(pb)
+}
+
+// patternWithin reports whether valid pattern b matches every client ID valid pattern a matches.
+func patternWithin(a, b string) bool {
+	pa, okA := parsePattern(a)
+	pb, okB := parsePattern(b)
+	return okA && okB && pa.within(pb)
+}
+
 // splitPathAndSuffix cuts the remainder returned by splitAuthorityAndPath
 // into its path and its query/fragment suffix (the suffix keeps its leading
 // "?" or "#", so an absent one is distinguishable from an empty one).
@@ -200,7 +256,7 @@ func splitAuthorityAndPath(raw string) (string, string, bool) {
 		// No path, or an empty authority ("https:///x").
 		return "", "", false
 	}
-	if suffix := strings.IndexAny(rest, "?#"); suffix >= 0 && suffix < slash {
+	if strings.ContainsAny(rest[:slash], "?#") {
 		// A slash in a query or fragment cannot begin the URL's path.
 		return "", "", false
 	}

@@ -61,6 +61,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, source.ID, direct.RemoteSessionID)
 
+	ensureAttachmentParent(t, ctx, ti.conn, clientID, requestingIssuer)
 	_, err = testrepo.New(ti.conn).InsertAttachmentFixture(ctx, testrepo.InsertAttachmentFixtureParams{ProjectID: projectID, OrganizationID: organizationID, PrincipalID: principalID, UserSessionIssuerID: requestingIssuer, RemoteSessionClientID: clientID, RemoteSessionID: source.ID, GrantGeneration: source.GrantGeneration, AttachedBySubjectID: subject.String()})
 	require.NoError(t, err)
 	for _, callerCtx := range []context.Context{keyCtx, sessionCtx} {

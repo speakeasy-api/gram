@@ -40,7 +40,7 @@ func TestPrepareEMA_CrossProjectFirstBindingsSerializeBeforeScopeDiscovery(t *te
 		ResponseTypesSupported:              []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 	})
 	require.NoError(t, err)
-	client := seedOrgLevelRemoteClient(t, ctx, ti.conn, auth.ActiveOrganizationID, issuer.ID, "prospective-inherited-client", firstUser, secondUser)
+	client := seedOrgLevelRemoteClient(t, ctx, ti.conn, auth.ActiveOrganizationID, issuer.ID, "prospective-inherited-client")
 	secret, err := testenv.NewEncryptionClient(t).Encrypt([]byte("prospective-test-secret"))
 	require.NoError(t, err)
 	err = repo.New(ti.conn).SetPreparationInheritedClientSecretFixture(ctx, repo.SetPreparationInheritedClientSecretFixtureParams{EncryptedSecret: conv.ToPGText(secret), GrantTypes: []string{oauthwire.GrantTypeJWTBearer}, ClientID: client, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID)})
@@ -48,6 +48,8 @@ func TestPrepareEMA_CrossProjectFirstBindingsSerializeBeforeScopeDiscovery(t *te
 	resource := "https://resource.example.com/"
 	firstServer := seedRemoteMCPServerForIssuer(t, ctx, ti, firstUser, "prospective-first", resource)
 	secondServer := seedRemoteMCPServerForIssuer(t, otherCtx, ti, secondUser, "prospective-second", resource)
+	associateClient(t, ctx, ti.conn, auth.ActiveOrganizationID, projectIDFromContext(t, ctx), firstServer, client)
+	associateClient(t, otherCtx, ti.conn, auth.ActiveOrganizationID, projectIDFromContext(t, otherCtx), secondServer, client)
 	var bindings int
 	fixture1, fixtureErr := repo.New(ti.conn).CountPreparationBindingsFixtureForIssuer(ctx, repo.CountPreparationBindingsFixtureForIssuerParams{OrganizationID: auth.ActiveOrganizationID, IssuerID: issuer.ID})
 	require.NoError(t, fixtureErr)

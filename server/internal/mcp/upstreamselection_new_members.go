@@ -55,14 +55,7 @@ func (c *memberChoices) previewNewMemberChoices(ctx context.Context, logger *slo
 			resolved[serverID] = decision.resolution
 			continue
 		}
-		projectID := uuid.Nil
-		for _, member := range members {
-			if member.serverID == serverID {
-				projectID = member.projectID
-				break
-			}
-		}
-		res, err := service.resolveAuthClientForConsent(ctx, c.selector.organizationID, serverID, projectID, decision.authClientID, c.subject)
+		res, err := service.resolveNoAuthChoice(ctx, c.selector.organizationID, serverID)
 		if err != nil {
 			logger.ErrorContext(ctx, "preview new gateway member choice", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 			continue
@@ -170,7 +163,7 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		if personal && !represented {
 			continue
 		}
-		res, err := s.resolveAuthClientChoiceForConsent(ctx, organizationID, member.id, member.projectID, row.AuthClientID.UUID, subject)
+		res, err := s.resolveProposedAuthClientWithPolicy(ctx, organizationID, member.id, member.projectID, none, row.AuthClientID, subject, true)
 		if err != nil {
 			return none, unresolved, false, err
 		}

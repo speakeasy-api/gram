@@ -11,6 +11,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -39,6 +40,15 @@ var ErrLogsOff = errors.New("logs are off for this organization")
 type FailingNowFilter struct {
 	// OrganizationID is the organization. Required.
 	OrganizationID string
+
+	// ProjectID keeps one project's failures, or every one when nil. A project leaves out organization gateways.
+	ProjectID uuid.UUID
+
+	// IssuerID keeps one MCP authentication provider's failures, as Connection Logs attributes them, or every one when nil.
+	IssuerID uuid.UUID
+
+	// IssuerServerIDs are the servers and gateways attached to IssuerID now.
+	IssuerServerIDs []string
 
 	// ProviderHost keeps one provider, by its normalized host, or every one when empty.
 	ProviderHost string
@@ -83,15 +93,16 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 
 	from := now.Add(-EpisodeLookback)
 	since := later(from, filter.TriedSince)
-	attempts, err := readEpisodeAttempts(ctx, ch, filter.OrganizationID, from, since, now)
+	attempts, err := readEpisodeAttempts(ctx, ch, filter, from, since, now)
 	if err != nil {
 		return nil, err
 	}
-	failures := triedSince(failuresOf(attempts, now), since)
+	// The read keeps the failing people's other attempts as evidence; only their failures here count.
+	failures := triedSince(slices.DeleteFunc(failuresOf(attempts, now), func(f failure) bool { return !filter.keeps(f.a) }), since)
 	if len(failures) == 0 {
 		return nil, nil
 	}
-	served, answers, err := readServed(ctx, ch, filter.OrganizationID, failures)
+	served, answers, err := readServed(ctx, ch, filter.OrganizationID, filter.ProjectID, failures, servedBatch)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +122,24 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 		return cmp.Or(a.OpenedAt.Compare(b.OpenedAt), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.AppKey, b.AppKey), cmp.Compare(a.Part, b.Part), cmp.Compare(a.ClientFamily, b.ClientFamily), cmp.Compare(a.Reason, b.Reason))
 	})
 	return out, nil
+}
+
+// keeps reports whether a failed attempt is in the filter's project and, as Connection
+// Logs attributes it, the filter's provider: on its servers or the provider itself, or
+// stamped with it, and never stamped only with another provider.
+func (filter FailingNowFilter) keeps(a attemptFacts) bool {
+	if filter.ProjectID != uuid.Nil && a.ProjectID != filter.ProjectID {
+		return false
+	}
+	if filter.IssuerID == uuid.Nil {
+		return true
+	}
+	issuer := filter.IssuerID.String()
+	stamped := slices.Contains(a.Issuers, issuer)
+	if len(a.Issuers) > 0 && !stamped {
+		return false
+	}
+	return stamped || a.ServerID == issuer || slices.Contains(filter.IssuerServerIDs, a.ServerID)
 }
 
 // triedSince keeps the failures of the connections whose latest failure became known
@@ -138,54 +167,77 @@ type lastServed struct {
 }
 
 // servedQuery reads the failing people's own connections on the failing servers and
-// gateways. Arguments: organization, server kinds, server ids, subjects.
+// gateways. Arguments: organization, every project, project, server kinds, server ids, subjects.
 const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
-WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
+WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
 // answersQuery reads anyone's latest answer per member on the failing servers and
-// gateways: a server failure ends on anyone's answer. Arguments: organization, server
-// kinds, server ids.
+// gateways: a server failure ends on anyone's answer. Arguments: organization, every
+// project, project, server kinds, server ids.
 const answersQuery = `
 SELECT
 	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
-WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id`
 
-// readServed reads the failing people's served connections, and anyone's latest
-// answers, on the servers the failures reached.
-func readServed(ctx context.Context, ch driver.Conn, organizationID string, failures []failure) (served, answers []lastServed, err error) {
-	var kinds, ids, subjects []string
+// servedBatch bounds the server and person pairs, and the servers, in one served query.
+const servedBatch = 1000
+
+type servedPair struct{ kind, server, subject string }
+
+// readServed reads the failing people's served connections, and anyone's latest answers,
+// on the servers the failures reached, in batches of the pairs and servers observed, so
+// the queries grow with the failures. A nil project reads every project.
+func readServed(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, failures []failure, batch int) (served, answers []lastServed, err error) {
+	pairSet, serverSet := map[servedPair]bool{}, map[servedPair]bool{}
 	for _, f := range failures {
 		if f.a.ServerID == "" {
 			continue
 		}
-		if !slices.Contains(kinds, f.a.ServerKind) {
-			kinds = append(kinds, f.a.ServerKind)
-		}
-		if !slices.Contains(ids, f.a.ServerID) {
-			ids = append(ids, f.a.ServerID)
-		}
-		if !slices.Contains(subjects, f.a.SubjectURN) {
-			subjects = append(subjects, f.a.SubjectURN)
-		}
+		pairSet[servedPair{f.a.ServerKind, f.a.ServerID, f.a.SubjectURN}] = true
+		serverSet[servedPair{f.a.ServerKind, f.a.ServerID, ""}] = true
 	}
-	if len(ids) == 0 {
-		return nil, nil, nil
+	cmpPair := func(a, b servedPair) int {
+		return cmp.Or(cmp.Compare(a.kind, b.kind), cmp.Compare(a.server, b.server), cmp.Compare(a.subject, b.subject))
 	}
-	if served, err = queryServed(ctx, ch, servedQuery, organizationID, kinds, ids, subjects); err != nil {
-		return nil, nil, err
+	every := projectID == uuid.Nil
+	columns := func(pairs []servedPair) (kinds, ids, subjects []string) {
+		for _, p := range pairs {
+			kinds, ids, subjects = appendOnce(kinds, p.kind), appendOnce(ids, p.server), appendOnce(subjects, p.subject)
+		}
+		return kinds, ids, subjects
 	}
-	if answers, err = queryServed(ctx, ch, answersQuery, organizationID, kinds, ids); err != nil {
-		return nil, nil, err
+	for pairs := range slices.Chunk(slices.SortedFunc(maps.Keys(pairSet), cmpPair), batch) {
+		kinds, ids, subjects := columns(pairs)
+		rows, err := queryServed(ctx, ch, servedQuery, organizationID, every, projectID, kinds, ids, subjects)
+		if err != nil {
+			return nil, nil, err
+		}
+		served = append(served, rows...)
+	}
+	for servers := range slices.Chunk(slices.SortedFunc(maps.Keys(serverSet), cmpPair), batch) {
+		kinds, ids, _ := columns(servers)
+		rows, err := queryServed(ctx, ch, answersQuery, organizationID, every, projectID, kinds, ids)
+		if err != nil {
+			return nil, nil, err
+		}
+		answers = append(answers, rows...)
 	}
 	return served, answers, nil
+}
+
+func appendOnce(values []string, v string) []string {
+	if slices.Contains(values, v) {
+		return values
+	}
+	return append(values, v)
 }
 
 func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any) ([]lastServed, error) {
@@ -242,16 +294,16 @@ func (s ServedByFamily) OnGatewayMember() bool {
 	return s.ServerKind == serverKindMeta && s.MemberID != ""
 }
 
-// servedByFamilyQuery takes organization, server kinds and server ids.
+// servedByFamilyQuery takes organization, every project, project, server kinds and server ids.
 const servedByFamilyQuery = `
 SELECT server_kind, server_id, member_id, client_family,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
-WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+WHERE organization_id = ? AND (? OR project_id = ?) AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id, client_family`
 
-// ReadServedByFamily reads when each client family was last served and answered on the failing people's servers.
-func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, failing []FailingPerson) ([]ServedByFamily, error) {
+// ReadServedByFamily reads when each client family was last served and answered on the failing people's servers, in one project unless nil.
+func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, failing []FailingPerson) ([]ServedByFamily, error) {
 	kindSet, idSet := map[string]bool{}, map[string]bool{}
 	for _, f := range failing {
 		if !f.OnMCPServer() {
@@ -264,7 +316,7 @@ func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID stri
 
 	var out []ServedByFamily
 	for batch := range slices.Chunk(ids, servedByFamilyBatch) {
-		rows, err := queryServedByFamily(ctx, ch, organizationID, kinds, batch)
+		rows, err := queryServedByFamily(ctx, ch, organizationID, projectID, kinds, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -273,8 +325,8 @@ func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID stri
 	return out, nil
 }
 
-func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, kinds, ids []string) ([]ServedByFamily, error) {
-	rows, err := ch.Query(failingReadContext(ctx), servedByFamilyQuery, organizationID, kinds, ids)
+func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, kinds, ids []string) ([]ServedByFamily, error) {
+	rows, err := ch.Query(failingReadContext(ctx), servedByFamilyQuery, organizationID, projectID == uuid.Nil, projectID, kinds, ids)
 	if err != nil {
 		return nil, fmt.Errorf("query served by family: %w", err)
 	}

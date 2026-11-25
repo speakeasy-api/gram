@@ -327,6 +327,9 @@ export function GrantAccessDialog({
 
               {memberRequest?.status === "pending" && !granted && (
                 <AccessRequestDecision
+                  // A new request starts the decision afresh: no choice, no
+                  // lapsed window and no result from the previous one.
+                  key={memberRequest.id}
                   request={memberRequest}
                   requesterName={member.name}
                 />
