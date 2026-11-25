@@ -118,10 +118,6 @@ export function AuthenticationSectionBody({
   );
 
   const gatewayId = target.attachImpactTarget.metaMcpServerId;
-  const linkedClientIds = useMemo(
-    () => new Set(allClients.map((client) => client.id)),
-    [allClients],
-  );
 
   const attachedIssuerIds = useMemo(
     () => [
@@ -186,8 +182,6 @@ export function AuthenticationSectionBody({
         {gatewayId ? (
           <GatewayAuthorizationServersField
             metaMcpServerId={gatewayId}
-            userSessionIssuerId={userSessionIssuer.id}
-            linkedClientIds={linkedClientIds}
             associatedIssuers={associatedIssuers}
             allowAdditionalProviders={!!target.multipleProviders}
             projectId={target.projectId}

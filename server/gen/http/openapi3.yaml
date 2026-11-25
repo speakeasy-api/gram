@@ -69452,6 +69452,7 @@ paths:
                 name: AttachRemoteSessionClientKeySet
     /rpc/remoteSessionClients.attachUserSessionIssuer:
         post:
+            deprecated: true
             description: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.
             operationId: attachUserSessionIssuer
             parameters:
@@ -69980,6 +69981,7 @@ paths:
                 name: DetachRemoteSessionClientKeySet
     /rpc/remoteSessionClients.detachUserSessionIssuer:
         post:
+            deprecated: true
             description: Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.
             operationId: detachUserSessionIssuer
             parameters:

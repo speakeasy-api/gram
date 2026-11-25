@@ -43,8 +43,8 @@ export function RemoteIdentityProvidersField({
   onDelete: (issuer: RemoteSessionIssuer) => void;
   readOnly?: boolean;
   /**
-   * A gateway's members that sign people in, one row each, listed first: the
-   * row is then about linking them, and a hand-added server is the rare case.
+   * A gateway’s proxied members, whose upstream state is separate from its
+   * existing authorization-server configuration.
    */
   members?: ReactNode;
   /** Servers the member rows already show, so each appears once. */
@@ -81,7 +81,7 @@ export function RemoteIdentityProvidersField({
             {others.length > 0 ? (
               <div className="space-y-3">
                 <Text muted small className="block">
-                  Also linked, not used by a member:
+                  Other authorization servers:
                 </Text>
                 {others.map((issuer) => (
                   <RemoteIdentityProviderRow
@@ -142,7 +142,7 @@ export function RemoteIdentityProvidersField({
       hint={
         <>
           {guided
-            ? "Members that sign people in through their own service, such as Linear. Link each one so signing in to this gateway also signs people in to it."
+            ? "The gateway uses each proxied member’s own upstream configuration."
             : "Where each user signs in to the upstream service. Speakeasy keeps their token and sends it with their requests."}
           <ExplainerDialog title="Authorization servers">
             <Text muted small className="block">
