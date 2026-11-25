@@ -30,7 +30,10 @@ use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor}
 
 use crate::catalog::{HiddenCatalogSource, UnknownToolSource};
 use crate::clip::ClippedToolSource;
-use crate::compaction::{Compaction, PersistingCompactor, PrimaryCompaction, build_compactor};
+use crate::compaction::{
+    Compaction, EpochCompactor, PersistingCompactor, PrimaryCompaction, TranscriptEpoch,
+    build_compactor,
+};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
@@ -513,11 +516,13 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
+    let transcript_epoch = TranscriptEpoch::default();
     let native_tools = ToolRegistry::new()
         .with(tools::bun_run::bun_run)
         .with(tools::tool_search::ToolSearchTool::new(
             mcp_catalog.clone(),
             mcp_cmd_tx.clone(),
+            transcript_epoch.clone(),
         ))
         .with(tools::inspect_asset::InspectAssetTool::new(
             notice_tx.clone(),
@@ -561,17 +566,19 @@ async fn spawn_thread(
         Some(Compaction { primary, fallback }) => {
             let terminal = match primary {
                 Some(PrimaryCompaction::Inline(compactor)) => {
-                    builder = builder.compactor(compactor);
+                    builder =
+                        builder.compactor(EpochCompactor::new(compactor, transcript_epoch.clone()));
                     None
                 }
                 Some(PrimaryCompaction::TurnEnd { mutator, terminal }) => {
-                    builder = builder.compactor(mutator);
+                    builder =
+                        builder.compactor(EpochCompactor::new(mutator, transcript_epoch.clone()));
                     Some(terminal)
                 }
                 None => None,
             };
             if let Some(fallback) = fallback {
-                builder = builder.compactor(fallback);
+                builder = builder.compactor(EpochCompactor::new(fallback, transcript_epoch));
             }
             terminal
         }

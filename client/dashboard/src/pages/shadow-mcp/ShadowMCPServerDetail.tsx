@@ -9,6 +9,10 @@ import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { RetryButton } from "@/components/retry-button";
+import { Spinner } from "@/components/ui/Spinner";
+import { describeApiError } from "@/lib/api-error";
+import { handleError } from "@/lib/errors";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -404,8 +408,9 @@ function EnsureServerReview({
 }) {
   const project = useProject();
   const queryClient = useQueryClient();
-  const ensure = useEnsureMcpServerReviewMutation();
+  const ensure = useEnsureMcpServerReviewMutation({ onError: () => {} });
   const [failed, setFailed] = useState(false);
+  const [failureReason, setFailureReason] = useState("");
   const [attempt, setAttempt] = useState(0);
   // Keyed by server and project (and retry attempt), not a bare boolean, so
   // navigating from one unreviewed server to another gathers for the new one
@@ -432,11 +437,12 @@ function EnsureServerReview({
             ensureServerReviewRequestBody: { target: canonicalServerUrl },
           },
         });
-      } catch {
+      } catch (err) {
         // A failure only marks the run it belongs to: navigating away starts
         // a new run — even one that repeats this run's key — and a stale
         // rejection must not overwrite that run's state.
         if (activeRunRef.current === runToken) {
+          setFailureReason(describeApiError(err).message);
           setFailed(true);
         }
         return;
@@ -455,24 +461,22 @@ function EnsureServerReview({
           Evidence could not be gathered
         </Text>
         <Text muted small className="mt-1 max-w-md">
-          Collecting this server's evidence failed. It may be a temporary
-          problem — try again.
+          {failureReason}
         </Text>
-        <Button
+        <RetryButton
           className="mt-3"
-          variant="secondary"
-          onClick={() => setAttempt((current) => current + 1)}
-        >
-          <Button.Text>Retry</Button.Text>
-        </Button>
+          isRetrying={ensure.isPending}
+          onRetry={() => setAttempt((current) => current + 1)}
+        />
       </div>
     );
   }
 
   return (
     <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+      <Spinner className="text-muted-foreground mr-0 mb-2 size-5" />
       <Text variant="body" className="font-medium">
-        Gathering evidence
+        Gathering evidence…
       </Text>
       <Text muted small className="mt-1 max-w-md">
         Collecting what this server declares about itself — its identity,
@@ -501,9 +505,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const policiesQuery = useRiskListPolicies();
-  const membersQuery = useMembers();
-  const rolesQuery = useRoles();
+  // Every read on this page reports its own failure inline (with the
+  // reason and a Retry), so none rethrows to the page error boundary.
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   let shadowMCPPolicies: ShadowMCPPolicy[] = [];
   if (!policiesQuery.isError) {
     shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
@@ -520,7 +530,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       serverSlug,
     },
     undefined,
-    { enabled: queryEnabled },
+    { enabled: queryEnabled, throwOnError: false },
   );
   const server = serverQuery.data;
   const serverDisplayName =
@@ -544,8 +554,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     : { projectId: project.id, serverUrl: serverURL, limit: USERS_PAGE_LIMIT };
   const usersQuery = useShadowMCPInventoryUsers(usersRequest, undefined, {
     enabled: usersQueryEnabled,
+    throwOnError: false,
   });
-  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
+  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation({
+    onError: () => {},
+  });
   const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
     null,
   );
@@ -636,6 +649,14 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         <Text variant="body" className="font-medium">
           Users could not be loaded
         </Text>
+        <Text muted small className="max-w-md">
+          {describeApiError(usersQuery.error).message}
+        </Text>
+        <RetryButton
+          className="mt-2"
+          isRetrying={usersQuery.isFetching}
+          onRetry={() => void usersQuery.refetch()}
+        />
       </div>
     ) : (
       <TopUsersTable
@@ -669,9 +690,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         invalidateAllShadowMCPInventoryServer(queryClient),
         invalidateAllShadowMCPInventory(queryClient),
       ]);
+      toast.success(name ? `Renamed to “${name}”` : "Server name cleared");
       return true;
-    } catch {
-      toast.error("Unable to update Shadow MCP server name");
+    } catch (err) {
+      handleError(err, { title: "Couldn't rename the server" });
       return false;
     }
   };
@@ -795,8 +817,13 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     Shadow MCP server could not be loaded
                   </Text>
                   <Text muted small className="max-w-md">
-                    Refresh the page or try again later.
+                    {describeApiError(serverQuery.error).message}
                   </Text>
+                  <RetryButton
+                    className="mt-2"
+                    isRetrying={serverQuery.isFetching}
+                    onRetry={() => void serverQuery.refetch()}
+                  />
                 </div>
               ) : (
                 <div className="flex min-h-0 flex-col gap-8 pb-8">

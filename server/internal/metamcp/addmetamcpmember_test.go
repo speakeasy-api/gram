@@ -578,11 +578,8 @@ func TestAddMetaMcpMember_RejectsRetiredApprovalsServer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
-// Attaching a member whose upstream identity pieces exist binds the member's
-// OAuth client to the gateway's issuer, so consent offers the provider with
-// no manual attach. A second member on the same upstream is a no-op: one
-// client per upstream per issuer.
-func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
+// Adding members does not write issuer-client pairs, even for one provider.
+func TestAddMetaMcpMember_DoesNotBindProviderClients(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -693,11 +690,10 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		SortOrder:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
-		"member's client must be bound to the gateway issuer")
+	require.Zero(t, gatewayClientsForUpstream(remoteIssuerID),
+		"adding a member does not write an issuer-client pair")
 
-	// Second member on the same upstream: attach succeeds, binding count for
-	// that upstream stays at one.
+	// Adding another member of the same provider still does not bind it.
 	secondID := seedMcpServer(t, ctx, ti.conn, projectID)
 	stampAndWire(secondID, newClient(remoteIssuerID, "auto-attach-client-2"))
 
@@ -710,8 +706,8 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		SortOrder:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
-		"one client per upstream per issuer")
+	require.Zero(t, gatewayClientsForUpstream(remoteIssuerID),
+		"no issuer-client pair is added for either member")
 }
 
 func TestAddMetaMcpMember_RequiresProjectAndGatewayWrite(t *testing.T) {

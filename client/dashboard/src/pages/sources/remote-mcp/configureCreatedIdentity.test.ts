@@ -246,7 +246,9 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(result).toMatchObject({
       status: "setup-required",
       mcpServer: { visibility: "disabled" },
-      message: expect.stringContaining("Settings > Sign-in"),
+      message: expect.stringContaining(
+        "An organization admin can open Settings > Sign-in and select Add credential",
+      ),
     });
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });
@@ -373,7 +375,10 @@ describe("configureCreatedRemoteMcpIdentity", () => {
 
     // The provider exists but nothing can sign in through it yet, so the
     // server must not be advertised as ready.
-    expect(result.status).toBe("setup-required");
+    expect(result).toMatchObject({
+      status: "setup-required",
+      message: expect.stringContaining("select Add credential"),
+    });
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });
 });

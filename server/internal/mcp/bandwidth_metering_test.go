@@ -93,7 +93,7 @@ func TestMCPBandwidthAttributionForAuthorizedPlatformToolset(t *testing.T) {
 	}))
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	body := toolsListBody()
-	slug := platformtools.ManagedAssistantPlatformToolsetSlug
+	slug := platformtools.PlatformMCPReadToolsetSlug
 	requestPath := "/platform/mcp/" + slug
 	publisher := &mcpBandwidthPublisher{}
 	handler := metering.NewMCPBandwidthMiddleware(ti.logger, publisher)(oops.MCPErrHandle(ti.logger, ti.service.ServePlatformToolset))

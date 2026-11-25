@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -167,7 +168,7 @@ func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t
 		t.Error("transactional recheck must not publish challenge logs through the pool")
 		return true, nil
 	}, nil)
-	service := &Service{authz: engine}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), authz: engine}
 	grant := workloadGrantIssuance{session: sessionIssuance{ProjectID: project, Audience: InferenceResource}}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)

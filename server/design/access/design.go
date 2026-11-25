@@ -2405,6 +2405,14 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 		Description("Optional message from the requester explaining why they need access.")
 		MaxLength(1000)
 	})
+	Attribute("duration", String, func() {
+		Description("How long the requester would like the access for, counted from approval: 1h, 2h or 4h. A suggestion shown to the approver, who still picks the window. Stored only when the request is stored. Cannot be sent with requested_until.")
+		Enum("1h", "2h", "4h")
+	})
+	Attribute("requested_until", String, func() {
+		Description("When the requester would like the access until, such as the end of their day as their own clock reads it. Must be in the future and at most 24 hours away. A suggestion shown to the approver, who still picks the window. Cannot be sent with duration.")
+		Format(FormatDateTime)
+	})
 })
 
 var RequestAccessResult = Type("RequestAccessResult", func() {
@@ -2805,6 +2813,10 @@ var AccessRequestModel = Type("AccessRequest", func() {
 	Attribute("selector", SelectorModel, "The resource or activity boundary asked for.")
 	Attribute("resource_name", String, "Name of the resource, as it was when the request was made.")
 	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("requested_duration_seconds", Int, "How long the requester asked to have the access, in seconds counted from approval. A suggestion; the approver picks the window. Absent when none was asked for.")
+	Attribute("requested_until", String, "When the requester asked to have the access until. A suggestion; the approver picks the window. Absent when none was asked for.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("status", String, "pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.")
 	Attribute("decided_by_user_id", String, "The administrator who approved or denied the request.")
 	Attribute("decided_by_name", String, "The deciding administrator's display name, or their email.")

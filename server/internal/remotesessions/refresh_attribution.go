@@ -1,25 +1,35 @@
 package remotesessions
 
 import (
+	"context"
 	"net/http"
 	"sync"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // RefreshAttribution says where a refresh's connection row goes; every refreshing path names one.
 type RefreshAttribution struct {
-	scope   mcpconnectionattempts.Scope
-	attempt mcpconnectionattempts.Attempt
-	skipped *SkippedClients
-	client  mcpconnectionattempts.Option
+	scope                mcpconnectionattempts.Scope
+	attempt              mcpconnectionattempts.Attempt
+	skipped              *SkippedClients
+	client               mcpconnectionattempts.Option
+	scheduledEligibility func(context.Context, remotesessions_repo.RemoteSession) ([]string, error)
 }
 
 // RefreshIn files a refresh as its own attempt under scope.
 func RefreshIn(scope mcpconnectionattempts.Scope) RefreshAttribution {
-	return RefreshAttribution{scope: scope, attempt: mcpconnectionattempts.NoAttempt, skipped: nil, client: mcpconnectionattempts.Option{}}
+	return RefreshAttribution{scope: scope, attempt: mcpconnectionattempts.NoAttempt, skipped: nil, client: mcpconnectionattempts.Option{}, scheduledEligibility: nil}
+}
+
+// WithScheduledEligibility reauthorizes the exact row after the refresh lock
+// and returns resources from the same typed offer or attachment reach.
+func (a RefreshAttribution) WithScheduledEligibility(check func(context.Context, remotesessions_repo.RemoteSession) ([]string, error)) RefreshAttribution {
+	a.scheduledEligibility = check
+	return a
 }
 
 // InAttempt makes the refresh a step of attempt. A zero attempt changes nothing.

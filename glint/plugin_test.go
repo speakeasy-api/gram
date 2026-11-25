@@ -31,6 +31,7 @@ func disabledAllRulesPlugin() *plugin {
 				NoRawUserEmailFilter:       noRawUserEmailFilterSettings{Disabled: true},
 				ResearchImportBoundary:     researchImportBoundarySettings{Disabled: true, Packages: nil},
 				NoRawAuthzChecks:           noRawAuthzChecksSettings{Disabled: true, Packages: nil},
+				NoPublicSchemaSql:          noPublicSchemaSqlSettings{Disabled: true},
 			},
 		},
 	}
@@ -51,5 +52,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 19)
+	require.Len(t, analyzers, 20)
 }

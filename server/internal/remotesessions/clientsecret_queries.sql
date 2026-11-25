@@ -134,25 +134,37 @@ LEFT JOIN organization_encryption_unreadable_values AS u
 WHERE c.organization_id = @organization_id::text
    OR (c.organization_id IS NULL AND p.organization_id = @organization_id::text);
 
--- name: ClearRemoteSessionClientSecretPlatformCopies :execrows
+-- name: ClearRemoteSessionClientSecretPlatformCopies :one
 -- Destroys up to limit platform-key copies of the organization's secrets
 -- after finalize. The organization-key copy stays, so this is not a new
 -- revision.
-UPDATE remote_session_clients AS c
-SET client_secret_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM remote_session_clients AS target
-    WHERE target.organization_id = @organization_id::text
-      AND target.client_secret_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT @limit_value
-  )
-  AND c.organization_id = @organization_id::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
-    FOR KEY SHARE
-  ), 0) = @decided_generation;
+-- Returns how many cleared copies stood alone and how many stood beside an
+-- organization-key copy. The outer statement rechecks that the platform-key
+-- copy is still set, so a row a concurrent clear already emptied is neither
+-- updated nor counted.
+WITH cleared AS (
+    UPDATE remote_session_clients AS c
+    SET client_secret_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM remote_session_clients AS target
+        WHERE target.organization_id = @organization_id::text
+          AND target.client_secret_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT @limit_value
+      )
+      AND c.organization_id = @organization_id::text
+      AND c.client_secret_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'oauth-client-secrets'
+        FOR KEY SHARE
+      ), 0) = @decided_generation
+    RETURNING (c.client_secret_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared;
 
 -- name: GetRemoteSessionClientProjectOrganization :one
 -- The organization of a project client stored without its own

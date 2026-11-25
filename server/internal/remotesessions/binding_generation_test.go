@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -9,12 +10,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -102,6 +106,49 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	auditCount, err = testrepo.New(ti.conn).CountAttachmentAuditEventsFixture(ctx, testrepo.CountAttachmentAuditEventsFixtureParams{ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, OrganizationID: auth.ActiveOrganizationID, SubjectID: source.ID.String(), ActorID: auth.UserID, PrincipalID: agent.ID.String(), BindingID: binding.ID, ReplacementBindingID: rebound.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 4, auditCount, "initial attach, idempotent attach, detach, and explicit reattach are audited")
+}
+
+func TestBindingsAttachWaitsOnConcurrentRevocation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(ti)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Concurrent revoke agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-revoke-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-revoke-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-revoke-client")
+	source := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: only establishes the test transaction.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	_, err = repo.New(tx).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: source.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: source.ID.String()})
+		done <- err
+	}()
+	q := repo.New(ti.conn)
+	require.Eventually(t, func() bool {
+		_, err := testrepo.New(ti.conn).ProbeAttachmentParentLockFixture(ctx, testrepo.ProbeAttachmentParentLockFixtureParams{RemoteSessionClientID: source.RemoteSessionClientID, UserSessionIssuerID: config})
+		var pgErr *pgconn.PgError
+		return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
+	}, 10*time.Second, 20*time.Millisecond, "attachment must reach parent persistence while the revoke is uncommitted")
+	require.NoError(t, tx.Commit(ctx))
+	select {
+	case err := <-done:
+		requireOopsCode(t, err, oops.CodeConflict)
+	case <-time.After(10 * time.Second):
+		t.Fatal("attachment did not finish after revoke committed")
+	}
+	rows, err := q.ListPrincipalRemoteSessionBindings(ctx, repo.ListPrincipalRemoteSessionBindingsParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 func TestResolveAuthorization_AttachmentReconnectDuringRefresh(t *testing.T) {

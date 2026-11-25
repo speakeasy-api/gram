@@ -1101,7 +1101,7 @@ const (
 // can't be made we fall back to own-sessions rather than failing.
 func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, agentSessions agentSessionScope) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
-	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// the managed assistant's platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
@@ -3036,9 +3036,9 @@ func buildSummarizeTranscript(messages []repo.ChatMessage) string {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
-		// Strip allowlisted harness envelopes (<message-context>, <notification>)
-		// so the summarizer sees the human turn, not framing boilerplate — same
-		// canonical tags title generation mines.
+		// Strip allowlisted harness envelopes so the summarizer sees the human
+		// turn, not framing boilerplate — same canonical tags title generation
+		// mines.
 		content := StripLeadingEnvelopes(msg.Content)
 		if content == "" {
 			continue

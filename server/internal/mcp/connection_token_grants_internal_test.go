@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -46,13 +47,14 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		{name: "unnamed refusal", err: refuseWorkloadGrant("policy", cause), want: mcpconnectionattempts.CodeAssertionOther, detail: "policy"},
 		{name: "stage unavailable", err: workloadGrantStageUnavailable("session_persist_unavailable", cause), want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
 		{name: "rate limited", err: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: cause}, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
-		{name: "choices not accepted", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceNotAccepted), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_not_accepted"},
 		{name: "server not reached", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceServerNotReached), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "choice_server_not_reached"},
 		{name: "credential not needed", err: setupRequired("no", errChoiceTakesNoCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_not_needed"},
 		{name: "credential needed", err: setupRequired("no", errChoiceNeedsCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_needed"},
 		{name: "sign-in not set up", err: setupRequired("no", errChoiceNotSetUp), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "sign_in_not_set_up"},
-		{name: "credential not ready", err: setupRequired("no", errChoiceNotReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "credential_not_ready"},
-		{name: "no credential ready", err: setupRequired("no", errChoiceNoneReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "no_credential_ready"},
+		{name: "chosen credential not set up", err: setupRequired("no", errChoiceChosenNotSetUp), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "credential_not_set_up"},
+		{name: "credential not ready", err: setupRequired("no", errChoiceNotConnected), want: mcpconnectionattempts.CodeInvalidRemoteSession, detail: "credential_not_ready"},
+		{name: "no credential ready", err: setupRequired("no", errChoiceNoneConnected), want: mcpconnectionattempts.CodeInvalidRemoteSession, detail: "no_credential_ready"},
+		{name: "named credential not connected", err: oops.NewOAuthError(http.StatusBadRequest, tokenErrorSetupRequired, "no", namedCredentialError{cause: errChoiceNotConnected, name: "Personal"}), want: mcpconnectionattempts.CodeInvalidRemoteSession, detail: "credential_not_ready"},
 		{name: "credential denied", err: accessDenied("no", errChoiceDenied), want: mcpconnectionattempts.CodeUpstreamCredentialDenied, detail: "credential_denied"},
 		{name: "no credential allowed", err: accessDenied("no", errChoiceNoneAllowed), want: mcpconnectionattempts.CodeUpstreamCredentialDenied, detail: "no_credential_allowed"},
 		{name: "credential not chosen", err: oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, "name one", errChoiceNotNamed), want: mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail: "credential_not_chosen"},
@@ -95,7 +97,7 @@ func (c assistantGrantCase) post(t *testing.T, form url.Values) *httptest.Respon
 
 	r := newTokenDispatchRequest(t, form)
 	w := httptest.NewRecorder()
-	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.client, "https://gram.example", "client_secret_post", c.service.logger))
+	require.NoError(t, c.service.handleAssistantClientCredentialsGrant(r.Context(), w, r, c.endpoint, c.service.aiCatalog.Snapshot(), c.client, "https://gram.example", "client_secret_post", c.service.logger))
 	return w
 }
 
@@ -118,7 +120,7 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
 	require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
 	require.Equal(t, c.client.ID.String(), row.UserSessionClientID)
-	require.Equal(t, mcpconnectionattempts.AppOf(c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 	require.Len(t, rec.Rows(), 1)
 }
 

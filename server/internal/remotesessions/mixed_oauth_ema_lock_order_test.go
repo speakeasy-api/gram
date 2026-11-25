@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -35,7 +34,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 				auth, _ := contextvalues.GetAuthContext(ctx)
 				projectID := *auth.ProjectID
 				serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "mixed-writer", in.Resource)
-				_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+				_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 				require.NoError(t, err)
 				in.ConfirmGrants = []string{"authorization_code", "refresh_token", oauthwire.GrantTypeJWTBearer}
 				prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -88,8 +87,8 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 				copies = int(fixtureValue6)
 				require.Equal(t, 2, copies)
 				if operation == "reconcile_inherited_tx" {
-					// Restore sole-consumer evidence and remove only the legacy association.
-					// Reconcile must really capture a missing row, not take its no-op path.
+					// Remove the association but keep the typed setup. Scope
+					// acquisition must still precede reconciliation.
 					err = repo.New(ti.conn).LockingFixtureClearUserIssuer(ctx, repo.LockingFixtureClearUserIssuerParams{ProjectID: projectID, ServerID: detachedServer})
 					require.NoError(t, err)
 					deleted, err := repo.New(ti.conn).LockingFixtureDeleteLegacyChoice(ctx, repo.LockingFixtureDeleteLegacyChoiceParams{ProjectID: projectID, ServerID: serverID, ClientID: in.ClientID})
@@ -111,7 +110,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 					err = repo.New(writer).LockingFixtureLockServer(ctx, repo.LockingFixtureLockServerParams{ProjectID: projectID, ServerID: serverID})
 					require.NoError(t, err)
 				}
-				commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, in.UserSessionIssuerID, in.RemoteSessionIssuerID, in.ClientID))
+				commit := identityCommitter(t, ti).Prepare(linkPlan(t, ctx, ti, in.UserSessionIssuerID, in.RemoteSessionIssuerID, in.ClientID))
 				var inherited pgx.Tx
 				if operation == "reconcile_inherited_tx" {
 					inherited = testenv.BeginTx(t, ctx, ti.conn)
@@ -126,7 +125,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 						}
 						done <- err
 					case "attach":
-						_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
+						_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: in.UserSessionIssuerID.String()})
 						done <- err
 					case "reconcile_inherited_tx":
 						err := upstreamclients.Reconcile(ctx, inherited, auth.ActiveOrganizationID, projectID, []uuid.UUID{in.UserSessionIssuerID})
@@ -187,7 +186,7 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 					fixtureValue8, err := repo.New(ti.conn).LockingFixtureCountLegacyChoice(ctx, repo.LockingFixtureCountLegacyChoiceParams{ProjectID: projectID, ServerID: serverID, ClientID: in.ClientID})
 					require.NoError(t, err)
 					captured = int(fixtureValue8)
-					require.Equal(t, 1, captured, "direct reconciliation must capture after acquiring its own preflight scope")
+					require.Zero(t, captured, "reconciliation must not manufacture a server offer")
 				}
 				require.Equal(t, grantsBefore, snapshot(), "configuration synchronization must not change permissions")
 				require.Equal(t, emaID, assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource))

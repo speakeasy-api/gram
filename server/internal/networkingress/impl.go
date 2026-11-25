@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -28,13 +27,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,7 +54,7 @@ type Service struct {
 	db                   *pgxpool.Pool
 	auth                 *auth.Auth
 	authz                *authz.Engine
-	enc                  *encryption.Client
+	credentials          *ingresscredentials.Credentials
 	audit                *audit.Logger
 	admission            *ExpansionAdmission
 	requester            ReconcileRequester
@@ -73,13 +73,13 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
-	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *ingresscredentials.Credentials, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
+	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, credentials, auditLogger, admission, requester, nil, health)
 }
 
 // NewServiceWithPublication configures the optional durable publication invalidator.
 // A nil requester preserves the dormant producer behavior.
-func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
+func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *ingresscredentials.Credentials, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
@@ -87,7 +87,7 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		db:                   db,
 		auth:                 auth.New(logger, db, sessions, authzEngine),
 		authz:                authzEngine,
-		enc:                  enc,
+		credentials:          credentials,
 		audit:                auditLogger,
 		admission:            admission,
 		requester:            requester,
@@ -203,19 +203,37 @@ type tailscaleCredentials struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func (s *Service) encryptCredentials(clientID, clientSecret string) (pgtype.Text, error) {
+// credentialDocument encodes the provider credential document the selected
+// provider adapter parses.
+func credentialDocument(clientID, clientSecret string) ([]byte, error) {
 	if clientID == "" || clientSecret == "" {
-		return pgtype.Text{}, fmt.Errorf("OAuth client ID and secret are required")
+		return nil, fmt.Errorf("OAuth client ID and secret are required")
 	}
 	plaintext, err := json.Marshal(tailscaleCredentials{ClientID: clientID, ClientSecret: clientSecret})
 	if err != nil {
-		return pgtype.Text{}, fmt.Errorf("encode provider credentials: %w", err)
+		return nil, fmt.Errorf("encode provider credentials: %w", err)
 	}
-	ciphertext, err := s.enc.Encrypt(plaintext)
-	if err != nil {
-		return pgtype.Text{}, fmt.Errorf("encrypt provider credentials: %w", err)
+	return plaintext, nil
+}
+
+// storeCredentials seals the credential document for the organization's
+// transition state and stores it on the ingress, inside dbtx.
+func (s *Service) storeCredentials(ctx context.Context, dbtx repo.DBTX, ingressID uuid.UUID, organizationID string, document []byte) (repo.NetworkIngress, error) {
+	if s.credentials == nil {
+		return repo.NetworkIngress{}, oops.E(oops.CodeUnavailable, nil, "provider credentials cannot be stored: no encryption key is configured").LogError(ctx, s.logger)
 	}
-	return conv.ToPGText(ciphertext), nil
+	ingress, err := s.credentials.Set(ctx, dbtx, ingressID, organizationID, document)
+	switch {
+	case errors.Is(err, ingresscredentials.ErrIngressNotFound):
+		return repo.NetworkIngress{}, oops.E(oops.CodeNotFound, err, "no network ingress found for organization")
+	case errors.Is(err, orgencryption.ErrSuspended), errors.Is(err, orgencryption.ErrInvalidKey):
+		return repo.NetworkIngress{}, oops.E(oops.CodeFailedPrecondition, err, "the organization's encryption key is suspended or invalid, so credentials can't be stored until it is fixed").LogWarn(ctx, s.logger)
+	case err != nil && orgencryption.IsKeyProblem(err):
+		return repo.NetworkIngress{}, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable; try again later").LogError(ctx, s.logger)
+	case err != nil:
+		return repo.NetworkIngress{}, oops.E(oops.CodeUnexpected, err, "store provider credentials").LogError(ctx, s.logger)
+	}
+	return ingress, nil
 }
 
 func validateHostname(hostname string) error {
@@ -246,7 +264,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if err := validateHostname(hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
-	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
+	credentials, err := credentialDocument(payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
 	}
@@ -296,7 +314,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
 		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
-		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
+		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false),
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
 		Runtime: conv.ToPGText(RuntimeGateway),
 	})
@@ -306,6 +324,10 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 			return nil, oops.E(oops.CodeConflict, err, "organization already has a network ingress")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create network ingress").LogError(ctx, s.logger)
+	}
+	ingress, err = s.storeCredentials(ctx, dbtx, ingress.ID, ingress.OrganizationID, credentials)
+	if err != nil {
+		return nil, err
 	}
 	view := mv.BuildNetworkIngressView(ingress)
 	if err := s.audit.LogNetworkIngressCreate(ctx, dbtx, audit.LogNetworkIngressCreateEvent{NetworkIngressEventBase: s.auditBase(authCtx, ingress), Snapshot: view}); err != nil {
@@ -403,7 +425,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
-	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
+	credentials, err := credentialDocument(payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
 	}
@@ -416,14 +438,15 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	if err := queries.AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, s.logger)
 	}
-	if _, err := queries.LockNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID); errors.Is(err, pgx.ErrNoRows) {
+	current, err := queries.LockNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, err, "no network ingress found for organization")
 	} else if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress").LogError(ctx, s.logger)
 	}
-	ingress, err := queries.RotateNetworkIngressCredentials(ctx, repo.RotateNetworkIngressCredentialsParams{CredentialsEncrypted: credentials, OrganizationID: authCtx.ActiveOrganizationID})
+	ingress, err := s.storeCredentials(ctx, dbtx, current.ID, authCtx.ActiveOrganizationID, credentials)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "rotate network ingress credentials").LogError(ctx, s.logger)
+		return nil, err
 	}
 	if err := s.audit.LogNetworkIngressRotateCredentials(ctx, dbtx, audit.LogNetworkIngressRotateCredentialsEvent{NetworkIngressEventBase: s.auditBase(authCtx, ingress), Provider: ingress.Provider}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record credential rotation").LogError(ctx, s.logger)

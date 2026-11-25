@@ -108,9 +108,7 @@ it("lists a registered agent that has not signed in yet under the agent grouping
   );
 
   // Grouped by person, there is no session to list, and nothing was searched.
-  expect(
-    screen.getByText(/No one has signed in through this provider yet/),
-  ).toBeTruthy();
+  expect(screen.getByText(/No one has signed in here yet/)).toBeTruthy();
   expect(screen.queryByText("No connections match your search")).toBeNull();
 
   fireEvent.click(screen.getByText("Agent"));
