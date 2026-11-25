@@ -399,26 +399,6 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 	require.NoError(t, err)
 }
 
-// seedLegacyIssuerClientLink gives tests an existing retired link, not an attachment prerequisite.
-func seedLegacyIssuerClientLink(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) {
-	t.Helper()
-	require.NoError(t, repo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   signInID,
-	}))
-}
-
-func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
-	t.Helper()
-
-	count, err := repo.New(conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   userIssuerID,
-	})
-	require.NoError(t, err)
-	return int(count)
-}
-
 // remoteSessionClientOrganizationID reads the persisted organization_id of a
 // remote_session_client by id (scoped to its project).
 func remoteSessionClientOrganizationID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, clientID uuid.UUID) string {

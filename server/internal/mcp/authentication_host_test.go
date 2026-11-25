@@ -593,7 +593,7 @@ func TestAuthenticationHost_RemoteConnectReturnsToAuthenticationHostConsent(t *t
 	authCtx := requireProjectAuthContext(t, ctx)
 	f := seedAuthenticationHostEndpointIssuer(t, ctx, ti)
 	harness := newAuthenticationHostHarness(t, ti)
-	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "authn-host-rc-"+uuid.NewString()[:8], "", nil)
+	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "authn-host-rc-"+uuid.NewString()[:8], "")
 	placeHostedConsentRegistration(t, ctx, ti, f.slugA, remoteClientID)
 	stored := authorizeOnAuthenticationHost(t, ctx, ti, harness, f, f.slugA)
 

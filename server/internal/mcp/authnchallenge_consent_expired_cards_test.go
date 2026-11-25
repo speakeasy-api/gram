@@ -138,7 +138,7 @@ func TestConsentPost_TypedChoiceRefusesAnExpiredPersonalClient(t *testing.T) {
 
 	ctx, fx := typedConsentEndpoint(t, "typed-expired")
 	serverID := fx.endpoint.McpServerID.UUID
-	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-expired", "", nil)
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-expired", "")
 	fixtures := authclientfixtures.New(fx.ti.conn)
 	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
@@ -165,7 +165,7 @@ func TestConsentPost_TypedSharedCredentialIgnoresAnExpiredCard(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: fx.orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "key", Valid: true}}))
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
-	expired := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-shared", "", []uuid.UUID{fx.shared})
+	expired := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-shared", "")
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, expired, fx.subject, consentChainedUpstream)
 
 	grant := approveConsent(t, ctx, fx)
@@ -181,7 +181,8 @@ func TestConsentAgentApproval_AttachedConnectionIsNotJudgedByCards(t *testing.T)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	agent := createConsentAgent(t, ctx, ti, fx, "Attached agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "agent-attached", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "agent-attached", "")
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, fx.target.ProjectID, fx.toolset.ID, client)
 	owner := urn.NewUserSubject(fx.userID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, fx.target.UserSessionIssuerID, client, owner, "owner-token", "")
 
@@ -229,7 +230,7 @@ func TestGatewayConsentPost_IsNotJudgedByCards(t *testing.T) {
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Docs", docsSlug, 1, newRecordingUpstream(t, "search_docs").url)
 	trackerUpstream := newRecordingUpstream(t, "list_issues")
 	trackerID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Tracker", "tracker-"+uuid.NewString()[:8], 2, trackerUpstream.url)
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-expired-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-expired-"+uuid.NewString()[:8], "")
 	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: trackerID, RemoteSessionClientID: remoteClient})
 	require.NoError(t, err)
 	expireConsentGrant(t, ctx, ti, issuer.ID, remoteClient, urn.NewUserSubject(authCtx.UserID), trackerUpstream.url)
@@ -507,7 +508,7 @@ func TestServeConsentAction_VerifyNeverConnectedAsksToConnect(t *testing.T) {
 
 	ctx, fx := seedMetaValidationFixture(t, "verify-never")
 	projectID, orgID := consentTestTenant(t, ctx)
-	client := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "verify-never-client", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "verify-never-client", "")
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, client)
 	member := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "verify-never-other", "https://never.example.com/mcp", conv.ToNullUUID(issuer), 1)
 	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, client, "remote_session")
@@ -537,11 +538,8 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			projectID, orgID := consentTestTenant(t, ctx)
 			linked, shared := fx.clientID, fx.endpoint.UserSessionIssuerID
-			if !tc.sibling {
-				require.NoError(t, testrepo.New(fx.ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{RemoteSessionClientID: linked, ProjectID: conv.ToNullUUID(projectID)}))
-			}
 
-			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
+			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "")
 			fixtures := authclientfixtures.New(fx.ti.conn)
 			// The shared fixture offers linked by default. Remove that offer
 			// without removing its token or the sibling case's issuer binding.

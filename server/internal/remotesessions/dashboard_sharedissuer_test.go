@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // Several MCP servers usually share one user session issuer, and a client's
@@ -98,32 +97,6 @@ func offerOwnRegistration(t *testing.T, ctx context.Context, ti *testInstance, s
 	return registrationID, authClientID
 }
 
-// Binding a client to an issuer is configuration for the issuer's one server,
-// so it is offered there under enforcement as it is without.
-func TestAttachUserSessionIssuerOffersOnTheSoleServerUnderEnforcement(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	orgID := activeOrganizationID(t, ctx)
-	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "attach-enforced-issuer")
-	target, _ := sourceBackedTarget(t, ctx, ti, "attach-enforced-target", userIssuerID)
-	providerID := createServerIdentityProvider(t, ctx, ti, "attach-enforced-provider", "", false, []string{"none"})
-	clientID := createServerIdentityClient(t, ctx, ti, "attach-enforced-client", providerID, false)
-
-	_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  clientID.String(),
-		UserSessionIssuerID: userIssuerID.String(),
-	})
-	require.NoError(t, err)
-
-	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), target))
-	require.Equal(t,
-		[]uuid.UUID{authclientbackfill.OAuthClientID(orgID, clientID, authclientbackfill.TypeRemoteSession)},
-		offeredAuthClients(t, ctx, ti.conn, target),
-	)
-}
-
 // A deleted server's registration must not reach the remaining server on the
 // same sign-in, even when another client write synchronizes the typed offers.
 func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement(t *testing.T) {
@@ -201,7 +174,6 @@ func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.
 	target, _ := sourceBackedTarget(t, ctx, ti, "capture-off-target", userIssuerID)
 	providerID := createServerIdentityProvider(t, ctx, ti, "capture-off-provider", "", false, []string{"none"})
 	clientID := createServerIdentityClient(t, ctx, ti, "capture-off-client", providerID, false)
-	seedLegacyIssuerClientLink(t, ctx, ti.conn, clientID, userIssuerID)
 	orgID := activeOrganizationID(t, ctx)
 	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
@@ -211,12 +183,8 @@ func TestCaptureSoleConsumersRequiresExplicitInputWithoutEnforcement(t *testing.
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target))
 	offers := offeredAuthClients(t, ctx, ti.conn, target)
 	require.Len(t, offers, 1)
-	compatibility := testrepo.New(ti.conn)
-	require.NoError(t, compatibility.DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
-		RemoteSessionClientID: clientID, ProjectID: conv.ToNullUUID(projectID),
-	}))
 	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
-	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target), "compatibility parent removal does not revoke an explicit server offer")
+	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, target), "reconciliation preserves an explicit server offer")
 	require.Equal(t, offers, offeredAuthClients(t, ctx, ti.conn, target), "the exact typed offer survives reconciliation")
 }
 
@@ -300,30 +268,6 @@ func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
 			})
 		}
 	}
-}
-
-// Under enforcement a client bound to the issuer of its one server is that
-// server's configuration, whatever else the server already offers.
-func TestAttachUserSessionIssuerOffersBesideTheServersOwnOfferUnderEnforcement(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	orgID := activeOrganizationID(t, ctx)
-	projectID := projectIDFromContext(t, ctx)
-	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
-	shared := seedSharedIssuer(t, ctx, ti, "beside-offer", "")
-	ownProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-own-provider", "", false, []string{"none"})
-	offerOwnRegistration(t, ctx, ti, shared.second, ownProvider, "beside-offer-own-client")
-	_, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
-	require.NoError(t, err)
-	attachedProvider := createServerIdentityProvider(t, ctx, ti, "beside-offer-attached-provider", "", false, []string{"none"})
-	attachedClient := createServerIdentityClient(t, ctx, ti, "beside-offer-attached-client", attachedProvider, false)
-
-	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: attachedClient.String(), UserSessionIssuerID: shared.userIssuerID.String()})
-	require.NoError(t, err)
-
-	require.Equal(t, []uuid.UUID{attachedClient}, associatedClients(t, ctx, ti.conn, projectID, shared.second))
-	require.Contains(t, offeredAuthClients(t, ctx, ti.conn, shared.second), authclientbackfill.OAuthClientID(orgID, attachedClient, authclientbackfill.TypeRemoteSession))
 }
 
 // An administrator's offer of a credential that is not an OAuth registration,

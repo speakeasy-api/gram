@@ -115,12 +115,10 @@ func TestCommitAddsAnotherProviderAlongsideAServersClient(t *testing.T) {
 			second := createCapturingServer(t, ctx, ti, "alongside-second", issuer)
 			betaClient := commitManualClient(t, ctx, ti, second, beta, "alongside-beta-client")
 
-			requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
 			_, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 				ID: alphaClient, ProjectID: projectIDFromContext(t, ctx), OrganizationID: activeOrganizationID(t, ctx),
 			})
 			require.NoError(t, err, "the first server's registration must still be live")
-			requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 			require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, first))
 			require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, second), "only this server is associated with its new client")
 		})
@@ -157,7 +155,6 @@ func TestCommitReusesItsOwnTypedOffer(t *testing.T) {
 	}
 
 	require.Zero(t, requests.Load(), "reusing a client registers nothing upstream")
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
@@ -175,7 +172,7 @@ func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	}))
 	t.Cleanup(registrationServer.Close)
 
-	target, issuer := createServerIdentityTarget(t, ctx, ti, "keep-own-target")
+	target, _ := createServerIdentityTarget(t, ctx, ti, "keep-own-target")
 	provider := createServerIdentityProvider(t, ctx, ti, "keep-own-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 	client := commitManualClient(t, ctx, ti, target, provider, "keep-own-client")
 
@@ -183,7 +180,6 @@ func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client.String(), result.Client.ID)
 	require.Zero(t, requests.Load())
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Two servers that share downstream sign-in can offer distinct registrations.
@@ -199,10 +195,8 @@ func TestCommitKeepsDistinctClientsForServersSharingAnIssuer(t *testing.T) {
 
 	other := commitManualClient(t, ctx, ti, second, provider, "credentials-other-client")
 
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{other}, serverAssociatedClients(t, ctx, ti, second))
-	requireNoAttachmentParent(t, ctx, ti, other, issuer)
 }
 
 // Moving a server to another provider releases a client other servers use: it
@@ -226,7 +220,6 @@ func TestCommitMovingToAnotherProviderReleasesASharedClient(t *testing.T) {
 
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "move-beta-client")
 
-	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
 	require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, staying))
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 
@@ -248,13 +241,11 @@ func TestCommitMovingToAnotherProviderUnbindsAClientOnlyThisServerUses(t *testin
 	alpha := createServerIdentityProvider(t, ctx, ti, "sole-alpha", "", false, []string{"none"})
 	beta := createServerIdentityProvider(t, ctx, ti, "sole-beta", "", false, []string{"none"})
 	moving := createCapturingServer(t, ctx, ti, "sole-moving", issuer)
-	alphaClient := commitManualClient(t, ctx, ti, moving, alpha, "sole-alpha-client")
+	commitManualClient(t, ctx, ti, moving, alpha, "sole-alpha-client")
 	createCapturingServer(t, ctx, ti, "sole-unconfigured", issuer)
 
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "sole-beta-client")
 
-	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
-	requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 }
 
@@ -268,11 +259,10 @@ func TestCommitKeepsAClientAGatewayMayUse(t *testing.T) {
 	createImpactGateway(t, ctx, ti, "gateway-keep", issuer)
 	alpha := createServerIdentityProvider(t, ctx, ti, "gateway-keep-alpha", "", false, []string{"none"})
 	beta := createServerIdentityProvider(t, ctx, ti, "gateway-keep-beta", "", false, []string{"none"})
-	alphaClient := commitManualClient(t, ctx, ti, target, alpha, "gateway-keep-alpha-client")
+	commitManualClient(t, ctx, ti, target, alpha, "gateway-keep-alpha-client")
 
 	betaClient := commitManualClient(t, ctx, ti, target, beta, "gateway-keep-beta-client")
 
-	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, target))
 }
 
@@ -287,14 +277,12 @@ func TestCommitAddingAServerIsNotBlockedByAnotherServersAgents(t *testing.T) {
 	beta := createServerIdentityProvider(t, ctx, ti, "agents-beta", "", false, []string{"none"})
 	first := createCapturingServer(t, ctx, ti, "agents-first", issuer)
 	alphaClient := commitManualClient(t, ctx, ti, first, alpha, "agents-alpha-client")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: alphaClient, UserSessionIssuerID: issuer}))
 	seedLiveAgentBinding(t, ctx, ti, alphaClient, issuer)
 	second := createCapturingServer(t, ctx, ti, "agents-second", issuer)
 
-	betaClient := commitManualClient(t, ctx, ti, second, beta, "agents-beta-client")
+	commitManualClient(t, ctx, ti, second, beta, "agents-beta-client")
 
 	requireClientBound(t, ctx, ti, alphaClient, issuer, true)
-	requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 	requireLiveAgentBindings(t, ctx, ti, alphaClient, issuer)
 }
 
@@ -318,8 +306,6 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	recordTypedClients(t, ctx, ti.conn, organizationID, associated)
 
 	// A leftover legacy link without a server placement is not an offer.
-	seedLegacyIssuerClientLink(t, ctx, ti.conn, siblingClient, issuer)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, siblingClient, issuer))
 
 	// The caller connected the server's own client and never the sibling's.
 	subject := urn.NewUserSubject(auth.UserID)
@@ -381,10 +367,6 @@ func seedBoundServiceAccountClient(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), forced)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   issuer,
-	}))
 	rows, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        activeOrganizationID(t, ctx),
 		RemoteSessionClientID: client.ID,
@@ -444,7 +426,6 @@ func TestGetServerIdentityImpactSaysWhichClientsLeavingRemoves(t *testing.T) {
 	createImpactGateway(t, ctx, ti, "leaving-gateway", issuer)
 	provider := createServerIdentityProvider(t, ctx, ti, "leaving-gateway-provider", "", false, []string{"none"})
 	client := commitManualClient(t, ctx, ti, target, provider, "leaving-gateway-client")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer}))
 
 	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(issuer, &target, "detach", nil, nil))
 	require.NoError(t, err)
@@ -471,7 +452,7 @@ func TestCommitExplicitReplaceRequiresWriteOnTheServersItMoves(t *testing.T) {
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, "replace-write-issuer")
 	provider := createServerIdentityProvider(t, ctx, ti, "replace-write-provider", "", false, []string{"none"})
 	first := createCapturingServer(t, ctx, ti, "replace-write-first", issuer)
-	client := commitManualClient(t, ctx, ti, first, provider, "replace-write-client")
+	commitManualClient(t, ctx, ti, first, provider, "replace-write-client")
 	outsideIssuer := createUserSessionIssuer(t, ctx, ti.conn, "replace-write-outside-issuer")
 	outside := createCapturingServer(t, ctx, ti, "replace-write-outside", outsideIssuer)
 
@@ -485,7 +466,6 @@ func TestCommitExplicitReplaceRequiresWriteOnTheServersItMoves(t *testing.T) {
 	payload.ReplaceClientServerIds = []string{outside.String()}
 	_, err := ti.service.CommitServerIdentityConfiguration(limited, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Replacing a client other servers use is an explicit choice: the preview names
@@ -522,8 +502,6 @@ func TestCommitExplicitReplaceMovesEveryServerToTheNewClient(t *testing.T) {
 	newClient, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireNoAttachmentParent(t, ctx, ti, oldClient, issuer)
-	requireNoAttachmentParent(t, ctx, ti, newClient, issuer)
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, second))
 
@@ -554,7 +532,6 @@ func TestCommitExplicitReplaceRefusesAnUnconfirmedServerList(t *testing.T) {
 		require.ErrorContains(t, err, "changed")
 	}
 
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
@@ -580,7 +557,6 @@ func TestCommitExplicitReplaceDoesNotTreatGatewayIssuerAsAnOffer(t *testing.T) {
 	preview.ReplaceClient = new(true)
 	_, err = ti.service.GetServerIdentityImpact(ctx, preview)
 	require.NoError(t, err)
-	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // A server in another project is outside the commit's writer scope, so its
@@ -643,7 +619,7 @@ func TestCommitExplicitReplaceRegistersANewClient(t *testing.T) {
 	}))
 	t.Cleanup(registrationServer.Close)
 
-	target, issuer := createServerIdentityTarget(t, ctx, ti, "replace-auto-target")
+	target, _ := createServerIdentityTarget(t, ctx, ti, "replace-auto-target")
 	provider := createServerIdentityProvider(t, ctx, ti, "replace-auto-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 	oldClient := commitManualClient(t, ctx, ti, target, provider, "replace-auto-old-client")
 
@@ -654,5 +630,4 @@ func TestCommitExplicitReplaceRegistersANewClient(t *testing.T) {
 	require.Nil(t, result.Failure)
 	require.Equal(t, int64(1), requests.Load())
 	require.NotEqual(t, oldClient.String(), result.Client.ID)
-	requireNoAttachmentParent(t, ctx, ti, oldClient, issuer)
 }

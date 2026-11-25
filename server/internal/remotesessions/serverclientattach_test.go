@@ -433,7 +433,6 @@ func TestAttachServerClientAssociation_OffersRegistrationWithoutServersIssuerPai
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
-	requireNoAttachmentParent(t, ctx, f.ti, client, own)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, f.ti.conn, server))
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }
@@ -552,7 +551,6 @@ func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
 	first := f.hostedServer(t, ctx, "hosted-exact-a", conv.ToNullUUID(issuer))
 	second := f.hostedServer(t, ctx, "hosted-exact-b", conv.ToNullUUID(issuer))
 	client, _ := f.client(t, ctx, "hosted-exact", uuid.Nil)
-	q := repo.New(f.ti.conn)
 	for _, server := range []uuid.UUID{first, second} {
 		result, err := f.attach(ctx, server, client)
 		require.NoError(t, err)
@@ -567,9 +565,6 @@ func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
 	stored, err := testrepo.New(f.ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, first)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, stored)
-	count, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer})
-	require.NoError(t, err)
-	require.Zero(t, count)
 }
 
 // A member with no issuer of its own reaches a client only through its gateway.

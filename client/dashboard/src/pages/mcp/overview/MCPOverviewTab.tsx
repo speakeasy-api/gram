@@ -123,6 +123,7 @@ export function MCPOverviewTab({
               ...range.resolve(),
               ...overviewScope(server),
               includeTimeSeries: true,
+              toolCallsOnly: true,
             },
           }),
         ),

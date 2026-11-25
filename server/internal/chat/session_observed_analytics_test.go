@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -37,7 +38,7 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	toolIOLogsDisabled := func(context.Context, string) (bool, error) { return false, nil }
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, logsEnabled, toolIOLogsDisabled, telemetry.NewUserInfoResolver(logger, ti.conn, cache.NoopCache), telemetry.NewNoopLogPublisher(logger))
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	telemService := telemetry.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, nil, nil, logsEnabled, logsEnabled, nil, authzEngine)
+	telemService := telemetry.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, nil, nil, logsEnabled, logsEnabled, nil, authzEngine, &feature.InMemory{})
 	chClient := repo.New(ti.chConn)
 	projectID := ti.projectID
 	now := time.Now().UTC().Add(-time.Minute)

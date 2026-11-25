@@ -1280,7 +1280,7 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 			upstream := "https://chained.example.test/mcp"
 			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", "chained-"+uuid.NewString()[:8], 1, upstream)
-			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "")
 			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 			require.NoError(t, err)
 			seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, memberID, upstreamClient, "ema")
@@ -1333,7 +1333,7 @@ func TestGatewayConsentRefusedMemberIsNotUnavailable(t *testing.T) {
 			upstream := "https://chained.example.test/mcp"
 			memberSlug := "chained-" + uuid.NewString()[:8]
 			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", memberSlug, 1, upstream)
-			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "")
 			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 			require.NoError(t, err)
 			seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, memberID, upstreamClient, "ema")
