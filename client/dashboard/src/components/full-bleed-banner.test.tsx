@@ -37,7 +37,9 @@ describe("FullBleedBanner", () => {
     const frame = container.firstElementChild!;
     expect(frame.className).toContain("w-full");
     expect(frame.className).toContain("border-b");
-    expect(frame.firstElementChild!.className).toContain("max-w-7xl");
+    expect(frame.firstElementChild!.className).toContain(
+      "max-w-(--page-max-width)",
+    );
   });
 
   // Page furniture shouldn't be announced; a banner that reports a state

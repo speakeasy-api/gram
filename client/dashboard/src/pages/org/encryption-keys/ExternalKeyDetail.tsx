@@ -135,7 +135,7 @@ export default function ExternalKeyDetail(): JSX.Element {
 
         <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
           <div className="shrink-0 border-b">
-            <div className="mx-auto max-w-[1270px] px-8">
+            <div className="mx-auto max-w-(--detail-max-width) px-8">
               <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                 <PageTabsTrigger value="overview" asChild>
                   <Link to={tabHref("overview")}>Overview</Link>
@@ -150,7 +150,7 @@ export default function ExternalKeyDetail(): JSX.Element {
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+          <div className="mx-auto w-full max-w-(--detail-max-width) px-8 py-8">
             <TabsContent value="overview" className="mt-0">
               {/* Keyed like the Settings tab: the verify result lives in tab
                   state, so without this a key-to-key navigation would keep

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 /**
  * DetailBody — the width contract for the scrollable body of a detail page.
  *
- * The raw string `mx-auto w-full max-w-[1270px] px-8 py-8` was copy-pasted into
+ * The raw string `mx-auto w-full max-w-(--detail-max-width) px-8 py-8` was copy-pasted into
  * ~13 detail pages (mcp, plugins, skills, sources, external services, …). This
  * centralizes that contract so the detail-page column width lives in one place
  * and pairs with `DetailHero` / the detail sidebar rail.
@@ -36,7 +36,7 @@ export function DetailBody({
   return (
     <div
       className={cn(
-        "mx-auto w-full max-w-[1270px] px-8 py-8",
+        "mx-auto w-full max-w-(--detail-max-width) px-8 py-8",
         fill && "flex-1",
         spacingClass,
         className,

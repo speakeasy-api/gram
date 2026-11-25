@@ -151,7 +151,7 @@ export function StepperShell({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    // Full width — Page.Body already centers content at max-w-7xl (the app's
+    // Full width — Page.Body already centers content at --page-max-width (the app's
     // standard page width).
     <Stack gap={6} className="w-full">
       {header}

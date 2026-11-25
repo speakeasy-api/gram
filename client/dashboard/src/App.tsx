@@ -4,6 +4,7 @@ import { legacyMcpRedirects, routesWithSubroutes } from "./route-elements";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
+import { PageWidthPreview } from "@/components/page-width-preview";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -120,6 +121,7 @@ export default function App(): JSX.Element {
                   <AppContent />
                   <Toaster />
                   <CommandPalette />
+                  <PageWidthPreview />
                 </SdkProvider>
               </NuqsAdapter>
             </BrowserRouter>

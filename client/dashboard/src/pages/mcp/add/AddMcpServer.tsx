@@ -115,7 +115,7 @@ function AddOptionCard({
 }
 
 function AddOptionGrid({ options }: { options: AddOption[] }): JSX.Element {
-  // Two columns at most. The page column is capped at max-w-7xl (1280px) and
+  // Two columns at most. The page column is capped at --page-max-width (1280px by default) and
   // each card spends a fixed 160px on its icon rail, so a third column leaves
   // the copy about 240px and it wraps to four lines. The 1→2 step is a
   // container query rather than a viewport one: the sidebar narrows this

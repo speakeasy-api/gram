@@ -829,7 +829,7 @@ function PluginDetailContent({
         />
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8">
+        <div className="mx-auto w-full max-w-(--detail-max-width) flex-1 space-y-10 px-8 py-8">
           {section === PLUGIN_OVERVIEW_SECTION_ID && (
             <section className="space-y-8">
               <div className="flex flex-wrap items-start justify-between gap-4">

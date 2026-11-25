@@ -587,7 +587,7 @@ export function EntityProfile({
   return (
     <div className="flex w-full flex-col">
       {/* Top strip: the back controls, shown when drilled into an entity. */}
-      <div className="mx-auto w-full max-w-7xl px-8 pt-5">
+      <div className="mx-auto w-full max-w-(--page-max-width) px-8 pt-5">
         {/* Cost Home (jump to root) + Back (one level up). Always mounted so
             they animate in/out across drills — conditional rendering would
             pop. The EntityProfile instance persists across drills, so the
@@ -631,7 +631,7 @@ export function EntityProfile({
       {/* Flat hero: name + headline stats on the page surface, closed by a
           hairline rule. */}
       <div className="border-border w-full border-b">
-        <div className="mx-auto w-full max-w-7xl px-8 pt-8 pb-6">
+        <div className="mx-auto w-full max-w-(--page-max-width) px-8 pt-8 pb-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="min-w-0">
@@ -695,7 +695,7 @@ export function EntityProfile({
           pinned && "border-border bg-background/85 border-b backdrop-blur-md",
         )}
       >
-        <div className="mx-auto w-full max-w-7xl px-8 py-2">
+        <div className="mx-auto w-full max-w-(--page-max-width) px-8 py-2">
           <Page.Toolbar>
             <Page.Toolbar.Leading>
               {datasetControl}
@@ -715,7 +715,7 @@ export function EntityProfile({
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-4 pb-24">
+      <div className="mx-auto flex w-full max-w-(--page-max-width) flex-col gap-6 px-8 pt-4 pb-24">
         {widgets}
         {/* The breakdown is its own section under the summary widgets, so it
             opens on a rule rather than floating off the last widget. The
