@@ -169,38 +169,69 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const hasToolsets = !!draft.assistant?.toolsets?.length;
   const hasAttachments = hasToolsets || !!draft.assistant?.mcpServers?.length;
   const scope = { gramProject: project.slug };
-  const { data: toolsetsData } = useListToolsets(scope, undefined, {
-    enabled: hasToolsets,
-  });
-  const { data: serversData } = useMcpServers(scope, undefined, {
-    enabled: hasAttachments,
-    throwOnError: false,
-  });
-  const { data: endpointsData } = useMcpEndpoints(scope, undefined, {
-    enabled: hasAttachments,
-    throwOnError: false,
-  });
-  const serverById = new Map(
-    serversData?.mcpServers.map((server) => [server.id, server]),
+  const { data: toolsetsData, isError: toolsetsError } = useListToolsets(
+    scope,
+    undefined,
+    {
+      enabled: hasToolsets,
+    },
   );
+  const { data: serversData, isError: serversError } = useMcpServers(
+    scope,
+    undefined,
+    {
+      enabled: hasAttachments,
+      throwOnError: false,
+    },
+  );
+  const { data: endpointsData, isError: endpointsError } = useMcpEndpoints(
+    scope,
+    undefined,
+    {
+      enabled: hasAttachments,
+      throwOnError: false,
+    },
+  );
+  const servers = serversError ? [] : (serversData?.mcpServers ?? []);
+  const endpoints = endpointsError
+    ? []
+    : (endpointsData?.mcpEndpoints ?? []).filter(
+        (endpoint) => !endpoint.customDomainId,
+      );
+  const serverById = new Map(servers.map((server) => [server.id, server]));
   const endpointBySlug = new Map(
-    endpointsData?.mcpEndpoints
-      .filter((endpoint) => !endpoint.customDomainId)
-      .map((endpoint) => [endpoint.slug, endpoint]),
+    endpoints.map((endpoint) => [endpoint.slug, endpoint]),
   );
   const toolsetBySlug = new Map(
-    toolsetsData?.toolsets.map((toolset) => [toolset.slug, toolset]),
+    (toolsetsError ? [] : (toolsetsData?.toolsets ?? [])).map((toolset) => [
+      toolset.slug,
+      toolset,
+    ]),
   );
   const attachments = [
-    ...(draft.assistant?.toolsets ?? []).map((ref) => {
+    ...(draft.assistant?.toolsets ?? []).flatMap((ref) => {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
-      return {
-        slug: ref.toolsetSlug,
-        endpointSlug: toolset?.mcpSlug,
-        matches: (server: { toolsetId?: string }) =>
-          server.toolsetId === toolset?.id,
-        environment: ref.environmentSlug ?? draft.assistantEnv?.slug,
-      };
+      if (!toolset) return [];
+      // Older toolset views may not carry a slug. Resolve the registered
+      // platform endpoint instead of rebuilding the retired legacy URL.
+      const platformEndpoints = endpoints.filter(
+        (endpoint) =>
+          endpoint.mcpServerId &&
+          serverById.get(endpoint.mcpServerId)?.toolsetId === toolset.id,
+      );
+      return [
+        {
+          slug: ref.toolsetSlug,
+          endpointSlug:
+            toolset.mcpSlug ??
+            (platformEndpoints.length === 1
+              ? platformEndpoints[0]?.slug
+              : undefined),
+          matches: (server: { toolsetId?: string }) =>
+            server.toolsetId === toolset.id,
+          environment: ref.environmentSlug ?? draft.assistantEnv?.slug,
+        },
+      ];
     }),
     ...(draft.assistant?.mcpServers ?? []).map((ref) => ({
       slug: ref.mcpServerSlug,
@@ -239,7 +270,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const mcps: MCPServerEntry[] = tokens.some((token) => token.isLoading)
     ? []
     : targets.flatMap(({ server, entry }, index) => {
-        const accessToken = tokens[index]?.data?.accessToken;
+        const token = tokens[index];
+        const accessToken = token?.isError
+          ? undefined
+          : token?.data?.accessToken;
         // A failed mint must not fall back to an unauthenticated connection.
         if (server.userSessionIssuerId && !accessToken) return [];
         return [{ ...entry, accessToken }];

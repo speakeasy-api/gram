@@ -21,15 +21,15 @@ const auth = {
   ensureValidHeaders: async () => ({}),
 };
 
-function setup() {
+function setup(url = "https://example.com/mcp/one") {
   const client = new QueryClient();
-  return renderHook(
+  const hook = renderHook(
     ({ token }) =>
       useMCPTools({
         auth,
         mcp: undefined,
         mcps: [
-          { url: "https://example.com/mcp/one", accessToken: token },
+          { url, accessToken: token },
           { url: "https://example.com/mcp/two", accessToken: "token-two" },
           { url: "https://example.com/mcp/three", environment: "test" },
         ],
@@ -42,6 +42,7 @@ function setup() {
       ),
     },
   );
+  return { ...hook, client };
 }
 
 describe("useMCPTools per-server bearer tokens", () => {
@@ -82,10 +83,36 @@ describe("useMCPTools per-server bearer tokens", () => {
     ]);
   });
 
+  it("rejects a non-HTTPS bearer target without contacting it", async () => {
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { result } = setup("http://example.com/mcp/one");
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect(connect).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          transport: expect.objectContaining({
+            url: "http://example.com/mcp/one",
+          }),
+        }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("reconnects when a bearer token is refreshed", async () => {
-    const { result, rerender } = setup();
+    const { result, rerender, client } = setup();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
+    expect(
+      JSON.stringify(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((query) => query.queryKey),
+      ),
+    ).not.toContain("token-one");
     rerender({ token: "refreshed-token" });
     await waitFor(() =>
       expect(connect).toHaveBeenCalledWith(

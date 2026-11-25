@@ -54,12 +54,16 @@ export function useMCPTools({
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     ([k, v]) => `${k}:${String(v)}`,
   );
-  const serversQueryKey = servers.map((s) => [
-    s.url,
-    s.name,
-    s.environment,
-    s.accessToken,
-  ]);
+  // Token rotation must reconnect without putting the bearer in the query key.
+  const hasServerTokens = servers.some((server) => server.accessToken);
+  const tokenSignature = hasServerTokens
+    ? JSON.stringify(servers.map((server) => server.accessToken))
+    : undefined;
+  const tokenRevision = useMemo(
+    () => (tokenSignature ? crypto.randomUUID() : undefined),
+    [tokenSignature],
+  );
+  const serversQueryKey = servers.map((s) => [s.url, s.name, s.environment]);
 
   // Each MCP transport stores a direct reference to its headers object and
   // spreads it on every send, so writes propagate to subsequent tool-call
@@ -94,7 +98,13 @@ export function useMCPTools({
   const mcpHeaders = headersProxyRef.current;
 
   const queryResult = useQuery({
-    queryKey: ["mcpTools", serversQueryKey, envQueryKey, authQueryKey],
+    queryKey: [
+      "mcpTools",
+      serversQueryKey,
+      envQueryKey,
+      authQueryKey,
+      tokenRevision,
+    ],
     queryFn: async () => {
       assert(!auth.isLoading, "No auth found");
       assert(servers.length > 0, "No MCP server configured");
@@ -123,6 +133,9 @@ export function useMCPTools({
       let skillDiscoveryFailed = false;
       const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
+          if (server.accessToken && new URL(server.url).protocol !== "https:") {
+            throw new Error("MCP bearer authentication requires HTTPS");
+          }
           const client = await createMCPClientWithVersionFallback({
             clientName: "gram-elements-mcp-client",
             transport: {
@@ -132,8 +145,11 @@ export function useMCPTools({
               // @ai-sdk/mcp stores this on the transport instance and calls it
               // as `this.fetchFn(...)`; handing it bare `window.fetch` throws
               // "Illegal invocation" in browsers, so bind it via a wrapper.
-              fetch: (...args: Parameters<typeof fetch>) =>
-                globalThis.fetch(...args),
+              fetch: (input, init) =>
+                globalThis.fetch(
+                  input,
+                  server.accessToken ? { ...init, redirect: "error" } : init,
+                ),
             },
           });
           const tools = await client.tools();
@@ -194,7 +210,7 @@ export function useMCPTools({
     // Errors surface inline via mcpToolsError, not an error boundary, even
     // under a host QueryClient that defaults to throwing.
     throwOnError: false,
-    gcTime: Infinity,
+    gcTime: hasServerTokens ? 0 : Infinity,
   });
 
   // Filter tools outside of the query to ensure filtering is applied whenever
