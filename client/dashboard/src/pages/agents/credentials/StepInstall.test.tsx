@@ -102,21 +102,40 @@ it("says an agent already has a key that nothing has used yet", () => {
   ).toBeTruthy();
 });
 
-it("withholds setup when the project gateway is unavailable", () => {
-  render(
-    <StepInstall
-      onIssue={vi.fn<() => void>()}
-      issuing={false}
-      secret="gram_secret"
-      existingKey={null}
-      gatewayURL=""
-      serverCount={1}
-    />,
-  );
+it.each([
+  [
+    "project_assignment_required" as const,
+    "This agent is not assigned to a project.",
+    "Assign the agent to a project before setting up its runtime.",
+  ],
+  [
+    "machine_access_disabled" as const,
+    "Machine access to this project gateway is disabled.",
+    "Ask an administrator to enable project gateway machine access, then reload this page.",
+  ],
+  [
+    "turned_off" as const,
+    "The project gateway is turned off.",
+    "Turn on the project gateway, then reload this page.",
+  ],
+])(
+  "withholds setup with an actionable %s state",
+  (reason, description, action) => {
+    render(
+      <StepInstall
+        onIssue={vi.fn<() => void>()}
+        issuing={false}
+        secret="gram_secret"
+        existingKey={null}
+        gatewayURL=""
+        gatewayUnavailableReason={reason}
+        serverCount={1}
+      />,
+    );
 
-  expect(
-    screen.getByText("This project does not have an available gateway."),
-  ).toBeTruthy();
-  expect(screen.queryByRole("tab", { name: "One-line setup" })).toBeNull();
-  expect(screen.queryByLabelText("Claude Code")).toBeNull();
-});
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(action);
+    expect(screen.queryByRole("tab", { name: "One-line setup" })).toBeNull();
+    expect(screen.queryByLabelText("Claude Code")).toBeNull();
+  },
+);

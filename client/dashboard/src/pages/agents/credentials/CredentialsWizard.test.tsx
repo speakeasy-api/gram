@@ -71,6 +71,8 @@ const mocks = vi.hoisted(() => ({
   // The organization's custom domain, if any.
   projectGatewayURL:
     "https://api.example.test/mcp/gateway/example/projects/main",
+  runtimeGatewayReason: undefined as string | undefined,
+  runtimeGateway: vi.fn(),
   customDomains: [] as {
     domain: string;
     ipAllowlist: string[];
@@ -79,12 +81,21 @@ const mocks = vi.hoisted(() => ({
   }[],
 }));
 
-vi.mock("@/components/mcp/useProjectGatewayEntry", () => ({
-  useProjectGatewayEntry: () => ({
-    show: true,
-    status: mocks.projectGatewayURL ? "available" : "unavailable",
-    url: mocks.projectGatewayURL || undefined,
-  }),
+vi.mock("@gram/client/react-query/agentRuntimeGateway.js", () => ({
+  useAgentRuntimeGateway: (...args: unknown[]) => {
+    mocks.runtimeGateway(...args);
+    return {
+      isPending: false,
+      isError: false,
+      data: mocks.projectGatewayURL
+        ? { available: true, url: mocks.projectGatewayURL }
+        : {
+            available: false,
+            unavailableReason:
+              mocks.runtimeGatewayReason ?? "machine_access_disabled",
+          },
+    };
+  },
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -531,6 +542,7 @@ beforeEach(() => {
   mocks.projectId = "project_one";
   mocks.projectGatewayURL =
     "https://api.example.test/mcp/gateway/example/projects/main";
+  mocks.runtimeGatewayReason = undefined;
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
   mocks.canIngestHooks = false;
@@ -792,6 +804,11 @@ describe("Provisioning a new agent", () => {
 
     const claude = await screen.findByLabelText("Claude Code");
     expect(claude.textContent).toContain(mocks.projectGatewayURL);
+    expect(mocks.runtimeGateway).toHaveBeenCalledWith(
+      { agentId: "agent_new" },
+      undefined,
+      expect.objectContaining({ enabled: true }),
+    );
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

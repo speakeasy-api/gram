@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import type { AgentRuntimeGatewayUnavailableReason } from "@gram/client/models/components/agentruntimegateway.js";
 import { useState, type JSX } from "react";
 import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
@@ -71,12 +72,18 @@ function keyCover(existingKey: ExistingAgentKey | null | undefined): {
   };
 }
 
+export type GatewayUnavailableReason =
+  | AgentRuntimeGatewayUnavailableReason
+  | "loading"
+  | "lookup_failed";
+
 export function StepInstall({
   onIssue,
   issuing,
   secret,
   existingKey,
   gatewayURL,
+  gatewayUnavailableReason,
   serverCount,
 }: {
   /** Issue a key, for a step reached without one to show. */
@@ -89,6 +96,7 @@ export function StepInstall({
    */
   existingKey: ExistingAgentKey | null | undefined;
   gatewayURL: string;
+  gatewayUnavailableReason?: GatewayUnavailableReason;
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";
 }): JSX.Element {
@@ -170,17 +178,67 @@ export function StepInstall({
     `asyncio.run(main())`,
   ].join("\n");
 
-  if (!gatewayURL) {
+  if (gatewayUnavailableReason) {
+    const unavailableByReason: Record<
+      string,
+      { description: string; action: string }
+    > = {
+      loading: {
+        description: "Checking the agent's project gateway.",
+        action: "Connection instructions will appear when this check finishes.",
+      },
+      lookup_failed: {
+        description: "The agent's project gateway could not be checked.",
+        action:
+          "Reload the page and try again. No connection instructions were shown.",
+      },
+      project_assignment_required: {
+        description: "This agent is not assigned to a project.",
+        action: "Assign the agent to a project before setting up its runtime.",
+      },
+      machine_access_disabled: {
+        description: "Machine access to this project gateway is disabled.",
+        action:
+          "Ask an administrator to enable project gateway machine access, then reload this page.",
+      },
+      no_organization_issuer: {
+        description:
+          "The project gateway needs an organization sign-in issuer.",
+        action:
+          "Configure the organization's sign-in issuer, then reload this page.",
+      },
+      multiple_organization_issuers: {
+        description:
+          "The project gateway has more than one organization sign-in issuer.",
+        action:
+          "Choose one organization sign-in issuer, then reload this page.",
+      },
+      custom_domain_only: {
+        description:
+          "The project gateway is available only on a custom domain.",
+        action: "Finish activating the custom domain, then reload this page.",
+      },
+      organization_disabled: {
+        description: "The organization gateway is disabled.",
+        action: "Enable the organization gateway, then reload this page.",
+      },
+      turned_off: {
+        description: "The project gateway is turned off.",
+        action: "Turn on the project gateway, then reload this page.",
+      },
+    };
+    const unavailable = unavailableByReason[gatewayUnavailableReason] ?? {
+      description: "The agent's project gateway is unavailable.",
+      action:
+        "Ask an administrator to review the gateway configuration, then reload this page.",
+    };
     return (
       <div className="space-y-5">
         <WizardStepHeader
           title="Connect the agent"
-          description="This project does not have an available gateway."
+          description={unavailable.description}
         />
-        <Text role="alert">
-          Connection instructions are unavailable until the project gateway is
-          enabled and ready.
-        </Text>
+        <Text role="alert">{unavailable.action}</Text>
       </div>
     );
   }

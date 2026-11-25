@@ -1,7 +1,6 @@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
-import { useProjectGatewayEntry } from "@/components/mcp/useProjectGatewayEntry";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -11,6 +10,7 @@ import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import { useAgentRuntimeGateway } from "@gram/client/react-query/agentRuntimeGateway.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -996,8 +996,24 @@ export function CredentialsWizard({
   ];
   const connections = useOwnerConnections(connectionServers, true, agent?.id);
 
-  const projectGateway = useProjectGatewayEntry();
-  const gatewayURL = projectGateway.url ?? "";
+  const runtimeGateway = useAgentRuntimeGateway(
+    { agentId: agentID ?? "" },
+    undefined,
+    { enabled: agentID !== null, throwOnError: false },
+  );
+  const gatewayURL = runtimeGateway.data?.available
+    ? (runtimeGateway.data.url ?? "")
+    : "";
+  const gatewayUnavailableReason =
+    agentID === null
+      ? undefined
+      : runtimeGateway.isPending
+        ? "loading"
+        : runtimeGateway.isError
+          ? "lookup_failed"
+          : runtimeGateway.data?.available
+            ? undefined
+            : runtimeGateway.data?.unavailableReason;
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
   // What the platform's runtime needs beyond the servers, such as a device
   // agent's polling and hook events. Empty for an API key and for platforms
@@ -2256,6 +2272,7 @@ export function CredentialsWizard({
             secret={secret}
             existingKey={existingKey}
             gatewayURL={gatewayURL}
+            gatewayUnavailableReason={gatewayUnavailableReason}
             serverCount={allServers ? "all" : selected.length}
           />
         );
