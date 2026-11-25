@@ -33,7 +33,7 @@ func TestSummarizeHooksPublishState(t *testing.T) {
 
 	t.Run("with a default pin", func(t *testing.T) {
 		t.Parallel()
-		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, overrides, staffOrg)
+		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, nil, overrides, staffOrg)
 		require.Equal(t, int64(4), result.Organizations)
 		require.Equal(t, int64(2), result.OrganizationsCleared)
 		require.Equal(t, int64(2), result.OrganizationsHeld)
@@ -49,10 +49,18 @@ func TestSummarizeHooksPublishState(t *testing.T) {
 
 	t.Run("without a default pin", func(t *testing.T) {
 		t.Parallel()
-		result := summarizeHooksPublishState(rows, 66, nil, overrides, staffOrg)
+		result := summarizeHooksPublishState(rows, 66, nil, nil, overrides, staffOrg)
 		require.Equal(t, int64(2), result.OrganizationsCleared)
 		require.Equal(t, int64(0), result.OrganizationsHeld)
 		require.Equal(t, int64(2), result.OrganizationsOnLegacyFlag)
+	})
+
+	t.Run("with a staged rollout at 100 percent", func(t *testing.T) {
+		t.Parallel()
+		stage := &hooksrollout.Stage{Revision: 1, Version: 66, Percent: 100, State: hooksrollout.StageRunning, Reason: "", SetBy: "", SetAt: time.Time{}}
+		result := summarizeHooksPublishState(rows, 66, &hooksrollout.Pin{Version: 64, SetBy: "", SetAt: time.Time{}}, stage, overrides, staffOrg)
+		require.Equal(t, int64(4), result.OrganizationsCleared)
+		require.Equal(t, int64(0), result.OrganizationsHeld)
 	})
 }
 

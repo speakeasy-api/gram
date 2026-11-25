@@ -36,12 +36,16 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout overrides").LogError(ctx, s.logger)
 	}
+	stage, err := hooksrollout.NewStageStore(s.db).Current(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read staged hooks rollout").LogError(ctx, s.logger)
+	}
 	repos, err := repo.New(s.db).AdminListHooksPublishState(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
 	}
 
-	result := summarizeHooksPublishState(repos, current, defaultPin, overrides, s.staffOrg)
+	result := summarizeHooksPublishState(repos, current, defaultPin, stage, overrides, s.staffOrg)
 	if s.hookFleetVersions.Latest != nil {
 		result.CurrentBinaryVersion = new(s.hookFleetVersions.Latest.String())
 	}
@@ -59,7 +63,7 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	return result, nil
 }
 
-func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
+func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, stage *hooksrollout.Stage, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
 	overrideByOrg := make(map[string]*hooksrollout.Pin, len(overrides))
 	for _, override := range overrides {
 		overrideByOrg[override.OrganizationID] = &override.Pin
@@ -91,8 +95,8 @@ func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, curre
 		seen[row.OrganizationID] = true
 		result.Organizations++
 
-		pins := hooksrollout.OrganizationPins{Override: overrideByOrg[row.OrganizationID], Default: defaultPin}
-		pin, _ := pins.Effective()
+		pins := hooksrollout.OrganizationPins{Override: overrideByOrg[row.OrganizationID], Default: defaultPin, Stage: stage}
+		pin, _ := pins.Effective(row.OrganizationID)
 		switch {
 		case staffOrg.Is(row.OrganizationID):
 			result.OrganizationsCleared++
