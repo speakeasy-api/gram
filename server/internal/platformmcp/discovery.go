@@ -138,21 +138,10 @@ func (r *Runtime) codeModeAvailable(ctx context.Context, organizationID string) 
 	return r.discovery.CodeExecutor != nil && r.discovery.CodeModeAvailable != nil && r.discovery.CodeModeAvailable(ctx, organizationID)
 }
 
-type discoveryModeKey struct{}
-
-// discoveryModeFromContext reads the surface the discovery middleware chose.
-// A request it never saw is a full-catalogue request.
-func discoveryModeFromContext(ctx context.Context) discoveryMode {
-	if mode, ok := ctx.Value(discoveryModeKey{}).(discoveryMode); ok {
-		return mode
-	}
-	return discoveryFull
-}
-
 // discoveryMiddleware serves a caller in the small surface from the meta-tools
-// plus the first-run tools. It sits outside the allowlist and catalogue
-// middleware: its tools/list takes the first-run tools from the catalogue they
-// filter for this caller, and a dispatched call enters them as an ordinary tools/call,
+// plus the first-run tools. It sits outside the catalogue middleware: its
+// tools/list takes the first-run tools from the catalogue they filter for this
+// caller, and a dispatched call enters them as an ordinary tools/call,
 // so the meta-tools reach a catalogue tool through the same SDK validation,
 // per-tool authorization, handler and fail-safe as a direct call does.
 func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
@@ -160,7 +149,6 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			principal := mustPrincipal(ctx)
 			mode := runtime.discoveryModeFor(ctx, logger, principal)
-			ctx = context.WithValue(ctx, discoveryModeKey{}, mode)
 			if mode == discoveryFull {
 				return next(ctx, method, req)
 			}
