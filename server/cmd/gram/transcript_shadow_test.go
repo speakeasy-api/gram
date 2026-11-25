@@ -1,8 +1,13 @@
 package gram
 
 import (
+	"context"
 	"flag"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"os"
 	"strings"
 	"testing"
@@ -267,9 +272,33 @@ func TestReadOnlyTranscriptsStrictInLocalDevelopment(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, local.Open(t.Context(), "org", listed, body), transcriptstore.ErrPlaintextRead, "local development rejects the plaintext read")
 
-	prod, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "prod", values), testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	prod, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContextIn(t, "prod", values), testenv.NewLogger(t), provider)
 	require.NoError(t, err)
 	require.NoError(t, prod.Open(t.Context(), "org", listed, body), "production serves, logs and counts")
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	var points []metricdata.DataPoint[int64]
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "chat.transcript_shadow.plaintext_reads" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			points = sum.DataPoints
+		}
+	}
+	require.Len(t, points, 1)
+	require.Equal(t, int64(1), points[0].Value)
+	require.Equal(t, attribute.NewSet(
+		attr.ProjectID(listed.String()),
+		attr.TranscriptShadowReader("Open"),
+		attr.Outcome("unopened"),
+	), points[0].Attributes)
 
 	blank := newTranscriptShadowCLIContextIn(t, "prod", map[string]string{chatTranscriptShadowProjectIDsFlag: ""})
 	_, err = configureReadOnlyTranscripts(blank, testenv.NewLogger(t), testenv.NewMeterProvider(t))

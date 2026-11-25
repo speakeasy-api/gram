@@ -86,12 +86,7 @@ func TestNoReaderServesForgedPlaintext(t *testing.T) {
 	f := setup(t, true)
 	id := uuid.New()
 	f.add(t, id)
-	f.capture(t, id)
-	_, err := f.db.Exec(t.Context(), `UPDATE chat_messages SET content = $1 WHERE id = $2`, canary, id) //nolint:glint // notestingrawsql: plants the canary in plaintext behind the shadow.
-	require.NoError(t, err)
-	n, err := fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	plantCanary(t, f, id)
 
 	transcripts := NewTranscripts(f.store, f.project)
 	ctx := t.Context()
