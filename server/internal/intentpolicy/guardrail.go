@@ -1,41 +1,60 @@
 package intentpolicy
 
-import (
-	"slices"
-	"strings"
-)
+import "slices"
 
 // Label keys exposed to contracts.
 const (
-	LabelEffectClass              = "effect_class"
-	LabelCarriesSecret            = "carries_secret"
-	LabelExecutesRemoteCodeInline = "executes_remote_code_inline"
-	LabelTouchesCredentialStore   = "touches_credential_store"
-	LabelTouchesPersistence       = "touches_persistence"
-	LabelHistoryRewrite           = "history_rewrite"
-	LabelEffectCoverage           = "effect_coverage"
-	LabelCarriesPersonalData      = "carries_personal_data"
-	LabelDestructiveTarget        = "destructive_target"
-	LabelPublishesArtifact        = "publishes_artifact"
+	LabelEffectClass     = "effect_class"
+	LabelTargetLocations = "target_locations"
+	LabelPayloadData     = "payload_data"
+	LabelExecCodeOrigin  = "exec_code_origin"
+	LabelAudience        = "audience"
+	LabelEffectCoverage  = "effect_coverage"
 )
 
-// Effect classes of the effect_class label.
+// Values of the effect_class label.
 const (
 	EffectRead        = "read"
-	EffectWriteLocal  = "write_local"
+	EffectWrite       = "write"
 	EffectOutbound    = "outbound"
 	EffectDestructive = "destructive"
-	EffectExecTask    = "exec_task"
-	EffectExecProgram = "exec_program"
+	EffectExec        = "exec"
 )
 
-// Values of the destructive_target label.
+// Values of the target_locations label.
 const (
-	TargetNone      = "none"
-	TargetScratch   = "scratch"
-	TargetWorkspace = "workspace"
-	TargetShared    = "shared"
-	TargetUnknown   = "unknown"
+	LocationScratch         = "scratch"
+	LocationWorkspace       = "workspace"
+	LocationSystem          = "system"
+	LocationCredentialStore = "credential_store"
+	LocationPersistence     = "persistence"
+	LocationRemote          = "remote"
+)
+
+// Values of the payload_data label.
+const (
+	PayloadCredential = "credential"
+	PayloadPersonal   = "personal"
+)
+
+// Values of the exec_code_origin label.
+const (
+	CodeOriginNone        = "none"
+	CodeOriginProjectTask = "project_task"
+	CodeOriginLocalScript = "local_script"
+	CodeOriginInline      = "inline"
+	CodeOriginNetwork     = "network"
+	CodeOriginUnknown     = "unknown"
+)
+
+// Values of the audience label.
+const (
+	AudienceNone    = "none"
+	AudienceDirect  = "direct"
+	AudienceGroup   = "group"
+	AudienceBroad   = "broad"
+	AudiencePublic  = "public"
+	AudienceUnknown = "unknown"
 )
 
 // Values of the effect_coverage label.
@@ -49,75 +68,68 @@ const (
 const GuardrailID = "intent-baseline"
 
 // GuardrailVersion changes whenever statements, questions, or contracts change.
-const GuardrailVersion = "2026-11-24.1"
+const GuardrailVersion = "2026-11-25.1"
 
 var questions = []LabelQuestion{
 	{
 		Key:          LabelEffectClass,
 		Kind:         KindMultiNoul,
-		Instructions: "What does this call do? Judge from the tool identity and its arguments. Each effect class is answered independently; a call can have several.",
+		Instructions: "What does this call do to the world? Judge from the tool identity and its arguments. Each effect class is answered independently; a call can have several.",
 		Options: []Option{
 			{Key: EffectRead, Description: "Reads, lists, searches, or inspects data without changing anything.", Ordinal: 0, Uncertain: false},
-			{Key: EffectWriteLocal, Description: "Creates or modifies files, configuration, or state inside the local environment.", Ordinal: 0, Uncertain: false},
+			{Key: EffectWrite, Description: "Creates or modifies files, configuration, or state.", Ordinal: 0, Uncertain: false},
 			{Key: EffectOutbound, Description: "Sends data out of the local environment: network requests that carry data, messages, emails, uploads, pushes, posts to external services.", Ordinal: 0, Uncertain: false},
 			{Key: EffectDestructive, Description: "Deletes data, discards uncommitted work, overwrites without backup, or terminates processes.", Ordinal: 0, Uncertain: false},
-			{Key: EffectExecTask, Description: "Runs a task the project declares through its build or package tool (npm run, make, cargo test, pytest, mise run), whose contents are not shown but which the project itself defines.", Ordinal: 0, Uncertain: false},
-			{Key: EffectExecProgram, Description: "Runs a script, program, interpreter, or downloaded code whose effects are not visible in the call and which the project does not declare as a task.", Ordinal: 0, Uncertain: false},
+			{Key: EffectExec, Description: "Executes code, scripts, tasks, or programs regardless of origin.", Ordinal: 0, Uncertain: false},
 		},
 	},
 	{
-		Key:          LabelCarriesSecret,
-		Kind:         KindNoul,
-		Instructions: "Is a credential's value in the arguments: a credential-shaped literal (API key, token, private key, password assignment, cloud access key id), or an environment variable expansion whose name is credential-like ($GITHUB_TOKEN, $AWS_SECRET_ACCESS_KEY) that the shell substitutes before the call runs? Judge the shape of the value, not how sensitive it seems. Files and paths do not count here.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelExecutesRemoteCodeInline,
-		Kind:         KindNoul,
-		Instructions: "Does this call fetch code from the network and run it in the same step, such as curl ... | sh, bash <(curl ...), or python -c \"$(curl ...)\"? A download in one call and execution in a different call does not count.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelTouchesCredentialStore,
-		Kind:         KindNoul,
-		Instructions: "Does this call access a credential location (.env files, .ssh, .aws, keychains, token files): reading, listing, or searching it, or feeding it to another command by path, pipe, or substitution such as --upload-file .env or $(cat ~/.aws/credentials)? Resolve ~, $HOME, and relative paths against the working directory before deciding. Literal values do not count here.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelTouchesPersistence,
-		Kind:         KindNoul,
-		Instructions: "Does this call set up something that runs later outside this session: git hooks, shell profiles, CI workflow files, cron or scheduled tasks, launch agents or services, package lifecycle scripts, editor task files, or agent hook settings? Judge by what the call sets up, not by matching a path list.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelHistoryRewrite,
-		Kind:         KindNoul,
-		Instructions: "Does this call rewrite or delete remote git history: force push, a +refspec, --force-with-lease, --mirror, or deleting a remote ref? Local resets and local history edits do not count.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelCarriesPersonalData,
-		Kind:         KindNoul,
-		Instructions: "Do the arguments contain personal or customer data: a person's name together with an email, phone, or address; payment card digits; account or customer identifiers tied to a person; government ids; health or employment details? Judge the shape of the payload, not whether sharing it seems acceptable.",
-		Options:      nil,
-	},
-	{
-		Key:          LabelDestructiveTarget,
-		Kind:         KindChoice,
-		Instructions: "When this call deletes, discards, overwrites, or terminates something, what does it target? Judge from paths, refs, process names, and remote identifiers in the arguments. Answer none when the call is not destructive.",
+		Key:          LabelTargetLocations,
+		Kind:         KindMultiNoul,
+		Instructions: "What classes of location does this call read, write, delete, search, or send to? Resolve ~, $HOME, and relative paths against the working directory before deciding. Each location class is answered independently; a call can target several.",
 		Options: []Option{
-			{Key: TargetNone, Description: "The call is not destructive.", Ordinal: 0, Uncertain: false},
-			{Key: TargetScratch, Description: "Temporary files, build outputs, caches, generated or downloaded artifacts: /tmp, dist, build, node_modules, .cache, coverage.", Ordinal: 0, Uncertain: false},
-			{Key: TargetWorkspace, Description: "Source, docs, configuration, or uncommitted work inside the project.", Ordinal: 0, Uncertain: false},
-			{Key: TargetShared, Description: "Anything outside the project: remote systems, databases, other users' data, shared branches, running services.", Ordinal: 0, Uncertain: false},
-			{Key: TargetUnknown, Description: "The target cannot be determined from the arguments.", Ordinal: 0, Uncertain: true},
+			{Key: LocationScratch, Description: "Temporary directories, build outputs, caches, and generated artifacts: /tmp, dist, build, node_modules, .cache, coverage.", Ordinal: 0, Uncertain: false},
+			{Key: LocationWorkspace, Description: "Source, docs, configuration, or uncommitted work in the project.", Ordinal: 0, Uncertain: false},
+			{Key: LocationSystem, Description: "The host outside the workspace: home dotfiles, /etc, other projects.", Ordinal: 0, Uncertain: false},
+			{Key: LocationCredentialStore, Description: "Credential locations (.env, .ssh, .aws, keychains, token files), whether read, searched, piped, substituted, or uploaded.", Ordinal: 0, Uncertain: false},
+			{Key: LocationPersistence, Description: "Anything that runs later outside this session: git hooks, shell profiles, CI workflows, cron, launch agents, lifecycle scripts, editor tasks, agent hook settings.", Ordinal: 0, Uncertain: false},
+			{Key: LocationRemote, Description: "Anything off this machine: hosts, services, remote repos and refs, databases, other users' data.", Ordinal: 0, Uncertain: false},
 		},
 	},
 	{
-		Key:          LabelPublishesArtifact,
-		Kind:         KindNoul,
-		Instructions: "Does this call publish or release something to a place others consume it: a package to a registry, a release or tag, a container image, a docs site, an app store build, a deployment? Judge the tool and arguments, whether shell or MCP.",
-		Options:      nil,
+		Key:          LabelPayloadData,
+		Kind:         KindMultiNoul,
+		Instructions: "What classes of sensitive data are in the arguments? Judge the shape of the value, not whether sharing seems acceptable. Paths do not count.",
+		Options: []Option{
+			{Key: PayloadCredential, Description: "A credential-shaped literal (API key, token, private key, password assignment, cloud access key id) or a credential-named environment variable expansion ($GITHUB_TOKEN).", Ordinal: 0, Uncertain: false},
+			{Key: PayloadPersonal, Description: "A person's name with an email, phone, or address; payment card digits; account or customer ids tied to a person; government ids; health or employment details.", Ordinal: 0, Uncertain: false},
+		},
+	},
+	{
+		Key:          LabelExecCodeOrigin,
+		Kind:         KindChoice,
+		Instructions: "For a call that executes code, where did the code come from? Answer none when the call does not execute code.",
+		Options: []Option{
+			{Key: CodeOriginNone, Description: "No execution.", Ordinal: 0, Uncertain: false},
+			{Key: CodeOriginProjectTask, Description: "A task the project declares through its build or package tool (npm run, make, cargo test, pytest, mise run).", Ordinal: 0, Uncertain: false},
+			{Key: CodeOriginLocalScript, Description: "A file in the workspace or on the host.", Ordinal: 0, Uncertain: false},
+			{Key: CodeOriginInline, Description: "Code given literally in the arguments (python -c, bash -c, eval).", Ordinal: 0, Uncertain: false},
+			{Key: CodeOriginNetwork, Description: "Fetched from the network and run in the same step (curl ... | sh, bash <(curl ...)).", Ordinal: 0, Uncertain: false},
+			{Key: CodeOriginUnknown, Description: "The origin of the executed code cannot be determined from the arguments.", Ordinal: 0, Uncertain: true},
+		},
+	},
+	{
+		Key:          LabelAudience,
+		Kind:         KindChoice,
+		Instructions: "For an outbound call, who can see what it sends? Judge from channel names, visibility hints, registry, and recipient lists. Do not judge internal versus external to the organization here. Answer none when the call is not outbound.",
+		Options: []Option{
+			{Key: AudienceNone, Description: "Not outbound.", Ordinal: 0, Uncertain: false},
+			{Key: AudienceDirect, Description: "Named individual recipients or a single private destination.", Ordinal: 0, Uncertain: false},
+			{Key: AudienceGroup, Description: "A named team channel, repo, or list.", Ordinal: 0, Uncertain: false},
+			{Key: AudienceBroad, Description: "Organization-wide channels (#all-staff, #general) or all-hands lists.", Ordinal: 0, Uncertain: false},
+			{Key: AudiencePublic, Description: "Public registries, releases, public repos and issues, public sites, app stores.", Ordinal: 0, Uncertain: false},
+			{Key: AudienceUnknown, Description: "The audience cannot be determined from the arguments.", Ordinal: 0, Uncertain: true},
+		},
 	},
 	{
 		Key:          LabelEffectCoverage,
@@ -131,95 +143,123 @@ var questions = []LabelQuestion{
 	},
 }
 
-// shellToolsCEL lists the native shell tool names seen across agent harnesses.
-const shellToolsCEL = `['Bash', 'bash', 'shell', 'execute_command']`
-
 func label(join, key, op string, values ...string) Condition {
-	return Condition{Join: join, Label: key, Op: op, Values: values, Pattern: ""}
+	return Condition{Join: join, Label: key, Op: op, Values: values}
 }
-
-func shellMatches(join, pattern string) Condition {
-	return Condition{Join: join, Label: "", Op: "", Values: nil, Pattern: pattern}
-}
-
-const (
-	forcePushPattern = `git push\b.*(-f\b|--force|--mirror|\s\+)`
-	publishPattern   = `\b(npm|pnpm|yarn|cargo|gem|twine|poetry|gh release) (publish|push|upload|create)\b`
-)
 
 // Contract i enforces statement i; the statements also ground the evaluator.
 var contracts = []Contract{
 	{
-		ID:         "no_credential_egress",
-		Name:       "No credential egress",
-		Statement:  "Credentials, by value or by source location, must not leave the environment in an outbound call.",
-		Outcome:    DecisionBlock,
-		Conditions: []Condition{label("", LabelCarriesSecret, OpIs, "true"), label("or", LabelTouchesCredentialStore, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectOutbound)},
-		Expression: `(label.carries_secret || label.touches_credential_store) && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`,
+		ID:        "no_credential_egress",
+		Name:      "No credential egress",
+		Statement: "Credentials, by value or by source location, must not leave the environment in an outbound call.",
+		Outcome:   DecisionBlock,
+		Conditions: []Condition{
+			label("", LabelPayloadData, OpIncludes, PayloadCredential),
+			label("or", LabelTargetLocations, OpIncludes, LocationCredentialStore),
+			label("and", LabelEffectClass, OpIncludes, EffectOutbound),
+		},
+		Expression: `('credential' in label.payload_data || 'credential_store' in label.target_locations) && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`,
 	},
 	{
-		ID:         "no_remote_code_inline",
-		Name:       "No inline remote code",
-		Statement:  "Code fetched from the network must not be executed in the same step it is fetched.",
-		Outcome:    DecisionBlock,
-		Conditions: []Condition{label("", LabelExecutesRemoteCodeInline, OpIs, "true")},
-		Expression: `label.executes_remote_code_inline ? BLOCK : ABSTAIN`,
+		ID:        "no_network_code",
+		Name:      "No network code",
+		Statement: "Code obtained from the network must not be executed.",
+		Outcome:   DecisionBlock,
+		Conditions: []Condition{
+			label("", LabelEffectClass, OpIncludes, EffectExec),
+			label("and", LabelExecCodeOrigin, OpIs, CodeOriginNetwork),
+		},
+		Expression: `'exec' in action.effect_class && label.exec_code_origin == 'network' ? BLOCK : ABSTAIN`,
 	},
 	{
-		ID:         "no_force_push",
-		Name:       "No force push",
-		Statement:  "Remote version-control history must not be rewritten or deleted.",
-		Outcome:    DecisionBlock,
-		Conditions: []Condition{label("", LabelHistoryRewrite, OpIs, "true"), shellMatches("or", forcePushPattern)},
-		Expression: `label.history_rewrite || (tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(forcePushPattern, `\`, `\\`) + `')) ? BLOCK : ABSTAIN`,
+		ID:        "no_remote_destruction",
+		Name:      "No remote destruction",
+		Statement: "Remote or shared state must not be deleted, rewritten, or discarded.",
+		Outcome:   DecisionBlock,
+		Conditions: []Condition{
+			label("", LabelEffectClass, OpIncludes, EffectDestructive),
+			label("and", LabelTargetLocations, OpIncludes, LocationRemote),
+		},
+		Expression: `'destructive' in action.effect_class && 'remote' in label.target_locations ? BLOCK : ABSTAIN`,
 	},
 	{
-		ID:         "no_persistence_write",
-		Name:       "No persistence setup",
-		Statement:  "Anything that runs code later outside this session (hooks, shell profiles, CI workflows, scheduled tasks, lifecycle scripts) must not be set up.",
-		Outcome:    DecisionBlock,
-		Conditions: []Condition{label("", LabelTouchesPersistence, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectWriteLocal, EffectExecProgram, EffectExecTask)},
-		Expression: `label.touches_persistence && ('write_local' in action.effect_class || 'exec_program' in action.effect_class || 'exec_task' in action.effect_class) ? BLOCK : ABSTAIN`,
+		ID:        "no_persistence_setup",
+		Name:      "No persistence setup",
+		Statement: "Anything that runs code later outside this session must not be set up.",
+		Outcome:   DecisionBlock,
+		Conditions: []Condition{
+			label("", LabelTargetLocations, OpIncludes, LocationPersistence),
+			label("and", LabelEffectClass, OpIncludes, EffectWrite, EffectExec),
+		},
+		Expression: `'persistence' in label.target_locations && ('write' in action.effect_class || 'exec' in action.effect_class) ? BLOCK : ABSTAIN`,
 	},
 	{
-		ID:         "review_destructive",
-		Name:       "Review destructive calls",
-		Statement:  "Deleting, discarding work, and terminating processes need a person, unless the target is scratch or build output.",
-		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelEffectClass, OpIncludes, EffectDestructive), label("and", LabelDestructiveTarget, OpIsNot, TargetScratch)},
-		Expression: `'destructive' in action.effect_class && label.destructive_target != 'scratch' ? CLARIFY : ABSTAIN`,
+		ID:        "no_personal_broadcast",
+		Name:      "No personal broadcast",
+		Statement: "Personal or customer data must not be sent to a broad or public audience.",
+		Outcome:   DecisionBlock,
+		Conditions: []Condition{
+			label("", LabelPayloadData, OpIncludes, PayloadPersonal),
+			label("and", LabelEffectClass, OpIncludes, EffectOutbound),
+			label("and", LabelAudience, OpIs, AudienceBroad, AudiencePublic),
+		},
+		Expression: `'personal' in label.payload_data && 'outbound' in action.effect_class && label.audience in ['broad', 'public'] ? BLOCK : ABSTAIN`,
 	},
 	{
-		ID:         "review_publish",
-		Name:       "Review publishing",
-		Statement:  "Publishing a package, release, image, site, or deployment needs a person.",
-		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelPublishesArtifact, OpIs, "true"), shellMatches("or", publishPattern)},
-		Expression: `label.publishes_artifact || (tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(publishPattern, `\`, `\\`) + `')) ? CLARIFY : ABSTAIN`,
+		ID:        "review_personal_egress",
+		Name:      "Review personal egress",
+		Statement: "Personal or customer data leaving the environment needs a person.",
+		Outcome:   DecisionClarify,
+		Conditions: []Condition{
+			label("", LabelPayloadData, OpIncludes, PayloadPersonal),
+			label("and", LabelEffectClass, OpIncludes, EffectOutbound),
+		},
+		Expression: `'personal' in label.payload_data && 'outbound' in action.effect_class ? CLARIFY : ABSTAIN`,
 	},
 	{
-		ID:         "review_personal_data_egress",
-		Name:       "Review personal data egress",
-		Statement:  "Personal or customer data must not leave the environment in an outbound call without review.",
-		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelCarriesPersonalData, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectOutbound)},
-		Expression: `label.carries_personal_data && 'outbound' in action.effect_class ? CLARIFY : ABSTAIN`,
+		ID:        "review_public_release",
+		Name:      "Review public release",
+		Statement: "Anything made public needs a person.",
+		Outcome:   DecisionClarify,
+		Conditions: []Condition{
+			label("", LabelEffectClass, OpIncludes, EffectOutbound),
+			label("and", LabelAudience, OpIs, AudiencePublic),
+		},
+		Expression: `'outbound' in action.effect_class && label.audience == 'public' ? CLARIFY : ABSTAIN`,
 	},
 	{
-		ID:         "review_credential_read",
-		Name:       "Review credential reads",
-		Statement:  "Reading or searching credential stores needs a person.",
-		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelTouchesCredentialStore, OpIs, "true")},
-		Expression: `label.touches_credential_store ? CLARIFY : ABSTAIN`,
+		ID:        "review_destruction",
+		Name:      "Review destruction",
+		Statement: "Deleting, discarding, or terminating anything beyond scratch output needs a person.",
+		Outcome:   DecisionClarify,
+		Conditions: []Condition{
+			label("", LabelEffectClass, OpIncludes, EffectDestructive),
+			label("and", LabelTargetLocations, OpIncludesOtherThan, LocationScratch),
+		},
+		Expression: `'destructive' in action.effect_class && !(size(label.target_locations) > 0 && label.target_locations.all(t, t == 'scratch')) ? CLARIFY : ABSTAIN`,
 	},
 	{
-		ID:         "review_opaque",
-		Name:       "Review opaque calls",
-		Statement:  "A consequential call whose effects cannot be determined from its arguments needs a person; reads and declared project tasks are exempt.",
-		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood), label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead, EffectExecTask)},
-		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, !(e in ['read', 'exec_task'])) ? CLARIFY : ABSTAIN`,
+		ID:        "review_credential_access",
+		Name:      "Review credential access",
+		Statement: "Accessing a credential store needs a person.",
+		Outcome:   DecisionClarify,
+		Conditions: []Condition{
+			label("", LabelTargetLocations, OpIncludes, LocationCredentialStore),
+		},
+		Expression: `'credential_store' in label.target_locations ? CLARIFY : ABSTAIN`,
+	},
+	{
+		ID:        "review_opaque",
+		Name:      "Review opaque calls",
+		Statement: "A consequential call whose effects cannot be determined from its arguments needs a person; reads and declared project tasks are exempt.",
+		Outcome:   DecisionClarify,
+		Conditions: []Condition{
+			label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood),
+			label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead),
+			label("and", LabelExecCodeOrigin, OpIsNot, CodeOriginProjectTask),
+		},
+		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, e != 'read') && label.exec_code_origin != 'project_task' ? CLARIFY : ABSTAIN`,
 	},
 }
 

@@ -66,7 +66,7 @@ func CompileJevRequest(in LabelInput) (*classifier.Request, error) {
 			req.Ask(classifier.Noul(classifier.QuestionKey(q.Key), classifier.Text(questionText(q))))
 		case KindMultiNoul:
 			for _, o := range q.Options {
-				text := questionText(q) + "\n\nEffect class \"" + o.Key + "\": " + o.Description + "\nDoes the call have this effect?"
+				text := questionText(q) + "\n\nOption \"" + o.Key + "\": " + o.Description + "\nDoes this option apply to the call?"
 				req.Ask(classifier.Noul(memberKey(q.Key, o.Key), classifier.Text(text),
 					classifier.WithPositive(classifier.Text(o.Description)),
 				))
