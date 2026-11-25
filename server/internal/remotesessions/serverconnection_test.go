@@ -73,7 +73,7 @@ func TestServerConnectionUsesSignedInUserAndDoesNotExecuteTools(t *testing.T) {
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
 	signedIn := contextvalues.WithValidatedGramSession(ctx, &signedInUser, false)
-	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
+	offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	payload := &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()}
 	result, err := env.service.TestServerConnection(signedIn, payload)
 	require.NoError(t, err)
@@ -118,17 +118,17 @@ func TestServerConnectionDoesNotExposeForeignProjectServer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
+func TestServerConnectionSelectsOnlyOfferedClient(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                string
-		associateUserClient bool
-		sharedIssuer        bool
-		wantStatus          string
+		name            string
+		offerUserClient bool
+		sharedIssuer    bool
+		wantStatus      string
 	}{
-		{"unassociated", false, false, "configuration_required"},
-		{"another client associated", false, true, "authorization_required"},
-		{"shared issuer with target client", true, true, "ready"},
+		{"no offer", false, false, "configuration_required"},
+		{"another client offered", false, true, "authorization_required"},
+		{"shared issuer with target client offered", true, true, "ready"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -151,13 +151,13 @@ func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
 			}, withRemoteServer(upstream.URL))
 			target, err := mcpserversrepo.New(env.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: env.mcpServerID.UUID, ProjectID: env.projectID})
 			require.NoError(t, err)
-			if tc.associateUserClient {
-				associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, env.clientID)
+			if tc.offerUserClient {
+				offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, target.ID, env.clientID)
 			}
 			if tc.sharedIssuer {
 				other, _ := seedActiveClient(t, ctx, env.db, env.projectID, target.UserSessionIssuerID.UUID, env.organizationID, "other-associated")
-				if !tc.associateUserClient {
-					associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, other)
+				if !tc.offerUserClient {
+					offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, target.ID, other)
 				}
 			}
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -233,7 +233,7 @@ func TestServerConnectionRefusesStaticAuthorizationHeader(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
-	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
+	offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	result, err := env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &signedInUser, false), &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()})
 	require.NoError(t, err)
 	require.Equal(t, "configuration_required", result.Status)

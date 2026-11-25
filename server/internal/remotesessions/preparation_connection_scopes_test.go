@@ -23,7 +23,8 @@ func connectedPreparation(t *testing.T, ti *testInstance, ctx context.Context, i
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: in.ClientID, UserSessionIssuerID: in.UserSessionIssuerID}))
-	seedRemoteMcpServerForLogin(t, ctx, ti.conn, *auth.ProjectID, in.UserSessionIssuerID, "connected-"+uuid.NewString()[:8], serverURL)
+	serverID := seedRemoteMcpServerForLogin(t, ctx, ti.conn, *auth.ProjectID, in.UserSessionIssuerID, "connected-"+uuid.NewString()[:8], serverURL)
+	offerRegistration(t, ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, serverID, in.ClientID)
 	seedProtectedResource(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, serverURL, protectedResourceSeed{pin: pin})
 }
 
@@ -217,7 +218,7 @@ func TestPreparationScopes_ServerFoundByItsDocumentResource(t *testing.T) {
 	require.Equal(t, []string{"files:read"}, prepared.Scopes, "the row is keyed by the server URL even though the binding names the RFC 9728 resource")
 }
 
-func TestPreparationScopes_UnlinkedClientRecordsTheRequest(t *testing.T) {
+func TestPreparationScopes_ClientWithoutAnOfferRecordsTheRequest(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	in.ConfirmGrants = []string{oauthwire.GrantTypeJWTBearer}
@@ -229,10 +230,13 @@ func TestPreparationScopes_UnlinkedClientRecordsTheRequest(t *testing.T) {
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", prepared.State)
-	require.Equal(t, []string{"files:read", "openid"}, prepared.Scopes, "a client no sign-in uses has no connection to follow")
+	require.Equal(t, []string{"files:read", "openid"}, prepared.Scopes, "no offer exists when the first preparation snapshots the request")
 	read := readEMA(t, ti, ctx, in)
-	require.Equal(t, []string{"files:read", "openid"}, read.ConnectionScopes)
-	require.False(t, *read.ScopesOutOfDate)
+	// Preparation publishes an exact EMA offer. Reading can now see that
+	// offer's live scopes, but it must not rewrite the stored snapshot.
+	require.Equal(t, []string{"files:read", "openid"}, read.Scopes)
+	require.Equal(t, []string{"files:write"}, read.ConnectionScopes)
+	require.True(t, *read.ScopesOutOfDate)
 }
 
 func TestPreparationScopes_DiscoveryOffIgnoresTheResourceRow(t *testing.T) {
