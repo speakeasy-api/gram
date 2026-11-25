@@ -151,7 +151,6 @@ vi.mock("./useIssuerDiscovery", () => ({
 
 function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
   return {
-    kind: "standard",
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",

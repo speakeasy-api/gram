@@ -286,7 +286,7 @@ func TestDisconnectAuthClientRemoteSession_RevokesUpstreamWithoutASignInLink(t *
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "offered-disconnect", upstream.URL+"/revoke", "s3cret", true)
-	require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
+	require.NoError(t, testrepo.New(ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
 		RemoteSessionClientID: fx.clientID,
 		ProjectID:             conv.ToNullUUID(fx.projectID),
 	}))

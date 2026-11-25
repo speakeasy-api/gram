@@ -261,7 +261,7 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND ac.source = 'backfill'
 ORDER BY ac.name, ac.id;
 
--- name: GetAuthClientRegistration :one
+-- name: LockAuthClientRegistration :one
 -- An OAuth registration a new remote_session or service_account client may
 -- name: live, with a live issuer, and in the client's project, shared across
 -- the organization, or platform-global.
@@ -292,7 +292,8 @@ WHERE c.id = @id
     WHERE p.id = c.project_id
       AND p.organization_id = @organization_id::text
       AND p.deleted IS FALSE
-  ));
+  ))
+FOR SHARE OF c;
 
 -- name: GetOrganizationProject :one
 SELECT p.id

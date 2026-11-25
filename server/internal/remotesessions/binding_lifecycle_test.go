@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,7 +25,7 @@ import (
 // but only while its exact grant, owner, tenant and configuration remain live.
 func TestRemoteSessionSweeps_AttachmentReachParity(t *testing.T) {
 	t.Parallel()
-	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
+	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "registration-retired", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
 	for _, state := range states {
 		t.Run("refresh/"+state, func(t *testing.T) {
 			t.Parallel()
@@ -140,6 +141,14 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentConfigFixture(ctx, testrepo.SoftDeleteAttachmentConfigFixtureParams{ID: id, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 	case "client-deleted":
 		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentClientFixture(ctx, testrepo.SoftDeleteAttachmentClientFixtureParams{ID: session.RemoteSessionClientID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
+	case "registration-retired":
+		err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: client, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		_, err = fixtures.GetPrincipalRemoteSessionBindingSessionFixture(ctx, binding.ID)
+		require.NoError(t, err, "registration deletion physically removed the attachment")
+		active, err := fixtures.CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, session.ID)
+		require.NoError(t, err)
+		require.Zero(t, active, "registration deletion did not retire the attachment")
 	case "issuer-deleted":
 		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentIssuerFixture(ctx, testrepo.SoftDeleteAttachmentIssuerFixtureParams{ID: uuid.MustParse(issuer), ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 	case "project-deleted":
