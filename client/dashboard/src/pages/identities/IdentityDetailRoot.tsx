@@ -448,7 +448,7 @@ const RAIL_CLASS_NAME =
   "border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0";
 
 /**
- * An agent's rail, with a red count on its Server sign-in tab of the servers
+ * An agent's rail, with a red count on its MCP sign-in tab of the servers
  * someone has to sign in to, so an expired or missing connection is seen
  * from any of its tabs.
  */
