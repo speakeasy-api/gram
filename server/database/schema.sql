@@ -5660,6 +5660,96 @@ ON user_session_issuer_cimd_clients (user_session_issuer_id);
 CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
 ON user_session_issuer_cimd_clients (organization_id);
 
+-- cimd_client_candidates is the staff review queue of CIMD client URLs seen on
+-- open-mode issuers that no catalog document covers. Global, like ai_products:
+-- no project_id or organization_id. One row per URL, never deleted, so a
+-- decision sticks and a dismissed URL is not raised again. Status values are
+-- validated in application code.
+CREATE TABLE IF NOT EXISTS cimd_client_candidates (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  url TEXT NOT NULL CHECK (url <> ''),
+  client_name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  reason TEXT,
+  reviewed_by TEXT,
+  reviewed_at timestamptz,
+  document_id uuid,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT cimd_client_candidates_pkey PRIMARY KEY (id),
+  CONSTRAINT cimd_client_candidates_document_id_fkey FOREIGN KEY (document_id) REFERENCES ai_product_cimd_documents (id) ON DELETE SET NULL
+);
+
+COMMENT ON TABLE cimd_client_candidates IS 'Staff review queue of CIMD client URLs no catalog document covers. One row per URL; the decision is permanent.';
+COMMENT ON COLUMN cimd_client_candidates.id IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.url IS 'The client_id the client presented, stored exactly as received.
+@access: restricted';
+COMMENT ON COLUMN cimd_client_candidates.client_name IS 'client_name from the fetched metadata document; null when absent.
+@access: opaque-confidential';
+COMMENT ON COLUMN cimd_client_candidates.status IS 'One of pending, approved, dismissed, customer_specific. Only pending rows are open; the others never return to pending.
+@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.reason IS 'Staff note recorded with the decision.
+@access: opaque-restricted';
+COMMENT ON COLUMN cimd_client_candidates.reviewed_by IS 'Subject URN of the staff member who decided; null while pending.
+@access: confidential-pii';
+COMMENT ON COLUMN cimd_client_candidates.reviewed_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.document_id IS 'Catalog document created on approval; null otherwise.
+@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.first_seen_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.created_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidates.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS cimd_client_candidates_url_key
+ON cimd_client_candidates (url);
+
+-- Serves the queue: filter by status, newest first.
+CREATE INDEX IF NOT EXISTS cimd_client_candidates_status_first_seen_at_idx
+ON cimd_client_candidates (status, first_seen_at DESC);
+
+-- cimd_client_candidate_sightings records each issuer that saw a candidate, so
+-- staff see its reach across organizations and issuers rather than a count.
+CREATE TABLE IF NOT EXISTS cimd_client_candidate_sightings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  candidate_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  organization_id TEXT,
+
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT cimd_client_candidate_sightings_pkey PRIMARY KEY (id),
+  CONSTRAINT cimd_client_candidate_sightings_candidate_id_fkey FOREIGN KEY (candidate_id) REFERENCES cimd_client_candidates (id) ON DELETE CASCADE,
+  CONSTRAINT cimd_client_candidate_sightings_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT cimd_client_candidate_sightings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE cimd_client_candidate_sightings IS 'Issuers, and their organizations, that saw each CIMD client candidate.';
+COMMENT ON COLUMN cimd_client_candidate_sightings.id IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.candidate_id IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.user_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.organization_id IS 'The issuer''s organization; null for a platform-global issuer.
+@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.last_seen_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.created_at IS '@access: confidential';
+COMMENT ON COLUMN cimd_client_candidate_sightings.updated_at IS '@access: confidential';
+
+-- Upsert target; also serves per-candidate reach reads.
+CREATE UNIQUE INDEX IF NOT EXISTS cimd_client_candidate_sightings_candidate_issuer_key
+ON cimd_client_candidate_sightings (candidate_id, user_session_issuer_id);
+
+-- Back the issuer and organization cascades.
+CREATE INDEX IF NOT EXISTS cimd_client_candidate_sightings_user_session_issuer_id_idx
+ON cimd_client_candidate_sightings (user_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS cimd_client_candidate_sightings_organization_id_idx
+ON cimd_client_candidate_sightings (organization_id);
+
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
 CREATE TABLE IF NOT EXISTS user_session_consents (
