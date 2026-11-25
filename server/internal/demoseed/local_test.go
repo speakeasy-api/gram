@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,7 +75,7 @@ func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec
 
 	logger := testenv.NewLogger(t)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
-	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
+	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot(), time.Time{})
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, spec.OrgID))
 }

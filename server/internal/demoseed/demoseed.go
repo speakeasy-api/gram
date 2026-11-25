@@ -56,6 +56,14 @@ const (
 //
 // Pass DefaultSpec() for the shared production demo org.
 func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
+	return runAt(ctx, logger, db, ch, blob, enc, assistantIssuerURL, serverURL, spec, time.Time{})
+}
+
+// runAt is Run with the seed clock pinned to now; the zero time means the
+// Postgres transaction time. The generated rows, and how many there are, are
+// a function of that clock, so two runs at the same clock produce the same
+// row set.
+func runAt(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, now time.Time) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -78,7 +86,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
-		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog)
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog, now)
 		if err != nil {
 			return err
 		}
@@ -154,8 +162,9 @@ type txBeginner interface {
 
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
-// clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot) (*seeder, error) {
+// clock the ClickHouse seed reuses. A zero now takes the clock from the
+// transaction time.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot, now time.Time) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
@@ -167,7 +176,7 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: now, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {
