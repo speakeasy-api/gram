@@ -128,8 +128,7 @@ const (
 	OpIncludesOtherThan = "includes anything other than"
 )
 
-// Condition is one clause of a contract's firing condition. A label clause
-// sets Label; a tool clause sets Pattern, matched against the shell command.
+// Condition is one clause of a contract's firing condition.
 type Condition struct {
 	// Join links the clause to the previous one: "", "and", or "or". Clauses
 	// joined by "or" form a group and groups are joined by "and", so
@@ -145,9 +144,6 @@ type Condition struct {
 	// Values are the label values compared: "true" for a yes/no label, else
 	// option keys. Several values read as "any of".
 	Values []string
-
-	// Pattern is the regular expression a shell command must match.
-	Pattern string
 }
 
 // Guardrail is the versioned set of statements, questions, and contracts.
