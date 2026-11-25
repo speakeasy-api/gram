@@ -263,7 +263,7 @@ func TestCreateMcpServer_AttachesOrganizationUserSessionIssuer(t *testing.T) {
 	require.Equal(t, issuerID, *created.UserSessionIssuerID)
 }
 
-func TestCreateMcpServer_ResolvesRemoteIssuerForSelectedOrganizationIssuer(t *testing.T) {
+func TestCreateMcpServer_DoesNotInheritRemoteIssuerFromOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
