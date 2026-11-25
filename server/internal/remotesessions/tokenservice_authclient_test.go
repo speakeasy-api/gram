@@ -397,6 +397,15 @@ func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.
 	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
 	require.Equal(t, f.clientID, tokens[f.issuerID].RemoteSessionClientID)
 
+	wrongProject := req
+	wrongProject.ProjectID = createProject(t, ctx, f.ti.conn, "hosted-other-project")
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, wrongProject)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+	wrongTenant := req
+	wrongTenant.OrganizationID = createOrganization(t, ctx, f.ti.conn, "hosted-other-tenant")
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, wrongTenant)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+
 	unknown := f.request(subject, uuid.New())
 	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, unknown)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
