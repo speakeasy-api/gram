@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -24,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // discoveryMode is the tool surface one Platform MCP request is served.
@@ -85,28 +85,14 @@ func (r *Runtime) WithDiscovery(config DiscoveryConfig) *Runtime {
 	return r
 }
 
-// harnessProducts maps each CIMD document URL in the aivendors registry to its
-// product ID, resolved once because the registry is static.
-var harnessProducts = sync.OnceValue(func() map[string]string {
-	products := make(map[string]string)
-	for _, product := range aivendors.Products() {
-		for _, clientID := range aivendors.GatewayMatchersFor(product).ClientIDs {
-			products[clientID] = product.ID
-		}
-	}
-	return products
-})
-
 // harnessForClient names the harness behind a verified OAuth client_id: the
-// aivendors product whose CIMD document admitted it, or "unknown". It
-// resolves through the CIMD admission catalog the same way the MCP gateway
-// does, never through the client's self-reported clientInfo. A dynamically
-// registered client has an opaque client_id that matches no entry.
-func harnessForClient(clientID string) string {
-	if preset, ok := admission.CatalogPreset(clientID); ok {
-		if product, ok := harnessProducts()[preset.URL]; ok {
-			return product
-		}
+// catalog product whose CIMD document admitted it, or "unknown". It resolves
+// through the CIMD admission catalog the same way the MCP gateway does, never
+// through the client's self-reported clientInfo. A dynamically registered
+// client has an opaque client_id that matches no entry.
+func harnessForClient(catalog *aivendors.Snapshot, clientID string) string {
+	if preset, ok := catalog.CatalogPreset(clientID); ok {
+		return preset.ProductID
 	}
 	return "unknown"
 }
@@ -123,7 +109,7 @@ func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, pri
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
-	harness := harnessForClient(principal.ClientID)
+	harness := harnessForClient(r.registrar.aiCatalogSnapshot(ctx), principal.ClientID)
 	if harness == chatGPTProductID {
 		return discoveryFull
 	}
@@ -152,21 +138,10 @@ func (r *Runtime) codeModeAvailable(ctx context.Context, organizationID string) 
 	return r.discovery.CodeExecutor != nil && r.discovery.CodeModeAvailable != nil && r.discovery.CodeModeAvailable(ctx, organizationID)
 }
 
-type discoveryModeKey struct{}
-
-// discoveryModeFromContext reads the surface the discovery middleware chose.
-// A request it never saw is a full-catalogue request.
-func discoveryModeFromContext(ctx context.Context) discoveryMode {
-	if mode, ok := ctx.Value(discoveryModeKey{}).(discoveryMode); ok {
-		return mode
-	}
-	return discoveryFull
-}
-
 // discoveryMiddleware serves a caller in the small surface from the meta-tools
-// plus the first-run tools. It sits outside the allowlist and catalogue
-// middleware: its tools/list takes the first-run tools from the catalogue they
-// filter for this caller, and a dispatched call enters them as an ordinary tools/call,
+// plus the first-run tools. It sits outside the catalogue middleware: its
+// tools/list takes the first-run tools from the catalogue they filter for this
+// caller, and a dispatched call enters them as an ordinary tools/call,
 // so the meta-tools reach a catalogue tool through the same SDK validation,
 // per-tool authorization, handler and fail-safe as a direct call does.
 func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
@@ -174,7 +149,6 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			principal := mustPrincipal(ctx)
 			mode := runtime.discoveryModeFor(ctx, logger, principal)
-			ctx = context.WithValue(ctx, discoveryModeKey{}, mode)
 			if mode == discoveryFull {
 				return next(ctx, method, req)
 			}
@@ -461,6 +435,12 @@ func (s *discoverySurface) describe(ctx context.Context, arguments json.RawMessa
 	}
 	return discoveryResult(output)
 }
+
+// chatGPTProductID is the catalog product whose CIMD documents identify a
+// ChatGPT caller.
+const chatGPTProductID = "chatgpt"
+
+var instructionToolNamePattern = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
 
 // guidanceFor returns the instruction paragraphs that name a tool.
 func (r *Registrar) guidanceFor(name string) []string {

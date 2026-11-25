@@ -194,14 +194,20 @@ export function StatTile(props: StatTileProps): JSX.Element {
 }
 
 /**
- * Loading placeholder shaped like a value-only StatTile — same padding, gap
- * and line heights, so the group doesn't shift when the figures land.
+ * Loading placeholder shaped like a StatTile — same padding, gap and line
+ * heights, so the group doesn't shift when the figures land. Value-only by
+ * default; `caption` adds the line a tile with a subtext carries.
  */
-export function StatTileSkeleton(): JSX.Element {
+export function StatTileSkeleton({
+  caption = false,
+}: {
+  caption?: boolean;
+} = {}): JSX.Element {
   return (
     <div className="bg-card flex min-w-0 flex-1 flex-col gap-4 p-6">
       <Skeleton className="h-[14.3px] w-24" />
       <Skeleton className="h-[34px] w-20" />
+      {caption && <Skeleton className="h-[17.9px] w-36 max-w-full" />}
     </div>
   );
 }

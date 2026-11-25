@@ -8,9 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 )
 
 var (
@@ -97,18 +95,9 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 	case err != nil:
 		return View{}, fmt.Errorf("read execution profile: %w", err)
 	}
-	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
-		VersionID:      uuid.NullUUID{UUID: profile.VersionID, Valid: profile.Version > 0},
-		OrganizationID: target.OrganizationID,
-		AssistantID:    target.AssistantID,
-		ProjectID:      target.ProjectID,
-	})
+	servers, err := loadProfileOffers(ctx, q, target, uuid.NullUUID{UUID: profile.VersionID, Valid: profile.Version > 0})
 	if err != nil {
-		return View{}, fmt.Errorf("list execution profile servers: %w", err)
-	}
-	typedOnly, err := authenforcement.ReadEnforced(ctx, db, target.OrganizationID)
-	if err != nil {
-		return View{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+		return View{}, err
 	}
 	recorded := map[uuid.UUID]Choice{}
 	if profile.Version > 0 {
@@ -120,56 +109,35 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 			recorded[row.McpServerID] = Choice{AuthClientID: row.AuthClientID, Source: row.Source}
 		}
 	}
-	ids := make([]uuid.UUID, 0, len(servers))
-	for _, row := range servers {
-		ids = append(ids, row.McpServerID)
-	}
-	offered, err := upstreamclientsrepo.New(db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: target.OrganizationID, McpServerIds: ids})
-	if err != nil {
-		return View{}, fmt.Errorf("list server auth clients: %w", err)
-	}
-	options := map[uuid.UUID][]Option{}
-	type offer struct{ serverID, authClientID uuid.UUID }
-	live := map[offer]bool{}
-	for _, row := range offered {
-		if !row.AuthClientID.Valid {
-			continue
-		}
-		live[offer{serverID: row.McpServerID, authClientID: row.AuthClientID.UUID}] = true
-		if upstreamclients.CheckConfiguredChoice([]upstreamclientsrepo.ListServerConsentAuthClientsRow{row}, row.AuthClientID, target.Context == ContextUserless) != nil {
-			continue
-		}
-		options[row.McpServerID] = append(options[row.McpServerID], Option{AuthClientID: row.AuthClientID.UUID, Name: row.AuthClientName.String, ClientType: row.ClientType.String})
-	}
-
 	view := View{Target: target, Version: profile.Version, Servers: make([]ServerView, 0, len(servers))}
 	for _, row := range servers {
 		server := ServerView{
-			MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: options[row.McpServerID],
-			NoAuthAllowed: len(row.AuthClientIds) == 0 && !row.UpstreamAuthPending,
+			MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: []Option{},
+			NoAuthAllowed: upstreamclients.CheckConfiguredChoice(row.offers, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, target.Context == ContextUserless) == nil,
 		}
-		if server.Options == nil {
-			server.Options = []Option{}
+		for i, offer := range row.offers {
+			if !offer.AuthClientID.Valid || upstreamclients.CheckConfiguredChoice(row.offers[i:i+1], offer.AuthClientID, target.Context == ContextUserless) != nil {
+				continue
+			}
+			server.Options = append(server.Options, Option{AuthClientID: offer.AuthClientID.UUID, Name: offer.AuthClientName.String, ClientType: offer.ClientType.String})
 		}
 		if choice, ok := recorded[row.McpServerID]; ok {
 			server.Choice = &choice
-			// A recorded client the server no longer offers enabled serves
-			// nothing until another is chosen.
-			switch {
-			case choice.AuthClientID.Valid && !live[offer{serverID: row.McpServerID, authClientID: choice.AuthClientID.UUID}]:
+			// Invalid recorded choices stay pinned until an administrator repairs them.
+			err := upstreamclients.CheckConfiguredChoice(row.offers, choice.AuthClientID, target.Context == ContextUserless)
+			if err != nil {
 				reason := GapNoClient
-				server.Gap = &reason
-			case !choice.AuthClientID.Valid && !server.NoAuthAllowed:
-				// A no-auth choice serves nothing once the server offers an
-				// enabled auth client, or while it has upstream credentials no
-				// auth client records yet.
-				reason := GapSelectionRequired
-				if row.UpstreamAuthPending {
+				switch {
+				case errors.Is(err, upstreamclients.ErrChoiceNeedsCredential):
+					reason = GapSelectionRequired
+				case errors.Is(err, upstreamclients.ErrChoiceUpstreamAuthPending):
 					reason = GapSetupIncomplete
+				case errors.Is(err, upstreamclients.ErrChoicePersonal):
+					reason = GapPersonalRequiresUser
 				}
 				server.Gap = &reason
 			}
-		} else if d, gap := decide(row, target.Context, typedOnly); gap != nil {
+		} else if d, gap := decide(row, target.Context); gap != nil {
 			server.Gap = &gap.Reason
 		} else {
 			server.Choice = &Choice{AuthClientID: uuid.NullUUID{UUID: d.authClientID, Valid: d.authClientID != uuid.Nil}, Source: SourceAutomatic}
@@ -219,16 +187,11 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 	if profile.Version != input.ExpectedVersion {
 		return ErrVersionChanged
 	}
-	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
-		VersionID:      uuid.NullUUID{UUID: profile.VersionID, Valid: profile.Version > 0},
-		OrganizationID: target.OrganizationID,
-		AssistantID:    target.AssistantID,
-		ProjectID:      target.ProjectID,
-	})
+	servers, err := loadProfileOffers(ctx, q, target, uuid.NullUUID{UUID: profile.VersionID, Valid: profile.Version > 0})
 	if err != nil {
-		return fmt.Errorf("list execution profile servers: %w", err)
+		return err
 	}
-	var reachedRow *ListProfileServersRow
+	var reachedRow *profileServer
 	for i := range servers {
 		if servers[i].McpServerID == serverID {
 			reachedRow = &servers[i]
@@ -239,12 +202,8 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 	}
 	var previous *Choice
 	if !reachedRow.HasChoice {
-		typedOnly, err := authenforcement.ReadEnforced(ctx, tx, target.OrganizationID)
-		if err != nil {
-			return fmt.Errorf("read upstream auth enforcement: %w", err)
-		}
 		// The choice the next turn would make on its own is what this replaces.
-		if d, gap := decide(*reachedRow, target.Context, typedOnly); gap == nil {
+		if d, gap := decide(*reachedRow, target.Context); gap == nil {
 			previous = &Choice{AuthClientID: uuid.NullUUID{UUID: d.authClientID, Valid: d.authClientID != uuid.Nil}, Source: SourceAutomatic}
 		}
 	}
@@ -265,11 +224,7 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 		clientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	}
 	if !input.Clear {
-		offered, err := upstreamclientsrepo.New(tx).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: target.OrganizationID, McpServerIds: []uuid.UUID{serverID}})
-		if err != nil {
-			return fmt.Errorf("list server auth clients: %w", err)
-		}
-		if err := upstreamclients.CheckConfiguredChoice(offered, clientID, target.Context == ContextUserless); err != nil {
+		if err := upstreamclients.CheckConfiguredChoice(reachedRow.offers, clientID, target.Context == ContextUserless); err != nil {
 			return fmt.Errorf("check choice: %w", err)
 		}
 	}

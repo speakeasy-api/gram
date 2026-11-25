@@ -275,7 +275,11 @@ func TestCapturesLeaveAServerWithItsOwnOfferAloneAfterRollback(t *testing.T) {
 
 				require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
 
-				require.Equal(t, conv.ToNullUUID(shared.firstProvider), storedIssuer(t, ctx, ti.conn, projectID, shared.second))
+				wantProvider := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+				if enabled {
+					wantProvider = conv.ToNullUUID(providerID)
+				}
+				require.Equal(t, wantProvider, storedIssuer(t, ctx, ti.conn, projectID, shared.second))
 				// Disabling an explicit registration is not consent to route the
 				// issuer's different credentials to this server after rollback.
 				requireClientBound(t, ctx, ti, secondClient, shared.userIssuerID, false)

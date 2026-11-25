@@ -312,6 +312,14 @@ type CreateSessionHandoffResponseBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 }
 
+// ListPendingAccessRequestsResponseBody is the type of the "agent" service
+// "listPendingAccessRequests" endpoint HTTP response body.
+type ListPendingAccessRequestsResponseBody struct {
+	// Pending requests, newest first. At most 50. Empty for a user who is not an
+	// organization administrator.
+	Requests []*AgentPendingAccessRequestResponseBody `form:"requests" json:"requests" xml:"requests"`
+}
+
 // GetPluginsUnauthorizedResponseBody is the type of the "agent" service
 // "getPlugins" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginsUnauthorizedResponseBody struct {
@@ -3423,6 +3431,196 @@ type CreateSessionHandoffGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListPendingAccessRequestsUnauthorizedResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPendingAccessRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsForbiddenResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "forbidden" error.
+type ListPendingAccessRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsBadRequestResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "bad_request" error.
+type ListPendingAccessRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsNotFoundResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "not_found" error.
+type ListPendingAccessRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsConflictResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "conflict" error.
+type ListPendingAccessRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsUnsupportedMediaResponseBody is the type of the
+// "agent" service "listPendingAccessRequests" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPendingAccessRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsInvalidResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "invalid" error.
+type ListPendingAccessRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsInvariantViolationResponseBody is the type of the
+// "agent" service "listPendingAccessRequests" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPendingAccessRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsUnexpectedResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "unexpected" error.
+type ListPendingAccessRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPendingAccessRequestsGatewayErrorResponseBody is the type of the "agent"
+// service "listPendingAccessRequests" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPendingAccessRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -3668,6 +3866,33 @@ type AgentSessionMetaResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Last activity recorded for the captured session.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// AgentPendingAccessRequestResponseBody is used to define fields on response
+// body types.
+type AgentPendingAccessRequestResponseBody struct {
+	// Access request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The requester's display name, or their email when they have none.
+	RequesterDisplayName string `form:"requester_display_name" json:"requester_display_name" xml:"requester_display_name"`
+	// The scope asked for.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The scope's name as the role editor shows it.
+	PermissionLabel string `form:"permission_label" json:"permission_label" xml:"permission_label"`
+	// The resource's name, as it was when the request was made.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// The requester's note to the administrators.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// How long the requester asked to have the access, in seconds counted from
+	// approval.
+	RequestedDurationSeconds *int `form:"requested_duration_seconds,omitempty" json:"requested_duration_seconds,omitempty" xml:"requested_duration_seconds,omitempty"`
+	// When the requester asked to have the access until.
+	RequestedUntil *string `form:"requested_until,omitempty" json:"requested_until,omitempty" xml:"requested_until,omitempty"`
+	CreatedAt      string  `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the request lapses.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// Dashboard page that opens the request to approve or deny it.
+	DecideURL string `form:"decide_url" json:"decide_url" xml:"decide_url"`
 }
 
 // AiScanTargetSignaturesRequestBody is used to define fields on request body
@@ -4095,6 +4320,26 @@ func NewCreateSessionHandoffResponseBody(res *agent.CreateSessionHandoffResult) 
 	body := &CreateSessionHandoffResponseBody{
 		URL:       res.URL,
 		ExpiresAt: res.ExpiresAt,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsResponseBody builds the HTTP response body from
+// the result of the "listPendingAccessRequests" endpoint of the "agent"
+// service.
+func NewListPendingAccessRequestsResponseBody(res *agent.ListPendingAccessRequestsResult) *ListPendingAccessRequestsResponseBody {
+	body := &ListPendingAccessRequestsResponseBody{}
+	if res.Requests != nil {
+		body.Requests = make([]*AgentPendingAccessRequestResponseBody, len(res.Requests))
+		for i, val := range res.Requests {
+			if val == nil {
+				body.Requests[i] = nil
+				continue
+			}
+			body.Requests[i] = marshalAgentAgentPendingAccessRequestToAgentPendingAccessRequestResponseBody(val)
+		}
+	} else {
+		body.Requests = []*AgentPendingAccessRequestResponseBody{}
 	}
 	return body
 }
@@ -6515,6 +6760,156 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 	return body
 }
 
+// NewListPendingAccessRequestsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listPendingAccessRequests" endpoint of
+// the "agent" service.
+func NewListPendingAccessRequestsUnauthorizedResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsUnauthorizedResponseBody {
+	body := &ListPendingAccessRequestsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsForbiddenResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsForbiddenResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsForbiddenResponseBody {
+	body := &ListPendingAccessRequestsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsBadRequestResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsBadRequestResponseBody {
+	body := &ListPendingAccessRequestsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsNotFoundResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsNotFoundResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsNotFoundResponseBody {
+	body := &ListPendingAccessRequestsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsConflictResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsConflictResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsConflictResponseBody {
+	body := &ListPendingAccessRequestsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listPendingAccessRequests" endpoint of
+// the "agent" service.
+func NewListPendingAccessRequestsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsUnsupportedMediaResponseBody {
+	body := &ListPendingAccessRequestsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsInvalidResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsInvalidResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsInvalidResponseBody {
+	body := &ListPendingAccessRequestsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listPendingAccessRequests" endpoint of
+// the "agent" service.
+func NewListPendingAccessRequestsInvariantViolationResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsInvariantViolationResponseBody {
+	body := &ListPendingAccessRequestsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listPendingAccessRequests" endpoint of the
+// "agent" service.
+func NewListPendingAccessRequestsUnexpectedResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsUnexpectedResponseBody {
+	body := &ListPendingAccessRequestsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPendingAccessRequestsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listPendingAccessRequests" endpoint of
+// the "agent" service.
+func NewListPendingAccessRequestsGatewayErrorResponseBody(res *goa.ServiceError) *ListPendingAccessRequestsGatewayErrorResponseBody {
+	body := &ListPendingAccessRequestsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
 func NewGetPluginsPayload(legacyEmail *string, deviceAgentToken *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
@@ -6755,6 +7150,15 @@ func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apike
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
+
+	return v
+}
+
+// NewListPendingAccessRequestsPayload builds a agent service
+// listPendingAccessRequests endpoint payload.
+func NewListPendingAccessRequestsPayload(apikeyToken *string) *agent.ListPendingAccessRequestsPayload {
+	v := &agent.ListPendingAccessRequestsPayload{}
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

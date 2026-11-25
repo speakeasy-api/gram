@@ -1005,7 +1005,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	activeSessions, err := repo.New(ti.conn).CountActiveRemoteSessionsByClientID(ctx, clientUUID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), activeSessions)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID), "retirement keeps the compatibility parent")
 }
 
 func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {

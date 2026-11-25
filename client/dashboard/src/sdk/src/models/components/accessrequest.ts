@@ -44,6 +44,14 @@ export type AccessRequest = {
    */
   message?: string | undefined;
   /**
+   * How long the requester asked to have the access, in seconds counted from approval. A suggestion; the approver picks the window. Absent when none was asked for.
+   */
+  requestedDurationSeconds?: number | undefined;
+  /**
+   * When the requester asked to have the access until. A suggestion; the approver picks the window. Absent when none was asked for.
+   */
+  requestedUntil?: Date | undefined;
+  /**
    * The requester's display name, or their email when they have none.
    */
   requesterName: string;
@@ -99,6 +107,10 @@ export const AccessRequest$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     message: z.optional(z.string()),
+    requested_duration_seconds: z.optional(z.int()),
+    requested_until: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     requester_name: z.string(),
     requester_user_id: z.string(),
     resource_name: z.optional(z.string()),
@@ -120,6 +132,8 @@ export const AccessRequest$inboundSchema: z.ZodMiniType<
       "decided_via": "decidedVia",
       "expires_at": "expiresAt",
       "grant_expires_at": "grantExpiresAt",
+      "requested_duration_seconds": "requestedDurationSeconds",
+      "requested_until": "requestedUntil",
       "requester_name": "requesterName",
       "requester_user_id": "requesterUserId",
       "resource_name": "resourceName",

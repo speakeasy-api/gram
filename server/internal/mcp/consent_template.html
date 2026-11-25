@@ -759,7 +759,7 @@
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
-            data-gateway="{{if or .ShowDiscoveryMode .CatalogChanges}}true{{else}}false{{end}}"
+            data-gateway="{{if or .ShowDiscoveryMode .DashboardInspectGateway .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -869,6 +869,11 @@
                   your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
                 </p>
               </dd>
+            </div>
+            {{else if .DashboardInspectGateway}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">Progressive (dashboard Inspect)</dd>
             </div>
             {{else if .GatewayDefaultMode}}
             <div data-agent-self-only>
@@ -1050,6 +1055,7 @@
                       data-auto-submit
                       class="bg-card mt-1 max-w-full border px-2 py-1 text-xs"
                     >
+                      {{if not .Selected}}<option value="" selected disabled>Choose a credential</option>{{end}}
                       {{range .Options}}
                       <option value="{{.ID}}" {{if .Selected}}selected{{end}} {{if not .Usable}}disabled{{end}}>
                         {{.Name}} · {{.TypeLabel}}{{if eq .State "connect"}} (connect first){{else if eq .State "reconnect"}} (reconnect first){{else if eq .State "setup"}} (not set up){{end}}

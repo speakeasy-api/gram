@@ -75,8 +75,12 @@ type Service struct {
 	providerHealth   *mcpconnectionattempts.ProviderHealth
 	registry         *mcpregistry.Service
 	remoteSessions   *remotesessions.Service
-	assets           *assets.Service
-	mcpSourceStorage blobio.Reader
+
+	// tailscaleOAuthMigration serves the temporary Tailscale OAuth client
+	// migration to organization keys; nil without organization encryption.
+	tailscaleOAuthMigration *TailscaleOAuthMigration
+	assets                  *assets.Service
+	mcpSourceStorage        blobio.Reader
 
 	// gcpIdentity screens and verifies platform external credentials. Nil
 	// leaves those methods unavailable.
@@ -153,6 +157,10 @@ type Service struct {
 	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
 	// CNAME targets. Empty leaves targets out of listCustomDomains.
 	customDomainTargetSuffix string
+
+	// orgEncryption reports and changes organization encryption transitions.
+	// Nil leaves those methods unavailable.
+	orgEncryption *OrganizationEncryption
 }
 
 type BillingOperations interface {
@@ -284,7 +292,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -567,6 +575,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
+	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
+	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
+	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })
+	server.RollbackOrganizationEncryption = service.strictAdminJSON(server.RollbackOrganizationEncryption, func() any { return new(adminserver.RollbackOrganizationEncryptionRequestBody) })
+	server.RunOrganizationEncryption = service.strictAdminJSON(server.RunOrganizationEncryption, func() any { return new(adminserver.RunOrganizationEncryptionRequestBody) })
+	server.FinalizeOrganizationEncryption = service.strictAdminJSON(server.FinalizeOrganizationEncryption, func() any { return new(adminserver.FinalizeOrganizationEncryptionRequestBody) })
 	adminserver.Mount(mux, server)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)

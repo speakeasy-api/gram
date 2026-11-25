@@ -342,11 +342,12 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	}
 	outageGate, brokenGate := gate(&pgconn.PgError{Code: "57P01"}), gate(&pgconn.PgError{Code: "42P01"})
 
-	_, err := outageGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	member := metaMember{slug: "m", backend: metaMemberBackendProxied}
+	_, err := outageGate.memberTokens(t.Context(), member)
 	_, unavailable := errors.AsType[memberUnavailableError](err)
 	require.True(t, unavailable, "error: %v", err)
 
-	_, err = brokenGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	_, err = brokenGate.memberTokens(t.Context(), member)
 	require.Error(t, err)
 	_, unavailable = errors.AsType[memberUnavailableError](err)
 	require.False(t, unavailable, "a broken query is not an outage: %v", err)
@@ -457,8 +458,8 @@ func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized, false, true), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }
 
-// A proxied member with associations resolves from its own clients; any other
-// member keeps its project's credentials.
+// Hosted members and proxied members with associations use member resolution.
+// Unassociated proxied members retain project resolution.
 func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	t.Parallel()
 
@@ -474,7 +475,6 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 			return memberTokens, nil
 		},
 		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
-		byMember:  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
 	}}
 
 	associated := metaMember{serverID: uuid.New(), slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}}
@@ -493,5 +493,5 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	hosted := metaMember{serverID: uuid.New(), slug: "hosted", backend: metaMemberBackendHosted}
 	got, err = gate.memberTokens(t.Context(), hosted)
 	require.NoError(t, err)
-	require.Equal(t, projectTokens, got)
+	require.Equal(t, memberTokens, got)
 }

@@ -33,11 +33,6 @@ func TestContractConditionsMatchExpressions(t *testing.T) {
 			} else {
 				require.Contains(t, []string{"and", "or"}, cond.Join, c.ID)
 			}
-			if cond.Pattern != "" {
-				require.Empty(t, cond.Label, c.ID)
-				require.Contains(t, c.Expression, strings.ReplaceAll(cond.Pattern, `\`, `\\`), c.ID)
-				continue
-			}
 			q, ok := questions[cond.Label]
 			require.True(t, ok, "%s reads unknown label %q", c.ID, cond.Label)
 			require.True(t,

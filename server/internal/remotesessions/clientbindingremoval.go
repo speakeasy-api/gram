@@ -15,26 +15,25 @@ import (
 )
 
 // clientBindingServers is, for each project with a server on one of a
-// client's user session issuers, the organization and those issuers.
+// client's actual server associations or typed offers, the organization and those issuers.
 type clientBindingServers struct {
 	organizationID string
 	projectID      uuid.UUID
 	issuerIDs      []uuid.UUID
 }
 
-// ClientBindingServers is every server project a client's issuer bindings
-// reach, read before a writer deletes those bindings.
+// ClientBindingServers is every server project an actual registration association or offer reaches,
+// read before a writer retires the registration.
 type ClientBindingServers []clientBindingServers
 
-// ReadClientBindingServers reads the server projects clientID's issuer
-// bindings reach in organizationID. Read it before the transaction's writer
+// ReadClientBindingServers reads the projects reached by clientID's associations and offers in organizationID. Read it before the transaction's writer
 // scope, and lock Projects with it.
 func ReadClientBindingServers(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) (ClientBindingServers, error) {
 	return readClientBindingServers(ctx, db, conv.ToPGText(organizationID), clientID)
 }
 
 // ReadGlobalClientBindingServers is ReadClientBindingServers for a
-// platform-global client, whose bindings reach servers in any organization.
+// platform-global client, whose associations and offers reach servers in any organization.
 func ReadGlobalClientBindingServers(ctx context.Context, db repo.DBTX, clientID uuid.UUID) (ClientBindingServers, error) {
 	return readClientBindingServers(ctx, db, pgtype.Text{String: "", Valid: false}, clientID)
 }
@@ -50,15 +49,15 @@ func readClientBindingServers(ctx context.Context, db repo.DBTX, organizationID 
 	var servers ClientBindingServers
 	for _, row := range rows {
 		if n := len(servers); n > 0 && servers[n-1].organizationID == row.OrganizationID && servers[n-1].projectID == row.ProjectID {
-			servers[n-1].issuerIDs = append(servers[n-1].issuerIDs, row.UserSessionIssuerID)
+			servers[n-1].issuerIDs = append(servers[n-1].issuerIDs, row.UserSessionIssuerID.UUID)
 			continue
 		}
-		servers = append(servers, clientBindingServers{organizationID: row.OrganizationID, projectID: row.ProjectID, issuerIDs: []uuid.UUID{row.UserSessionIssuerID}})
+		servers = append(servers, clientBindingServers{organizationID: row.OrganizationID, projectID: row.ProjectID, issuerIDs: []uuid.UUID{row.UserSessionIssuerID.UUID}})
 	}
 	return servers, nil
 }
 
-// Organizations lists the organizations whose servers the bindings reach.
+// Organizations lists the organizations whose servers the registration reaches.
 func (s ClientBindingServers) Organizations() []string {
 	var organizations []string
 	for _, project := range s {
@@ -81,7 +80,7 @@ func (s ClientBindingServers) Projects(organizationID string) []uuid.UUID {
 	return projects
 }
 
-// Derive recomputes the upstream issuer of the servers the deleted bindings
+// Derive recomputes the upstream issuer of the servers the deleted registration
 // reached. It rewrites only that derived column: the writer has already
 // pruned the client's associations and synchronized their typed records, and
 // holds the writer scope of every project in Projects.

@@ -94,8 +94,7 @@ func (s *Service) resolveMetaMemberResource(
 // project owns is claimed only by that project's members, the ones whose
 // dispatch routes through it.
 //
-// Where typed auth client resolution is enforced, a member claims the
-// registrations it offers through typed auth clients and no others.
+// Typed consent limits claims to registrations offered by the proxied member.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -104,11 +103,10 @@ func (s *Service) claimingMetaMembers(
 	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
-	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, false, err
-	}
+	return s.claimingMetaMembersForValidation(ctx, endpoint, client, usesTypedConsentInventory(ctx))
+}
 
+func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, typedOffers bool) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	// A member claims the clients associated with it rather than every
 	// client of its authorization server.
 	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow

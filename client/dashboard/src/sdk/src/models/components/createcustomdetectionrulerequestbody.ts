@@ -9,7 +9,7 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * Severity level for findings produced by this rule.
  */
-export const Severity = {
+export const CreateCustomDetectionRuleRequestBodySeverity = {
   Info: "info",
   Low: "low",
   Medium: "medium",
@@ -19,7 +19,9 @@ export const Severity = {
 /**
  * Severity level for findings produced by this rule.
  */
-export type Severity = ClosedEnum<typeof Severity>;
+export type CreateCustomDetectionRuleRequestBodySeverity = ClosedEnum<
+  typeof CreateCustomDetectionRuleRequestBodySeverity
+>;
 
 export type CreateCustomDetectionRuleRequestBody = {
   /**
@@ -41,7 +43,7 @@ export type CreateCustomDetectionRuleRequestBody = {
   /**
    * Severity level for findings produced by this rule.
    */
-  severity?: Severity | undefined;
+  severity?: CreateCustomDetectionRuleRequestBodySeverity | undefined;
   /**
    * Human-readable title for the rule.
    */
@@ -49,9 +51,10 @@ export type CreateCustomDetectionRuleRequestBody = {
 };
 
 /** @internal */
-export const Severity$outboundSchema: z.ZodMiniEnum<typeof Severity> = z.enum(
-  Severity,
-);
+export const CreateCustomDetectionRuleRequestBodySeverity$outboundSchema:
+  z.ZodMiniEnum<typeof CreateCustomDetectionRuleRequestBodySeverity> = z.enum(
+    CreateCustomDetectionRuleRequestBodySeverity,
+  );
 
 /** @internal */
 export type CreateCustomDetectionRuleRequestBody$Outbound = {
@@ -73,7 +76,10 @@ export const CreateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
     detectionExpr: z.optional(z.string()),
     regex: z.optional(z.string()),
     ruleId: z.string(),
-    severity: z._default(Severity$outboundSchema, "medium"),
+    severity: z._default(
+      CreateCustomDetectionRuleRequestBodySeverity$outboundSchema,
+      "medium",
+    ),
     title: z.string(),
   }),
   z.transform((v) => {

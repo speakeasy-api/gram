@@ -20,8 +20,8 @@ function AffectedUsers({
   if (lookupFailed) {
     return (
       <Alert variant="warning" dismissible={false}>
-        Could not check which servers and toolsets use this sign-in issuer.
-        People signing in to them may start signing in through Okta.
+        Could not check which servers and toolsets use this MCP sign-in. People
+        signing in to them may start signing in through Okta.
       </Alert>
     );
   }
@@ -76,7 +76,7 @@ export function TrustSignInConfirmDialog({
           </Dialog.Title>
           <Dialog.Description>
             {confirmation?.trustsOther &&
-              "This sign-in issuer trusts another sign-in client, which Okta replaces. "}
+              "This MCP sign-in trusts another sign-in client, which Okta replaces. "}
             Okta sign-in only admits people who already exist in this
             organization, so provision everyone through SCIM first.
           </Dialog.Description>

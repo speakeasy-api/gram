@@ -12,26 +12,26 @@ SELECT pg_advisory_unlock(@lock_id::bigint);
 
 -- name: CustomerUsageSeedOrganizationCollision :one
 SELECT EXISTS (
- SELECT 1 FROM public.organization_metadata WHERE id= @organization_id::text
+ SELECT 1 FROM organization_metadata WHERE id= @organization_id::text
  AND (slug<> @slug::text OR workos_id IS NOT NULL)) AS collision;
 
 -- name: CustomerUsageSeedDeleteTrials :exec
-DELETE FROM public.trials WHERE organization_id=ANY(@organization_ids::text[]);
+DELETE FROM trials WHERE organization_id=ANY(@organization_ids::text[]);
 
 -- name: CustomerUsageSeedDeleteBillingMetadata :exec
-DELETE FROM public.billing_metadata WHERE organization_id=ANY(@organization_ids::text[]);
+DELETE FROM billing_metadata WHERE organization_id=ANY(@organization_ids::text[]);
 
 -- name: CustomerUsageSeedUpsertOrganization :exec
-INSERT INTO public.organization_metadata
+INSERT INTO organization_metadata
    (id,name,slug,gram_account_type,created_at,disabled_at) VALUES (@id::text,@name::text,@slug::text,@gram_account_type::text,@created_at::timestamptz,NULL)
    ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
    gram_account_type=EXCLUDED.gram_account_type,created_at=EXCLUDED.created_at,
    disabled_at=NULL,updated_at= @updated_at::timestamptz;
 
 -- name: CustomerUsageSeedInsertBillingAnchor :exec
-INSERT INTO public.billing_metadata (organization_id,billing_cycle_anchor_day)
+INSERT INTO billing_metadata (organization_id,billing_cycle_anchor_day)
    VALUES (@organization_id::text,@billing_cycle_anchor_day::int);
 
 -- name: CustomerUsageSeedInsertTrial :exec
-INSERT INTO public.trials (organization_id,tier,created_at,ends_at,converted_at,demoted_at)
+INSERT INTO trials (organization_id,tier,created_at,ends_at,converted_at,demoted_at)
    VALUES (@organization_id::text,'enterprise',@created_at::timestamptz,@ends_at::timestamptz,sqlc.narg('converted_at')::timestamptz,NULL);

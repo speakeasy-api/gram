@@ -6,7 +6,7 @@
 //USAGE flag "--collection <id>" env="REFLOW_COLLECTION" required=#true help="Reflow application collection ID"
 //USAGE flag "--shard-size <n>" default="15" help="Golden flows per shard when one run of all of them is refused"
 //USAGE flag "--parallelism <n>" default="1" help="Flows to overlap within a shard (1-16); the dev dashboard times out page loads above 1"
-//USAGE flag "--base-branch <name>" help="Pull requests: borrow passes from, and compare with, this branch's CI runs"
+//USAGE flag "--base-branch <name>" help="Pull requests: borrow passes from, compare with, and fail only on new failures against this branch's CI runs"
 //USAGE flag "--branch <name>" help="Branch to record the CI runs on (default: the checked-out branch)"
 //USAGE flag "--ci-context <file>" help="CI provenance JSON passed to reflow ci run"
 //USAGE flag "--out-dir <dir>" default=".reflow-ci" help="Directory for CI run results and the Markdown report"
@@ -141,9 +141,14 @@ async function ciRun(
   };
 }
 
+// A pull request fails only on what it breaks. A flow that already fails on
+// the base branch (still_failing) is the base branch's problem, and failing on
+// it would block every open pull request until the base branch is fixed.
+const failOn = baseBranch ? ["--fail-on", "new_failure,unknown,not_run"] : [];
+
 async function gate(ciRunId: string): Promise<boolean> {
   const gated =
-    await $`reflow ci gate --ci-run ${ciRunId} ${baseArgs}`.nothrow();
+    await $`reflow ci gate --ci-run ${ciRunId} ${baseArgs} ${failOn}`.nothrow();
   process.stdout.write(gated.stdout);
   return gated.exitCode === 0;
 }

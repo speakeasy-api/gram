@@ -57,6 +57,7 @@ func handleToolsList(
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -118,12 +119,8 @@ func handleToolsList(
 			"capabilities":         reqMeta.CapabilityKeys,
 		}
 		payload.recordServingAnalytics(props)
-		// Preserve existing analytics consumers while also emitting the shared
-		// hosted/remote event. Consumers should select one event, not sum both.
-		for _, event := range []string{"mcp_server_count", "mcp_server_tools_list"} {
-			if err := productMetrics.CaptureEvent(ctx, event, payload.sessionID, props); err != nil {
-				logger.ErrorContext(ctx, "failed to capture "+event+" event", attr.SlogError(err))
-			}
+		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, props); err != nil {
+			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
 		}
 	}
 
@@ -175,6 +172,10 @@ func handleToolsList(
 			}
 			t.InputSchema = injected
 		}
+	}
+
+	if local != nil {
+		tools = withLocalTools(tools, local(ctx, logger, toolset.OrganizationID, payload))
 	}
 
 	// An empty toolset must list [] rather than null: some clients reject a

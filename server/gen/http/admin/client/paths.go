@@ -651,3 +651,43 @@ func SetOrganizationHooksRolloutAdminPath() string {
 func ClearOrganizationHooksRolloutAdminPath() string {
 	return "/admin/organization.clearHooksRollout"
 }
+
+// ListTailscaleOAuthMigrationAdminPath returns the URL path to the admin service listTailscaleOAuthMigration HTTP endpoint.
+func ListTailscaleOAuthMigrationAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.organizations"
+}
+
+// RunTailscaleOAuthMigrationStepAdminPath returns the URL path to the admin service runTailscaleOAuthMigrationStep HTTP endpoint.
+func RunTailscaleOAuthMigrationStepAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.run"
+}
+
+// GetOrganizationEncryptionAdminPath returns the URL path to the admin service getOrganizationEncryption HTTP endpoint.
+func GetOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.get"
+}
+
+// ListOrganizationEncryptionTransitionsAdminPath returns the URL path to the admin service listOrganizationEncryptionTransitions HTTP endpoint.
+func ListOrganizationEncryptionTransitionsAdminPath() string {
+	return "/admin/organizationEncryption.listTransitions"
+}
+
+// EnrollOrganizationEncryptionAdminPath returns the URL path to the admin service enrollOrganizationEncryption HTTP endpoint.
+func EnrollOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.enroll"
+}
+
+// RollbackOrganizationEncryptionAdminPath returns the URL path to the admin service rollbackOrganizationEncryption HTTP endpoint.
+func RollbackOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.rollback"
+}
+
+// RunOrganizationEncryptionAdminPath returns the URL path to the admin service runOrganizationEncryption HTTP endpoint.
+func RunOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.run"
+}
+
+// FinalizeOrganizationEncryptionAdminPath returns the URL path to the admin service finalizeOrganizationEncryption HTTP endpoint.
+func FinalizeOrganizationEncryptionAdminPath() string {
+	return "/admin/organizationEncryption.finalize"
+}

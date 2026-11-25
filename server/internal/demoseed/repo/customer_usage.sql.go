@@ -12,7 +12,7 @@ import (
 )
 
 const customerUsageSeedDeleteBillingMetadata = `-- name: CustomerUsageSeedDeleteBillingMetadata :exec
-DELETE FROM public.billing_metadata WHERE organization_id=ANY($1::text[])
+DELETE FROM billing_metadata WHERE organization_id=ANY($1::text[])
 `
 
 func (q *Queries) CustomerUsageSeedDeleteBillingMetadata(ctx context.Context, organizationIds []string) error {
@@ -21,7 +21,7 @@ func (q *Queries) CustomerUsageSeedDeleteBillingMetadata(ctx context.Context, or
 }
 
 const customerUsageSeedDeleteTrials = `-- name: CustomerUsageSeedDeleteTrials :exec
-DELETE FROM public.trials WHERE organization_id=ANY($1::text[])
+DELETE FROM trials WHERE organization_id=ANY($1::text[])
 `
 
 func (q *Queries) CustomerUsageSeedDeleteTrials(ctx context.Context, organizationIds []string) error {
@@ -30,7 +30,7 @@ func (q *Queries) CustomerUsageSeedDeleteTrials(ctx context.Context, organizatio
 }
 
 const customerUsageSeedInsertBillingAnchor = `-- name: CustomerUsageSeedInsertBillingAnchor :exec
-INSERT INTO public.billing_metadata (organization_id,billing_cycle_anchor_day)
+INSERT INTO billing_metadata (organization_id,billing_cycle_anchor_day)
    VALUES ($1::text,$2::int)
 `
 
@@ -45,7 +45,7 @@ func (q *Queries) CustomerUsageSeedInsertBillingAnchor(ctx context.Context, arg 
 }
 
 const customerUsageSeedInsertTrial = `-- name: CustomerUsageSeedInsertTrial :exec
-INSERT INTO public.trials (organization_id,tier,created_at,ends_at,converted_at,demoted_at)
+INSERT INTO trials (organization_id,tier,created_at,ends_at,converted_at,demoted_at)
    VALUES ($1::text,'enterprise',$2::timestamptz,$3::timestamptz,$4::timestamptz,NULL)
 `
 
@@ -83,7 +83,7 @@ func (q *Queries) CustomerUsageSeedLock(ctx context.Context, lockID int64) error
 
 const customerUsageSeedOrganizationCollision = `-- name: CustomerUsageSeedOrganizationCollision :one
 SELECT EXISTS (
- SELECT 1 FROM public.organization_metadata WHERE id= $1::text
+ SELECT 1 FROM organization_metadata WHERE id= $1::text
  AND (slug<> $2::text OR workos_id IS NOT NULL)) AS collision
 `
 
@@ -109,7 +109,7 @@ func (q *Queries) CustomerUsageSeedUnlock(ctx context.Context, lockID int64) err
 }
 
 const customerUsageSeedUpsertOrganization = `-- name: CustomerUsageSeedUpsertOrganization :exec
-INSERT INTO public.organization_metadata
+INSERT INTO organization_metadata
    (id,name,slug,gram_account_type,created_at,disabled_at) VALUES ($1::text,$2::text,$3::text,$4::text,$5::timestamptz,NULL)
    ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
    gram_account_type=EXCLUDED.gram_account_type,created_at=EXCLUDED.created_at,

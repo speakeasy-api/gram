@@ -32,11 +32,6 @@ const (
 	// clicks too; the click handler ignores them.
 	actionOpen = ActionPrefix + "open"
 
-	// minEndOfDayLead hides End of day when the day ends sooner than this, the
-	// same rule the dashboard's self-grant follows. A grant needs at least
-	// five minutes.
-	minEndOfDayLead = 10 * time.Minute
-
 	maxNameChars    = 200
 	maxMessageChars = 1500
 )
@@ -69,10 +64,16 @@ type cardInput struct {
 	ExpiresAt       time.Time
 	GrantExpiresAt  time.Time
 	DashboardURL    string
+	// RequestedDuration is how long the requester asked for, counted from
+	// approval, or zero.
+	RequestedDuration time.Duration
+	// RequestedUntil is when the requester asked to have the access until,
+	// or zero.
+	RequestedUntil time.Time
 }
 
 // pendingCard asks an administrator to decide. endOfDay is the deadline of
-// the End of day button, or zero to leave the button out.
+// the End of day choice, or zero to leave it out; cardEndOfDay picks it.
 func pendingCard(in cardInput, endOfDay time.Time) slackdm.Message {
 	requester := label(in.RequesterName)
 	blocks := []slackdm.Block{
@@ -90,6 +91,13 @@ func pendingCard(in cardInput, endOfDay time.Time) slackdm.Message {
 	if !endOfDay.IsZero() {
 		options = append(options, slackdm.Option{Text: slackdm.TextObject{Type: "plain_text", Text: "End of day"}, Value: endOfDayKey + "|" + strconv.FormatInt(endOfDay.Unix(), 10)})
 	}
+	initial := requestedWindowIndex(in.RequestedDuration)
+	if !in.RequestedUntil.IsZero() && endOfDay.Equal(in.RequestedUntil) {
+		// End of day carries the requester's own deadline; open on it. When
+		// the card fell back to the reader's end of day, it is not what was
+		// asked for, so the card opens on the fixed windows instead.
+		initial = len(options) - 1
+	}
 	menu := slackdm.Element{
 		Type:          "static_select",
 		Text:          nil,
@@ -101,7 +109,7 @@ func pendingCard(in cardInput, endOfDay time.Time) slackdm.Message {
 		Confirm:       nil,
 		Placeholder:   slackdm.PlainText("Allow for…"),
 		Options:       options,
-		InitialOption: &options[0],
+		InitialOption: &options[initial],
 	}
 	allow := button("Allow", actionAllow, value, "primary")
 	buttons := []slackdm.Element{menu, allow}
@@ -203,6 +211,13 @@ func detailFields(in cardInput) slackdm.Block {
 		{Type: "mrkdwn", Text: "*Permission*\n" + label(in.PermissionLabel) + " " + slackdm.Code(in.PermissionScope, maxNameChars)},
 		{Type: "mrkdwn", Text: "*Resource*\n" + label(resource)},
 	}
+	if in.Status == access.AccessRequestStatusPending && in.RequestedDuration > 0 {
+		fields = append(fields, slackdm.TextObject{Type: "mrkdwn", Text: "*Asked for*\n" + durationLabel(in.RequestedDuration)})
+	}
+	if in.Status == access.AccessRequestStatusPending && !in.RequestedUntil.IsZero() {
+		// Slack renders the date in the reader's own time zone.
+		fields = append(fields, slackdm.TextObject{Type: "mrkdwn", Text: "*Asked until*\n" + slackdm.Date(in.RequestedUntil)})
+	}
 	if in.Status == access.AccessRequestStatusPending && !in.ExpiresAt.IsZero() {
 		fields = append(fields, slackdm.TextObject{Type: "mrkdwn", Text: "*Request expires*\n" + slackdm.Date(in.ExpiresAt)})
 	}
@@ -223,16 +238,57 @@ func label(text string) string {
 	return slackdm.Code(text, maxNameChars)
 }
 
-// endOfDay is 23:59 today in loc, or zero when that is less than
-// minEndOfDayLead away or, on a day that gains an hour, further away than a
-// temporary grant can last.
-func endOfDay(now time.Time, loc *time.Location) time.Time {
-	local := now.In(loc)
-	end := time.Date(local.Year(), local.Month(), local.Day(), 23, 59, 0, 0, loc)
-	if lead := end.Sub(now); lead < minEndOfDayLead || lead > access.TemporaryGrantMaxDuration {
-		return time.Time{}
+// requestedWindowIndex picks the fixed window a card opens on for the
+// duration the requester asked for: the one that matches it, or else the
+// longest one within it. With no duration, or one shorter than every window,
+// it is the first.
+func requestedWindowIndex(requested time.Duration) int {
+	index := 0
+	for i, window := range approveWindows {
+		if window.duration <= requested {
+			index = i
+		}
 	}
-	return end
+	return index
+}
+
+// cardEndOfDay is the deadline of a card's End of day choice: the time the
+// requester asked for when they asked for one that is still far enough off,
+// otherwise 23:59 today in loc. The notifier passes the requester's Slack time
+// zone as loc, and the reading administrator's only when the requester has
+// none. It is zero when neither leaves enough time.
+func cardEndOfDay(in cardInput, now time.Time, loc *time.Location) time.Time {
+	if lead := in.RequestedUntil.Sub(now); !in.RequestedUntil.IsZero() && lead >= access.MinEndOfDayLead && lead <= access.TemporaryGrantMaxDuration {
+		return in.RequestedUntil
+	}
+	return access.EndOfDay(now, loc)
+}
+
+// durationLabel reads a requested duration: a fixed window's label when it
+// matches one, otherwise hours and minutes.
+func durationLabel(duration time.Duration) string {
+	for _, window := range approveWindows {
+		if window.duration == duration {
+			return window.label
+		}
+	}
+	hours := int(duration / time.Hour)
+	minutes := int((duration % time.Hour) / time.Minute)
+	parts := make([]string, 0, 2)
+	if hours > 0 {
+		parts = append(parts, plural(hours, "hour"))
+	}
+	if minutes > 0 || hours == 0 {
+		parts = append(parts, plural(minutes, "minute"))
+	}
+	return strings.Join(parts, " ")
+}
+
+func plural(count int, unit string) string {
+	if count == 1 {
+		return "1 " + unit
+	}
+	return strconv.Itoa(count) + " " + unit + "s"
 }
 
 // parseWindow reads a menu choice: a fixed window's key, or End of day with
