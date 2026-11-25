@@ -235,7 +235,7 @@ func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "claimed member", memberSlug, 0, mcpservers.VisibilityPublic)
 	member, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(memberSlug), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{member.UserSessionIssuerID.UUID, gateway.issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "")
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{member.UserSessionIssuerID.UUID}))
 	seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, member.ID, client, "remote_session")
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, gateway.subject.ID, member.ID.String())

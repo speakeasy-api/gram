@@ -138,14 +138,14 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(siblingIssuerID), Visibility: mcpservers.VisibilityPrivate})
 						require.NoError(t, err)
 					}
-					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", issuerIDs)
+					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "")
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs))
 					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs, []uuid.UUID{clientID}))
 					if state == "sibling_issuer_client" {
 						siblingID := mcpServerBySlug(t, ctx, ti, projectID, fx.denied)
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
 						require.NoError(t, err)
-						siblingClientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "sibling-only-client", "", issuerIDs)
+						siblingClientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "sibling-only-client", "")
 						require.NotEqual(t, clientID, siblingClientID)
 						require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: siblingID, RemoteSessionClientID: siblingClientID}))
 						tx := testenv.BeginTx(t, ctx, ti.conn)

@@ -943,8 +943,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSessio
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, sharedIssuerID)
 	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-b", "")
 	subject := createTestUser(t, ctx, ti, "multicred-user-"+uuid.NewString())
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-a", time.Now().Add(time.Hour))
 	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-b", time.Now().Add(time.Hour))

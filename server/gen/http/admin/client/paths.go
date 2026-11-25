@@ -627,6 +627,11 @@ func GetHooksRolloutAdminPath() string {
 	return "/admin/hooksRollout.get"
 }
 
+// GetHooksReleaseProgressAdminPath returns the URL path to the admin service getHooksReleaseProgress HTTP endpoint.
+func GetHooksReleaseProgressAdminPath() string {
+	return "/admin/hooksRollout.progress"
+}
+
 // SetHooksRolloutDefaultAdminPath returns the URL path to the admin service setHooksRolloutDefault HTTP endpoint.
 func SetHooksRolloutDefaultAdminPath() string {
 	return "/admin/hooksRollout.setDefault"

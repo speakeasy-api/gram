@@ -451,9 +451,6 @@ func TestListServerProjectsOnClientIssuers_Scoping(t *testing.T) {
 	otherProjectID := createProject(t, ctx, ti.conn, "bindscope-other-project")
 	seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, userIssuerID, "bindscope-sibling")
 	// An old parent must not give either server reachability on its own.
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID,
-	}))
 	params := repo.ListServerProjectsOnClientIssuersParams{OrganizationID: conv.ToPGText(orgID), RemoteSessionClientID: clientID}
 	rows, err := q.ListServerProjectsOnClientIssuers(ctx, params)
 	require.NoError(t, err)
