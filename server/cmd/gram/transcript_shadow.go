@@ -55,7 +55,7 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if err != nil {
 		return none, err
 	}
-	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
+	if orgEncryption.Service == nil || (writer != nil && orgEncryption.Provisioner == nil) {
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
 	if db == nil {
@@ -87,7 +87,13 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
+	// Only a process that captures shadows provisions keys. A reader opens
+	// shadows that a capturing process already sealed, so it never mints a
+	// config or data key.
 	for _, org := range organizations {
+		if writer == nil {
+			break
+		}
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
@@ -102,10 +108,10 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 
 // configureReaderTranscripts is for a process that reads chat messages but
 // never writes them (streams). With organization encryption it opens shadows
-// like any other reader. Without it, it falls back to read-only Transcripts,
+// like any other reader, without provisioning keys. Without it, it falls back to read-only Transcripts,
 // which report every read for a listed project.
 func configureReaderTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
-	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
+	if orgEncryption.Service == nil {
 		return configureReadOnlyTranscripts(c, logger, meterProvider)
 	}
 	return configureTranscriptShadow(ctx, c, db, nil, orgEncryption, tracerProvider, meterProvider)
