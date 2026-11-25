@@ -35,7 +35,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 		visibleLegacy, visibleEnforced          bool
 	}{
 		{name: "detached_required_caller_header", detached: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
-		{name: "detached_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
+		{name: "detached_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "association_without_typed_offer", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
