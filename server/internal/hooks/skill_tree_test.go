@@ -307,6 +307,30 @@ func TestSkillCapture_TreeLookupFailureRequestsDirectory(t *testing.T) {
 	}
 }
 
+// Without a tree digest the scan state is checked through the raw hash alias.
+// A failed check must still record the activation and ask for content. (cubic)
+func TestSkillCapture_AliasScanStateFailureRequestsContent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	ti.service.piScanner = promptinjection.NewScanner(testenv.NewLogger(t), classifierReturning(promptinjection.LabelSafe))
+	seedPromptInjectionPolicy(t, ctx, ti)
+	content := captureManifest("alias-skill", "plain manifest")
+
+	activation := func(key string) *gen.IngestPayload {
+		payload := skillPayload("claude", eventTypeSkillActivated, "alias-session", "alias-skill", rawHash(content))
+		payload.IdempotencyKey = &key
+		return payload
+	}
+	requireContentRequired(t, ctx, ti, activation("alias-first"), true)
+	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(content)))
+	requireContentRequired(t, ctx, ti, activation("alias-scanned"), false)
+
+	ti.service.repo = repo.New(failingQueryDB{Pool: ti.conn, name: "SkillRawHashNeedsPromptInjectionScan"})
+	requireContentRequired(t, ctx, ti, activation("alias-failure"), true)
+	requireObservationRecorded(t, ctx, ti, "alias-failure")
+}
+
 // A device on an older tree matches a version the raw hash alias no longer
 // points to. That version's own scan coverage decides, so a version whose scan
 // failed at upload is requested and scanned again. (cubic)

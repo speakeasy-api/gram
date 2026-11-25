@@ -466,7 +466,8 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 				RawSha256: rawSHA256,
 			})
 			if err != nil {
-				return nil, false, fmt.Errorf("check known skill scan state: %w", err)
+				s.logger.WarnContext(ctx, "check known skill scan state; requesting skill content", attr.SlogError(err))
+				contentRequired = true
 			}
 		}
 		capture = &skillCaptureSignal{rawSHA256: rawSHA256, contentRequired: contentRequired}
