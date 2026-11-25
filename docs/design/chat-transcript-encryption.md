@@ -146,9 +146,11 @@ of the shadow. Writes that change a shadowed field after insert
 unit with the write: in their own transaction, or under a savepoint inside a
 caller's transaction, so a failed recapture also rolls back its write.
 
-A process that reads chat messages without the shadow store (today `streams`,
-for the prompt-injection judge and signal evaluation) builds read-only
-`Transcripts` from the same project list. In production a read for a listed
+`streams` reads chat messages (the prompt-injection judge and signal
+evaluation) but never writes them. It builds the shadow store from the same
+organization encryption settings as the server and opens shadows like any other
+reader. A process without organization encryption builds read-only
+`Transcripts` from the project list instead. In production a read for a listed
 project there is still served from plaintext, but it is reported: an error log
 and `chat.transcript_shadow.plaintext_reads` by `gram.transcript_shadow.reader`,
 with `gram.outcome:unopened`, the one outcome that serves plaintext besides

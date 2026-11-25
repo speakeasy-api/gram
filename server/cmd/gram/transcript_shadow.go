@@ -58,8 +58,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow requires database and writer")
+	if db == nil {
+		return none, fmt.Errorf("chat transcript shadow requires a database")
 	}
 	// Check compatibility before resolving projects, provisioning keys or enabling writes.
 	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
@@ -93,8 +93,22 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 		}
 	}
 	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
-	writer.WithTranscripts(transcripts)
+	// A process that only reads chat messages has no writer to wire.
+	if writer != nil {
+		writer.WithTranscripts(transcripts)
+	}
 	return transcripts, nil
+}
+
+// configureReaderTranscripts is for a process that reads chat messages but
+// never writes them (streams). With organization encryption it opens shadows
+// like any other reader. Without it, it falls back to read-only Transcripts,
+// which report every read for a listed project.
+func configureReaderTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
+		return configureReadOnlyTranscripts(c, logger, meterProvider)
+	}
+	return configureTranscriptShadow(ctx, c, db, nil, orgEncryption, tracerProvider, meterProvider)
 }
 
 // configureReadOnlyTranscripts is for a process that reads chat messages but

@@ -275,3 +275,15 @@ func TestReadOnlyTranscriptsStrictInLocalDevelopment(t *testing.T) {
 	_, err = configureReadOnlyTranscripts(blank, testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.Error(t, err, "an explicitly blank list must not disable reporting")
 }
+
+func TestReaderTranscriptsFallBackWithoutOrgEncryption(t *testing.T) {
+	t.Parallel()
+	listed := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	c := newTranscriptShadowCLIContextIn(t, "local", map[string]string{chatTranscriptShadowProjectIDsFlag: listed.String()})
+	transcripts, err := configureReaderTranscripts(t.Context(), c, nil, orgEncryptionDeps{}, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.NotNil(t, transcripts)
+	require.False(t, transcripts.Enabled(listed), "without organization encryption streams cannot open shadows")
+	body := []transcriptstore.Body{{MessageID: uuid.New(), Content: new(string), ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}
+	require.ErrorIs(t, transcripts.Open(t.Context(), "org", listed, body), transcriptstore.ErrPlaintextRead, "so its reads go through the guard")
+}

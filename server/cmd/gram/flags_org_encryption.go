@@ -69,7 +69,7 @@ func orgEncryptionServiceFlags() []cli.Flag {
 func transcriptShadowReadOnlyFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowProjectIDsFlag,
-		Usage:   "Project UUIDs that keep encrypted chat transcript shadows. This command cannot open shadows: its chat message reads for these projects are served from plaintext, logged as errors and counted as chat.transcript_shadow.plaintext_reads, and fail in local development.",
+		Usage:   "Project UUIDs that keep encrypted chat transcript shadows. This command reads chat messages but never writes them. With organization encryption configured it opens the shadows; without it, its reads for these projects are served from plaintext, logged as errors and counted as chat.transcript_shadow.plaintext_reads, and fail in local development.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
 	}
 }
