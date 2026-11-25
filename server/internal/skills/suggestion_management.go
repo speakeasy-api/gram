@@ -318,10 +318,17 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "load skill suggestion changes for approval").LogError(ctx, logger)
 	}
 	approval.evidence.Changes = changes
-	// A reviewer's edit replaces SKILL.md only; the supporting files carry
-	// over from the base version unchanged.
+	// A reviewer's edit replaces SKILL.md only. Without an explicit file list,
+	// the suggestion's changes to supporting files still apply on top of it,
+	// so approving an edited suggestion does not silently drop them.
 	proposedTree := skilldiff.Tree{Manifest: content, Files: baseTree.Files}
 	var remaining []repo.ListSkillEditSuggestionChangesRow
+	if editedContent != nil && !files.explicit {
+		proposedTree, err = applySupportingFileChanges(proposedTree, changes)
+		if err != nil {
+			return approval, err
+		}
+	}
 	if editedContent == nil {
 		// An explicit file list would silently discard a taken edit to a
 		// supporting file, so the two cannot be combined.
@@ -460,6 +467,24 @@ func (s *Service) approveSuggestion(
 	approval.suggestion = approved
 	approval.version = recorded.Version
 	return approval, nil
+}
+
+// applySupportingFileChanges applies a suggestion's changes to files other
+// than SKILL.md onto tree, which carries the reviewer's edited SKILL.md. A
+// change that no longer applies is a conflict rather than a silent drop.
+func applySupportingFileChanges(tree skilldiff.Tree, changes []repo.ListSkillEditSuggestionChangesRow) (skilldiff.Tree, error) {
+	for _, change := range changes {
+		if skilldiff.IsManifestPath(change.Path.String) {
+			continue
+		}
+		applied, err := tree.ApplyChange(change.Path.String, change.ProposedDiff)
+		if err != nil {
+			return skilldiff.Tree{}, oops.E(oops.CodeConflict, nil,
+				"the suggested change to %s no longer applies; approve the edited SKILL.md with files to set the supporting files yourself", change.Path.String)
+		}
+		tree = applied
+	}
+	return tree, nil
 }
 
 // approvalContent resolves what a reviewer is taking from a suggestion: every

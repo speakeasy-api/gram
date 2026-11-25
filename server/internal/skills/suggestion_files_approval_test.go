@@ -151,3 +151,43 @@ func TestSkillsApproveSuggestionWithoutFilesAppliesSupportingFileChanges(t *test
 		"references/rollback.md": []byte(strings.Replace(rollbackReference, "Notify the channel.", "Notify the channel and the on-call.", 1)),
 	}, versionFiles(t, ti, uuid.MustParse(fixture.skill.Skill.ID), approved.Version.ID))
 }
+
+func TestSkillsApproveSuggestionWithEditedContentStillAppliesSupportingFileChanges(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	fixture := createMixedSuggestion(t, ctx, ti, "approve-edited-keeps-files")
+	edited := skillManifest(fixture.skill.Skill.Name, "Runbook.", "Reviewer rewrite.")
+
+	approved, err := ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: fixture.suggestionID.String(), Content: &edited, ChangeIds: nil, Files: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "applied", approved.Outcome)
+	require.Equal(t, edited, approved.Version.Content, "the reviewer's SKILL.md replaces the proposed one")
+	require.Equal(t, map[string][]byte{
+		"references/rollback.md": []byte(strings.Replace(rollbackReference, "Notify the channel.", "Notify the channel and the on-call.", 1)),
+	}, versionFiles(t, ti, uuid.MustParse(fixture.skill.Skill.ID), approved.Version.ID), "the proposed reference edit is not dropped")
+}
+
+func TestSkillsApproveSuggestionWithEditedContentRefusesAStaleSupportingFileChange(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	fixture := createMixedSuggestion(t, ctx, ti, "approve-edited-stale-file")
+
+	// Point the reference change at text the base file does not contain.
+	stale, err := skilldiff.UnifiedFile("references/rollback.md", "# Rollback\n\nPage the release manager.\n", "# Rollback\n\nPage the release manager now.\n")
+	require.NoError(t, err)
+	require.NoError(t, ti.repo.RebaseSkillEditSuggestionChange(ctx, repo.RebaseSkillEditSuggestionChangeParams{
+		ProposedDiff: stale, ProjectID: ti.projectID, ID: fixture.fileChange,
+	}))
+
+	edited := skillManifest(fixture.skill.Skill.Name, "Runbook.", "Reviewer rewrite.")
+	_, err = ti.service.ApproveSuggestion(ctx, &gen.ApproveSuggestionPayload{
+		ID: fixture.suggestionID.String(), Content: &edited, ChangeIds: nil, Files: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "references/rollback.md")
+	require.Len(t, suggestionChangeIDs(t, ti, fixture.suggestionID), 2, "nothing was recorded and the suggestion is still open")
+}

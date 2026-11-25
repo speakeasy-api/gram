@@ -53,7 +53,7 @@ Then use exactly one of these, with `confirmed: true` only after that confirmati
 
 Do not record suggested text with `add_skill_version`. That leaves the suggestion open in the queue and records no approval.
 
-Each proposed change names the file it edits in `path`: SKILL.md or a supporting file such as a `references/` entry. Show the user the path with each change. An approved version keeps the skill's other supporting files, such as `scripts/` and `references/` entries, with the taken changes applied, so leave `files` out of `approve_skill_suggestion` unless the user asked to replace those files. `files` is refused while `change_ids` takes a change whose path is not SKILL.md. To read a supporting file while reviewing, call `get_skill_file` with a path from the version's `files`.
+Each proposed change names the file it edits in `path`: SKILL.md or a supporting file such as a `references/` entry. Show the user the path with each change. An approved version keeps the skill's other supporting files, such as `scripts/` and `references/` entries, with the taken changes applied, so leave `files` out of `approve_skill_suggestion` unless the user asked to replace those files. `files` is refused while `change_ids` takes a change whose path is not SKILL.md. A correction sent as `content` replaces SKILL.md only: every proposed change to a supporting file is still applied, so tell the user before you send one. To read a supporting file while reviewing, call `get_skill_file` with a path from the version's `files`.
 
 Handle the result:
 
