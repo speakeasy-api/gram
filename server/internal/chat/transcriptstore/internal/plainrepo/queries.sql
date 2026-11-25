@@ -207,8 +207,10 @@ ORDER BY o.created_at ASC, o.seq ASC;
 -- first. A message with a shadow returns its ciphertext and no plaintext body,
 -- so the store matches it on the opened shadow only. A message with no shadow
 -- (written before capture began) returns its plaintext, the fallback every read
--- applies.
-SELECT m.id, m.chat_id, m.created_at, m.seq,
+-- applies. The role lets the store count scanned messages the way
+-- GetChatEntryTotals counts the generation, so progress compares like with
+-- like.
+SELECT m.id, m.chat_id, m.created_at, m.seq, m.role,
        t.ciphertext AS shadow_ciphertext,
        COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
        CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,

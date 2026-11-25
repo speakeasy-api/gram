@@ -718,7 +718,10 @@ function ThreadSearchBar({
                 <SimpleTooltip
                   tooltip={`Still searching: ${searchProgressLabel(scan.scanned, scan.total)}. Matches appear as they are found.`}
                 >
-                  <Spinner className="mr-0 size-3" />
+                  {/* Spinner drops the trigger props, so a span carries them. */}
+                  <span className="flex">
+                    <Spinner className="mr-0 size-3" />
+                  </span>
                 </SimpleTooltip>
               )}
               {loading
@@ -2020,7 +2023,9 @@ function ChatDetailPanel({
                   ? "Searching…"
                   : searchTranscript.isScanning
                     ? `Searching… ${searchProgressLabel(searchTranscript.scannedMessages, searchTranscript.totalMessages)}`
-                    : `No messages match “${searchQuery}”.`
+                    : searchTranscript.isError
+                      ? `The search stopped early. No messages matched “${searchQuery}” in the part it scanned.`
+                      : `No messages match “${searchQuery}”.`
                 : filterActive
                   ? "No messages match the current filter."
                   : dimNonRisk

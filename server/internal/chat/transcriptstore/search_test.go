@@ -1,6 +1,7 @@
 package transcriptstore
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"testing"
@@ -25,6 +26,28 @@ func TestLikePatternMatchesPostgresILIKE(t *testing.T) {
 			require.Equal(t, want, compileLike(pattern).match(text), "text %q pattern %q", text, pattern)
 		}
 	}
+}
+
+func TestJSONBTextMatchesPostgresJSONBText(t *testing.T) {
+	t.Parallel()
+	f := setup(t, false)
+	values := []string{
+		`[]`, `{}`, `null`, `[{"id":"call_a","function":{"name":"lookup","arguments":"{\"q\":1}"}}]`,
+		`{"a": [1, 2.50, true, null], "b": {"c": "d"}}`, `"<b>&amp;</b>"`, `{"html":"<a href=\"x\">&</a>"}`,
+		`["tab\tnew\nline", "quote \" back \\ slash", "\u0001 \u001f", "  é 😀", "😀", "a\/b"]`,
+		`{"key with spaces": " , : ", "k:,": ",:"}`,
+	}
+	for _, value := range values {
+		var want string
+		require.NoError(t, f.db.QueryRow(t.Context(), `SELECT $1::jsonb::text`, value).Scan(&want)) //nolint:glint // notestingrawsql: compares the Go layout with PostgreSQL's jsonb text output.
+		require.Equal(t, want, jsonbText([]byte(want)), "jsonb text is kept: %s", value)
+		// A shadow holds the JSON as encoding/json writes it.
+		compact, err := json.Marshal(json.RawMessage(want))
+		require.NoError(t, err)
+		require.Equal(t, want, jsonbText(compact), "shadow layout: %s", compact)
+	}
+	require.True(t, compileLike(`%"name": "lookup"%`).matchBody("", []byte(`[{"function":{"name":"lookup"}}]`), nil))
+	require.True(t, compileLike(`%<b>%`).matchBody("", nil, []byte(`"<b>"`)))
 }
 
 // searchFixture is a chat of n messages, oldest first, with deterministic
@@ -116,6 +139,40 @@ func TestSearchChatScansShadowsInChunks(t *testing.T) {
 	require.ElementsMatch(t, matchedIDs(plain...), matchedIDs(searchAll(t, transcripts, f, "NEEDLE_ORD")...), "'_' is a wildcard as in the SQL search")
 	require.Empty(t, matchedIDs(searchAll(t, transcripts, f, `needle\_ord`)...), `'\_' is a literal underscore`)
 	require.Empty(t, matchedIDs(searchAll(t, NewTranscripts(f.store, uuid.New()), f, `needle\_ord`)...))
+
+	// A query with jsonb's separator spacing matches the shadow's compact JSON
+	// as it matches the plaintext column.
+	spaced := `"name": "find_needleword"`
+	require.Equal(t, []uuid.UUID{ids[419]}, matchedIDs(searchAll(t, transcripts, f, spaced)...))
+	require.Equal(t, []uuid.UUID{ids[419]}, matchedIDs(searchAll(t, NewTranscripts(f.store, uuid.New()), f, spaced)...))
+}
+
+func TestSearchChatCountsScannedLikeEntryTotals(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ids := f.addText(t, 6, func(i int) (string, []byte, []byte) {
+		if i == 4 {
+			return "message with tool calls", []byte(`[{"id":"call"}]`), nil
+		}
+		return fmt.Sprintf("message %d", i+1), nil, nil
+	})
+	// Two plain system messages are left out of the totals; a system message
+	// with tool calls and the unshadowed last message are counted.
+	fixtures := fixturerepo.New(f.db)
+	for _, id := range []uuid.UUID{ids[1], ids[3], ids[4]} {
+		_, err := fixtures.SetRole(t.Context(), "system", id, project(f.project))
+		require.NoError(t, err)
+	}
+	f.capture(t, ids[:5]...)
+
+	transcripts := NewTranscripts(f.store, f.project)
+	totals, err := transcripts.GetChatEntryTotals(t.Context(), f.db, GetChatEntryTotalsParams{ChatID: f.chat, ProjectID: f.project, Generation: 0, RiskMessageIds: []uuid.UUID{}, RiskContentPartIds: []uuid.UUID{}})
+	require.NoError(t, err)
+	require.Equal(t, int64(4), totals.Total)
+	pages := searchAll(t, transcripts, f, "message")
+	require.Len(t, pages, 1)
+	require.Equal(t, totals.Total, pages[0].Scanned)
+	require.Len(t, matchedIDs(pages...), 6, "system messages are still searched")
 }
 
 func TestSearchChatCursorResumesAndStopsAtMatchLimit(t *testing.T) {
@@ -144,8 +201,8 @@ func TestSearchChatCursorResumesAndStopsAtMatchLimit(t *testing.T) {
 		require.Equal(t, []uuid.UUID{ids[200]}, matchedIDs(second))
 	}
 
-	// The fifth match reaches the limit, so a limit of 4 ends the search at
-	// the first page.
+	// The fourth match reaches the limit of 4, so the search ends on the first
+	// page even though a fifth match lies in the next chunk.
 	limited, err := transcripts.SearchChat(t.Context(), f.db, ChatSearch{ProjectID: f.project, ChatID: f.chat, Generation: 0, Query: "needle", Cursor: "", ContextSize: 0, MatchLimit: 4})
 	require.NoError(t, err)
 	require.False(t, limited.More)

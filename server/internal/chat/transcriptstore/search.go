@@ -134,8 +134,10 @@ type ChatSearchPage struct {
 	// with NextCursor.
 	More       bool
 	NextCursor string
-	// Scanned counts the generation's messages scanned so far by this search.
-	// A project off the list searches everything in one call and leaves it 0.
+	// Scanned counts the messages scanned so far by this search the way
+	// GetChatEntryTotals counts Total (user, assistant and tool messages, and
+	// any message with tool calls), so the two compare as progress. A project
+	// off the list searches everything in one call and leaves it 0.
 	Scanned int64
 }
 
@@ -176,7 +178,7 @@ func decodeChatSearchCursor(value string) (chatSearchCursor, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return c, ErrInvalidCursor
 	}
-	if c.Seq < 1 || c.Matches < 0 || c.Scanned < 1 || c.WindowEnd < 0 {
+	if c.Seq < 1 || c.Matches < 0 || c.Scanned < 0 || c.WindowEnd < 0 {
 		return c, ErrInvalidCursor
 	}
 	return c, nil
@@ -224,7 +226,7 @@ func (t *Transcripts) SearchChat(ctx context.Context, db DBTX, s ChatSearch) (Ch
 		}
 	}
 
-	page := ChatSearchPage{Rows: rows, More: more, NextCursor: "", Scanned: cursor.Scanned + int64(len(chunk))}
+	page := ChatSearchPage{Rows: rows, More: more, NextCursor: "", Scanned: cursor.Scanned + scanned.counted}
 	if !more || len(chunk) == 0 {
 		page.More = false
 		return page, nil
@@ -248,10 +250,12 @@ func (t *Transcripts) SearchChat(ctx context.Context, db DBTX, s ChatSearch) (Ch
 	return page, nil
 }
 
-// chatChunk is one scanned chunk of a chat search: the rows scanned, the IDs
-// of those that match, and whether messages remain after them.
+// chatChunk is one scanned chunk of a chat search: the rows scanned, how many
+// of them GetChatEntryTotals counts, the IDs of those that match, and whether
+// messages remain after them.
 type chatChunk struct {
 	rows    []plainrepo.ScanChatSearchChunkRow
+	counted int64
 	matches []uuid.UUID
 	more    bool
 }
@@ -283,6 +287,13 @@ func (t *Transcripts) scanChatChunk(ctx context.Context, db DBTX, s ChatSearch, 
 		return chatChunk{}, err
 	}
 
+	var counted int64
+	for i, m := range opened {
+		if countsAsEntry(chunk[i].Role, m.ToolCalls) {
+			counted++
+		}
+	}
+
 	pattern := compileLike("%" + s.Query + "%")
 	remaining := int(s.MatchLimit - cursor.Matches)
 	matches := make([]uuid.UUID, 0)
@@ -300,7 +311,19 @@ func (t *Transcripts) scanChatChunk(ctx context.Context, db DBTX, s ChatSearch, 
 		more = false
 	}
 
-	return chatChunk{rows: chunk, matches: matches, more: more}, nil
+	return chatChunk{rows: chunk, counted: counted, matches: matches, more: more}, nil
+}
+
+// countsAsEntry reports whether GetChatEntryTotals counts a message in Total:
+// a message with tool calls, or a user, assistant or tool message. Tool calls
+// are counted the way capture counts them into the shadow's metadata, which is
+// what the totals read for a shadowed message.
+func countsAsEntry(role string, toolCalls []byte) bool {
+	switch role {
+	case "user", "assistant", "tool":
+		return true
+	}
+	return metadataOf("", nil, toolCalls).toolCallCount > 0
 }
 
 // listSearchMatchWindows reads the windows around matches for display and

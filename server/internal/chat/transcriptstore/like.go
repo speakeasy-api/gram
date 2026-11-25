@@ -1,6 +1,9 @@
 package transcriptstore
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -107,13 +110,97 @@ func (p likePattern) match(text string) bool {
 }
 
 // matchBody reports whether any field the SQL search matched does: the
-// message text, the tool calls JSON and the structured content JSON.
+// message text, the tool calls JSON and the structured content JSON. The SQL
+// matched the JSON columns as jsonb::text, so both JSON fields are matched in
+// that form whatever layout they arrive in.
 func (p likePattern) matchBody(content string, toolCalls, contentRaw []byte) bool {
 	if p.match(content) {
 		return true
 	}
-	if toolCalls != nil && p.match(string(toolCalls)) {
+	if toolCalls != nil && p.match(jsonbText(toolCalls)) {
 		return true
 	}
-	return contentRaw != nil && p.match(string(contentRaw))
+	return contentRaw != nil && p.match(jsonbText(contentRaw))
+}
+
+// jsonbText lays out a JSON value the way PostgreSQL prints jsonb as text: a
+// space after each ',' and ':' between tokens, no other whitespace, and
+// strings escaped only where jsonb escapes them. A shadow holds its JSON as
+// encoding/json wrote it (compact, with '<', '>' and '&' escaped), while a
+// plaintext row arrives already in jsonb's form, so matching both in this one
+// form keeps the Go search equal to the SQL one. Input that is not valid JSON
+// is laid out on a best-effort basis and never fails.
+func jsonbText(raw []byte) string {
+	var b strings.Builder
+	b.Grow(len(raw) + len(raw)/8)
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch c {
+		case ' ', '\t', '\n', '\r':
+		case ',', ':':
+			b.WriteByte(c)
+			b.WriteByte(' ')
+		case '"':
+			end := jsonStringEnd(raw, i)
+			writeJSONBString(&b, raw[i:end])
+			i = end - 1
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// jsonStringEnd returns the index just past the closing quote of the JSON
+// string that opens at start, or len(raw) when it is not closed.
+func jsonStringEnd(raw []byte, start int) int {
+	for i := start + 1; i < len(raw); i++ {
+		switch raw[i] {
+		case '\\':
+			i++
+		case '"':
+			return i + 1
+		}
+	}
+	return len(raw)
+}
+
+// writeJSONBString writes one JSON string token with jsonb's escaping: '"',
+// '\' and control characters are escaped, everything else is written as is.
+func writeJSONBString(b *strings.Builder, token []byte) {
+	if !bytes.ContainsRune(token, '\\') {
+		b.Write(token)
+		return
+	}
+	var value string
+	if err := json.Unmarshal(token, &value); err != nil {
+		b.Write(token)
+		return
+	}
+	b.WriteByte('"')
+	for _, r := range value {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < ' ' {
+				fmt.Fprintf(b, `\u%04x`, r)
+				continue
+			}
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
 }

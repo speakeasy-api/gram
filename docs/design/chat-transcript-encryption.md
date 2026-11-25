@@ -143,8 +143,10 @@ Search cannot run in SQL over ciphertext. For a listed project,
 `Transcripts.SearchPlatformChats` (Platform MCP `search_chats`) scan messages in
 keyset order, 200 per chunk, one query per chunk. That query returns a
 shadowed message's ciphertext and no plaintext body, so the match is decided in
-Go on the opened shadow with the ILIKE semantics the SQL used (`like.go`). A
-message with no shadow is matched on its plaintext, the usual fallback. The scan
+Go on the opened shadow with the ILIKE semantics the SQL used (`like.go`). The
+JSON fields are matched in the layout PostgreSQL prints `jsonb::text` in, since
+a shadow holds them compacted by `encoding/json`. A message with no shadow is
+matched on its plaintext, the usual fallback. The scan
 does not hash the plaintext either; the rows it returns are checked for
 staleness when they are read for display (the chat.load windows through the
 joined read, the Platform MCP hits through `ListShadowsCurrent`). Each call

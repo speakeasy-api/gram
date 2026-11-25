@@ -75,3 +75,6 @@ VALUES(@id,@chat_id,@project_id,'user',@content,sqlc.narg(content_raw)::jsonb,sq
 
 -- name: SetContent :execrows
 UPDATE chat_messages SET content = @content WHERE id = @id AND project_id = @project_id;
+
+-- name: SetRole :execrows
+UPDATE chat_messages SET role = @role WHERE id = @id AND project_id = @project_id;

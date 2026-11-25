@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
@@ -236,5 +238,24 @@ func TestLoadChat_SearchScansEncryptedShadowsInChunks(t *testing.T) {
 	bad := "not a cursor"
 	p.ScanCursor = &bad
 	_, err = ti.service.LoadChat(ctx, p)
-	require.Error(t, err)
+	require.ErrorIs(t, err, transcriptstore.ErrInvalidCursor)
+
+	// A search continuation reuses the open's audit record, but a scan_cursor
+	// on a read that is not a search does not skip it.
+	audited := func() int64 {
+		t.Helper()
+		n, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+		require.NoError(t, err)
+		return n
+	}
+	before := audited()
+	p.ScanCursor = first.NextScanCursor
+	_, err = ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Equal(t, before, audited(), "a search continuation is not logged again")
+	plain := loadPayload(chatID.String())
+	plain.ScanCursor = first.NextScanCursor
+	_, err = ti.service.LoadChat(ctx, plain)
+	require.NoError(t, err)
+	require.Equal(t, before+1, audited(), "a transcript read with a stray scan_cursor is logged")
 }

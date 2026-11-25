@@ -259,6 +259,18 @@ func (q *Queries) SetJSONField(ctx context.Context, column1 string, column2 []by
 	return result.RowsAffected(), nil
 }
 
+const setRole = `-- name: SetRole :execrows
+UPDATE chat_messages SET role = $1 WHERE id = $2 AND project_id = $3
+`
+
+func (q *Queries) SetRole(ctx context.Context, role string, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setRole, role, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setStorageError = `-- name: SetStorageError :execrows
 UPDATE chat_messages SET storage_error=$1::text WHERE id=$2 AND project_id=$3
 `

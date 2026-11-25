@@ -2254,7 +2254,7 @@ func (q *Queries) ReadPlatformChatMessages(ctx context.Context, arg ReadPlatform
 }
 
 const scanChatSearchChunk = `-- name: ScanChatSearchChunk :many
-SELECT m.id, m.chat_id, m.created_at, m.seq,
+SELECT m.id, m.chat_id, m.created_at, m.seq, m.role,
        t.ciphertext AS shadow_ciphertext,
        COALESCE(CASE WHEN t.message_id IS NULL THEN m.content END, '')::text AS fallback_content,
        CASE WHEN t.message_id IS NULL THEN m.tool_calls END::jsonb AS fallback_tool_calls,
@@ -2284,6 +2284,7 @@ type ScanChatSearchChunkRow struct {
 	ChatID             uuid.UUID
 	CreatedAt          pgtype.Timestamptz
 	Seq                int64
+	Role               string
 	ShadowCiphertext   pgtype.Text
 	FallbackContent    string
 	FallbackToolCalls  []byte
@@ -2295,7 +2296,9 @@ type ScanChatSearchChunkRow struct {
 // first. A message with a shadow returns its ciphertext and no plaintext body,
 // so the store matches it on the opened shadow only. A message with no shadow
 // (written before capture began) returns its plaintext, the fallback every read
-// applies.
+// applies. The role lets the store count scanned messages the way
+// GetChatEntryTotals counts the generation, so progress compares like with
+// like.
 func (q *Queries) ScanChatSearchChunk(ctx context.Context, arg ScanChatSearchChunkParams) ([]ScanChatSearchChunkRow, error) {
 	rows, err := q.db.Query(ctx, scanChatSearchChunk,
 		arg.ChatID,
@@ -2318,6 +2321,7 @@ func (q *Queries) ScanChatSearchChunk(ctx context.Context, arg ScanChatSearchChu
 			&i.ChatID,
 			&i.CreatedAt,
 			&i.Seq,
+			&i.Role,
 			&i.ShadowCiphertext,
 			&i.FallbackContent,
 			&i.FallbackToolCalls,

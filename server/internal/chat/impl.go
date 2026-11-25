@@ -1313,12 +1313,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	// Record dashboard session-opens in the audit log. Scroll pagination
-	// (before_seq/after_seq) and search continuation (scan_cursor) reuse the
-	// same open and are not re-logged; only
+	// (before_seq/after_seq) and search continuation (scan_cursor with a
+	// query) reuse the same open and are not re-logged. A scan_cursor is
+	// ignored outside a search, so it does not skip the log there. Only
 	// session-authenticated (dashboard) reads are recorded, since chat-token,
 	// external-user, and assistant reads are the owner/runtime consuming their
 	// own transcript rather than a reviewer accessing a session.
-	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil && payload.ScanCursor == nil {
+	searchContinuation := payload.ScanCursor != nil && !payload.RiskOnly && payload.Query != nil && strings.TrimSpace(*payload.Query) != ""
+	if authCtx.SessionID != nil && payload.BeforeSeq == nil && payload.AfterSeq == nil && !searchContinuation {
 		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
 			return nil, err
 		}
@@ -1427,10 +1429,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	case queryStr != "":
 		// Search view: messages matching the query plus a fixed context window,
-		// grouped into contiguous segments — same windowing as risk-only. Cursors
-		// are ignored on this initial request; the dashboard expands segments with
-		// plain before_seq/after_seq follow-ups. Message construction mirrors the
-		// risk_only branch above.
+		// grouped into contiguous segments, the same windowing as risk-only.
+		// before_seq/after_seq are ignored here; the dashboard expands segments
+		// with plain before_seq/after_seq follow-ups. Message construction
+		// mirrors the risk_only branch above.
 		// Projects that keep encrypted transcripts are searched one chunk per
 		// request; the dashboard follows next_scan_cursor until the scan ends.
 		scanCursor := ""
@@ -1741,10 +1743,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	}
 
 	if search != nil {
-		// A search that is complete has scanned the whole generation, which a
-		// single SQL search does in one request.
+		// A chunked search counts what it scanned the way totals.Total counts
+		// the generation. A single SQL search scans the whole generation in one
+		// request.
 		scanned := totals.Total
-		if search.More {
+		if s.transcripts.Enabled(*authCtx.ProjectID) {
 			scanned = search.Scanned
 		}
 		result.ScanHasMore = &search.More
