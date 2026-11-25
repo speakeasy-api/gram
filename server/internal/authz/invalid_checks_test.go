@@ -193,6 +193,48 @@ func TestDispositionLimitedGrantSeparatesConnectFromCalls(t *testing.T) {
 	require.False(t, allowed)
 }
 
+// A block on destructive tools has to take away every call that might be
+// destructive. A call with no disposition might be, so the block applies; an
+// unannotated tool is not, so the allow stands; and a disposition the registry
+// does not know is an invalid check rather than a call the block cannot match.
+func TestToolCallDispositionAgainstDispositionBlock(t *testing.T) {
+	t.Parallel()
+
+	server := uuid.New()
+	project := uuid.New()
+	blocked := NewSelector(ScopeMCPBlockedConnect, server.String())
+	blocked[SelectorKeyDisposition] = DispositionDestructive
+	grants := []Grant{
+		NewGrant(ScopeMCPConnect, server.String()),
+		NewGrantWithSelector(ScopeMCPBlockedConnect, blocked),
+	}
+	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(project))
+
+	cases := []struct {
+		name        string
+		disposition string
+		allowed     bool
+		invalid     bool
+	}{
+		{name: "absent", disposition: "", allowed: false, invalid: false},
+		{name: "unannotated", disposition: DispositionUnannotated, allowed: true, invalid: false},
+		{name: "unrecognized", disposition: "dangerous", allowed: false, invalid: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			allowed, err := GrantsAuthorize(grants, ref.ToolCall("delete_all", tc.disposition))
+			if tc.invalid {
+				require.ErrorIs(t, err, ErrInvalidCheck)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.allowed, allowed)
+		})
+	}
+}
+
 func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 	t.Parallel()
 

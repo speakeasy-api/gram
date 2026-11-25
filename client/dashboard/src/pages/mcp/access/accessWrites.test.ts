@@ -35,9 +35,9 @@ function state(entries: ResourceAudienceEntry[]) {
 }
 
 const catalog: ToolSelectionTool[] = [
-  { name: "search", annotations: ["read_only"] },
-  { name: "fetch", annotations: ["read_only"] },
-  { name: "delete", annotations: ["destructive"] },
+  { name: "search", disposition: "read_only" },
+  { name: "fetch", disposition: "read_only" },
+  { name: "delete", disposition: "destructive" },
 ];
 
 const role = (overrides: Partial<ResourceAudienceEntry> = {}) =>
@@ -1163,7 +1163,7 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
   expect(
     reachableTools(updated.cells.use, [
       ...catalog,
-      { name: "unannotated", annotations: [] },
+      { name: "unannotated", disposition: "unannotated" },
     ]),
   ).toEqual(["search", "fetch", "unannotated"]);
 });
@@ -1194,20 +1194,11 @@ describe("narrowing to read-only tools on an OpenAPI server", () => {
   // leaves the GETs reachable — and the page has to read it the same way, or
   // a saved "read-only tools" reads back as no access at all.
   const openapi: ToolSelectionTool[] = [
-    {
-      name: "list_pets",
-      annotations: ["read_only", "idempotent", "open_world"],
-    },
-    {
-      name: "get_pet",
-      annotations: ["read_only", "idempotent", "open_world"],
-    },
-    { name: "create_pet", annotations: ["open_world"] },
-    { name: "update_pet", annotations: ["idempotent", "open_world"] },
-    {
-      name: "delete_pet",
-      annotations: ["destructive", "idempotent", "open_world"],
-    },
+    { name: "list_pets", disposition: "read_only" },
+    { name: "get_pet", disposition: "read_only" },
+    { name: "create_pet", disposition: "open_world" },
+    { name: "update_pet", disposition: "idempotent" },
+    { name: "delete_pet", disposition: "destructive" },
   ];
 
   it("reads the saved choice back as the read-only tools", () => {

@@ -261,7 +261,7 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(client
 		switch {
 		case row == nil:
 			return none
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, clientID) {
 				return none
 			}
@@ -394,7 +394,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if snap.discoverScopes {
 		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
-			if sv.TypedAuthEnforced || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+			if sv.UsesTypedOffers || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
 			}
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
@@ -489,7 +489,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		if sv.TypedAuthEnforced && !slices.Contains(sv.OfferedClientIds, c.ID) {
+		if sv.UsesTypedOffers && !slices.Contains(sv.OfferedClientIds, c.ID) {
 			continue
 		}
 		// Identity chaining requests the scopes recorded at Turn on.
@@ -517,7 +517,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 			continue
 		}
 		switch {
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, c.ID) {
 				continue
 			}

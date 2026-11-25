@@ -303,7 +303,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
   , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
@@ -408,7 +408,7 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	TypedAuthEnforced                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
@@ -432,7 +432,7 @@ func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerPa
 		&i.Name,
 		&i.Slug,
 		&i.IssuerID,
-		&i.TypedAuthEnforced,
+		&i.UsesTypedOffers,
 		&i.OfferedClientIds,
 		&i.Issuer,
 		&i.MetadataFetchedAt,
@@ -732,7 +732,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
+  , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS uses_typed_offers
   , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
@@ -831,7 +831,7 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	TypedAuthEnforced                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
@@ -870,7 +870,7 @@ func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string
 			&i.Name,
 			&i.Slug,
 			&i.IssuerID,
-			&i.TypedAuthEnforced,
+			&i.UsesTypedOffers,
 			&i.OfferedClientIds,
 			&i.Issuer,
 			&i.MetadataFetchedAt,

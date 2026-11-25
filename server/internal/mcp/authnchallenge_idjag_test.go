@@ -132,6 +132,14 @@ func newIDJAGTokenRequest(ctx context.Context, slug, clientID, assertion, author
 
 func newIDJAGTestService(t *testing.T, trustedCertificates ...*x509.Certificate) (context.Context, *testInstance, idJAGTestAssertion, string) {
 	t.Helper()
+	assertionSigner, jwksURL, rootCAs := serveIDJAGKeys(t, trustedCertificates...)
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithTLSRootCAs(rootCAs))
+	return ctx, ti, assertionSigner, jwksURL
+}
+
+// serveIDJAGKeys serves a new signer's keys over TLS, returning the signer, JWKS URL and trusting roots.
+func serveIDJAGKeys(t *testing.T, trustedCertificates ...*x509.Certificate) (idJAGTestAssertion, string, *x509.CertPool) {
+	t.Helper()
 	assertionSigner := newIDJAGTestAssertion(t)
 	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -145,8 +153,7 @@ func newIDJAGTestService(t *testing.T, trustedCertificates ...*x509.Certificate)
 	for _, certificate := range trustedCertificates {
 		rootCAs.AddCert(certificate)
 	}
-	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, testenv.NewMeterProvider(t), guardian.WithTLSRootCAs(rootCAs))
-	return ctx, ti, assertionSigner, jwksServer.URL
+	return assertionSigner, jwksServer.URL, rootCAs
 }
 
 func setOrganizationIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, issuer usersessionsrepo.UserSessionIssuer, mode admission.Mode) {

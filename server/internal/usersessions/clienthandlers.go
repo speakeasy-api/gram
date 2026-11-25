@@ -456,16 +456,17 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	}
 
 	// Each downstream credential can have different choices. Group the IDs
-	// without dropping any choices and retain the original lock order.
+	// by their actual project scope without dropping any choices.
 	type subjectIssuer struct {
 		subject string
 		issuer  uuid.UUID
+		project uuid.UUID
 	}
 	var order []subjectIssuer
 	groups := make(map[subjectIssuer][]uuid.UUID, len(revokedSessions))
 	subjects := make(map[subjectIssuer]urn.SessionSubject, len(revokedSessions))
 	for _, session := range revokedSessions {
-		key := subjectIssuer{subject: session.SubjectUrn.String(), issuer: session.UserSessionIssuerID}
+		key := subjectIssuer{subject: session.SubjectUrn.String(), issuer: session.UserSessionIssuerID, project: session.ProjectID.UUID}
 		if _, ok := groups[key]; !ok {
 			order = append(order, key)
 			subjects[key] = session.SubjectUrn
@@ -474,7 +475,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	}
 	var revokedUpstream []remotesessions.RevokedCredentials
 	for _, key := range order {
-		creds, err := s.revoker.SoftDeleteSubjectSessionsForCredentials(ctx, dbtx, subjects[key], key.issuer, *authCtx.ProjectID, authCtx.ActiveOrganizationID, groups[key])
+		creds, err := s.revoker.SoftDeleteSubjectSessionsForCredentials(ctx, dbtx, subjects[key], key.issuer, key.project, authCtx.ActiveOrganizationID, groups[key])
 
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)

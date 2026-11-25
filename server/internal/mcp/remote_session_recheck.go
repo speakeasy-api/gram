@@ -455,7 +455,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 				ClaimedAt:       row.ClaimedAt,
 				NowTs:           conv.ToPGTimestamptz(time.Now()),
 			}); err != nil {
-				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(probeErr))
+				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
 			}
 			return recheckRateLimited
 		case errors.Is(probeErr, errRemoteSessionVerdictNotRecorded):

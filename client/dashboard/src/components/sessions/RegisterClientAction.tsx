@@ -5,7 +5,7 @@ import { RegisterClientSheet } from "./RegisterClientSheet";
 import { useCanManageIssuerClients } from "./useCanManageIssuerClients";
 
 /**
- * Opens the register sheet for one MCP Authentication Provider. Hidden from
+ * Opens the register sheet for one MCP sign-in. Hidden from
  * anyone who cannot register clients against it, as other write controls are.
  */
 export function RegisterClientAction({

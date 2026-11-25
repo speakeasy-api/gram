@@ -71,7 +71,13 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		{
 			Name:        ToolExecuteTool,
 			Title:       "Run a Tool",
-			Description: "Execute one tool. Pass its qualified name (serverslug--toolname) as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`.",
+			Description: "Execute one tool. Pass its qualified name (serverslug--toolname) as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. For a tool whose describe_tools annotations set readOnlyHint and not destructiveHint, use execute_read_only_tool instead.",
+			InputSchema: executeToolSchema,
+		},
+		{
+			Name:        ToolExecuteReadOnlyTool,
+			Title:       "Run a Read-Only Tool",
+			Description: "Execute one read-only tool: a tool whose describe_tools annotations set readOnlyHint and not destructiveHint. Takes the same `name` and `arguments` as execute_tool. Any other tool is refused; run it with execute_tool.",
 			InputSchema: executeToolSchema,
 		},
 		{

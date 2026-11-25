@@ -174,7 +174,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 	}
 	members, err := metamcprepo.New(s.db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{MetaMcpServerID: gatewayID, ProjectID: projectID})
 	if err != nil {
-		return nil, fmt.Errorf("list proxied gateway members: %w", err)
+		return nil, fmt.Errorf("list proxied gateway members: %w: %w", ErrUnavailable, err)
 	}
 	readable := make([]MCPGatewayMemberSignIn, 0, len(members))
 	ids := make([]uuid.UUID, 0, len(members))
@@ -201,7 +201,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 	}
 	statuses, err := authclients.ReadServerAuthenticationStatuses(ctx, s.db, principal.OrganizationID, projectID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("read gateway member sign-in statuses: %w", err)
+		return nil, fmt.Errorf("read gateway member sign-in statuses: %w: %w", ErrUnavailable, err)
 	}
 	result := make([]MCPGatewayMemberSignIn, 0, len(readable))
 	for i, member := range readable {

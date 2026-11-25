@@ -795,6 +795,9 @@ JOIN mcp_auth_clients AS client
  AND client.organization_id = binding.organization_id
  AND client.remote_session_client_id = binding.remote_session_client_id
 WHERE binding.id = @binding_id::uuid
+  AND binding.organization_id = @org_id::text
+  AND binding.project_id = @project_id::uuid
+  AND client.project_id = binding.project_id
   AND binding.state = 'ready';
 
 -- The value is a placeholder; stored values are never returned.

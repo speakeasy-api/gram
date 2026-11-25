@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // seedReadyFlyApp records a deployment with one function whose Fly.io app is
@@ -38,7 +39,7 @@ func seedReadyFlyApp(t *testing.T, db *pgxpool.Pool, organizationID string, proj
 		Scale: pgtype.Int4{Int32: 1, Valid: true},
 	})
 	require.NoError(t, err)
-	accessID, err := deployments.CreateDeploymentFunctionsAccess(ctx, deploymentsrepo.CreateDeploymentFunctionsAccessParams{
+	accessID, err := testrepo.New(db).CreateFunctionsAccessFixture(ctx, testrepo.CreateFunctionsAccessFixtureParams{
 		ProjectID: projectID, DeploymentID: deploymentID, FunctionID: function.ID,
 		EncryptionKey: conv.NewSecret([]byte("unused-runner-key")), BearerFormat: conv.ToPGText("v1"),
 	})

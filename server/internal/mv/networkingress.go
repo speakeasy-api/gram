@@ -7,6 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 )
 
@@ -24,7 +25,7 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 		CustomDomainID:        conv.FromNullableUUID(ingress.CustomDomainID),
 		Enabled:               ingress.Enabled,
 		IdentityRequired:      ingress.IdentityRequired,
-		CredentialsConfigured: ingress.CredentialsEncrypted.Valid && ingress.CredentialsEncrypted.String != "",
+		CredentialsConfigured: ingresscredentials.Has(ingresscredentials.Stored(ingress)),
 		Status:                ingress.Status,
 		DNSName:               conv.FromPGText[string](ingress.DnsName),
 		LastError:             conv.FromPGText[string](ingress.LastError),
@@ -36,9 +37,10 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 	}
 }
 
-// networkIngressRuntime names an ingress's runtime for clients: only
-// "gateway" is the tailnet gateway; anything else, including NULL, is the
-// operator.
+// networkIngressRuntime names an ingress's runtime for clients. New ingresses
+// are created on the tailnet gateway and report "gateway". Any other stored
+// value, including NULL, reports "operator": the row was created for the
+// retired Tailscale Kubernetes operator, and nothing hosts it any more.
 func networkIngressRuntime(runtime pgtype.Text) string {
 	if runtime.Valid && runtime.String == "gateway" {
 		return "gateway"

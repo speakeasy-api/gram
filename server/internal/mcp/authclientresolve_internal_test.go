@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -192,7 +193,7 @@ func TestWithoutDeniedSources(t *testing.T) {
 func TestRefreshIsUndecidedBeforeEnforcement(t *testing.T) {
 	t.Parallel()
 
-	reconnect, chain, decided, err := (&Service{}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
+	reconnect, chain, decided, err := (&Service{aiCatalog: aivendorstest.NewStore()}).refreshNeedsAuthClientReconnect(t.Context(), &ResolvedMcpEndpoint{McpServerID: validUUID(uuid.New()), OrganizationID: "org_a"}, urn.NewUserSubject("user_a"), "jti")
 	require.NoError(t, err)
 	require.False(t, reconnect)
 	require.False(t, chain.clientID.Valid)
@@ -219,7 +220,9 @@ func newAuthClientFixture(t *testing.T, pool *pgxpool.Pool) *authClientFixture {
 	q := authclientbackfill.New(pool)
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	f := &authClientFixture{t: t, q: q, service: &Service{db: pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
+	f := &authClientFixture{t: t, q: q, service: &Service{
+		aiCatalog: aivendorstest.NewStore(),
+		db:        pool, enc: enc, logger: testenv.NewLogger(t), authClientPermitter: connectPermitter{}}, orgID: "org_" + uuid.NewString(), projectID: uuid.New(), registration: uuid.New(), issuerID: uuid.New()}
 	require.NoError(t, q.SeedOrganizationFixture(ctx, f.orgID))
 	require.NoError(t, q.SeedProjectFixture(ctx, authclientbackfill.SeedProjectFixtureParams{ID: f.projectID, Slug: "p-" + f.projectID.String()[:8], OrganizationID: f.orgID}))
 	require.NoError(t, q.SeedRemoteSessionIssuerFixture(ctx, authclientbackfill.SeedRemoteSessionIssuerFixtureParams{ID: f.issuerID, ProjectID: validUUID(f.projectID), Slug: "rsi-" + f.issuerID.String()[:8], Issuer: "https://auth.example.com/" + f.issuerID.String()[:8], Name: pgtype.Text{String: "Example", Valid: true}}))
@@ -1176,7 +1179,7 @@ func TestProfileSelectorReadsOnlyATurnCredentialsOwnProfile(t *testing.T) {
 
 	projectID, version := uuid.New(), uuid.New()
 	endpoint := &ResolvedMcpEndpoint{ProjectID: projectID, OrganizationID: "org_a"}
-	s := &Service{}
+	s := &Service{aiCatalog: aivendorstest.NewStore()}
 	credential := func(org string, project uuid.UUID, profile uuid.NullUUID) principalcredential.Credential {
 		return principalcredential.Credential{
 			OrganizationID:            org,

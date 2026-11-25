@@ -173,7 +173,7 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 		if zone == nil {
 			zone = time.UTC
 		}
-		posted, err := n.slack.Post(ctx, workspace.Token, slackUserID, pendingCard(content, endOfDay(n.now(), zone)))
+		posted, err := n.slack.Post(ctx, workspace.Token, slackUserID, pendingCard(content, cardEndOfDay(content, n.now(), zone)))
 		if err != nil {
 			if slackdm.Retryable(err) {
 				retry = errors.Join(retry, err)
@@ -400,17 +400,25 @@ func (c *Cards) input(ctx context.Context, row repo.GetAccessRequestRow) (cardIn
 		names[person.ID] = conv.Default(person.DisplayName, person.Email)
 	}
 	content := cardInput{
-		RequestID:       request.ID,
-		Status:          access.EffectiveAccessRequestStatus(request, time.Now()),
-		RequesterName:   conv.Default(names[request.RequesterUserID], "A former member"),
-		PermissionLabel: request.Scope,
-		PermissionScope: request.Scope,
-		ResourceName:    request.ResourceName.String,
-		Message:         request.Message.String,
-		DeciderName:     "",
-		ExpiresAt:       request.ExpiresAt.Time,
-		GrantExpiresAt:  time.Time{},
-		DashboardURL:    "",
+		RequestID:         request.ID,
+		Status:            access.EffectiveAccessRequestStatus(request, time.Now()),
+		RequesterName:     conv.Default(names[request.RequesterUserID], "A former member"),
+		PermissionLabel:   request.Scope,
+		PermissionScope:   request.Scope,
+		ResourceName:      request.ResourceName.String,
+		Message:           request.Message.String,
+		DeciderName:       "",
+		ExpiresAt:         request.ExpiresAt.Time,
+		GrantExpiresAt:    time.Time{},
+		DashboardURL:      "",
+		RequestedDuration: 0,
+		RequestedUntil:    time.Time{},
+	}
+	if request.RequestedDurationSeconds.Valid {
+		content.RequestedDuration = time.Duration(request.RequestedDurationSeconds.Int32) * time.Second
+	}
+	if request.RequestedUntil.Valid {
+		content.RequestedUntil = request.RequestedUntil.Time
 	}
 	if entry, ok := authz.ScopeEntryFor(authz.Scope(request.Scope)); ok {
 		content.PermissionLabel = entry.Label

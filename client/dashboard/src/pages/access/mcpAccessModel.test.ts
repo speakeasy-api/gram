@@ -5,9 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   convertToolLimit,
   fuzzyMatch,
+  limitAfterToggle,
+  toolLimitReaches,
   toggleDisposition,
   dispositionCopy,
-  toolDispositionAnnotations,
+  type ToolLimit,
 } from "./mcpAccessModel";
 import type { ServerTool } from "./serverMerge";
 
@@ -50,6 +52,78 @@ describe("tool limits", () => {
   });
 });
 
+describe("ticking tools on a rule limited to kinds", () => {
+  const readOnly: Extract<ToolLimit, { kind: "annotations" }> = {
+    kind: "annotations",
+    dispositions: ["read_only"],
+  };
+  const tools = kindTestTools();
+
+  it("keeps the kinds and names the ticked tool beside them", () => {
+    expect(
+      limitAfterToggle(readOnly, tools, "delete", ["search", "delete"]),
+    ).toEqual({
+      kind: "annotations",
+      dispositions: ["read_only"],
+      tools: ["delete"],
+    });
+  });
+
+  it("drops a named tool when it is unticked", () => {
+    expect(
+      limitAfterToggle({ ...readOnly, tools: ["delete"] }, tools, "delete", [
+        "search",
+      ]),
+    ).toEqual({ kind: "annotations", dispositions: ["read_only"], tools: [] });
+  });
+
+  it("turns into a tool list when a tool a kind covers is unticked", () => {
+    expect(limitAfterToggle(readOnly, tools, "search", [])).toEqual({
+      kind: "tools",
+      tools: [],
+    });
+  });
+
+  it("turns into a tool list when a named tool a kind also covers is unticked", () => {
+    expect(
+      limitAfterToggle({ ...readOnly, tools: ["search"] }, tools, "search", []),
+    ).toEqual({ kind: "tools", tools: [] });
+  });
+
+  it("keeps the kinds when the last tool is ticked", () => {
+    expect(
+      limitAfterToggle({ ...readOnly, tools: ["delete"] }, tools, "plain", [
+        "search",
+        "delete",
+        "plain",
+      ]),
+    ).toEqual({
+      kind: "annotations",
+      dispositions: ["read_only"],
+      tools: ["delete", "plain"],
+    });
+  });
+
+  it("becomes every tool when the last tool of a tool list is ticked", () => {
+    expect(
+      limitAfterToggle(
+        { kind: "tools", tools: ["search", "delete"] },
+        tools,
+        "plain",
+        ["search", "delete", "plain"],
+      ),
+    ).toEqual({ kind: "all" });
+  });
+
+  it("reaches the kinds and the named tools", () => {
+    const limit = { ...readOnly, tools: ["delete"] };
+    const reached = tools
+      .filter((tool) => toolLimitReaches(limit, tool))
+      .map((tool) => tool.name);
+    expect(reached).toEqual(["search", "delete"]);
+  });
+});
+
 describe("fuzzyMatch", () => {
   it("matches subsequences, ignoring case and spaces", () => {
     expect(fuzzyMatch("gdrv", "Google Drive")).toBe(true);
@@ -80,29 +154,20 @@ describe("unknown tool annotations", () => {
   );
 });
 
-describe("toolDispositionAnnotations", () => {
-  it("counts a tool under its one disposition only", () => {
-    // The server classifies a read-only and idempotent tool as read-only, so
-    // an idempotent rule does not cover it.
-    expect(
-      toolDispositionAnnotations({
-        annotations: { readOnlyHint: true, idempotentHint: true },
-      }),
-    ).toEqual(["read_only"]);
-    expect(
-      toolDispositionAnnotations({
-        annotations: { readOnlyHint: true, destructiveHint: true },
-      }),
-    ).toEqual(["destructive"]);
-    expect(
-      toolDispositionAnnotations({
-        annotations: { idempotentHint: true, openWorldHint: true },
-      }),
-    ).toEqual(["idempotent"]);
-  });
-
-  it("gives an unannotated tool none of the four annotations", () => {
-    expect(toolDispositionAnnotations({ annotations: {} })).toEqual([]);
-    expect(toolDispositionAnnotations({})).toEqual([]);
-  });
-});
+function kindTestTools(): ServerTool[] {
+  return [
+    {
+      id: "1",
+      name: "search",
+      type: "http",
+      annotations: { readOnlyHint: true },
+    },
+    {
+      id: "2",
+      name: "delete",
+      type: "http",
+      annotations: { destructiveHint: true },
+    },
+    { id: "3", name: "plain", type: "http" },
+  ];
+}

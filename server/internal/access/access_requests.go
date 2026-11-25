@@ -111,16 +111,19 @@ type storedAccessRequest struct {
 
 // recordAccessRequest stores a pending request when the rollout is on for the
 // organization. It returns nil when requests are not stored: the rollout is
-// off, or the caller is not a signed-in member (an API key or an agent), who
-// keep the email-only behaviour. For members, a scope that cannot be given
+// off, or the caller does not act for a member (any other API key, or an
+// agent), who keep the email-only behaviour. For members, a scope that cannot be given
 // temporarily is refused, since an approval could not grant it.
-func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload) (*storedAccessRequest, error) {
+//
+// member says whether the caller acts for a member: a signed-in member, or a
+// device agent's per-user key whose owner the agent service has verified.
+func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload, member bool) (*storedAccessRequest, error) {
 	if !s.AccessRequestsEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
 		return nil, nil
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID), attr.SlogUserID(ac.UserID))
 
-	if !isMemberCaller(ctx, ac) {
+	if !member {
 		return nil, nil
 	}
 	scope := authz.Scope(payload.Scope)
@@ -140,6 +143,12 @@ func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.Aut
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal selector").LogError(ctx, logger)
 	}
+	now := time.Now()
+	duration, until, err := RequestedAccessWindow(payload.Duration, payload.RequestedUntil, now)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
+	}
+	requestedSeconds, requestedUntil := requestedWindowColumns(duration, until)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -158,14 +167,16 @@ func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.Aut
 	}
 
 	inserted, err := queries.InsertAccessRequest(ctx, repo.InsertAccessRequestParams{
-		OrganizationID:  ac.ActiveOrganizationID,
-		RequesterUserID: ac.UserID,
-		Scope:           string(scope),
-		Selector:        selectorJSON,
-		ResourceName:    conv.PtrToPGTextEmpty(trimmedPtr(payload.ResourceName)),
-		Message:         conv.PtrToPGTextEmpty(trimmedPtr(payload.Message)),
-		ChallengeIds:    []string{},
-		ExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(AccessRequestTTL), InfinityModifier: pgtype.Finite, Valid: true},
+		OrganizationID:           ac.ActiveOrganizationID,
+		RequesterUserID:          ac.UserID,
+		Scope:                    string(scope),
+		Selector:                 selectorJSON,
+		ResourceName:             conv.PtrToPGTextEmpty(trimmedPtr(payload.ResourceName)),
+		Message:                  conv.PtrToPGTextEmpty(trimmedPtr(payload.Message)),
+		ChallengeIds:             []string{},
+		RequestedDurationSeconds: requestedSeconds,
+		RequestedUntil:           requestedUntil,
+		ExpiresAt:                pgtype.Timestamptz{Time: now.Add(AccessRequestTTL), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Asking again while a request is pending returns that request, so
@@ -210,6 +221,22 @@ func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.Aut
 		return nil, oops.E(oops.CodeUnexpected, err, "commit access request").LogError(ctx, logger)
 	}
 	return &storedAccessRequest{view: view, created: true}, nil
+}
+
+// requestedWindowColumns turns what RequestedAccessWindow read into the
+// stored columns. It does no checks of its own: RequestedAccessWindow already
+// refused a duration and a deadline together, and a deadline that is past or
+// more than a day away.
+func requestedWindowColumns(duration time.Duration, until time.Time) (pgtype.Int4, pgtype.Timestamptz) {
+	seconds := pgtype.Int4{Int32: 0, Valid: false}
+	if duration > 0 {
+		seconds = pgtype.Int4{Int32: conv.SafeInt32(int(duration / time.Second)), Valid: true}
+	}
+	deadline := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	if !until.IsZero() {
+		deadline = pgtype.Timestamptz{Time: until.UTC(), InfinityModifier: pgtype.Finite, Valid: true}
+	}
+	return seconds, deadline
 }
 
 // isMemberCaller reports a signed-in member acting for themselves: not an API
@@ -607,23 +634,31 @@ func (s *Service) accessRequestViews(ctx context.Context, db database.DBTX, rows
 			return nil, fmt.Errorf("unmarshal access request selector: %w", err)
 		}
 		view := &gen.AccessRequest{
-			ID:               row.ID.String(),
-			RequesterUserID:  row.RequesterUserID,
-			RequesterName:    conv.Default(names[row.RequesterUserID], "A former member"),
-			Scope:            row.Scope,
-			Selector:         authzSelectorToGen(selector),
-			ResourceName:     conv.FromPGText[string](row.ResourceName),
-			Message:          conv.FromPGText[string](row.Message),
-			Status:           EffectiveAccessRequestStatus(row, now),
-			DecidedByUserID:  conv.FromPGText[string](row.DecidedByUserID),
-			DecidedByName:    nil,
-			DecidedVia:       conv.FromPGText[string](row.DecidedVia),
-			DecidedAt:        nil,
-			TemporaryGrantID: nil,
-			GrantExpiresAt:   nil,
-			ExpiresAt:        row.ExpiresAt.Time.UTC().Format(time.RFC3339),
-			CreatedAt:        row.CreatedAt.Time.UTC().Format(time.RFC3339),
-			UpdatedAt:        row.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			ID:                       row.ID.String(),
+			RequesterUserID:          row.RequesterUserID,
+			RequesterName:            conv.Default(names[row.RequesterUserID], "A former member"),
+			Scope:                    row.Scope,
+			Selector:                 authzSelectorToGen(selector),
+			ResourceName:             conv.FromPGText[string](row.ResourceName),
+			Message:                  conv.FromPGText[string](row.Message),
+			RequestedDurationSeconds: nil,
+			RequestedUntil:           nil,
+			Status:                   EffectiveAccessRequestStatus(row, now),
+			DecidedByUserID:          conv.FromPGText[string](row.DecidedByUserID),
+			DecidedByName:            nil,
+			DecidedVia:               conv.FromPGText[string](row.DecidedVia),
+			DecidedAt:                nil,
+			TemporaryGrantID:         nil,
+			GrantExpiresAt:           nil,
+			ExpiresAt:                row.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			CreatedAt:                row.CreatedAt.Time.UTC().Format(time.RFC3339),
+			UpdatedAt:                row.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		}
+		if row.RequestedDurationSeconds.Valid {
+			view.RequestedDurationSeconds = new(int(row.RequestedDurationSeconds.Int32))
+		}
+		if row.RequestedUntil.Valid {
+			view.RequestedUntil = new(row.RequestedUntil.Time.UTC().Format(time.RFC3339))
 		}
 		if row.DecidedByUserID.Valid {
 			view.DecidedByName = new(conv.Default(names[row.DecidedByUserID.String], "A former member"))

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -78,6 +79,7 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	client := openrouter.NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		openrouter.EndpointsFor(partition.US),
 		provisioner,
 		&openrouter.PlatformKeyResolver{Provisioner: provisioner},
 		nil,

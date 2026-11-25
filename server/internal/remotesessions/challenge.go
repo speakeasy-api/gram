@@ -930,6 +930,9 @@ type Client struct {
 	CredentialOwner CredentialOwner
 }
 
+// CanStartSignIn reports whether the client's authorization server can start a browser sign-in.
+func (c Client) CanStartSignIn() bool { return c.AuthorizationEndpoint != "" }
+
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
@@ -1714,7 +1717,7 @@ func (m *ChallengeManager) mintAuthorization(
 		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
 	}
 
-	if client.AuthorizationEndpoint == "" {
+	if !client.CanStartSignIn() {
 		return "", fmt.Errorf("remote_session_issuer %s: %w", client.IssuerSlug, ErrIssuerNoAuthorizationEndpoint)
 	}
 	if client.TokenEndpoint == "" {
@@ -2425,9 +2428,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return none, oops.E(oops.CodeUnexpected, err, "lock hosted upstream issuer").LogError(ctx, logger)
 		}
 	}
-	// The client lock serializes publication with registration deletion and
-	// issuer retirement. A rejected exchange leaves its upstream revoke armed.
 
+	// The client lock serializes publication with registration deletion and
+	// issuer retirement. If the client is already gone, the binding check
+	// below rejects the exchange and leaves its upstream revoke armed.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)

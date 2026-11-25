@@ -423,7 +423,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // describeCachedMember applies current tool permissions to stored definitions.
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"
@@ -786,6 +786,7 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 	if err != nil {
 		return err
 	}
+	resolved = enforcedCompatibility(resolved)
 	if (resolved.outcome != authClientResolved && resolved.outcome != authClientLegacy) || resolved.clientID != member.Auth.ClientID || resolved.choice.clientID != member.Auth.RegistrationID {
 		return errConsentConfigurationChanged
 	}

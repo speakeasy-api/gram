@@ -188,7 +188,7 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	}, binding.Gaps)
 }
 
-func TestBindRequiresExplicitEMAChoiceForUserBackedTurns(t *testing.T) {
+func TestBindDefaultsToSoleEMAClientOnlyForUserBackedTurns(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server := f.server(unstored)
@@ -200,13 +200,13 @@ func TestBindRequiresExplicitEMAChoiceForUserBackedTurns(t *testing.T) {
 	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
 
 	userBacked := f.bind(ContextUserBacked)
-	require.Empty(t, f.choices(userBacked.VersionID))
-	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapSelectionRequired}}, userBacked.Gaps)
+	require.Empty(t, userBacked.Gaps)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(userBacked.VersionID))
 
-	_, err := f.setChoice(ContextUserBacked, server, client(emaClient))
-	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(f.bind(ContextUserBacked).VersionID))
-	require.Empty(t, f.choices(userBacked.VersionID), "choosing EMA does not alter a running turn")
+	f.authClient(server, typeRemoteSession, registration)
+	rebound := f.bind(ContextUserBacked)
+	require.Equal(t, userBacked.VersionID, rebound.VersionID, "a new offer cannot change an already saved choice")
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(rebound.VersionID))
 }
 
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {

@@ -7,6 +7,7 @@ import {
   type ToolSelectionTool,
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
+import { isToolAnnotation } from "@/components/tool-selection/annotations";
 import { useOrganization } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
@@ -32,8 +33,8 @@ import {
   unrestrictedResourceLabel,
 } from "./types";
 import { computePanelState, isProjectWideSelector } from "./computePanelState";
-import { toolDispositionAnnotations } from "./mcpAccessModel";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
+import { toolDisposition } from "./mcpAccessModel";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { useOrgAssistants } from "./useOrgAssistants";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
@@ -947,7 +948,7 @@ function RemoteToolMetadataLoader({
 }
 
 function toSelectionTool(tool: ServerTool): ToolSelectionTool {
-  return { name: tool.name, annotations: toolDispositionAnnotations(tool) };
+  return { name: tool.name, disposition: toolDisposition(tool) };
 }
 
 function remoteServerStatus(
@@ -1123,8 +1124,9 @@ function RoleToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of allServers) {
       for (const tool of server.tools) {
-        for (const annotation of toolDispositionAnnotations(tool)) {
-          counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
+        const disposition = toolDisposition(tool);
+        if (isToolAnnotation(disposition)) {
+          counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
         }
       }
     }

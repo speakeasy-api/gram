@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { GatewayAuthorizationServersField } from "./GatewayMemberSignInField";
 
 const mocks = vi.hoisted(() => ({
   admin: true,
+  forbidden: false,
   read: vi.fn(),
   retry: vi.fn(),
   rows: vi.fn(),
@@ -48,12 +50,32 @@ vi.mock("./useGatewayMemberRows", () => ({
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: ({ mcpServerId }: { mcpServerId: string }) => {
     mocks.read(mcpServerId);
+    const denied = mocks.forbidden;
     return {
-      data: {
-        status:
-          mcpServerId === "incomplete" ? "setup_incomplete" : "configured",
-      },
-      isError: mcpServerId === "failed",
+      data: denied
+        ? undefined
+        : {
+            status:
+              mcpServerId === "incomplete" ? "setup_incomplete" : "configured",
+          },
+      isError: denied || mcpServerId === "failed",
+      error: denied
+        ? new ServiceError(
+            {
+              fault: false,
+              id: "test-error",
+              message: "Forbidden",
+              name: "forbidden",
+              temporary: false,
+              timeout: false,
+            },
+            {
+              response: new Response(null, { status: 403 }),
+              request: new Request("https://example.test"),
+              body: "",
+            },
+          )
+        : undefined,
       refetch: mocks.retry,
     };
   },
@@ -71,6 +93,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.admin = true;
+  mocks.forbidden = false;
 });
 
 it("reads typed state per proxied member without offering a gateway mutation", () => {
@@ -100,4 +123,20 @@ it("does not link to management for non-admin readers", () => {
   renderField();
   expect(screen.getByText("Upstream credentials configured")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
+});
+
+it("explains the organization read requirement without retry or management for an MCP-only viewer", () => {
+  mocks.admin = false;
+  mocks.forbidden = true;
+  renderField();
+  expect(screen.getByText("Configured member")).toBeTruthy();
+  expect(
+    screen.getAllByText(
+      "Organization read access is required to view upstream sign-in status.",
+    ),
+  ).toHaveLength(3);
+  expect(screen.queryByText("Upstream credentials configured")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(screen.queryByRole("link")).toBeNull();
+  expect(mocks.retry).not.toHaveBeenCalled();
 });

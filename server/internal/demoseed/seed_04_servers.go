@@ -628,8 +628,8 @@ func (s *seeder) sharedSourceAuthClient() uuid.UUID {
 	return authclientbackfill.HeaderClientID(s.orgID(), "remote", s.det("remotemcp-slack"), s.det("agent-identity-header-slack"), "static_credential")
 }
 
-func seedAuthClientEMA(ctx context.Context, q *repo.Queries, authClientID, bindingID uuid.UUID) error {
-	n, err := q.ServersInsertAuthClientEMA(ctx, repo.ServersInsertAuthClientEMAParams{AuthClientID: authClientID, BindingID: bindingID})
+func seedAuthClientEMA(ctx context.Context, q *repo.Queries, org string, projectID, authClientID, bindingID uuid.UUID) error {
+	n, err := q.ServersInsertAuthClientEMA(ctx, repo.ServersInsertAuthClientEMAParams{AuthClientID: authClientID, BindingID: bindingID, OrgID: org, ProjectID: projectID})
 	if err != nil {
 		return fmt.Errorf("insert typed EMA client details: %w", err)
 	}
@@ -659,7 +659,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
 		}
 	}
-	if err := seedAuthClientEMA(ctx, s.q, s.det("auth-client-ema-wiki"), s.det("ema-binding-wiki")); err != nil {
+	if err := seedAuthClientEMA(ctx, s.q, org, proj, s.det("auth-client-ema-wiki"), s.det("ema-binding-wiki")); err != nil {
 		return err
 	}
 	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 )
 
 func TestKeyTypeOrDefault(t *testing.T) {
@@ -47,15 +48,28 @@ func TestKeyTypeValidate(t *testing.T) {
 func TestUpstreamKeyIdentity(t *testing.T) {
 	t.Parallel()
 
-	// The chat key format is load-bearing: upstream keys already exist under
-	// these exact names.
-	name, label := upstreamKeyIdentity("prod", "org-1", "acme", KeyTypeChat)
-	require.Equal(t, "gram-prod-org-1", name)
-	require.Equal(t, "acme (prod environment)", label)
+	// The US formats are load-bearing: upstream keys already exist under these
+	// exact names.
+	for _, tc := range []struct {
+		name      string
+		partition partition.Partition
+		keyType   KeyType
+		wantName  string
+		wantLabel string
+	}{
+		{name: "us chat", partition: partition.US, keyType: KeyTypeChat, wantName: "gram-prod-org-1", wantLabel: "acme (prod environment)"},
+		{name: "us internal", partition: partition.US, keyType: KeyTypeInternal, wantName: "gram-prod-org-1-internal", wantLabel: "acme (prod environment, internal)"},
+		{name: "eu chat", partition: partition.EU, keyType: KeyTypeChat, wantName: "gram-prod-eu-org-1", wantLabel: "acme (prod environment, eu partition)"},
+		{name: "eu internal", partition: partition.EU, keyType: KeyTypeInternal, wantName: "gram-prod-eu-org-1-internal", wantLabel: "acme (prod environment, eu partition, internal)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	name, label = upstreamKeyIdentity("prod", "org-1", "acme", KeyTypeInternal)
-	require.Equal(t, "gram-prod-org-1-internal", name)
-	require.Equal(t, "acme (prod environment, internal)", label)
+			name, label := upstreamKeyIdentity("prod", tc.partition, "org-1", "acme", tc.keyType)
+			require.Equal(t, tc.wantName, name)
+			require.Equal(t, tc.wantLabel, label)
+		})
+	}
 }
 
 // newKeyTypeTestClient builds a unified client whose completion calls hit a

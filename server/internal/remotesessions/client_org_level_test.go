@@ -322,3 +322,26 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 		})
 	}
 }
+
+func TestListClientsBySignIn_IncludesOrganizationGatewayPlacement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	project, org := projectIDFromContext(t, ctx), activeOrganizationID(t, ctx)
+	gatewaySignIn := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "list-org-gateway")
+	memberSignIn := createUserSessionIssuer(t, ctx, ti.conn, "list-org-member")
+	provider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, org, "list-org-provider")
+	registration := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, provider, "list-org-registration", memberSignIn)
+	q := repo.New(ti.conn)
+	params := repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+		ProjectID: project, OrganizationID: org, UserSessionIssuerID: gatewaySignIn,
+		RemoteSessionIssuerID: conv.ToNullUUID(provider), Cursor: uuid.NullUUID{}, LimitValue: 10,
+	}
+	rows, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, registration, rows[0].RemoteSessionClient.ID)
+	seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "list-org-other-gateway")
+	rows, err = q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows, "an ambiguous organization issuer must not acquire placements")
+}

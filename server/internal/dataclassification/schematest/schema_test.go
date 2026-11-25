@@ -67,7 +67,7 @@ SELECT c.relname, a.attname, coalesce(pg_catalog.col_description(c.oid, a.attnum
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'm', 'f')
+WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p', 'm', 'f')
 ORDER BY c.relname, a.attnum`)
 	require.NoError(t, err)
 	defer rows.Close()

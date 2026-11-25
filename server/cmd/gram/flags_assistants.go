@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"os"
 	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -165,6 +166,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			GuestPort:       0,
 			ServerURL:       localRuntimeServerURL,
 			ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
+			OTelEnv:         assistants.LocalRuntimeOTelEnv(c.Bool("with-otel-tracing"), os.Getenv),
 		},
 	}, nil
 }

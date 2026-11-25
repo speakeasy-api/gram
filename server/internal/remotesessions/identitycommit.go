@@ -420,8 +420,8 @@ type IdentityResult struct {
 	// Client is the client offered by the target server.
 	Client repo.RemoteSessionClient
 
-	// Bindings lists every user session issuer the client is bound to, sorted
-	// by id.
+	// Bindings lists the sign-in configurations of the client's live placements
+	// visible in the plan scope, sorted by ID.
 	Bindings []uuid.UUID
 
 	// Method is how the client was obtained.
@@ -1012,7 +1012,7 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	}
 
 	var client repo.RemoteSessionClient
-	var attached []uuid.UUID
+	var bindings []uuid.UUID
 	var moved []uuid.UUID
 	var replaced uuid.UUID
 	var released []repo.RemoteSessionClient
@@ -1081,11 +1081,23 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		}
 	}
 
-	if !reused {
+	if reused {
+		// Reuse selects an exact offer. Read its visible server placements
+		// without consulting the attachment compatibility table.
+		var err error
+		bindings, err = tx.q.ListVisibleRemoteSessionClientPlacementIssuers(ctx, repo.ListVisibleRemoteSessionClientPlacementIssuersParams{
+			ProjectID:             c.plan.Scope.ProjectID,
+			OrganizationID:        c.plan.Scope.OrganizationID,
+			RemoteSessionClientID: client.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("read reused remote session client bindings: %w", err)
+		}
+	} else {
 		var err error
 		switch reg.Method {
 		case RegistrationLinked:
-			client, attached, err = c.linkClient(ctx, tx)
+			client, bindings, err = c.linkClient(ctx, tx)
 		case RegistrationCIMD:
 			client, err = c.createCIMDClient(ctx, tx)
 		case RegistrationManual, RegistrationDCR:
@@ -1149,7 +1161,7 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	c.result = IdentityResult{
 		Provider:        c.provider,
 		Client:          client,
-		Bindings:        attached,
+		Bindings:        bindings,
 		Method:          reg.Method,
 		ProviderCreated: c.plan.Provider.create != nil,
 		ClientCreated:   !reused && reg.Method != RegistrationLinked,

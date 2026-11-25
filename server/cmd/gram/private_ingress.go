@@ -26,6 +26,7 @@ import (
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -35,23 +36,26 @@ import (
 )
 
 type mcpServerRuntime struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.MCP == nil || deps.Metadata == nil {
+	if deps.AICatalog == nil || deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
-		MCP:      deps.MCP,
-		Metadata: deps.Metadata,
+		AICatalog: deps.AICatalog,
+		MCP:       deps.MCP,
+		Metadata:  deps.Metadata,
 	}, nil
 }
 
@@ -159,20 +163,22 @@ func privateIngressServerFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    "netingress-gateway-namespace",
-			Usage:   "Namespace of the tailnet gateway service account accepted for any gateway-hosted ingress",
+			Usage:   "Namespace of the tailnet gateway service account, the only workload whose attestation is accepted",
 			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_NAMESPACE"},
 		},
 		&cli.StringFlag{
 			Name:    "netingress-gateway-service-account",
-			Usage:   "Tailnet gateway service account accepted for any gateway-hosted ingress",
+			Usage:   "Tailnet gateway service account, the only workload whose attestation is accepted",
 			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT"},
 		},
 	)
 }
 
+// validatePrivateGatewayPrincipal requires the tailnet gateway's identity: the
+// gateway is the only workload that forwards private network traffic.
 func validatePrivateGatewayPrincipal(namespace, serviceAccount string) error {
-	if (namespace == "") != (serviceAccount == "") {
-		return errors.New("private network ingress gateway namespace and service account must be configured together")
+	if namespace == "" || serviceAccount == "" {
+		return errors.New("private network ingress gateway namespace and service account are required")
 	}
 	return nil
 }
@@ -206,8 +212,8 @@ type privateIngressServerDependencies struct {
 	// TokenReviewer verifies the attestation token on every private request.
 	TokenReviewer netingress.TokenReviewer
 
-	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway
-	// whose requests resolve their ingress by host. Both empty disables it.
+	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway,
+	// whose requests resolve their ingress by host. Both are required.
 	GatewayNamespace      string
 	GatewayServiceAccount string
 }
@@ -241,12 +247,10 @@ func servePrivateIngress(
 		30*time.Second,
 		telemetry,
 	)
-	if deps.GatewayNamespace != "" || deps.GatewayServiceAccount != "" {
-		if err := verifier.UseGatewayPrincipal(deps.GatewayNamespace, deps.GatewayServiceAccount); err != nil {
-			return fmt.Errorf("configure tailnet gateway principal: %w", err)
-		}
+	if err := verifier.UseGatewayPrincipal(deps.GatewayNamespace, deps.GatewayServiceAccount); err != nil {
+		return fmt.Errorf("configure tailnet gateway principal: %w", err)
 	}
-	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, func(mux goahttp.Muxer) {
+	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, deps.Runtime.AICatalog, func(mux goahttp.Muxer) {
 		mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
 	})
 
@@ -300,6 +304,7 @@ func newPrivateIngressHandler(
 	telemetry *netingress.Telemetry,
 	verifier netingress.WorkloadVerifier,
 	meterReadings gcp.Publisher[*meteringv1.MeterReading],
+	aiCatalog *aivendors.Store,
 	attach func(goahttp.Muxer),
 ) goahttp.Muxer {
 	mux := goahttp.NewMuxer()
@@ -327,6 +332,7 @@ func newPrivateIngressHandler(
 	// rewrites successful responses.
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, meterReadings))
 	mux.Use(middleware.SessionMiddleware)
+	mux.Use(aiCatalog.Middleware)
 	attach(mux)
 	return mux
 }
