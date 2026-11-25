@@ -155,8 +155,9 @@ const (
 	AICatalogProductsInsertedKey     = attribute.Key("gram.ai_catalog.products_inserted")
 	AICatalogDocumentsInsertedKey    = attribute.Key("gram.ai_catalog.documents_inserted")
 	AICatalogDecisionsLinkedKey      = attribute.Key("gram.ai_catalog.decisions_linked")
-	CIMDCandidatesScannedKey         = attribute.Key("gram.cimd.candidates.scanned")
-	CIMDCandidatesRecordedKey        = attribute.Key("gram.cimd.candidates.recorded")
+	CIMDCandidatesScannedKey         = attribute.Key("gram.cimd.candidates_scanned")
+	CIMDCandidatesRecordedKey        = attribute.Key("gram.cimd.candidates_recorded")
+	CIMDCandidatesSkippedKey         = attribute.Key("gram.cimd.candidates_skipped")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -417,6 +418,12 @@ const (
 	// refuses nobody: the client got in, and no rule anywhere covered it.
 	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
+
+	// CIMDCandidateOutcomeKey is what happened to one candidate write on
+	// cimd.candidates.writes: "recorded", "capped" (the issuer is at its
+	// pending cap or no longer exists), "dropped" (too many writes in
+	// flight), or "failed".
+	CIMDCandidateOutcomeKey = attribute.Key("gram.cimd.candidate_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
 	// dimension on jwks.fetch.* metrics. Omitted for inline key sets, which
@@ -2347,6 +2354,14 @@ func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
+func CIMDCandidateOutcome[V ~string](v V) attribute.KeyValue {
+	return CIMDCandidateOutcomeKey.String(string(v))
+}
+
+func SlogCIMDCandidateOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDCandidateOutcomeKey), string(v))
 }
 
 func JWKSOrigin(v string) attribute.KeyValue { return JWKSOriginKey.String(v) }
@@ -4729,4 +4744,7 @@ func SlogCIMDCandidatesScanned(v int64) slog.Attr {
 }
 func SlogCIMDCandidatesRecorded(v int64) slog.Attr {
 	return slog.Int64(string(CIMDCandidatesRecordedKey), v)
+}
+func SlogCIMDCandidatesSkipped(v int64) slog.Attr {
+	return slog.Int64(string(CIMDCandidatesSkippedKey), v)
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Staff review queue of CIMD client URLs no catalog document covers. One row per URL; the decision is permanent.
+// Staff review queue of CIMD client URLs no catalog document covers. One row per URL; rows are never deleted.
 type CimdClientCandidate struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -22,7 +22,7 @@ type CimdClientCandidate struct {
 	// client_name from the fetched metadata document; null when absent.
 	// @access: opaque-confidential
 	ClientName pgtype.Text
-	// One of pending, approved, dismissed, customer_specific. Only pending rows are open; the others never return to pending.
+	// One of pending, approved, dismissed, customer_specific; validated in application code.
 	// @access: confidential
 	Status string
 	// Staff note recorded with the decision.

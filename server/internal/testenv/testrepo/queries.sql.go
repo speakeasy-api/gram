@@ -3497,6 +3497,15 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	return id, err
 }
 
+const insertCimdClientCandidateFixture = `-- name: InsertCimdClientCandidateFixture :exec
+INSERT INTO cimd_client_candidates (url) VALUES ($1)
+`
+
+func (q *Queries) InsertCimdClientCandidateFixture(ctx context.Context, url string) error {
+	_, err := q.db.Exec(ctx, insertCimdClientCandidateFixture, url)
+	return err
+}
+
 const insertCompletedDeploymentFixture = `-- name: InsertCompletedDeploymentFixture :exec
 WITH created AS (
   INSERT INTO deployments (id, user_id, project_id, organization_id, idempotency_key)

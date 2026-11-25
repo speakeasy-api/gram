@@ -62,7 +62,9 @@ var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 // useful.
 
 // resolveUserSessionClient resolves the user_session_clients row behind a
-// presented client_id. Error contract, in the order callers should check:
+// presented client_id. In resolveClientCIMD mode, logger must already carry
+// the truncated client_id; the lines logged here do not repeat it. Error
+// contract, in the order callers should check:
 //
 //   - *admission.DenialError: the issuer's admission policy refused this
 //     client_id before any fetch ran; render invalid_client with the
@@ -77,6 +79,8 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
+		// Every caller in this mode builds its logger from
+		// ResolvedMcpEndpoint.LogWith, which names neither.
 		logger = logger.With(
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 			attr.SlogOrganizationID(endpoint.OrganizationID),
@@ -173,7 +177,6 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 				// method stands; the operator's reset is to revoke the
 				// client, after which the next authorize registers afresh.
 				logger.WarnContext(ctx, "cimd document downgrades token_endpoint_auth_method, refusing refresh",
-					attr.SlogOAuthClientID(clientID),
 					attr.SlogOAuthRegisteredAuthMethod(cachedRow.TokenEndpointAuthMethod.String),
 					attr.SlogOAuthDeclaredAuthMethod(result.Document.DeclaredAuthMethod()),
 				)
@@ -224,7 +227,7 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 // cannot fail the resolution.
 func (s *Service) recordCIMDCandidate(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, row *usersessions_repo.UserSessionClient) {
 	mode, _ := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
-	if !cimdcandidates.Recordable(clientCatalog, mode, row.ClientID) {
+	if !cimdcandidates.Recordable(clientCatalog, mode, s.outboundOrigin(), row.ClientID) {
 		return
 	}
 	s.cimdCandidates.Record(ctx, logger, cimdcandidates.Sighting{
@@ -325,7 +328,6 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 	// dimension: this is the URL an operator needs when diagnosing a preset
 	// miss, and it is exactly the value too unbounded to be a metric label.
 	logAttrs := []any{
-		attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 		attr.SlogCIMDAdmissionMode(mode),
 		attr.SlogCIMDAdmissionOutcome(decision.Denial),
 	}
@@ -364,7 +366,6 @@ func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger
 		// dropped: on an unauthenticated endpoint a run of these is a
 		// probing campaign, and that is worth being able to see.
 		logger.InfoContext(ctx, "cimd admission would deny",
-			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
 			attr.SlogCIMDAdmissionOutcome(shadow.Denial),
 		)
@@ -384,7 +385,6 @@ func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger
 			// that do mean something.
 			if !errors.Is(err, context.Canceled) {
 				logger.ErrorContext(ctx, "cimd admission shadow lookup failed",
-					attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 					attr.SlogError(err),
 				)
 			}
@@ -399,7 +399,6 @@ func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger
 		// nothing was, and the outcome attribute carries the shadow's own
 		// verdict so the line reads as the refusal that did not happen.
 		logger.InfoContext(ctx, "cimd admission would deny",
-			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
 			attr.SlogCIMDAdmissionOutcome(admission.DenialNotListed),
 		)

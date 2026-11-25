@@ -2896,3 +2896,6 @@ ORDER BY c.url, s.user_session_issuer_id;
 
 -- name: SetCimdClientCandidateStatusFixture :exec
 UPDATE cimd_client_candidates SET status = @status WHERE url = @url;
+
+-- name: InsertCimdClientCandidateFixture :exec
+INSERT INTO cimd_client_candidates (url) VALUES (@url);

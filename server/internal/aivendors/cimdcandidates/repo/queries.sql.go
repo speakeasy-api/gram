@@ -12,8 +12,110 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backfillSightings = `-- name: BackfillSightings :execrows
+WITH input AS (
+  -- Set-returning functions in one select list advance together.
+  SELECT
+    unnest($1::text[]) AS url,
+    unnest($2::text[]) AS client_name,
+    unnest($3::timestamptz[]) AS first_seen_at,
+    unnest($4::timestamptz[]) AS last_seen_at,
+    unnest($5::uuid[]) AS user_session_issuer_id
+),
+per_url AS (
+  SELECT
+    input.url,
+    (array_agg(input.client_name ORDER BY input.last_seen_at DESC) FILTER (WHERE input.client_name <> ''))[1] AS client_name,
+    min(input.first_seen_at) AS first_seen_at,
+    max(input.last_seen_at) AS last_seen_at
+  FROM input
+  GROUP BY input.url
+),
+candidate AS (
+  INSERT INTO cimd_client_candidates AS c (url, client_name, first_seen_at, last_seen_at)
+  SELECT per_url.url, per_url.client_name, per_url.first_seen_at, per_url.last_seen_at
+  FROM per_url
+  ON CONFLICT (url) DO UPDATE SET
+    client_name = CASE WHEN c.status = 'pending' THEN COALESCE(EXCLUDED.client_name, c.client_name) ELSE c.client_name END,
+    first_seen_at = CASE WHEN c.status = 'pending' THEN LEAST(c.first_seen_at, EXCLUDED.first_seen_at) ELSE c.first_seen_at END,
+    last_seen_at = GREATEST(c.last_seen_at, EXCLUDED.last_seen_at),
+    updated_at = clock_timestamp()
+  RETURNING c.id, c.url
+)
+INSERT INTO cimd_client_candidate_sightings AS s (candidate_id, user_session_issuer_id, organization_id, last_seen_at)
+SELECT candidate.id, iss.id, iss.organization_id, input.last_seen_at
+FROM input
+JOIN candidate ON candidate.url = input.url
+JOIN user_session_issuers AS iss ON iss.id = input.user_session_issuer_id
+ON CONFLICT (candidate_id, user_session_issuer_id) DO UPDATE SET
+  last_seen_at = GREATEST(s.last_seen_at, EXCLUDED.last_seen_at),
+  updated_at = clock_timestamp()
+`
+
+type BackfillSightingsParams struct {
+	Urls                 []string
+	ClientNames          []string
+	FirstSeenAts         []pgtype.Timestamptz
+	LastSeenAts          []pgtype.Timestamptz
+	UserSessionIssuerIds []uuid.UUID
+}
+
+// Upserts one backfill batch with the same rules as RecordSighting, minus the
+// cap, which the caller applies. Rows are positional across the arrays; each
+// (url, issuer) pair appears once. Returns the sightings written.
+func (q *Queries) BackfillSightings(ctx context.Context, arg BackfillSightingsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillSightings,
+		arg.Urls,
+		arg.ClientNames,
+		arg.FirstSeenAts,
+		arg.LastSeenAts,
+		arg.UserSessionIssuerIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const countPendingSightingsByIssuer = `-- name: CountPendingSightingsByIssuer :many
+SELECT s.user_session_issuer_id, count(*)::bigint AS pending
+FROM cimd_client_candidate_sightings AS s
+JOIN cimd_client_candidates AS c ON c.id = s.candidate_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND c.status = 'pending'
+GROUP BY s.user_session_issuer_id
+`
+
+type CountPendingSightingsByIssuerRow struct {
+	UserSessionIssuerID uuid.UUID
+	Pending             int64
+}
+
+// Pending sightings per issuer, served by
+// cimd_client_candidate_sightings_user_session_issuer_id_idx.
+func (q *Queries) CountPendingSightingsByIssuer(ctx context.Context, userSessionIssuerIds []uuid.UUID) ([]CountPendingSightingsByIssuerRow, error) {
+	rows, err := q.db.Query(ctx, countPendingSightingsByIssuer, userSessionIssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountPendingSightingsByIssuerRow
+	for rows.Next() {
+		var i CountPendingSightingsByIssuerRow
+		if err := rows.Scan(&i.UserSessionIssuerID, &i.Pending); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCIMDClientsForBackfill = `-- name: ListCIMDClientsForBackfill :many
 SELECT
+  cl.id,
   cl.user_session_issuer_id,
   cl.client_id_metadata_uri::text AS url,
   cl.client_name,
@@ -21,12 +123,22 @@ SELECT
   COALESCE(cl.client_id_metadata_fetched_at, cl.updated_at)::timestamptz AS last_seen_at
 FROM user_session_clients AS cl
 WHERE cl.user_session_issuer_id = ANY($1::uuid[])
+  AND (cl.user_session_issuer_id, cl.id) > ($2::uuid, $3::uuid)
   AND cl.client_id_metadata_uri IS NOT NULL
   AND cl.deleted IS FALSE
-ORDER BY cl.created_at, cl.id
+ORDER BY cl.user_session_issuer_id, cl.id
+LIMIT $4::int
 `
 
+type ListCIMDClientsForBackfillParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	AfterIssuerID        uuid.UUID
+	AfterID              uuid.UUID
+	PageSize             int32
+}
+
 type ListCIMDClientsForBackfillRow struct {
+	ID                  uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	Url                 string
 	ClientName          string
@@ -34,10 +146,15 @@ type ListCIMDClientsForBackfillRow struct {
 	LastSeenAt          pgtype.Timestamptz
 }
 
-// Live CIMD client rows of the given issuers, served by
-// user_session_clients_issuer_id_key.
-func (q *Queries) ListCIMDClientsForBackfill(ctx context.Context, userSessionIssuerIds []uuid.UUID) ([]ListCIMDClientsForBackfillRow, error) {
-	rows, err := q.db.Query(ctx, listCIMDClientsForBackfill, userSessionIssuerIds)
+// Pages the live CIMD client rows of the given issuers by
+// (user_session_issuer_id, id), served by user_session_clients_issuer_id_key.
+func (q *Queries) ListCIMDClientsForBackfill(ctx context.Context, arg ListCIMDClientsForBackfillParams) ([]ListCIMDClientsForBackfillRow, error) {
+	rows, err := q.db.Query(ctx, listCIMDClientsForBackfill,
+		arg.UserSessionIssuerIds,
+		arg.AfterIssuerID,
+		arg.AfterID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +163,7 @@ func (q *Queries) ListCIMDClientsForBackfill(ctx context.Context, userSessionIss
 	for rows.Next() {
 		var i ListCIMDClientsForBackfillRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.UserSessionIssuerID,
 			&i.Url,
 			&i.ClientName,
@@ -55,6 +173,32 @@ func (q *Queries) ListCIMDClientsForBackfill(ctx context.Context, userSessionIss
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExistingCandidateURLs = `-- name: ListExistingCandidateURLs :many
+SELECT c.url
+FROM cimd_client_candidates AS c
+WHERE c.url = ANY($1::text[])
+`
+
+func (q *Queries) ListExistingCandidateURLs(ctx context.Context, urls []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExistingCandidateURLs, urls)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return nil, err
+		}
+		items = append(items, url)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -155,7 +299,8 @@ type RecordSightingParams struct {
 // a decided candidate keeps its decision; only a pending one takes a newer
 // client name or an earlier first sighting. A URL that is not yet a candidate
 // is created only while the issuer has fewer than max_pending_per_issuer
-// pending sightings. Affects no rows when that cap skips it.
+// pending sightings. Affects no rows when that cap skips it or the issuer no
+// longer exists. The cap is soft: concurrent writes can overshoot it slightly.
 func (q *Queries) RecordSighting(ctx context.Context, arg RecordSightingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordSighting,
 		arg.LastSeenAt,

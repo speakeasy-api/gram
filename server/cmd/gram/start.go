@@ -2423,7 +2423,7 @@ func newStartCommand() *cli.Command {
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
 						OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryption.Provisioner),
 						OrganizationEncryptionMigrator: orgEncryptionMigrator,
-						StartupSeeds:                   startupSeeds(logger, db, siteURL),
+						StartupSeeds:                   startupSeeds(logger, db, siteURL, callbackOrigins.Outbound),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,
