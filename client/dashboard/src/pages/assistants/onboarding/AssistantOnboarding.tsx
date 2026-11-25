@@ -169,29 +169,29 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const hasToolsets = !!draft.assistant?.toolsets?.length;
   const hasAttachments = hasToolsets || !!draft.assistant?.mcpServers?.length;
   const scope = { gramProject: project.slug };
-  const { data: toolsetsData, isError: toolsetsError } = useListToolsets(
-    scope,
-    undefined,
-    {
-      enabled: hasToolsets,
-    },
-  );
-  const { data: serversData, isError: serversError } = useMcpServers(
-    scope,
-    undefined,
-    {
-      enabled: hasAttachments,
-      throwOnError: false,
-    },
-  );
-  const { data: endpointsData, isError: endpointsError } = useMcpEndpoints(
-    scope,
-    undefined,
-    {
-      enabled: hasAttachments,
-      throwOnError: false,
-    },
-  );
+  const {
+    data: toolsetsData,
+    isError: toolsetsError,
+    isLoading: loadingToolsets,
+  } = useListToolsets(scope, undefined, {
+    enabled: hasToolsets,
+  });
+  const {
+    data: serversData,
+    isError: serversError,
+    isLoading: loadingServers,
+  } = useMcpServers(scope, undefined, {
+    enabled: hasAttachments,
+    throwOnError: false,
+  });
+  const {
+    data: endpointsData,
+    isError: endpointsError,
+    isLoading: loadingEndpoints,
+  } = useMcpEndpoints(scope, undefined, {
+    enabled: hasAttachments,
+    throwOnError: false,
+  });
   const servers = serversError ? [] : (serversData?.mcpServers ?? []);
   const endpoints = endpointsError
     ? []
@@ -267,17 +267,21 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       ),
     ),
   });
-  const mcps: MCPServerEntry[] = tokens.some((token) => token.isLoading)
-    ? []
-    : targets.flatMap(({ server, entry }, index) => {
-        const token = tokens[index];
-        const accessToken = token?.isError
-          ? undefined
-          : token?.data?.accessToken;
-        // A failed mint must not fall back to an unauthenticated connection.
-        if (server.userSessionIssuerId && !accessToken) return [];
-        return [{ ...entry, accessToken }];
-      });
+  const mcps: MCPServerEntry[] | undefined =
+    loadingToolsets ||
+    loadingServers ||
+    loadingEndpoints ||
+    tokens.some((token) => token.isLoading)
+      ? undefined
+      : targets.flatMap(({ server, entry }, index) => {
+          const token = tokens[index];
+          const accessToken = token?.isError
+            ? undefined
+            : token?.data?.accessToken;
+          // A failed mint must not fall back to an unauthenticated connection.
+          if (server.userSessionIssuerId && !accessToken) return [];
+          return [{ ...entry, accessToken }];
+        });
 
   const getSession = useCallback(async () => {
     try {

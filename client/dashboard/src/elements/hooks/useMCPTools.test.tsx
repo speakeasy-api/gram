@@ -113,15 +113,36 @@ describe("useMCPTools per-server bearer tokens", () => {
           .map((query) => query.queryKey),
       ),
     ).not.toContain("token-one");
+    connect.mockClear();
     rerender({ token: "refreshed-token" });
-    await waitFor(() =>
-      expect(connect).toHaveBeenCalledWith(
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(3));
+    expect(connect.mock.calls.map(([options]) => options)).toEqual(
+      (
+        [
+          [
+            "one",
+            {
+              "Gram-Chat-Session": "chat-session",
+              Authorization: "Bearer refreshed-token",
+            },
+          ],
+          [
+            "two",
+            {
+              "Gram-Chat-Session": "chat-session",
+              Authorization: "Bearer token-two",
+            },
+          ],
+          [
+            "three",
+            { "Gram-Chat-Session": "chat-session", "Gram-Environment": "test" },
+          ],
+        ] as const
+      ).map(([slug, headers]) =>
         expect.objectContaining({
           transport: expect.objectContaining({
-            url: "https://example.com/mcp/one",
-            headers: expect.objectContaining({
-              Authorization: "Bearer refreshed-token",
-            }),
+            url: `https://example.com/mcp/${slug}`,
+            headers,
           }),
         }),
       ),

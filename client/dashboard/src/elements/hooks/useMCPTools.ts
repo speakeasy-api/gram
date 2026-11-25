@@ -136,6 +136,12 @@ export function useMCPTools({
           if (server.accessToken && new URL(server.url).protocol !== "https:") {
             throw new Error("MCP bearer authentication requires HTTPS");
           }
+          // Both the transport and the separate skill probe send bearer headers.
+          const fetchFn: typeof fetch = (input, init) =>
+            globalThis.fetch(
+              input,
+              server.accessToken ? { ...init, redirect: "error" } : init,
+            );
           const client = await createMCPClientWithVersionFallback({
             clientName: "gram-elements-mcp-client",
             transport: {
@@ -145,11 +151,7 @@ export function useMCPTools({
               // @ai-sdk/mcp stores this on the transport instance and calls it
               // as `this.fetchFn(...)`; handing it bare `window.fetch` throws
               // "Illegal invocation" in browsers, so bind it via a wrapper.
-              fetch: (input, init) =>
-                globalThis.fetch(
-                  input,
-                  server.accessToken ? { ...init, redirect: "error" } : init,
-                ),
+              fetch: fetchFn,
             },
           });
           const tools = await client.tools();
@@ -158,6 +160,7 @@ export function useMCPTools({
             server,
             headers,
             tools,
+            fetchFn,
           );
           if (!withSkills.discovered) skillDiscoveryFailed = true;
           return { server, tools: withSkills.tools };
@@ -316,6 +319,7 @@ async function withSkillTool(
   server: NormalizedServer,
   headers: Record<string, string>,
   tools: MCPToolsResult,
+  fetchFn: typeof fetch,
 ): Promise<{ tools: MCPToolsResult; discovered: boolean }> {
   if (!serverServesSkills(client) || LOAD_SKILL_TOOL_NAME in tools) {
     return { tools, discovered: true };
@@ -325,6 +329,7 @@ async function withSkillTool(
       url: server.url,
       headers,
       protocolVersion: client.initializeResult.protocolVersion,
+      fetchFn,
     });
     if (skills.length === 0) return { tools, discovered: true };
     return {

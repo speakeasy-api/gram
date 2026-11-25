@@ -5,6 +5,8 @@ import type { MintUserSessionResponseBody } from "@gram/client/models/components
 import {
   queryOptions,
   useQuery,
+  useQueryClient,
+  type QueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
@@ -112,6 +114,21 @@ type UserSessionTokenOptionsFactory = (
   throwOnError?: false,
 ) => UseQueryOptions<MintUserSessionResponseBody | null>;
 
+// Keep an opaque revision per dashboard cache, shared by all token consumers.
+// A renewed login never reuses the prior session's tokens or exposes its ID in keys.
+const sessionRevisions = new WeakMap<
+  QueryClient,
+  { session: string; id: string }
+>();
+
+function tokenSessionRevision(client: QueryClient, session: string): string {
+  const current = sessionRevisions.get(client);
+  if (current?.session === session) return current.id;
+  const id = crypto.randomUUID();
+  sessionRevisions.set(client, { session, id });
+  return id;
+}
+
 /** Shared token query policy for clients that connect to several targets. */
 export function useUserSessionTokenOptions(projectOverride?: {
   id: string;
@@ -121,6 +138,10 @@ export function useUserSessionTokenOptions(projectOverride?: {
   const ambientProject = useProject();
   const project = projectOverride ?? ambientProject;
   const mintMutation = useMintUserSessionMutation();
+  const sessionRevision = tokenSessionRevision(
+    useQueryClient(),
+    session.session,
+  );
 
   return (
     target: UserSessionTokenTarget,
@@ -137,6 +158,7 @@ export function useUserSessionTokenOptions(projectOverride?: {
         id,
         userSessionIssuerId,
         session.user.id,
+        sessionRevision,
         ...(target.kind === "metaMcpServer"
           ? [target.discoveryMode, target.connectionVersion]
           : []),
