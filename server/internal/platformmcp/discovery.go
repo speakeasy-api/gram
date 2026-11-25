@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -446,6 +447,12 @@ func (s *discoverySurface) describe(ctx context.Context, arguments json.RawMessa
 	}
 	return discoveryResult(output)
 }
+
+// chatGPTProductID is the catalog product whose CIMD documents identify a
+// ChatGPT caller.
+const chatGPTProductID = "chatgpt"
+
+var instructionToolNamePattern = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
 
 // guidanceFor returns the instruction paragraphs that name a tool.
 func (r *Registrar) guidanceFor(name string) []string {

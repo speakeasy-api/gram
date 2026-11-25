@@ -57,8 +57,6 @@ func everyHarness(variant feature.Variant) harnessFlags {
 // goldenClientDecision is what Platform MCP decides from one client ID.
 type goldenClientDecision struct {
 	ClientID     string        `json:"client_id"`
-	ChatGPT      bool          `json:"chatgpt"`
-	Allowlist    []string      `json:"allowlist"`
 	Harness      string        `json:"harness"`
 	Progressive  discoveryMode `json:"progressive"`
 	CodeMode     discoveryMode `json:"code_mode"`
@@ -86,8 +84,6 @@ func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 		principal.ClientID = id
 		decisions = append(decisions, goldenClientDecision{
 			ClientID:     id,
-			ChatGPT:      isChatGPTClient(catalog, id),
-			Allowlist:    clientToolAllowlist(catalog, id),
 			Harness:      harnessForClient(catalog, id),
 			Progressive:  progressive.discoveryModeFor(t.Context(), progressive.registrar.logger, principal),
 			CodeMode:     codeMode.discoveryModeFor(t.Context(), codeMode.registrar.logger, principal),
@@ -144,8 +140,8 @@ func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_surfaces_golden.json", data)
 }
 
-// The runtime reads the store it was given: an empty catalog recognizes no
-// ChatGPT client, so ChatGPT keeps the full catalogue.
+// The runtime reads the store it was given: an empty catalog still serves
+// every client the full catalogue.
 func TestRuntimeReadsTheInjectedCatalog(t *testing.T) {
 	t.Parallel()
 

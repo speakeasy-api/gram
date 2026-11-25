@@ -358,7 +358,7 @@ func TestDiscoveryModeFailsClosedToCatalogue(t *testing.T) {
 	require.Equal(t, discoveryFull, flagged.discoveryModeFor(t.Context(), flagged.registrar.logger, principal), "no organization serves the catalogue")
 }
 
-func TestFlaggedChatGPTKeepsAllowlistedCatalogue(t *testing.T) {
+func TestFlaggedChatGPTKeepsFullCatalogue(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithDiscovery(DiscoveryConfig{
@@ -372,7 +372,7 @@ func TestFlaggedChatGPTKeepsAllowlistedCatalogue(t *testing.T) {
 		Tools []*mcp.Tool `json:"tools"`
 	}
 	allowlistRPC(t, handler, runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
-	require.ElementsMatch(t, chatGPTToolAllowlist, toolNames(list.Tools), "ChatGPT lists every operation upfront, never the meta-tools")
+	require.ElementsMatch(t, names(runtime.registrar.For(AudienceExternal)), toolNames(list.Tools), "ChatGPT lists every operation upfront, never the meta-tools")
 
 	response := allowlistRPCRaw(t, handler, runtime, testChatGPTConnectorClientID, callBody(callPlatformToolName, map[string]any{"name": "get_platform_context"}))
 	require.NotNil(t, response.Error)
