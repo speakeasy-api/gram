@@ -846,7 +846,13 @@ export function IdentityChainingField({
             generation={read.data.generation}
             recorded={read.data.scopes}
             connection={read.data.connectionScopes ?? []}
-            canApply={ready && canWrite && !grantsBlocked && supportedProviders}
+            canApply={
+              ready &&
+              canWrite &&
+              !onlyWhenOn &&
+              !grantsBlocked &&
+              supportedProviders
+            }
             canWrite={canWrite}
             busy={pending}
             onApplyingChange={setApplyingScopes}

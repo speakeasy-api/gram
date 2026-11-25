@@ -115,7 +115,7 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 			identity.RemoteSessionClientID.String() + "\x00" +
 			identity.RemoteSessionIssuerID.String()
 	case "no_client", "no_session", "anonymous", ProviderAuthorizationIdentityChaining:
-		if identity.RemoteSessionID != uuid.Nil || !identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID != uuid.Nil {
+		if identity.RemoteSessionID != uuid.Nil || !identity.RemoteSessionUpdatedAt.IsZero() {
 			return "", ErrReadinessInvalid
 		}
 		if (identity.Absence == "no_session" || identity.Absence == ProviderAuthorizationIdentityChaining) && identity.RemoteSessionIssuerID == uuid.Nil {
@@ -126,6 +126,12 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 			issuer = identity.RemoteSessionIssuerID.String()
 		}
 		payload += identity.Absence + "\x00" + issuer
+		if identity.RemoteSessionClientID != uuid.Nil {
+			if identity.Absence != "no_session" && identity.Absence != ProviderAuthorizationIdentityChaining {
+				return "", ErrReadinessInvalid
+			}
+			payload += "\x00" + identity.RemoteSessionClientID.String()
+		}
 	default:
 		return "", ErrReadinessInvalid
 	}

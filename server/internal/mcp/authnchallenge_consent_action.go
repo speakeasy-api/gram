@@ -155,7 +155,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	// offered maps each registration the endpoint offers through a typed auth
 	// client to the project it is served in. Actions on those run from that
 	// offer, which authorizes them whether or not the sign-in links the
-	// registration; it is empty where typed auth clients are not enforced.
+	// registration; hosted sign-in still uses the endpoint issuer.
 	bound, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
@@ -228,6 +228,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		// No matching grant is an idempotent no-op. Only a typed offer can
+		// authorize disconnecting this subject’s grant across issuers.
 		var derr error
 		if projectID, ok := offered[client.ID]; ok {
 			_, derr = s.remoteChallengeMgr.DisconnectAuthClientRemoteSession(ctx, subject, projectID, endpoint.OrganizationID, client.ID)
@@ -333,8 +335,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
-		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead. Managed policies ignore this action:
+		// Clients without a matching grant update zero rows. Without a typed
+		// offer, a grant issued on a different sign-in does not match. Managed policies ignore this action:
 		// their effective value comes from organization policy, while the stored
 		// user preference remains intact if the organization later restores
 		// user-controlled refresh.
@@ -400,9 +402,8 @@ func (s *Service) buildRemoteConnectURL(
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint))
 	defer t.Finish(ctx)
-	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
-	// Otherwise, use it only when no other bound client can claim it: under
-	// multi-binding it may belong to a different client's upstream, while a
+	// Resolve a stored gateway member before choosing the login target. Hosted
+	// endpoints still derive their resource from the sign-in's bindings; a
 	// client shared by servers with different upstreams derives none on its
 	// own and would record a grant nothing routes to.
 	var clientResource string
@@ -436,13 +437,6 @@ func (s *Service) buildRemoteConnectURL(
 			return "", false, oops.E(oops.CodeBadRequest, nil, "this connection is not configured for any server this gateway serves").LogWarn(ctx, logger)
 		}
 	}
-	if rerr == nil && !claimedByMember {
-		boundIDs := make([]uuid.UUID, 0, len(bound))
-		for i := range bound {
-			boundIDs = append(boundIDs, bound[i].ID)
-		}
-		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
-	}
 	if rerr != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
@@ -472,14 +466,29 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
-		// An exact typed offer authorizes this registration for this server.
-		// Alternative providers offering the same server are not competing
-		// resource owners; keep the selected server's concrete target. Legacy
-		// issuer bindings and ambiguous gateway members retain their derivation.
-		if !claimedByMember && endpoint.McpServerID.Valid && endpoint.UpstreamResource != "" && typedAuthorization.ServerID == endpoint.McpServerID.UUID {
-			clientResource = endpoint.UpstreamResource
+		if !claimedByMember {
+			clientResource, err = s.typedLoginResource(ctx, typedAuthorization)
+			if err == nil && !endpoint.McpServerID.Valid {
+				resourceMember = chosenMetaMember{serverID: uuid.NullUUID{UUID: typedAuthorization.ServerID, Valid: true}, projectID: loginProjectID}
+			}
 		}
+	} else if !claimedByMember {
+		// Hosted endpoints keep the existing issuer resource policy.
+		boundIDs := make([]uuid.UUID, 0, len(bound))
+		for i := range bound {
+			boundIDs = append(boundIDs, bound[i].ID)
+		}
+		clientResource, err = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
+	if err != nil {
+		if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
+			return "", false, oops.E(oops.CodeForbidden, err, "connection changed; reload the consent page").LogWarn(ctx, logger)
+		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return "", false, oops.E(oops.CodeUnexpected, err, "derive client upstream resource").LogError(ctx, logger)
+	}
+
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),

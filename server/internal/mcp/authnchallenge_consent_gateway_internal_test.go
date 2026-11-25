@@ -213,7 +213,7 @@ func TestMetaGateMemberConnectURL(t *testing.T) {
 func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 	t.Parallel()
 
-	gate := metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: true}}
+	gate := metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{}}
 	link := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 	registration := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	for _, tc := range []struct {
@@ -241,7 +241,7 @@ func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 
 	derived := gatewayTestMember("github", "", uuid.New(), uuid.New())
 	derived.authClient = &authClientResolution{outcome: authClientGap, noAuthAllowed: true}
-	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: false}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
+	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{consentPreview: true}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
 }
 
 // A member with nothing routed, or a rejected credential, names the page that

@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -749,8 +748,8 @@ func (s *Service) resolveUpstreamResource(
 // its own OAuth where applicable).
 //
 // upstream is the resolved credential forwarded to the remote server. It's
-// only populated when the caller ran the issuer gate; otherwise it's empty
-// and the proxy does not forward an Authorization header upstream. A self
+// populated by issuer-gated resolution or a selected ungated agent key.
+// Without a credential, the proxy forwards no Authorization header. A self
 // client's credential is replaced and retried once when the upstream rejects
 // it, and a rejection that survives answers with the administrator's repair.
 //
@@ -801,8 +800,8 @@ func (s *Service) serveRemoteBackend(
 }
 
 // agentKeyUngatedUpstream serves an agent key's credential choice for a
-// private server reached without an issuer gate, once the organization
-// enforces, through the same resolution as a gated request. Any other caller,
+// server reached without an issuer gate, through the same resolution as a
+// gated request. Any other caller,
 // server or organization keeps upstream and buildOptions as given.
 func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
@@ -826,13 +825,6 @@ func (s *Service) agentKeyUngatedUpstream(
 	agentID, err := uuid.Parse(actor.ID)
 	if err != nil {
 		return upstream, buildOptions, nil //nolint:nilerr // an actor id that does not parse is no agent key
-	}
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return upstream, buildOptions, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
-	}
-	if mode != feature.AuthClientResolverEnforced {
-		return upstream, buildOptions, nil
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(endpoint, mcpServer, organizationID, mcproute.MCP)
 	selector, err := s.agentKeySelectorFor(ctx, resolved)

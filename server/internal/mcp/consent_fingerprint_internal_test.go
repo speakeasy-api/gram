@@ -11,12 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 // hosted adds a toolset-backed server to the fixture's project.
@@ -55,53 +52,25 @@ func TestCatalogMemberConfigurationsTypedHashIgnoresDerivedIssuer(t *testing.T) 
 	require.Equal(t, after[hosted].hash, after[hosted].typedHash)
 }
 
-func TestConsentBackendFingerprintFollowsEnforcement(t *testing.T) {
+func TestConsentBackendFingerprintUsesTypedEvidence(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_consent_fingerprint_reuse")
 	require.NoError(t, err)
 	ctx := t.Context()
 
-	t.Run("upstream client choice covers the derived issuer", func(t *testing.T) {
+	t.Run("legacy evidence can still be computed without choosing it", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID)}
 		before, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
+		require.NotEqual(t, before.decided, before.otherMode)
+
+		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(ctx, authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
 		after, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NotEqual(t, before.decided, after.decided)
-	})
-
-	t.Run("typed auth clients leave a proxied server's derived issuer out", func(t *testing.T) {
-		t.Parallel()
-		f := newAuthClientFixture(t, pool)
-		endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID)}
-		issuerBound, err := f.service.consentBackendFingerprint(ctx, endpoint)
-		require.NoError(t, err)
-
-		f.enforce()
-		typed, err := f.service.consentBackendFingerprint(ctx, endpoint)
-		require.NoError(t, err)
-		require.NotEqual(t, issuerBound.decided, typed.decided)
-		require.Equal(t, issuerBound.decided, typed.otherMode, "an approval saved before enforcement is compared in its own form")
-		require.Equal(t, typed.decided, issuerBound.otherMode)
-		recorded, err := f.service.consentBackendEvidence(ctx, endpoint)
-		require.NoError(t, err)
-		require.Equal(t, typed.decided, recorded.decided.typedHash)
-		require.Equal(t, issuerBound.decided, recorded.decided.hash, "the issuer-covering evidence recorded beside it is what the upstream client choice compares")
-
-		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
-		resynced, err := f.service.consentBackendFingerprint(ctx, endpoint)
-		require.NoError(t, err)
-		require.Equal(t, typed.decided, resynced.decided)
-
-		_, err = productfeaturesrepo.New(pool).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-		require.NoError(t, err)
-		f.service.authEnforcement = authenforcement.NewGate(pool)
-		rolledBack, err := f.service.consentBackendFingerprint(ctx, endpoint)
-		require.NoError(t, err)
-		require.NotEqual(t, issuerBound.decided, rolledBack.decided, "after enforcement ends the resynchronized issuer is a configuration change again")
+		require.Equal(t, before.decided, after.decided)
+		require.NotEqual(t, before.otherMode, after.otherMode)
 	})
 
 	t.Run("typed auth clients still cover a hosted server's derived issuer", func(t *testing.T) {
@@ -176,4 +145,22 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 			require.Equal(t, tc.enforced && tc.approved.TypedBackendHash != "", comparisons["typed_compared"])
 		})
 	}
+}
+
+func TestConsentInventoryFingerprintBindsTypedChoice(t *testing.T) {
+	t.Parallel()
+	inventory := consentToolInventory{Complete: true, Resource: "test-resource", BackendHash: "test-backend"}
+	legacy := consentInventoryFingerprint(&inventory)
+	require.NotEmpty(t, legacy)
+	noAuth := uuid.Nil
+	inventory.DirectAuthClient = &noAuth
+	anonymous := consentInventoryFingerprint(&inventory)
+	require.NotEqual(t, legacy, anonymous)
+	id := uuid.New()
+	inventory.DirectAuthClient = &id
+	selected := consentInventoryFingerprint(&inventory)
+	require.NotEqual(t, legacy, selected)
+	require.NotEqual(t, anonymous, selected)
+	id = uuid.New()
+	require.NotEqual(t, selected, consentInventoryFingerprint(&inventory))
 }

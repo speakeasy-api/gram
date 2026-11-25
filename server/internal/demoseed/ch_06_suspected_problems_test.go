@@ -35,6 +35,8 @@ func TestSeededConnectionHealthListsTheIntendedProblems(t *testing.T) {
 	}{
 		{"just before the switch", at(11, 44), time.Minute},
 		{"just after the switch", at(11, 46), time.Minute},
+		// On this Monday the baseline served a Felix/Notion request after his scripted failure.
+		{"weekday traffic does not heal Cursor's Notion failure", time.Date(2026, 11, 23, 11, 46, 0, 0, time.Local).UTC(), time.Minute},
 		{"just after midnight", at(0, 5), time.Minute},
 		{"evening", at(18, 0), time.Minute},
 		{"23 hours later", at(11, 46), 23 * time.Hour},

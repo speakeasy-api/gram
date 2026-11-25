@@ -59,7 +59,6 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 	setup := func(t *testing.T) (*authClientFixture, *ResolvedMcpEndpoint, headlessCaller) {
 		t.Helper()
 		f := newAuthClientFixture(t, pool)
-		f.enforce()
 		issuerID := uuid.New()
 		require.NoError(t, selectionbackfill.New(pool).SeedUserSessionIssuerFixture(t.Context(), selectionbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, Slug: "usi-" + issuerID.String()[:8]}))
 		client, err := usersessions_repo.New(pool).CreateUserSessionClient(t.Context(), usersessions_repo.CreateUserSessionClientParams{
@@ -79,7 +78,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		t.Parallel()
 		f, endpoint, caller := setup(t)
 		only := shared(f)
-		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, true)
+		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
 		require.NoError(t, err)
 		require.Equal(t, map[uuid.UUID]uuid.UUID{f.serverID: only}, picks)
 	})
@@ -89,10 +88,10 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		f, endpoint, caller := setup(t)
 		shared(f)
 		second := shared(f)
-		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, true)
+		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
 		requireOAuthCode(t, err, tokenErrorSelectionRequired, "no choice named")
 
-		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(second)}}, true)
+		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(second)}})
 		require.NoError(t, err)
 		require.Equal(t, second, picks[f.serverID], "the request names the choice")
 	})
@@ -113,7 +112,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 			OrganizationID: f.orgID, AuthClientID: validUUID(configured), McpServerID: f.serverID,
 		})
 		require.NoError(t, err)
-		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, true)
+		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
 		require.NoError(t, err)
 		require.Equal(t, configured, picks[f.serverID])
 	})
@@ -132,7 +131,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 			OrganizationID: f.orgID, AuthClientID: uuid.NullUUID{}, McpServerID: f.serverID,
 		})
 		require.NoError(t, err)
-		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, true)
+		_, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
 		require.NoError(t, err)
 		require.Equal(t, only, picks[f.serverID])
 	})
@@ -142,9 +141,9 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		f, endpoint, caller := setup(t)
 		named := shared(f)
 		f.service.authClientPermitter = denyPermitter{}
-		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(named)}}, true)
+		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(named)}})
 		requireOAuthCode(t, err, "access_denied", "denied choice")
-		_, _, _, err = f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(uuid.New())}}, true)
+		_, _, _, err = f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {clientID: validUUID(uuid.New())}})
 		requireOAuthCode(t, err, "access_denied", "foreign choice")
 	})
 
@@ -152,7 +151,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		t.Parallel()
 		f, endpoint, caller := setup(t)
 		shared(f)
-		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{uuid.New(): {}}, true)
+		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{uuid.New(): {}})
 		requireOAuthCode(t, err, "invalid_request", "out of scope")
 	})
 
@@ -161,7 +160,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		f, endpoint, caller := setup(t)
 		// An upstream OAuth client no auth client records yet.
 		f.attach()
-		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, true)
+		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil)
 		requireOAuthCode(t, err, tokenErrorSetupRequired, "upstream credentials with nothing offered")
 	})
 
@@ -170,7 +169,7 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		f, endpoint, _ := setup(t)
 		f.oauthClient(authClientTypeRemoteSession)
 		workload := headlessCaller{workloadIssuerID: validUUID(uuid.New()), workloadSubject: "repo:example/app:ref:refs/heads/main"}
-		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, urn.NewWorkloadSubject(workload.workloadIssuerID.UUID, workload.workloadSubject), workload, nil, true)
+		_, _, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, urn.NewWorkloadSubject(workload.workloadIssuerID.UUID, workload.workloadSubject), workload, nil)
 		requireOAuthCode(t, err, tokenErrorSetupRequired, "personal credentials are not offered to a workload")
 		code, _ := workloadGrantHappened(err)
 		require.Equal(t, mcpconnectionattempts.CodeUpstreamSignInNotSetUp, code)
@@ -179,20 +178,18 @@ func TestHeadlessAuthClientPicks(t *testing.T) {
 		oops.OAuthErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/token", nil))
 		require.JSONEq(t, `{"error":"setup_required","error_description":"a server's upstream sign-in is not set up"}`, w.Body.String())
 	})
+}
 
-	t.Run("organizations that do not enforce refuse named choices and decide nothing", func(t *testing.T) {
-		t.Parallel()
-		f := newAuthClientFixture(t, pool)
-		endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, McpServerID: validUUID(f.serverID), UserSessionIssuerID: uuid.New()}
-		caller := headlessCaller{clientID: validUUID(uuid.New())}
-		shared(f)
-		up, picks, _, err := f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, nil, false)
-		require.NoError(t, err)
-		require.Nil(t, up)
-		require.Nil(t, picks)
-		_, _, _, err = f.service.headlessAuthClientPicks(t.Context(), endpoint, user, caller, map[uuid.UUID]headlessChoice{f.serverID: {}}, false)
-		requireOAuthCode(t, err, "invalid_request", "not enforced")
-	})
+func TestHeadlessChoiceRequiresExplicitEMA(t *testing.T) {
+	t.Parallel()
+	server := consentAuthServer{id: uuid.New()}
+	clientID := uuid.New()
+	auth := &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{{ID: clientID, Type: authz.AuthClientTypeEMA, State: consentClientReady}}}
+	_, err := decideHeadlessChoice(server, auth, headlessChoice{}, false)
+	requireOAuthCode(t, err, tokenErrorSelectionRequired, "sole EMA")
+	choice, err := decideHeadlessChoice(server, auth, headlessChoice{clientID: validUUID(clientID)}, true)
+	require.NoError(t, err)
+	require.Equal(t, clientID, choice.ID)
 }
 
 func requireOAuthCode(t *testing.T, err error, code, msg string) {
