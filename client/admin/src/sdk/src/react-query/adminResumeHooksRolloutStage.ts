@@ -50,7 +50,7 @@ export type AdminResumeHooksRolloutStageMutationError =
  * resumeHooksRolloutStage admin
  *
  * @remarks
- * Restarts a resumed staged rollout. The day at the current share starts over.
+ * Restarts a paused staged rollout. The day at the current share starts over.
  */
 export function useAdminResumeHooksRolloutStageMutation(
   options?: MutationHookOptions<

@@ -154,7 +154,8 @@ func hooksRolloutStageReason(reason string) (string, error) {
 
 func (s *Service) hooksRolloutStageError(ctx context.Context, err error, msg string) error {
 	switch {
-	case errors.Is(err, hooksrollout.ErrStageVersionBehind):
+	case errors.Is(err, hooksrollout.ErrStageVersionBehind),
+		errors.Is(err, hooksrollout.ErrStageVersionOlder):
 		return oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, s.logger)
 	case errors.Is(err, hooksrollout.ErrNoActiveStage),
 		errors.Is(err, hooksrollout.ErrStageNotRunning),

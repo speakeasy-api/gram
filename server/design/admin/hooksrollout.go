@@ -235,7 +235,7 @@ func hooksRolloutMethods() {
 		Meta("openapi:operationId", "adminClearOrganizationHooksRollout")
 	})
 	Method("startHooksRolloutStage", func() {
-		Description("Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.")
+		Description("Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Meta("openapi:typename", "StartHooksRolloutStageRequestBody")

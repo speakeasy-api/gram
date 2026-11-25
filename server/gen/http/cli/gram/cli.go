@@ -34008,7 +34008,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
 	fmt.Fprintln(os.Stderr, `    clear-organization-hooks-rollout: Removes an organization's hooks version override so it follows the default pin again.`)
-	fmt.Fprintln(os.Stderr, `    start-hooks-rollout-stage: Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.`)
+	fmt.Fprintln(os.Stderr, `    start-hooks-rollout-stage: Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.`)
 	fmt.Fprintln(os.Stderr, `    pause-hooks-rollout-stage: Holds a running staged rollout at its current share. Organizations it already cleared keep the new version.`)
 	fmt.Fprintln(os.Stderr, `    resume-hooks-rollout-stage: Restarts a paused staged rollout. The day at the current share starts over.`)
 	fmt.Fprintln(os.Stderr, `    cancel-hooks-rollout-stage: Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.`)
@@ -36689,7 +36689,7 @@ func adminStartHooksRolloutStageUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.`)
+	fmt.Fprintln(os.Stderr, `Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

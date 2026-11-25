@@ -466,7 +466,7 @@ type Service interface {
 	// Starts a staged rollout of a hooks version newer than the default pin. It
 	// clears canary organizations first, then 25 percent of organizations on the
 	// default pin a day later, then moves the default pin a day after that.
-	// Replaces an active rollout of another version.
+	// Replaces an active rollout of an older version.
 	StartHooksRolloutStage(context.Context, *StartHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
 	// Holds a running staged rollout at its current share. Organizations it
 	// already cleared keep the new version.

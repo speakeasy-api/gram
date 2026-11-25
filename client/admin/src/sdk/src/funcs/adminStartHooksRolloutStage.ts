@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * startHooksRolloutStage admin
  *
  * @remarks
- * Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.
+ * Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of an older version.
  */
 export function adminStartHooksRolloutStage(
   client: GramCore,

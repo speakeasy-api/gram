@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * resumeHooksRolloutStage admin
  *
  * @remarks
- * Restarts a resumed staged rollout. The day at the current share starts over.
+ * Restarts a paused staged rollout. The day at the current share starts over.
  */
 export function adminResumeHooksRolloutStage(
   client: GramCore,

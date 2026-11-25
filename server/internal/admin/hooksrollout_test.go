@@ -327,6 +327,8 @@ func TestHooksRolloutStage_StaleRevisionConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	replaced, err := svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: shown.Stage.Revision, Version: current})
 	require.NoError(t, err)
+	_, err = svc.StartHooksRolloutStage(ctx, &gen.StartHooksRolloutStagePayload{AdminSessionToken: nil, Revision: replaced.Stage.Revision, Version: current - 1})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	_, err = svc.CancelHooksRolloutStage(ctx, &gen.CancelHooksRolloutStagePayload{AdminSessionToken: nil, Revision: shown.Stage.Revision, Reason: "cancel the old one"})
 	requireOopsCode(t, err, oops.CodeConflict)
