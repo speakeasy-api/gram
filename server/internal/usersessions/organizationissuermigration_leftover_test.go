@@ -106,9 +106,13 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				require.NoError(t, err)
 				assert.Len(t, clientsAfter, 1)
 				if leftover {
-					bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
+					remoteRepo := remotesessionsrepo.New(ti.conn)
+					bound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
 					require.NoError(t, err)
 					assert.Zero(t, bound, "the leftover binding stays behind with the source")
+					sourceBound, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: sourceID})
+					require.NoError(t, err)
+					assert.EqualValues(t, 1, sourceBound, "consolidation does not delete source issuer-client links")
 				}
 
 				// A credential issued after consolidation takes the path issuance
