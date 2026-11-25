@@ -161,8 +161,8 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintext(t *testing.T) {
 	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "plaintext reads")
 	edited := seedMessageContent(t, ctx, ti, chatID, "original message")
 
-	// The message has a shadow that is now stale. A project on the read
-	// allowlist would fail this load; this project is not on it, so it must
+	// The message has a shadow that is now stale. A project that captures
+	// shadows would fail this load; this project does not, so it must
 	// keep serving plaintext without touching the shadow.
 	store, reader := newMeteredTranscriptShadowStore(t, ti)
 	captureTranscriptShadows(t, ti, store, edited)
