@@ -1570,6 +1570,24 @@ func (q *Queries) DeleteOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const deleteRegistrationJunctionFixture = `-- name: DeleteRegistrationJunctionFixture :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.project_id IS NOT DISTINCT FROM $2::uuid
+`
+
+type DeleteRegistrationJunctionFixtureParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.NullUUID
+}
+
+func (q *Queries) DeleteRegistrationJunctionFixture(ctx context.Context, arg DeleteRegistrationJunctionFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteRegistrationJunctionFixture, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
+}
+
 const deleteRetainedCatalogSourcesFixture = `-- name: DeleteRetainedCatalogSourcesFixture :exec
 DELETE FROM mcp_registries
 `

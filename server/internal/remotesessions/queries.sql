@@ -941,149 +941,160 @@ SELECT EXISTS (
     AND usi.deleted IS FALSE
 )::boolean AS bound;
 
--- name: LockRemoteSessionClientsBoundToUserSessionIssuer :many
--- Serializes concurrent deletes of sibling issuers sharing a client, which
--- could otherwise each see the other's binding as live and both skip the
--- orphan cascade. Ordered so overlapping lock sets acquire deadlock-free.
--- Tenancy and liveness mirror
--- ListRemoteSessionClientsOrphanedByUserSessionIssuer: locking a row that scan
--- can never return would block writers for nothing.
+-- name: LockRemoteSessionClientsForIssuerRetirement :many
+-- Lock only registrations of grants minted under this issuer. Callback
+-- publication locks the live source issuer before taking this client lock.
 SELECT c.id
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
-  AND c.deleted IS FALSE
-ORDER BY c.id
-FOR UPDATE OF c;
-
--- name: LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer :many
--- Organization-owned issuers can bind clients from any project in the
--- organization, organization-owned clients, plus global clients. Derive
--- tenancy from projects for legacy project clients whose organization_id was
--- not backfilled. Lock the complete set before deciding which clients become
--- orphaned.
-SELECT c.id
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS client_project ON client_project.id = c.project_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id IS NULL
-  AND usi.organization_id = @organization_id::text
+FROM remote_session_clients c
+JOIN user_session_issuers issuer ON issuer.id = @user_session_issuer_id::uuid AND issuer.deleted
+WHERE NOT c.deleted
+  AND (issuer.project_id = @project_id::uuid OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
   AND (
-    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
-    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
-    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+    (c.project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text
+      AND (issuer.project_id IS NULL OR issuer.project_id = p.id)))
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text))
   )
-  AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_sessions s
+    WHERE s.remote_session_client_id = c.id AND s.user_session_issuer_id = issuer.id AND NOT s.deleted
+  )
 ORDER BY c.id
 FOR UPDATE OF c;
 
 -- name: LockRemoteSessionClientForSessionWrite :one
--- Serializes a remote-login callback's session write against the issuer-delete
--- orphan cascade, which locks the same client row before sweeping the client's
--- sessions. A callback that acquires the lock after that cascade committed
--- re-reads the (issuer, client) binding as dead and rejects the write instead
--- of resurrecting an orphaned grant. No rows means the client itself is gone.
-SELECT id
-FROM remote_session_clients
+-- Serialize callback publication with registration deletion and issuer grant
+-- retirement. The callback already locked its live source issuer.
+SELECT id FROM remote_session_clients
 WHERE id = @id AND deleted IS FALSE
 FOR UPDATE;
 
--- name: ListRemoteSessionClientsOrphanedByUserSessionIssuer :many
--- Clients whose only live binding belongs to this issuer: once its bindings
--- go, no live issuer can reach their sessions. Tenancy mirrors
--- CheckRemoteSessionClientBindingForUserSessionIssuer. The target issuer's own
--- deleted flag is ignored (tombstoned first, same tx); sibling bindings count
--- only while their issuer is live.
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
-  AND c.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS sibling
-    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
-    WHERE sibling.remote_session_client_id = link.remote_session_client_id
-      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
-      AND sibling_usi.deleted IS FALSE
-  );
+-- name: LockRegistrationForAttachmentPublication :one
+-- Use the same client-first order as registration and issuer retirement.
+-- A new attachment or re-consent cannot commit behind a completed delete.
+SELECT id FROM remote_session_clients
+WHERE id = @id AND deleted IS FALSE
+FOR SHARE;
 
--- name: ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer :many
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS client_project ON client_project.id = c.project_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND usi.project_id IS NULL
-  AND usi.organization_id = @organization_id::text
+-- name: RetirePrincipalAttachmentsForDeletedIssuer :exec
+-- Keep the compatibility parent row; retire only attachments issued on the
+-- deleted surface or pinned to a source that can no longer authorize them.
+UPDATE principal_remote_session_bindings b
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM user_session_issuers issuer
+WHERE issuer.id = @user_session_issuer_id::uuid AND issuer.deleted
+  AND b.organization_id = @organization_id::text AND b.revoked_at IS NULL
+  AND (issuer.project_id = b.project_id OR (issuer.project_id IS NULL AND issuer.organization_id = b.organization_id))
+  AND (b.user_session_issuer_id = issuer.id OR EXISTS (
+    SELECT 1 FROM remote_sessions s
+    WHERE s.id = b.remote_session_id AND s.remote_session_client_id = b.remote_session_client_id
+      AND s.user_session_issuer_id = issuer.id
+  ));
+
+-- name: RetireOrphanedGrantsForDeletedIssuer :many
+-- Only grants with the deleted issuer as persisted source are candidates.
+-- A still-live downstream credential for the same subject, with its own
+-- currently offered typed choice in this scope, keeps the shared grant live.
+-- Attachments on other sources stay untouched. An attachment pinned to this
+-- deleted source is no longer eligible under the attachment liveness checks.
+UPDATE remote_sessions s
+SET deleted_at = clock_timestamp(),
+    upstream_subject = NULL, upstream_email = NULL, upstream_display_name = NULL,
+    identity_source = NULL, enrichment = NULL,
+    last_validated_at = NULL, validation_status = NULL, validation_reason = NULL
+FROM user_session_issuers issuer, remote_session_clients c
+WHERE issuer.id = @user_session_issuer_id::uuid AND issuer.deleted
+  AND (issuer.project_id = @project_id::uuid OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
+  AND s.user_session_issuer_id = issuer.id AND NOT s.deleted
+  AND c.id = s.remote_session_client_id AND NOT c.deleted
   AND (
-    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
-    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
-    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+    (c.project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text
+      AND (issuer.project_id IS NULL OR issuer.project_id = p.id)))
+    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text))
   )
-  AND c.deleted IS FALSE
   AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS sibling
-    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
-    WHERE sibling.remote_session_client_id = link.remote_session_client_id
-      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
-      AND sibling_usi.deleted IS FALSE
-  );
-
--- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
--- Drops every client binding an issuer holds. Runs only from the orphan
--- cascade, which must tombstone the sessions these rows still make reachable
--- before they go.
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS usi
-WHERE link.user_session_issuer_id = usi.id
-  AND usi.id = @user_session_issuer_id
-  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text));
-
--- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = @remote_session_client_id
-  AND c.project_id = @project_id;
+    SELECT 1 FROM upstream_client_selections choice
+    JOIN projects p ON p.id = choice.project_id AND p.organization_id = choice.organization_id AND NOT p.deleted
+    JOIN mcp_servers server ON server.id = choice.mcp_server_id AND server.project_id = p.id AND NOT server.deleted
+    JOIN mcp_server_auth_clients offer ON offer.mcp_server_id = server.id AND offer.project_id = p.id
+      AND offer.organization_id = p.organization_id AND offer.auth_client_id = choice.auth_client_id AND NOT offer.deleted
+    JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+      AND (auth.project_id IS NULL OR auth.project_id = p.id) AND NOT auth.deleted AND auth.enabled
+      AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
+    JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
+      AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
+    WHERE choice.credential_kind = 'user_session' AND NOT choice.deleted AND NOT choice.no_auth
+      AND p.organization_id = @organization_id::text AND (issuer.project_id IS NULL OR p.id = issuer.project_id)
+      AND (c.project_id IS NULL OR c.project_id = p.id)
+      AND EXISTS (
+        SELECT 1 FROM user_sessions downstream
+        JOIN user_session_issuers survivor ON survivor.id = downstream.user_session_issuer_id AND NOT survivor.deleted
+        WHERE COALESCE(downstream.credential_id, downstream.id) = choice.credential_id
+          AND downstream.subject_urn = s.subject_urn AND NOT downstream.deleted AND downstream.refresh_expires_at > now()
+          AND (downstream.project_id IS NULL OR downstream.project_id = p.id)
+          AND (survivor.project_id = p.id OR (survivor.project_id IS NULL AND survivor.organization_id = p.organization_id))
+      )
+  )
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted;
 
 -- name: ListServerProjectsOnClientIssuers :many
--- Each live project with a live MCP server on a user session issuer the client
--- is bound to, with that issuer, in organization_id, or in any organization
--- when it is null (only a platform-global client reaches several). A writer
--- reads it before it deletes the client's bindings, so that afterwards it can
--- re-derive the upstream issuer of servers that take it from those bindings.
-SELECT DISTINCT p.organization_id, s.project_id, link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN mcp_servers AS s
-  ON s.user_session_issuer_id = link.user_session_issuer_id
- AND s.deleted IS FALSE
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.deleted IS FALSE
-WHERE link.remote_session_client_id = @remote_session_client_id
+-- Derive issuer stamps only for servers with an actual registration association
+-- or offer, not every server reachable from a compatibility parent row.
+SELECT DISTINCT p.organization_id, s.project_id, s.user_session_issuer_id
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id AND NOT p.deleted
+WHERE NOT s.deleted AND s.user_session_issuer_id IS NOT NULL
   AND (sqlc.narg('organization_id')::text IS NULL OR p.organization_id = sqlc.narg('organization_id')::text)
-ORDER BY p.organization_id, s.project_id, link.user_session_issuer_id;
+  AND (
+    EXISTS (
+      SELECT 1 FROM mcp_server_remote_session_clients a
+      WHERE a.mcp_server_id = s.id AND a.project_id = s.project_id AND a.organization_id = p.organization_id
+        AND NOT a.deleted AND a.remote_session_client_id = @remote_session_client_id::uuid
+    ) OR EXISTS (
+      SELECT 1 FROM mcp_server_auth_clients offer
+      JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
+      WHERE offer.mcp_server_id = s.id AND offer.project_id = s.project_id AND offer.organization_id = p.organization_id
+        AND NOT offer.deleted AND NOT auth.deleted AND auth.remote_session_client_id = @remote_session_client_id::uuid
+    )
+  )
+ORDER BY p.organization_id, s.project_id, s.user_session_issuer_id;
 
--- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
--- Removes every user session issuer binding of a client the caller has just
--- soft-deleted, in any tenant: the client row's deletion is the authorization,
--- so a live client is never touched.
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING remote_session_clients AS c
-WHERE link.remote_session_client_id = c.id
-  AND c.id = @remote_session_client_id
-  AND c.deleted IS TRUE;
+-- name: RetireOffersForDeletedRegistration :exec
+-- A manual offer might have no server-registration mirror. Retire that offer
+-- too, but never retire sibling offers using another registration.
+UPDATE mcp_server_auth_clients offer
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM mcp_auth_clients auth, remote_session_clients c, mcp_servers server, projects p
+WHERE c.id = @id::uuid AND c.deleted AND auth.remote_session_client_id = c.id
+  AND server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  AND p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
+  AND auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  AND (sqlc.narg('organization_id')::text IS NULL OR offer.organization_id = sqlc.narg('organization_id')::text)
+  AND NOT offer.deleted
+  AND (sqlc.narg('project_id')::uuid IS NULL OR c.project_id = sqlc.narg('project_id')::uuid)
+  AND (
+    (sqlc.narg('organization_id')::text IS NULL AND c.project_id IS NULL AND c.organization_id IS NULL)
+    OR (sqlc.narg('organization_id')::text IS NOT NULL AND (
+      (c.project_id IS NULL AND c.organization_id = sqlc.narg('organization_id')::text)
+      OR EXISTS (SELECT 1 FROM projects owner WHERE owner.id = c.project_id AND owner.organization_id = sqlc.narg('organization_id')::text)
+    ))
+  );
+
+-- name: RetirePrincipalAttachmentsForDeletedRegistration :exec
+-- A true registration deletion retires all pinned attachments. Do not
+-- remove the compatibility parents: that would physically delete the rows.
+UPDATE principal_remote_session_bindings b
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM remote_session_clients c
+WHERE c.id = @id::uuid AND c.deleted AND b.remote_session_client_id = c.id AND b.revoked_at IS NULL
+  AND (sqlc.narg('organization_id')::text IS NULL OR b.organization_id = sqlc.narg('organization_id')::text)
+  AND (sqlc.narg('project_id')::uuid IS NULL OR c.project_id = sqlc.narg('project_id')::uuid)
+  AND (
+    (sqlc.narg('organization_id')::text IS NULL AND c.project_id IS NULL AND c.organization_id IS NULL)
+    OR (sqlc.narg('organization_id')::text IS NOT NULL AND (
+      (c.project_id IS NULL AND c.organization_id = sqlc.narg('organization_id')::text)
+      OR EXISTS (SELECT 1 FROM projects owner WHERE owner.id = c.project_id AND owner.organization_id = sqlc.narg('organization_id')::text)
+    ))
+  );
 
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
@@ -1192,23 +1203,15 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: LockLiveUserSessionIssuerForRemoteSessionWrite :one
--- First lock of the remote-login callback transaction, taken before the
--- client row. Issuer migration holds the issuer FOR UPDATE and then inserts
--- client links that key-share the same client row, so a callback that locked
--- the client first and only then reached the remote_sessions foreign key
--- would deadlock with it. Locking the issuer first puts both in the same
--- order, and the liveness predicate is re-evaluated once the migration
--- commits, so a login started on a retired issuer is rejected rather than
--- stored against its tombstone. FOR KEY SHARE is the mode the foreign key
--- takes anyway and does not conflict with the FOR NO KEY UPDATE issuer
--- deletion holds, so the callback still never waits on a delete: that race is
--- settled by the delete's cascade sweeping the stored grant.
+-- Lock the live source before the registration. FOR SHARE conflicts with
+-- issuer retirement's FOR NO KEY UPDATE, so even the first grant cannot
+-- publish behind retirement's provenance scan. The waiter rechecks liveness.
 SELECT id
 FROM user_session_issuers
 WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE
-FOR KEY SHARE;
+FOR SHARE;
 
 -- name: ListRemoteSessionClientsByProjectID :many
 SELECT
@@ -1307,6 +1310,14 @@ WHERE t.id = @id
   AND t.status <> 'revoked'
   AND t.deleted IS FALSE
   AND p.deleted IS FALSE;
+
+-- name: GetProjectOwnedRegistrationForDelete :one
+-- An ownership precheck before discovering delete writer scope. The live row
+-- is rechecked by the project-scoped writer lock before mutation.
+SELECT c.id FROM remote_session_clients c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id::text AND NOT p.deleted
+WHERE c.id = @id::uuid AND c.project_id = @project_id::uuid AND NOT c.deleted;
+
 -- Serializes the two halves of the private_key_jwt coupling, which live in
 -- different handlers and each read a column the other writes. Under READ
 -- COMMITTED both can pass against the same starting row and commit, landing
@@ -1481,25 +1492,6 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
-RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted;
-
--- name: SoftDeleteRemoteSessionsByClientIDs :many
--- Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
--- every client one issuer deletion stranded, so it sweeps them in a single
--- statement rather than a round trip per client while holding their locks.
-UPDATE remote_sessions
-SET deleted_at = clock_timestamp(),
-    -- Tombstones keep credentials for upstream revocation but no identity.
-    upstream_subject = NULL,
-    upstream_email = NULL,
-    upstream_display_name = NULL,
-    identity_source = NULL,
-    enrichment = NULL,
-    -- The credential is gone, so nothing it was observed doing survives it.
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL
-WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted;
 
 -- name: CountActiveRemoteSessionsByClientID :one
@@ -2480,26 +2472,17 @@ WHERE s.id = @id
 RETURNING s.*;
 
 -- name: SetRemoteSessionAutoRefresh :execrows
--- Records the subject's consent-screen auto-refresh choice. Deliberately does
--- NOT touch updated_at: that column doubles as the refresh CAS token-version
--- signal and keepalive clock, and a preference toggle must not perturb either.
--- Scoped through the requesting user_session_issuer's tenant-scoped client
--- binding (binding row, the issuer's project, and the client's own
--- project/org tenancy, mirroring
--- CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
--- cross tenant boundaries. The session's own user_session_issuer_id is
--- provenance only: the credential is one shared grant per (subject, client),
--- so the preference set from any bound surface is the preference every bound
--- surface reads.
+-- Records the subject's preference without changing the refresh CAS version.
+-- An untyped surface can control its exact source grant only. Cross-issuer
+-- shared grants require tenant-scoped typed authorization at the caller.
 UPDATE remote_sessions AS s
 SET auto_refresh = @auto_refresh
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
-  AND link.remote_session_client_id = s.remote_session_client_id
-  AND link.user_session_issuer_id = @user_session_issuer_id
+  AND c.id = s.remote_session_client_id
+  AND usi.id = @user_session_issuer_id
+  AND s.user_session_issuer_id = usi.id
   AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
@@ -2582,21 +2565,8 @@ WHERE s.subject_urn = @subject_urn
 RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted;
 
 -- name: SoftDeleteRemoteSessionBySubjectAndClient :many
--- Consent-screen disconnect: soft-deletes the subject's grant for one
--- upstream client. Subject, client and issuer all derived server-side from
--- the challenge state and the endpoint's bindings, never from the form;
--- scoped through the requesting issuer's tenant-scoped client binding
--- (binding row, the issuer's project, and the client's own project/org
--- tenancy, mirroring CheckRemoteSessionClientBindingForUserSessionIssuer) so
--- the write cannot cross tenants. The session's own user_session_issuer_id is
--- provenance only: a disconnect from any bound surface destroys the shared
--- credential globally (the caller then attempts upstream revocation).
---
--- Returns the stored credentials it tombstones; the partial unique index on
--- (subject_urn, remote_session_client_id) caps that at one row. The
--- user_session_issuers join constrains the *requesting* issuer, never the
--- grant's provenance issuer, so a grant minted through a now-soft-deleted
--- issuer stays reachable — and still RFC 7009'd — from any live bound surface.
+-- Untyped disconnect is limited to the subject's grant minted on this exact
+-- issuer. Callers controlling a shared grant must use a live typed offer.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
     -- Tombstones keep credentials for upstream revocation but no identity.
@@ -2609,13 +2579,12 @@ SET deleted_at = clock_timestamp(),
     last_validated_at = NULL,
     validation_status = NULL,
     validation_reason = NULL
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
   AND s.remote_session_client_id = @remote_session_client_id
-  AND link.remote_session_client_id = s.remote_session_client_id
-  AND link.user_session_issuer_id = @user_session_issuer_id
+  AND c.id = s.remote_session_client_id
+  AND usi.id = @user_session_issuer_id
+  AND s.user_session_issuer_id = usi.id
   AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
