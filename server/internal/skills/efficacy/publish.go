@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -233,7 +234,12 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, claimToken
 	// A batch can hold several evaluations of the same session — one per skill the
 	// session activated — and they all judge the same messages, so the read and
 	// the render are paid once per chat for the length of this pass.
-	transcripts := make(map[uuid.UUID]Transcript, len(inputs))
+	// Evaluations of the same skill version likewise share its supporting
+	// files, which can total megabytes, so they are read once per version.
+	cache := &passCache{
+		transcripts: make(map[uuid.UUID]Transcript, len(inputs)),
+		skillFiles:  make(map[uuid.UUID][]skilltree.File),
+	}
 
 	var retryable []error
 	for _, input := range inputs {
@@ -263,7 +269,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, claimToken
 			continue
 		}
 
-		if err := p.publishEvaluation(ctx, projectID, claimToken, input, transcripts, &result); err != nil {
+		if err := p.publishEvaluation(ctx, projectID, claimToken, input, cache, &result); err != nil {
 			retryable = append(retryable, err)
 		}
 	}
@@ -363,11 +369,11 @@ func guardWindow(inputs []repo.GetSkillEfficacyJudgeInputsRow, now time.Time) (t
 // its rows, letting a second pass judge them concurrently. A hang is
 // infrastructure: state and attempt counter are both left alone, so the caller
 // retries the same reserved rows.
-func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
+func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, cache *passCache, result *PublishResult) error {
 	evaluationCtx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
 	defer cancel()
 
-	err := p.publishOne(evaluationCtx, projectID, claimToken, input, transcripts, result)
+	err := p.publishOne(evaluationCtx, projectID, claimToken, input, cache, result)
 	if err != nil && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 		// The bound expired while the pass's own context was still live, so the
 		// hang is this evaluation's. The step that surfaced it cannot tell a hung
@@ -381,7 +387,7 @@ func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, 
 // publishOne judges one evaluation and publishes its score. It returns an error
 // only for infrastructure failures; model failures and deterministic row
 // validation failures are charged locally so the rest of the batch still runs.
-func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
+func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, cache *passCache, result *PublishResult) error {
 	if input.Surface != SurfaceDev && input.Surface != SurfaceAssistant {
 		terminal, err := p.chargeAttempt(ctx, projectID, claimToken, input, validationFailureClass, 1)
 		if err != nil {
@@ -394,16 +400,16 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 		return nil
 	}
 
-	transcript, err := p.loadTranscript(ctx, projectID, input.ChatID, transcripts)
+	transcript, err := p.loadTranscript(ctx, projectID, input.ChatID, cache.transcripts)
 	if err != nil {
 		result.Retryable++
 		return err
 	}
 
-	supportingFiles, err := domainskills.LoadSkillVersionFiles(ctx, repo.New(p.db), projectID, input.SkillID, input.SkillVersionID)
+	supportingFiles, err := p.loadSkillFiles(ctx, projectID, input.SkillID, input.SkillVersionID, cache.skillFiles)
 	if err != nil {
 		result.Retryable++
-		return fmt.Errorf("load skill files for efficacy judge: %w", err)
+		return err
 	}
 
 	judged, err := p.judge.Judge(ctx, JudgeInput{
@@ -650,6 +656,30 @@ func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScann
 func recommendationFeedbackID(evaluationID uuid.UUID, recommendation RawRecommendation) uuid.UUID {
 	name := strings.Join([]string{"skill-efficacy-recommendation", recommendation.Outcome, recommendation.Note, recommendation.Confidence}, "\x00")
 	return uuid.NewSHA1(evaluationID, []byte(name))
+}
+
+// passCache holds reads that several evaluations in one pass share.
+type passCache struct {
+	transcripts map[uuid.UUID]Transcript
+	skillFiles  map[uuid.UUID][]skilltree.File
+}
+
+// loadSkillFiles returns a skill version's supporting files, reusing a read
+// this pass already made. Like loadTranscript, only a success is cached, and a
+// failed read is infrastructure, so it is wrapped with ErrRetryable.
+func (p *Publisher) loadSkillFiles(ctx context.Context, projectID, skillID, versionID uuid.UUID, cache map[uuid.UUID][]skilltree.File) ([]skilltree.File, error) {
+	if cached, ok := cache[versionID]; ok {
+		return cached, nil
+	}
+
+	files, err := domainskills.LoadSkillVersionFiles(ctx, repo.New(p.db), projectID, skillID, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("load skill files for efficacy judge: %w: %w", ErrRetryable, err)
+	}
+
+	cache[versionID] = files
+
+	return files, nil
 }
 
 // loadTranscript renders one chat's transcript, reusing a rendering this pass
