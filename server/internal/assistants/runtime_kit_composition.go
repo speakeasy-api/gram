@@ -84,7 +84,7 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	command, args := KitGatewayCommand(8081)
 	backend, err := NewKitLocalRuntimeBackend(KitLocalRuntimeConfig{
 		Environment: c.Environment, Image: c.Image, Command: command, Args: args, Env: env, GuestPort: 8081, ServerURL: s.serverURL,
-		ExtraCACertFile: c.ExtraCACertFile, WorkloadAssertionFile: c.WorkloadAssertionFile, Network: c.Network, CompatibilityGeneration: "kit-workload-assertion-v1", HomeOwnedByRuntimeUser: true,
+		ExtraCACertFile: c.ExtraCACertFile, WorkloadAssertionFile: c.WorkloadAssertionFile, Network: c.Network, CompatibilityGeneration: "kit-project-gateway-v1", HomeOwnedByRuntimeUser: true,
 		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
 			tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
 			if err != nil {
