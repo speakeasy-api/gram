@@ -3620,6 +3620,51 @@ func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody stri
 	return v, nil
 }
 
+// BuildGetSecretBackfillsPayload builds the payload for the admin
+// getSecretBackfills endpoint from CLI flags.
+func BuildGetSecretBackfillsPayload(adminGetSecretBackfillsAdminSessionToken string) (*admin.GetSecretBackfillsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSecretBackfillsAdminSessionToken != "" {
+			adminSessionToken = &adminGetSecretBackfillsAdminSessionToken
+		}
+	}
+	v := &admin.GetSecretBackfillsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunMarketplaceTokenBackfillPayload builds the payload for the admin
+// runMarketplaceTokenBackfill endpoint from CLI flags.
+func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillAdminSessionToken string) (*admin.RunMarketplaceTokenBackfillPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminRunMarketplaceTokenBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunMarketplaceTokenBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunMarketplaceTokenBackfillPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunRunnerKeyOrganizationBackfillPayload builds the payload for the
+// admin runRunnerKeyOrganizationBackfill endpoint from CLI flags.
+func BuildRunRunnerKeyOrganizationBackfillPayload(adminRunRunnerKeyOrganizationBackfillAdminSessionToken string) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminRunRunnerKeyOrganizationBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunRunnerKeyOrganizationBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetProjectRedeployPreviewPayload builds the payload for the admin
 // getProjectRedeployPreview endpoint from CLI flags.
 func BuildGetProjectRedeployPreviewPayload(adminGetProjectRedeployPreviewOrganizationID string, adminGetProjectRedeployPreviewProjectID string, adminGetProjectRedeployPreviewAdminSessionToken string) (*admin.GetProjectRedeployPreviewPayload, error) {

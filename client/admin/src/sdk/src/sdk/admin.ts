@@ -59,6 +59,7 @@ import { adminGetProjectRedeployPreview } from "../funcs/adminGetProjectRedeploy
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
+import { adminGetSecretBackfills } from "../funcs/adminGetSecretBackfills.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -107,7 +108,9 @@ import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepair
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRollbackOrganizationEncryption } from "../funcs/adminRollbackOrganizationEncryption.js";
+import { adminRunMarketplaceTokenBackfill } from "../funcs/adminRunMarketplaceTokenBackfill.js";
 import { adminRunOrganizationEncryption } from "../funcs/adminRunOrganizationEncryption.js";
+import { adminRunRunnerKeyOrganizationBackfill } from "../funcs/adminRunRunnerKeyOrganizationBackfill.js";
 import { adminRunTailscaleOAuthMigrationStep } from "../funcs/adminRunTailscaleOAuthMigrationStep.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
@@ -159,6 +162,7 @@ import { AdminListOrganizationProjectsResult } from "../models/components/adminl
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
+import { AdminMarketplaceTokenBackfill } from "../models/components/adminmarketplacetokenbackfill.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
 import { AdminMcpServerResourceScopes } from "../models/components/adminmcpserverresourcescopes.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
@@ -191,6 +195,8 @@ import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryokt
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminRegistryPromotionCandidate } from "../models/components/adminregistrypromotioncandidate.js";
 import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
+import { AdminRunnerKeyOrganizationBackfill } from "../models/components/adminrunnerkeyorganizationbackfill.js";
+import { AdminSecretBackfills } from "../models/components/adminsecretbackfills.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -2231,6 +2237,51 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminUpdateGlobalIssuer(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * getSecretBackfills admin
+   *
+   * @remarks
+   * Previews the temporary secret backfills: what applying each would change now. Writes nothing.
+   */
+  async getSecretBackfills(
+    options?: RequestOptions,
+  ): Promise<AdminSecretBackfills> {
+    return unwrapAsync(adminGetSecretBackfills(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * runMarketplaceTokenBackfill admin
+   *
+   * @remarks
+   * Applies the marketplace token backfill: gives each GitHub connection its project's organization, then moves each plaintext marketplace token to its hash and the copies its organization's transition state writes, sealed with this process's platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+   */
+  async runMarketplaceTokenBackfill(
+    options?: RequestOptions,
+  ): Promise<AdminMarketplaceTokenBackfill> {
+    return unwrapAsync(adminRunMarketplaceTokenBackfill(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * runRunnerKeyOrganizationBackfill admin
+   *
+   * @remarks
+   * Applies the runner key organization backfill: sets functions_access.organization_id from each runner key's project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.
+   */
+  async runRunnerKeyOrganizationBackfill(
+    options?: RequestOptions,
+  ): Promise<AdminRunnerKeyOrganizationBackfill> {
+    return unwrapAsync(adminRunRunnerKeyOrganizationBackfill(
+      this,
       options,
     ));
   }

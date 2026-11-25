@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/marketplacetokenbackfill"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/marketplacetokenbackfill"
 )
 
 // testEncryptionKey is a throwaway 32-byte key, base64 encoded.

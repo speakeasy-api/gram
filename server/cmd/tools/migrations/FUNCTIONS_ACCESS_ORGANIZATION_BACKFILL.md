@@ -6,6 +6,12 @@ A runner key's organization is its project's organization. A runner key keeps a 
 
 The run covers soft-deleted runner keys. It changes only `organization_id`. It never touches `updated_at` or the key itself, so every deployed function runner keeps working. It never overwrites an `organization_id` that is already set. It does not alter the schema or publish events.
 
+## In dev and prod: use the admin dashboard
+
+Apply it from the admin dashboard's temporary **Secret backfills** page, under Platform Management. The page previews the counts below and runs the same backfill inside the admin server, with the default batch size. Nobody needs database write access on their machine. The checks under "Before running" still apply.
+
+The commands below run the same backfill from a terminal, for local development.
+
 Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended PostgreSQL database.
 
 ## Before running

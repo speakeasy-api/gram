@@ -1,6 +1,8 @@
 // Package functionsaccessorganization sets functions_access.organization_id
-// on function runner keys written before the deploy path set it; see
-// FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md.
+// on function runner keys written before the deploy path set it. The
+// migrations CLI and the admin dashboard's temporary Secret backfills page run
+// it; see
+// server/cmd/tools/migrations/FUNCTIONS_ACCESS_ORGANIZATION_BACKFILL.md.
 package functionsaccessorganization
 
 import (

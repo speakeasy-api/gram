@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/functionsaccessorganization"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/functionsaccessorganization"
 )
 
 const (

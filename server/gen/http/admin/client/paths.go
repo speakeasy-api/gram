@@ -532,6 +532,21 @@ func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"
 }
 
+// GetSecretBackfillsAdminPath returns the URL path to the admin service getSecretBackfills HTTP endpoint.
+func GetSecretBackfillsAdminPath() string {
+	return "/admin/secretBackfills.get"
+}
+
+// RunMarketplaceTokenBackfillAdminPath returns the URL path to the admin service runMarketplaceTokenBackfill HTTP endpoint.
+func RunMarketplaceTokenBackfillAdminPath() string {
+	return "/admin/secretBackfills.runMarketplaceTokens"
+}
+
+// RunRunnerKeyOrganizationBackfillAdminPath returns the URL path to the admin service runRunnerKeyOrganizationBackfill HTTP endpoint.
+func RunRunnerKeyOrganizationBackfillAdminPath() string {
+	return "/admin/secretBackfills.runRunnerKeyOrganizations"
+}
+
 // GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
 func GetProjectRedeployPreviewAdminPath() string {
 	return "/admin/project.redeployPreview"

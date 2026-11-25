@@ -1,6 +1,7 @@
 // Package marketplacetokenbackfill moves plugin marketplace tokens stored in
-// plaintext to their hash and sealed copies; see
-// MARKETPLACE_TOKENS_BACKFILL.md.
+// plaintext to their hash and sealed copies. The migrations CLI and the admin
+// dashboard's temporary Secret backfills page run it; see
+// server/cmd/tools/migrations/MARKETPLACE_TOKENS_BACKFILL.md.
 package marketplacetokenbackfill
 
 import (

@@ -15,9 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/marketplacetokenbackfill"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/marketplacetokenbackfill"
 )
 
 const (

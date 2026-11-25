@@ -15,6 +15,14 @@ This backfill gives every older connection the same form. For each connection th
 
 The token itself does not change, so every install URL that admins and devices already hold keeps working. The run changes only the token columns and `organization_id`. It never touches `updated_at`, which is the last-published timestamp and part of the device agent's ETag. It does not alter the schema or publish events. It never prints a token.
 
+## In dev and prod: use the admin dashboard
+
+Apply it from the admin dashboard's temporary **Secret backfills** page, under Platform Management. The page previews the counts below and runs the same backfill inside the admin server, with the platform key and organization encryption the servers use. Nobody needs database write access or the key on their machine.
+
+The page shows the admin server's platform key fingerprint. Check it matches the servers' `encryption key loaded` log before you apply. The checks under "Before running" still apply. When the admin server has organization encryption, it also seals the tokens of organizations past `platform_key` instead of leaving them in place.
+
+The commands below run the same backfill from a terminal, for local development.
+
 Run from `server/`. `GRAM_DATABASE_URL` must point directly at the intended PostgreSQL database.
 
 ## Before running
