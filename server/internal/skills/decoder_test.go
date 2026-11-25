@@ -56,10 +56,21 @@ func TestSkillsRequestDecoderAllowsFileUploadsOnFileMethods(t *testing.T) {
 	t.Parallel()
 
 	for _, path := range []string{"/rpc/skills.create", "/rpc/skills.addVersion", "/rpc/skills.approveSuggestion"} {
-		request := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(make([]byte, maxSkillFilesRequestBodyBytes+1)))
+		// A body over the default skills limit but under the file limit is
+		// read in full.
+		accepted := bytes.Repeat([]byte("a"), maxSkillsRequestBodyBytes*4)
+		request := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(accepted))
 		_ = skillsRequestDecoder(request)
 
 		read, err := io.ReadAll(request.Body)
+		require.NoError(t, err, path)
+		require.Equal(t, accepted, read, path)
+
+		// One byte over the file limit is refused.
+		request = httptest.NewRequest(http.MethodPost, path, bytes.NewReader(make([]byte, maxSkillFilesRequestBodyBytes+1)))
+		_ = skillsRequestDecoder(request)
+
+		read, err = io.ReadAll(request.Body)
 		var maxBytesErr *http.MaxBytesError
 		require.ErrorAs(t, err, &maxBytesErr, path)
 		require.Equal(t, int64(maxSkillFilesRequestBodyBytes), maxBytesErr.Limit, path)

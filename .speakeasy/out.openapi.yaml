@@ -122913,12 +122913,15 @@ components:
           type: string
           description: The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.
           format: binary
+          maxLength: 5242880
         content_type:
           type: string
           description: The media type of the file. Inferred from the path extension and content when omitted.
         path:
           type: string
           description: The slash-separated path relative to the skill root, for example references/REFERENCE.md. Must be a clean relative path of at most 512 bytes and must not be SKILL.md.
+          minLength: 1
+          maxLength: 512
       description: A supporting file of a skill directory, such as a script, reference document, or asset.
       required:
         - path

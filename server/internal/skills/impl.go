@@ -158,7 +158,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
 		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
-		"link", "unlink", "listLinks":
+		"link", "unlink", "listLinks", "getVersionFile":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)

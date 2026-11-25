@@ -26,7 +26,7 @@ func BuildCreatePayload(skillsCreateBody string, skillsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(skillsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Files {
 			if e != nil {
@@ -85,7 +85,7 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 	{
 		err = json.Unmarshal([]byte(skillsAddVersionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.DerivedFromVersionID != nil {
@@ -635,7 +635,7 @@ func BuildApproveSuggestionPayload(skillsApproveSuggestionBody string, skillsApp
 	{
 		err = json.Unmarshal([]byte(skillsApproveSuggestionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		for _, e := range body.ChangeIds {

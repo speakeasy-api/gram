@@ -30331,7 +30331,7 @@ func skillsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills create --body '{\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills create --body '{\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsAddVersionUsage() {
@@ -30355,7 +30355,7 @@ func skillsAddVersionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsRestoreVersionUsage() {
@@ -30567,7 +30567,7 @@ func skillsApproveSuggestionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWJjMTIz\",\n            \"content_type\": \"abc123\",\n            \"path\": \"abc123\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-suggestion --body '{\n      \"change_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"content\": \"abc123\",\n      \"files\": [\n         {\n            \"content\": \"YWFh\",\n            \"content_type\": \"abc123\",\n            \"path\": \"aa\"\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsDismissSuggestionUsage() {

@@ -1133,8 +1133,13 @@ var SkillFileInput = Type("SkillFileInput", func() {
 	Meta("struct:pkg:path", "types")
 	Description("A supporting file of a skill directory, such as a script, reference document, or asset.")
 
-	Attribute("path", String, "The slash-separated path relative to the skill root, for example references/REFERENCE.md. Must be a clean relative path of at most 512 bytes and must not be SKILL.md.")
-	Attribute("content", Bytes, "The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.")
+	Attribute("path", String, "The slash-separated path relative to the skill root, for example references/REFERENCE.md. Must be a clean relative path of at most 512 bytes and must not be SKILL.md.", func() {
+		MinLength(1)
+		MaxLength(512)
+	})
+	Attribute("content", Bytes, "The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.", func() {
+		MaxLength(5 * 1024 * 1024)
+	})
 	Attribute("content_type", String, "The media type of the file. Inferred from the path extension and content when omitted.")
 	Required("path", "content")
 })

@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -17602,6 +17604,15 @@ func ValidateListLinksGatewayErrorResponseBody(body *ListLinksGatewayErrorRespon
 func ValidateSkillFileInputRequestBodyRequestBody(body *SkillFileInputRequestBodyRequestBody) (err error) {
 	if body.Content == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if utf8.RuneCountInString(body.Path) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 1, true))
+	}
+	if utf8.RuneCountInString(body.Path) > 512 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", body.Path, utf8.RuneCountInString(body.Path), 512, false))
+	}
+	if len(body.Content) > 5242880 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, len(body.Content), 5242880, false))
 	}
 	return
 }

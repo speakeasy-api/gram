@@ -10815,5 +10815,20 @@ func ValidateSkillFileInputRequestBodyRequestBody(body *SkillFileInputRequestBod
 	if body.Content == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
 	}
+	if body.Path != nil {
+		if utf8.RuneCountInString(*body.Path) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", *body.Path, utf8.RuneCountInString(*body.Path), 1, true))
+		}
+	}
+	if body.Path != nil {
+		if utf8.RuneCountInString(*body.Path) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.path", *body.Path, utf8.RuneCountInString(*body.Path), 512, false))
+		}
+	}
+	if body.Content != nil {
+		if len(body.Content) > 5242880 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, len(body.Content), 5242880, false))
+		}
+	}
 	return
 }

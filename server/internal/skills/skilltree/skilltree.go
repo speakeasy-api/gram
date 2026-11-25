@@ -109,11 +109,15 @@ type Entry struct {
 //
 // A path must be a clean, relative, slash-separated path of at most
 // MaxPathBytes bytes. It may not contain empty, "." or ".." segments,
-// backslashes, or control characters, and it may not name the manifest.
+// backslashes, control characters, or invisible format characters such as
+// bidirectional overrides, which can disguise a file name when it is shown.
+// It may not name the skill root itself or the manifest.
 func ValidatePath(p string) error {
 	switch {
 	case p == "":
 		return fmt.Errorf("%w: path is empty", ErrInvalidPath)
+	case p == ".":
+		return fmt.Errorf("%w: %q names the skill root, not a file", ErrInvalidPath, p)
 	case len(p) > MaxPathBytes:
 		return fmt.Errorf("%w: %q is longer than %d bytes", ErrInvalidPath, p, MaxPathBytes)
 	case !utf8.ValidString(p):
@@ -124,6 +128,8 @@ func ValidatePath(p string) error {
 		return fmt.Errorf("%w: %q must use forward slashes", ErrInvalidPath, p)
 	case strings.IndexFunc(p, unicode.IsControl) >= 0:
 		return fmt.Errorf("%w: %q contains a control character", ErrInvalidPath, p)
+	case strings.IndexFunc(p, isFormatRune) >= 0:
+		return fmt.Errorf("%w: %q contains an invisible format character", ErrInvalidPath, p)
 	case path.Clean(p) != p:
 		return fmt.Errorf("%w: %q must not contain empty, \".\" or \"..\" segments", ErrInvalidPath, p)
 	case p == ".." || strings.HasPrefix(p, "../"):
@@ -132,6 +138,12 @@ func ValidatePath(p string) error {
 		return fmt.Errorf("%w: %q is the skill manifest, not a supporting file", ErrInvalidPath, p)
 	}
 	return nil
+}
+
+// isFormatRune reports Unicode format characters (category Cf), such as
+// bidirectional overrides and zero-width joiners.
+func isFormatRune(r rune) bool {
+	return unicode.Is(unicode.Cf, r)
 }
 
 // Validate checks supporting files against the path rules and size caps and
