@@ -48,10 +48,11 @@ func callMemberAt(t *testing.T, memberURL string, guardianOpts ...func(*guardian
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-address-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-address", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", memberURL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-address", "")
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", memberURL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-address-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-address", memberURL)
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -327,7 +328,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	}
 }
 
-// A connection stopped by its sign-in provider's address is down, like an outage: approval waits, as it does for an outage.
+// A broken provider address cannot be approved. A temporary outage does not invalidate the typed choice.
 func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
 	t.Parallel()
 
@@ -338,12 +339,17 @@ func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
 		approvable bool
 	}{
 		{name: "address", key: remotesessions.RefreshAddressKey, value: guardian.AddressNotFound, approvable: false},
-		{name: "outage", key: remotesessions.RefreshOutageKey, value: remotesessions.RefreshOutageProvider, approvable: false},
+		{name: "outage", key: remotesessions.RefreshOutageKey, value: remotesessions.RefreshOutageProvider, approvable: true},
 		{name: "nothing recorded", key: nil, value: nil, approvable: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx := seedTwoClientConsentEndpoint(t, "address-approve-"+uuid.NewString()[:8])
+			serverID := fx.endpoint.McpServerID.UUID
+			for _, clientID := range []uuid.UUID{fx.clientA, fx.clientB} {
+				seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, clientID, "remote_session")
+			}
+			seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, serverID.String())
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, "token-a", consentChainedUpstream)
 			refreshableConnection(t, ctx, fx, fx.clientA, time.Now().Add(-time.Minute), serviceUnavailable)
 			if tc.key != nil {

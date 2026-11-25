@@ -64,14 +64,12 @@ func TestAgentKeyMemberChoicesPreservesRequestAttribution(t *testing.T) {
 		choices, err := f.service.agentKeyMemberChoices(ctx, f.orgID, agentID, uuid.Nil, attribution)
 		require.NoError(t, err)
 		require.NotNil(t, choices)
-		for _, typed := range []bool{false, true} {
-			source := &attributionUpstreamTokens{fakeUpstreamTokens: fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}}
-			f.service.upstreamTokens = source
-			_, err := choices.resolve(ctx, metaMember{serverID: f.serverID, projectID: f.projectID, typedAuthClient: typed, chosenClientID: validUUID(uuid.New())})
-			require.NoError(t, err)
-			// The client is a func, which require.Equal never treats as equal; %+v compares it by nil-ness and code.
-			require.Equal(t, fmt.Sprintf("%+v", attribution), fmt.Sprintf("%+v", source.attribution), "lazy resolution must retain the gateway scope and incoming request")
-			require.NotEqual(t, fmt.Sprintf("%+v", remotesessions.RefreshIn(scope)), fmt.Sprintf("%+v", source.attribution), "attribution keeps the incoming request")
-		}
+		source := &attributionUpstreamTokens{fakeUpstreamTokens: fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}}
+		f.service.upstreamTokens = source
+		_, err = choices.resolve(ctx, metaMember{serverID: f.serverID, projectID: f.projectID, chosenClientID: validUUID(uuid.New())})
+		require.NoError(t, err)
+		// The client is a func, which require.Equal never treats as equal; %+v compares it by nil-ness and code.
+		require.Equal(t, fmt.Sprintf("%+v", attribution), fmt.Sprintf("%+v", source.attribution), "lazy resolution must retain the gateway scope and incoming request")
+		require.NotEqual(t, fmt.Sprintf("%+v", remotesessions.RefreshIn(scope)), fmt.Sprintf("%+v", source.attribution), "attribution keeps the incoming request")
 	}
 }

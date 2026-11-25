@@ -8,6 +8,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -375,9 +376,9 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 type gatewayAvailability func(context.Context, usersessionsrepo.DBTX, orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)
 
 // projectTokenCache resolves a derived gateway's upstream credentials on
-// first use and keeps them for the rest of the request: one member at a time
-// for a proxied member with associated clients, one member project at a time
-// for any other member.
+// first use and keeps them for the rest of the request, whose organization,
+// sign-in and subject are fixed. Hosted members and proxied members with
+// associations resolve by exact member; the remaining members use their project.
 //
 // A proxied member resolves only the clients associated with it. The issuer
 // binds clients for every server that signs in through it, possibly several
@@ -396,7 +397,7 @@ type projectTokenCache struct {
 
 	mu        sync.Mutex
 	byProject map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken
-	byMember  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken
+	byMember  map[memberTokenKey]map[uuid.UUID]remotesessions.UpstreamToken
 }
 
 func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
@@ -414,23 +415,32 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 	return tokens, nil
 }
 
-// getMember resolves a proxied member's credentials from its associated
-// clients alone.
+type memberTokenKey struct {
+	projectID uuid.UUID
+	serverID  uuid.UUID
+}
+
+// getMember resolves a member's credentials without falling back to the
+// project's potentially broader credentials.
 func (c *projectTokenCache) getMember(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if tokens, ok := c.byMember[member.serverID]; ok {
+	key := memberTokenKey{projectID: member.projectID, serverID: member.serverID}
+	if tokens, ok := c.byMember[key]; ok {
 		return tokens, nil
+	}
+	if c.resolveMember == nil {
+		return nil, errors.New("member credential resolver is not configured")
 	}
 	tokens, err := c.resolveMember(ctx, member)
 	if err != nil {
 		return nil, err
 	}
 	if c.byMember == nil {
-		c.byMember = map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{}
+		c.byMember = map[memberTokenKey]map[uuid.UUID]remotesessions.UpstreamToken{}
 	}
-	c.byMember[member.serverID] = tokens
+	c.byMember[key] = tokens
 	return tokens, nil
 }
 
@@ -442,9 +452,8 @@ func resolvesByAssociation(member metaMember) bool {
 
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
-// so a member whose provider is not connected degrades on its own. A stored
-// gateway uses it too, for its hosted members, so the issuer's clients
-// resolve only when one needs them.
+// so a member whose provider is not connected degrades on its own. Stored
+// gateways also use this cache for exact hosted placements.
 func (s *Service) newOrganizationGatewayTokens(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	// One snapshot attributes every resolution in this request.
 	catalog := s.aiCatalog.SnapshotFor(ctx)
@@ -457,6 +466,13 @@ func (s *Service) newOrganizationGatewayTokens(ctx context.Context, r *http.Requ
 			return tokens, nil
 		},
 		resolveMember: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			if member.backend == metaMemberBackendHosted {
+				tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, catalog))).NotingSkips(skipped).FromRequest(r), endpoint.OrganizationID, member.projectID, member.serverID, endpoint.UserSessionIssuerID, subject, true)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "resolve hosted member sign-in").LogError(ctx, s.logger)
+				}
+				return tokens, nil
+			}
 			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, catalog))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve member remote session").LogError(ctx, s.logger)
@@ -465,7 +481,7 @@ func (s *Service) newOrganizationGatewayTokens(ctx context.Context, r *http.Requ
 		},
 		mu:        sync.Mutex{},
 		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
-		byMember:  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+		byMember:  map[memberTokenKey]map[uuid.UUID]remotesessions.UpstreamToken{},
 	}
 }
 
@@ -479,6 +495,13 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	}
 	if g.projectTokens == nil {
 		return g.tokens, nil
+	}
+	if member.backend == metaMemberBackendHosted {
+		tokens, err := g.projectTokens.getMember(ctx, member)
+		if err != nil && !errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrClientCredentialMisconfigured) && !errors.Is(err, remotesessions.ErrClientCredentialUnavailable) {
+			return nil, memberCredentialLoadError(member, err)
+		}
+		return tokens, err
 	}
 	if resolvesByAssociation(member) {
 		tokens, err := g.projectTokens.getMember(ctx, member)
@@ -503,9 +526,8 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 // rest would show a person connections, and the services behind them, for
 // servers their access does not include.
 //
-// Where typed auth client resolution is enforced, the registrations its
-// servers offer through typed auth clients are listed whether or not the
-// sign-in links them. Direct proxied servers and a gateway's proxied members
+// Registrations offered by typed auth clients are listed independently of
+// sign-in links. Direct proxied servers and a gateway's proxied members
 // offer only these registrations; a gateway keeps its sign-in's clients for
 // the hosted members that use them.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
@@ -514,8 +536,7 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 }
 
 // listEndpointClientsAndRegistrations shares one lazy member snapshot between
-// sign-in filtering and typed registration discovery. Disabled enforcement
-// does not trigger member discovery just to return an empty registration map.
+// hosted sign-in filtering and typed registration discovery.
 func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, map[uuid.UUID]uuid.UUID, error) {
 	var members []metaMember
 	var membersErr error
@@ -543,22 +564,13 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 		}
 		return typed, nil
 	}
-	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
-		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if directProxiedConsent(endpoint) && usesTypedConsentInventory(ctx) {
+		typed, err := loadTypedRegistrations()
 		if err != nil {
 			return nil, nil, err
 		}
-		if enforced {
-			// Legacy issuer links are not offers under typed enforcement. Load
-			// only personal and identity-provider registrations linked directly
-			// to this server, even when that leaves no connection cards.
-			typed, err := loadTypedRegistrations()
-			if err != nil {
-				return nil, nil, err
-			}
-			clients, err := s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, nil, typed)
-			return clients, typed, err
-		}
+		clients, err := s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, nil, typed)
+		return clients, typed, err
 	}
 	clients, err := s.listSignInClients(ctx, endpoint, challengeState, loadMembers)
 	if err != nil {
@@ -575,25 +587,64 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 // listSignInClients is the clients the endpoint's sign-in links that
 // listEndpointClients offers.
 func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
-	if endpoint.IsOrganizationGateway() {
-		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-		if err != nil {
-			return nil, fmt.Errorf("list organization remote session clients: %w", err)
-		}
-		if len(clients) == 0 {
-			return nil, nil
-		}
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		return s.hostedSignInClients(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+	}
+	if endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid {
 		members, err := loadMembers()
 		if err != nil {
 			return nil, err
 		}
-		reachable := make([]remotesessions.Client, 0, len(clients))
-		for _, client := range clients {
-			if clientServesAnyMember(client, members) {
-				reachable = append(reachable, client)
+		var clients []remotesessions.Client
+		seen := make(map[uuid.UUID]bool)
+		byProject := make(map[uuid.UUID][]uuid.UUID)
+		for _, member := range members {
+			if member.backend != metaMemberBackendHosted {
+				continue
+			}
+			for registration := range member.associatedClients {
+				byProject[member.projectID] = append(byProject[member.projectID], registration)
 			}
 		}
-		return reachable, nil
+		for project, ids := range byProject {
+			assigned, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, project, endpoint.OrganizationID, ids)
+			if err != nil {
+				return nil, fmt.Errorf("read hosted gateway registrations: %w", err)
+			}
+			for _, client := range assigned {
+				if !seen[client.ID] {
+					seen[client.ID] = true
+					clients = append(clients, client)
+				}
+			}
+		}
+		slices.SortFunc(clients, func(a, b remotesessions.Client) int { return bytes.Compare(a.ID[:], b.ID[:]) })
+		if usesTypedConsentInventory(ctx) {
+			return clients, nil
+		}
+		// Compatibility inventory is still needed for proxied members outside
+		// typed consent. It cannot add or authorize a hosted registration.
+		proxied := slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool {
+			return member.backend == metaMemberBackendHosted
+		})
+		if len(proxied) == 0 {
+			return clients, nil
+		}
+		var legacy []remotesessions.Client
+		if endpoint.IsOrganizationGateway() {
+			legacy, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		} else {
+			legacy, err = s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list proxied gateway sign-in clients: %w", err)
+		}
+		for _, client := range legacy {
+			if !seen[client.ID] && clientServesSignInMember(ctx, client, proxied) {
+				clients = append(clients, client)
+			}
+		}
+		return clients, nil
 	}
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -604,10 +655,9 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	}
 	// The issuer may bind clients for other servers sharing it. Consent offers
 	// a proxied server only the clients configured for it, and a gateway only
-	// those of the members the subject reaches. A hosted server keeps serving
-	// from every client its issuer binds.
-	switch {
-	case endpoint.IsSingleServer():
+	// those of the members the subject reaches. Hosted placements are handled
+	// separately above.
+	if directProxiedConsent(endpoint) && !usesTypedConsentInventory(ctx) {
 		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
 		if err != nil {
 			return nil, err
@@ -616,12 +666,6 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
 			return !own[client.ID] || (challengeState.WorkloadReconnect != nil && client.ID != challengeState.WorkloadReconnect.ClientID)
 		}), nil
-	case endpoint.MetaMcpServerID.Valid:
-		members, err := loadMembers()
-		if err != nil {
-			return nil, err
-		}
-		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool { return !clientServesAnyMember(client, members) }), nil
 	}
 	return clients, nil
 }
@@ -643,9 +687,6 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, fmt.Errorf("resolve gateway members: %w", err)
 	}
-	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
-		return nil, err
-	}
 	if binding := challengeState.CodeReconnect; binding != nil && !binding.reviewReady() {
 		hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, binding.UserID)
 		if err != nil {
@@ -661,15 +702,10 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	return members, nil
 }
 
-// clientServesAnyMember reports whether a client authenticates for at least
-// one member, by memberUsesClient.
-func clientServesAnyMember(client remotesessions.Client, members []metaMember) bool {
-	for _, member := range members {
-		if memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
-			return true
-		}
-	}
-	return false
+func clientServesSignInMember(ctx context.Context, client remotesessions.Client, members []metaMember) bool {
+	return slices.ContainsFunc(members, func(member metaMember) bool {
+		return (!usesTypedConsentInventory(ctx) || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+	})
 }
 
 // endpointRemoteSessionStatuses is the subject's remote session state on
@@ -719,14 +755,10 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 		}
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
-	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
 	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
-		TypedOffers:           typedOffers,
+		TypedOffers:           usesTypedConsentInventory(ctx),
 		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {

@@ -98,7 +98,7 @@ export function AttemptDetailSheet({
                       : elsewhere
                         ? lockedServerId
                           ? "This attempt is on another server"
-                          : "This attempt is through another provider"
+                          : "This attempt used another MCP sign-in"
                         : query.data?.loggingEnabled === false
                           ? "Logging is off"
                           : "No attempt with this reference"
@@ -373,7 +373,7 @@ function Section({
   );
 }
 
-function ContextFacts({
+export function ContextFacts({
   attempt,
   providerName,
 }: {
@@ -408,7 +408,7 @@ function ContextFacts({
       ? appLabel(attempt.app)
       : `${attempt.app.name}. No version reported at this step.`,
   ]);
-  if (providerName) facts.push(["Provider", providerName]);
+  if (providerName) facts.push(["MCP sign-in", providerName]);
   if (attempt.network) facts.push(["Network", attempt.network.label]);
   if (attempt.context.grantType)
     facts.push(["Grant", attempt.context.grantType]);

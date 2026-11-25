@@ -65,9 +65,9 @@ type healthAttempt struct {
 
 // healthRow is what a row says beyond its step and result.
 type healthRow struct {
-	userID, family, version, grant, service, device string
-	member                                          uuid.UUID
-	repeats                                         uint32
+	userID, family, version, grant, service, device, detail string
+	member                                                  uuid.UUID
+	repeats                                                 uint32
 }
 
 // begin starts an attempt on a server key or the gateway.
@@ -98,6 +98,9 @@ func (a *healthAttempt) row(step mcpconnectionattempts.Step, what mcpconnectiona
 	}
 	if f.service != "" {
 		opts = append(opts, mcpconnectionattempts.Provider(f.service))
+	}
+	if f.detail != "" {
+		opts = append(opts, mcpconnectionattempts.Detail(f.detail))
 	}
 	row, err := mcpconnectionattempts.RowAt(a.attempt, step, what, final, at, opts...)
 	if err != nil {
@@ -143,7 +146,7 @@ func (g *healthGen) service(server string, member string) string {
 
 // person is the row of a person's app.
 func (g *healthGen) person(p healthPerson) healthRow {
-	return healthRow{userID: g.userID(p), family: p.family, version: p.version, grant: "", service: "", device: g.device(p.key), member: uuid.Nil, repeats: 0}
+	return healthRow{userID: g.userID(p), family: p.family, version: p.version, grant: "", service: "", device: g.device(p.key), detail: "", member: uuid.Nil, repeats: 0}
 }
 
 // browser is a sign-in page row: opened in the person's browser.
@@ -161,6 +164,12 @@ type signInEnd struct {
 }
 
 var healthConnected = signInEnd{step: mcpconnectionattempts.StepInboundToken, what: mcpconnectionattempts.ResultCodeIssued, unfinished: false}
+
+const (
+	healthSignInTokenDelay   = 58 * time.Second
+	healthRenewalTokenDelay  = time.Second
+	healthRecoveryServeDelay = 90 * time.Second
+)
 
 // signIn is a full sign-in: the MCP sign-in, the service's for a server that has one, then the token.
 func (g *healthGen) signIn(p healthPerson, server string, t time.Time, end signInEnd) {
@@ -201,14 +210,14 @@ func (g *healthGen) signIn(p healthPerson, server string, t time.Time, end signI
 	}
 	token := g.person(p)
 	token.grant = oauthwire.GrantTypeAuthorizationCode
-	a.row(mcpconnectionattempts.StepInboundToken, end.what, t.Add(58*time.Second), true, token)
+	a.row(mcpconnectionattempts.StepInboundToken, end.what, t.Add(healthSignInTokenDelay), true, token)
 }
 
 // renewal is the app renewing its MCP sign-in.
 func (g *healthGen) renewal(p healthPerson, server string, t time.Time, what mcpconnectionattempts.Happened) {
 	f := g.person(p)
 	f.grant = oauthwire.GrantTypeRefreshToken
-	g.begin(t, server, healthApp(p.family)).row(mcpconnectionattempts.StepInboundToken, what, t.Add(time.Second), true, f)
+	g.begin(t, server, healthApp(p.family)).row(mcpconnectionattempts.StepInboundToken, what, t.Add(healthRenewalTokenDelay), true, f)
 }
 
 // serviceRenewal is Speakeasy renewing the person's sign-in to the service.
@@ -255,7 +264,7 @@ func (g *healthGen) listing(p healthPerson, t time.Time, missing string) {
 
 // network is a row of nobody known yet: an app or browser on one of a few networks.
 func (g *healthGen) network(n int, family, version string) healthRow {
-	return healthRow{userID: "", family: family, version: version, grant: "", service: "", device: g.device("network-" + strconv.Itoa(n)), member: uuid.Nil, repeats: 0}
+	return healthRow{userID: "", family: family, version: version, grant: "", service: "", device: g.device("network-" + strconv.Itoa(n)), detail: "", member: uuid.Nil, repeats: 0}
 }
 
 // refusedApp is an app refused when it asks for its token: a blocked AI app, or an app
@@ -350,10 +359,21 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 		return true
 	case p.family == mcpconnectionattempts.FamilyCursor && p.version == "2.0.1" && server == "github" && !t.Before(g.clk.cursorBrokenFrom()):
 		return true
+	case g.cursorNotionBusy(p, server, t):
+		return true
 	case server == "wiki" && !t.Before(g.clk.wikiBrokenFrom()) && slices.Contains([]string{"ken", "ivy", "theo", "amara"}, p.key):
+		return true
+	// Far enough back that a blip's recovery and served request land before storyNow's failure.
+	case p.key == "felix" && server == "notion" && t.After(g.clk.now.Add(-45*time.Minute)):
 		return true
 	}
 	return false
+}
+
+// cursorNotionBusy protects the failure in storyNow, including recovery rows from
+// attempts that started before the failure. Other people's Notion traffic still runs.
+func (g *healthGen) cursorNotionBusy(p healthPerson, server string, t time.Time) bool {
+	return p.key == "felix" && server == "notion" && !t.Before(g.clk.cursorNotionFailure().Add(healthRenewalTokenDelay))
 }
 
 // busyLater is busy for a row that follows one at a time busy has already allowed: the
@@ -427,6 +447,13 @@ func (g *healthGen) baseline() {
 			if cutoff := g.clk.now.Add(-2 * time.Minute); recoverAt.After(cutoff) {
 				recoverAt = when.Add(cutoff.Sub(when) / 2)
 			}
+			// An app sign-in or a served request ends this episode, even when the
+			// attempt itself started before the failure. Keep a blip and its recovery together.
+			if (healthBlips[kind] && g.cursorNotionBusy(p, server, recoverAt.Add(healthRecoveryServeDelay))) ||
+				(kind == "sign_in" && g.cursorNotionBusy(p, server, when.Add(healthSignInTokenDelay))) ||
+				((kind == "renewal" || kind == "listing") && g.cursorNotionBusy(p, server, when.Add(healthRenewalTokenDelay))) {
+				continue
+			}
 			g.emit(kind, p, server, when, recoverAt)
 			// After a sign-in or renewal the app usually makes requests the server answers.
 			if requestAt := when.Add(g.r.span(time.Minute, 20*time.Minute)); (kind == "renewal" || kind == "service_renewal" || kind == "sign_in") &&
@@ -444,7 +471,7 @@ var healthBlips = map[string]bool{"renewal_fail": true, "service_fail": true, "r
 // gateway member's service, and listing the gateway's tools.
 func (g *healthGen) recovered(p healthPerson, server, member string, at time.Time) {
 	g.signIn(p, server, at, healthConnected)
-	g.servedRequest(p, server, member, at.Add(90*time.Second))
+	g.servedRequest(p, server, member, at.Add(healthRecoveryServeDelay))
 	if server == healthGatewayKey {
 		g.serviceRenewal(p, server, member, at.Add(time.Minute), mcpconnectionattempts.ResultRefreshed)
 		g.listing(p, at.Add(2*time.Minute), "")
@@ -709,7 +736,7 @@ func (g *healthGen) storyNow() {
 	now := g.clk.now
 	g.signIn(g.personByKey("noor"), "notion", now.Add(-6*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundToken, what: mcpconnectionattempts.ResultCodeIssued, unfinished: true})
 	g.begin(now.Add(-19*time.Minute), "notion", mcpconnectionattempts.AppDCR).row(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, now.Add(-19*time.Minute), false, g.network(1, mcpconnectionattempts.FamilyBrowser, ""))
-	g.renewal(g.personByKey("felix"), "notion", now.Add(-14*time.Minute), mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
+	g.renewal(g.personByKey("felix"), "notion", g.clk.cursorNotionFailure(), mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
 	// Claude Code works on Notion after it, so Felix's failure there joins the Cursor 2.0.1 problem.
 	g.servedRequest(g.personByKey("jonas"), "notion", "", now.Add(-4*time.Minute))
 	g.signIn(g.personByKey("theo"), "support", now.Add(-33*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundConsent, what: mcpconnectionattempts.CodeCanceled, unfinished: false})
@@ -720,6 +747,20 @@ func (g *healthGen) storyNow() {
 			g.listing(p, t, "")
 		} else {
 			g.renewal(p, p.servers[0], t, mcpconnectionattempts.ResultRefreshed)
+		}
+	}
+}
+
+// storyConnect: Ana and Mei's apps ask for Support Desk, where neither has connected an account.
+// It draws nothing, so the stories before it keep their rows.
+func (g *healthGen) storyConnect() {
+	for i, key := range []string{"ana", "mei"} {
+		p := g.personByKey(key)
+		for k := range 4 {
+			t := g.clk.now.Add(-3*time.Hour + time.Duration(i)*7*time.Minute + time.Duration(k)*50*time.Minute)
+			f := g.person(p)
+			f.grant, f.detail = oauthwire.GrantTypeJWTBearer, "no_credential_ready"
+			g.begin(t, "support", healthApp(p.family)).row(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession, t.Add(time.Second), true, f)
 		}
 	}
 }
@@ -749,6 +790,7 @@ func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, []mcpconne
 	g.storyKillswitch()
 	g.storyDenied()
 	g.storyNow()
+	g.storyConnect()
 	served := slices.SortedFunc(maps.Values(g.served), func(a, b mcpconnectionattempts.Served) int {
 		return cmp.Or(cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ClientFamily, b.ClientFamily))
 	})

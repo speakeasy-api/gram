@@ -74,20 +74,37 @@ func connectScope(t *testing.T, fx consentActionFixture, clientID uuid.UUID) str
 	return postConnectAction(t, fx, clientID).Query().Get("scope")
 }
 
-// A consent endpoint binding clients from two authorization servers: the
-// endpoint resource's advertised scopes go to the client whose grant is
-// qualified to it, and the other client's request is decided by its own
-// authorization server.
+// seedGatewayScopeOffers gives each provider a different offered gateway
+// member. A's remote member has protected resource metadata; B's tunneled
+// member falls back to the provider's scope catalogue.
+func seedGatewayScopeOffers(t *testing.T, tag string, aScopes []string) (context.Context, consentActionFixture, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	ctx, fx, metaID, owner, issuerID := metaConsent(t, tag)
+	a := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, tag+"-a", consentUpstreamA+"/", conv.ToNullUUID(issuerID), 0)
+	seedScopeConsentOffer(t, ctx, fx, a.mcpServerID, owner)
+	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", aScopes)
+
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", "")
+	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, other)
+	fx = focusTypedConsentTunnel(t, ctx, fx, metaID, other, otherIssuer, tag+"-b")
+	advertise(t, ctx, fx, otherIssuer, []string{"b:read"})
+	return ctx, fx, owner, other
+}
+
+func seedScopeConsentOffer(t *testing.T, ctx context.Context, fx consentActionFixture, serverID, clientID uuid.UUID) {
+	t.Helper()
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, clientID, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, serverID.String())
+}
+
+// A gateway with two providers scopes each connection to the member its
+// typed offer names, not the other member's protected resource metadata.
 func TestServeConsentAction_MultiBindingConnectRequestsOwnResourceScopes(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-multi")
-	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
-	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-a", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-multi-b", "", []uuid.UUID{fx.shared, other})
-	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
-
-	require.Equal(t, "b:read", connectScope(t, fx, shared), "provider B is decided by its own catalogue, not A's resource")
+	_, fx, owner, other := seedGatewayScopeOffers(t, "scope-multi", []string{"a:read"})
+	fx.server = "" // Exercise provider login from the gateway, without a focused member.
+	require.Equal(t, "b:read", connectScope(t, fx, other), "provider B is decided by its own catalogue, not A's resource")
 	require.Equal(t, "a:read", connectScope(t, fx, owner), "the owner requests the resource's advertised scopes")
 }
 
@@ -96,9 +113,10 @@ func TestServeConsentAction_MultiBindingConnectRequestsOwnResourceScopes(t *test
 func TestServeConsentAction_SoleSharedClientRequestsEndpointResourceScopes(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-sole")
+	ctx, fx, _ := seedSharedUpstreamEndpoint(t, "scope-sole")
 	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read"})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "", []uuid.UUID{fx.shared, other})
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-sole", "")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, shared, "remote_session")
 	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
 
 	require.Equal(t, "a:read", connectScope(t, fx, shared))
@@ -110,20 +128,22 @@ func TestServeConsentAction_SoleSharedClientRequestsEndpointResourceScopes(t *te
 func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, other := seedSharedUpstreamEndpoint(t, "scope-card")
-	registerPageClient(t, ctx, fx)
-	cacheResourceScopes(t, ctx, fx, consentUpstreamA+"/", []string{"a:read", "openid"})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-a", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-card-b", "", []uuid.UUID{fx.shared, other})
-	advertise(t, ctx, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, shared), []string{"b:read"})
-	// A grant minted before the owner was bound routes to the endpoint.
-	grantScopedTo(t, ctx, fx, shared, []string{"b:read"}, consentUpstreamA+"/")
+	ctx, fx, _, other := seedGatewayScopeOffers(t, "scope-card", []string{"a:read", "openid"})
+	grantScoped(t, ctx, fx, other, []string{"b:read"})
+	markVerified(t, ctx, fx, other)
+
+	// The first-party list counts connections without probing member tools.
+	list := firstPartyConsent(t, ctx, fx)
+	list.server = ""
+	code, listing, _ := render(t, list)
+	require.Equal(t, http.StatusOK, code, listing)
+	require.Contains(t, listing, "1 of 2 servers connected")
 
 	code, html, _ := render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
-	require.Contains(t, html, "1 of 2 connected")
+	require.Contains(t, html, "1 of 1 connected")
 	require.NotContains(t, html, consentIdentityCopy, "provider B's connect would not request openid")
-	require.Equal(t, "b:read", connectScope(t, fx, shared))
+	require.Equal(t, "b:read", connectScope(t, fx, other))
 }
 
 // A gateway client's login reads the claiming member's resource row, never
@@ -134,7 +154,7 @@ func TestServeConsent_GatewayIdentityReconnectFollowsLogin(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw")
-	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "scope-gw-member")
+	fx = focusTypedConsentTunnel(t, ctx, fx, metaID, clientID, issuerID, "scope-gw-member")
 	const claimed = "https://claimed.example.com/mcp"
 	claimResource(t, ctx, fx, clientID, claimed)
 	cacheResourceScopes(t, ctx, fx, claimed, []string{"read"})
@@ -159,7 +179,8 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 	ctx, fx := standaloneConsent(t, "scope-remote", upstream.URL, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, upstream.URL)
 	})
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "scope-remote", "")
+	seedScopeConsentOffer(t, ctx, fx, fx.endpoint.McpServerID.UUID, clientID)
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	const claimed = "https://claimed.example.com/mcp"
 	claimResource(t, ctx, fx, clientID, claimed)
@@ -182,7 +203,8 @@ func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
 
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw-member")
 	const member = "https://member.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
+	seeded := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
+	seedScopeConsentOffer(t, ctx, fx, seeded.mcpServerID, clientID)
 	fx.server = "scope-gw-member-m"
 	cacheResourceScopes(t, ctx, fx, member, []string{"m:read", "openid"})
 	advertise(t, ctx, fx, issuerID, []string{"admin", "openid"})

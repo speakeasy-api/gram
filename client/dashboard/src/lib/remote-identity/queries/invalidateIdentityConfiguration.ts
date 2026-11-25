@@ -5,7 +5,7 @@ import { invalidateAllServerClientAssociations } from "@gram/client/react-query/
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers";
 import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer";
 import { invalidateAllRemoteSessionsCount } from "@gram/client/react-query/remoteSessionsCount";
-import { invalidateSharedIssuerImpact } from "../model/upstreamRepointing";
+import { invalidateAllServerIdentityImpact } from "@gram/client/react-query/serverIdentityImpact";
 
 /** Refresh all views of a saved upstream identity configuration. */
 export async function invalidateIdentityConfiguration(
@@ -18,6 +18,6 @@ export async function invalidateIdentityConfiguration(
     invalidateAllRemoteSessionIssuers(queryClient),
     invalidateAllRemoteSessionIssuer(queryClient),
     invalidateAllRemoteSessionsCount(queryClient),
-    invalidateSharedIssuerImpact(queryClient),
+    invalidateAllServerIdentityImpact(queryClient),
   ]);
 }

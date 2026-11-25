@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -111,10 +112,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	}))
+	placeClientForSignIn(t, ctx, ti.conn, client.ID, userIssuer)
 
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
 	require.NoError(t, err)
@@ -163,16 +161,11 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	ctx, fx := seedRemoteLoginInFlight(t, "stale-cb", spy)
 
 	// The issuer dies while the user is off at the upstream provider. The
-	// binding row survives here (unlike the full delete handler) so the
-	// callback's rejection is provably keyed on issuer liveness, not on the
-	// link row's absence.
-	_, err := usersessionsrepo.New(fx.ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	// server placement survives the forced soft delete, so the callback's
+	// rejection is keyed on issuer liveness, not removal of the placement.
+	require.NoError(t, testrepo.New(fx.ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 
-	err = fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "stale-code"))
+	err := fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "stale-code"))
 	require.ErrorContains(t, err, "no longer exists", "the stale callback is rejected instead of stored")
 	require.Equal(t, int64(1), fx.exchanges.Load(), "rejection happens at persist time, after the code exchange")
 
@@ -185,11 +178,9 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }
 
-// The callback and the issuer delete take the client row and the issuer row in
-// opposite orders, so the issuer lock has to stay compatible with the foreign
-// key check the session insert performs. Neither outcome may leave a live
-// upstream grant behind: here the write wins the race and the cascade sweeps it.
-func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t *testing.T) {
+// Even a first grant, with no existing provenance to discover, cannot publish
+// behind a concurrent issuer retirement.
+func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteRejectsFirstGrant(t *testing.T) {
 	t.Parallel()
 
 	spy := &revocationSpy{}
@@ -211,34 +202,22 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "race-code"))
 	}()
 
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(30 * time.Second):
-		t.Fatal("the callback is stuck behind the issuer-delete lock: the two would deadlock in production")
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
-	stored, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            fx.subject,
-		RemoteSessionClientID: fx.clientID,
-	})
-	require.NoError(t, err, "the callback committed while the delete held the issuer lock")
-
-	// The rest of the delete, now that the callback has released the client row.
-	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(tx).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 
 	revoker := newTestUpstreamRevoker(t, fx.ti)
-	creds, err := revoker.DetachUserSessionIssuerFromClients(ctx, tx, fx.userIssuer, fx.projectID, fx.organizationID)
+	creds, err := revoker.RetireDeletedUserSessionIssuer(ctx, tx, fx.userIssuer, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
-	require.Len(t, creds, 1, "the grant written mid-delete is picked up by the orphan scan")
-	require.Equal(t, stored.RemoteSessionClientID, creds[0].RemoteSessionClientID)
+	require.Empty(t, creds, "the waiting callback has not stored any grant")
 	require.NoError(t, tx.Commit(ctx))
 
-	revoker.RevokeAllDetached(ctx, creds)
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "no longer exists")
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback still waiting after issuer retirement committed")
+	}
 
 	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,
@@ -276,11 +255,7 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
 	// The migration retires the source and commits.
-	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-		ID:        fx.userIssuer,
-		ProjectID: fx.projectID,
-	})
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(tx).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{ID: fx.userIssuer, ProjectID: fx.projectID}))
 	require.NoError(t, tx.Commit(ctx))
 
 	require.Eventually(t, func() bool { return len(done) > 0 }, 5*time.Second, 10*time.Millisecond)

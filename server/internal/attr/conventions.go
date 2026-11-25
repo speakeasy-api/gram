@@ -86,15 +86,6 @@ const (
 	// AuthClientReasonKey is why resolving a request's typed auth client did not succeed.
 	AuthClientReasonKey = attribute.Key("gram.auth_client.reason")
 
-	// AuthClientLegacyOutcomeKey is the outcome the legacy upstream client choice reached for the same request.
-	AuthClientLegacyOutcomeKey = attribute.Key("gram.auth_client.legacy_outcome")
-
-	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
-	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
-
-	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
-	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
-
 	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
 	UpstreamIssuerSurfaceKey = attribute.Key("gram.upstream_issuer.surface")
 
@@ -839,6 +830,8 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey            = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey       = attribute.Key("gram.openrouter.response.body")
+	OpenRouterTimeToFirstChunkKey   = attribute.Key("gram.openrouter.time_to_first_chunk_ms")
+	OpenRouterUpstreamProviderKey   = attribute.Key("gram.openrouter.upstream_provider")
 	OpenRouterRateLimitLimitKey     = attribute.Key("gram.openrouter.ratelimit.limit")
 	OpenRouterRateLimitRemainingKey = attribute.Key("gram.openrouter.ratelimit.remaining")
 	OpenRouterRateLimitResetKey     = attribute.Key("gram.openrouter.ratelimit.reset")
@@ -1222,6 +1215,10 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// TelemetryOverviewSourceKey names the table that served an observability overview.
+	TelemetryOverviewSourceKey = attribute.Key("gram.telemetry.overview.source")
+
 	// InferenceConversationOutcomeKey records how an Anthropic inference frame
 	// was mapped to a stored conversation: "session" (the frame's session id
 	// named an existing chat), "adopted_prefix" (the chat already holding the
@@ -1241,6 +1238,10 @@ const (
 	// TranscriptShadowMessageCountKey is the number of chat messages in one
 	// encrypted transcript shadow capture batch.
 	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
+	// TranscriptShadowPlaintextFallbackCountKey is the number of messages in
+	// one encrypted transcript read that had no shadow and were served from
+	// plaintext.
+	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -1494,14 +1495,6 @@ func AuthClientReason(v string) attribute.KeyValue { return AuthClientReasonKey.
 // SlogAuthClientReason is why resolving a typed auth client did not succeed.
 func SlogAuthClientReason(v string) slog.Attr { return slog.String(string(AuthClientReasonKey), v) }
 
-func AuthClientLegacyOutcome(v string) attribute.KeyValue {
-	return AuthClientLegacyOutcomeKey.String(v)
-}
-
-func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
-
-func AuthClientResolverMode(v string) attribute.KeyValue { return AuthClientResolverModeKey.String(v) }
-
 func UpstreamIssuerSurface(v string) attribute.KeyValue { return UpstreamIssuerSurfaceKey.String(v) }
 
 // SlogUpstreamIssuerSurface is the serving surface of an upstream issuer comparison.
@@ -1578,11 +1571,6 @@ func SlogMandatoryAuthzSource(v string) slog.Attr {
 func MandatoryAuthzReason(v string) attribute.KeyValue { return MandatoryAuthzReasonKey.String(v) }
 func SlogMandatoryAuthzReason(v string) slog.Attr {
 	return slog.String(string(MandatoryAuthzReasonKey), v)
-}
-
-// SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.
-func SlogAuthClientLegacyOutcome(v string) slog.Attr {
-	return slog.String(string(AuthClientLegacyOutcomeKey), v)
 }
 
 // SlogSigintRequestedWindowSize records the configured message count including the target.
@@ -1780,6 +1768,10 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryOverviewSource(v string) attribute.KeyValue {
+	return TelemetryOverviewSourceKey.String(v)
+}
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {
@@ -3214,6 +3206,14 @@ func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
 
+func OpenRouterTimeToFirstChunk(v int64) attribute.KeyValue {
+	return OpenRouterTimeToFirstChunkKey.Int64(v)
+}
+
+func OpenRouterUpstreamProvider(v string) attribute.KeyValue {
+	return OpenRouterUpstreamProviderKey.String(v)
+}
+
 func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
 	return OpenRouterRateLimitLimitKey.String(v)
 }
@@ -4492,6 +4492,10 @@ func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
 }
 
+func GenAIUsageReasoningTokens(v int) attribute.KeyValue {
+	return GenAIUsageReasoningTokensKey.Int(v)
+}
+
 func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }
 func SlogGenAIUsageCost(v float64) slog.Attr {
 	return slog.Float64(string(GenAIUsageCostKey), v)
@@ -4721,6 +4725,10 @@ func SlogInferenceMessageCount(v int) slog.Attr {
 
 func TranscriptShadowMessageCount(v int) attribute.KeyValue {
 	return TranscriptShadowMessageCountKey.Int(v)
+}
+
+func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
+	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }

@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp/fixtures/fixturerepo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -56,7 +55,7 @@ import (
 // management APIs, scoped to this member and its configured auth clients.
 func TestAgentMemberAuthRegression(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"off", "shadow", "enforced"} {
+	for _, mode := range []string{"not_enrolled", "enforced"} {
 		for _, state := range []string{"live", "missing_attachment", "revoked_attachment", "same_source_new_generation", "replaced_source_without_reattach", "disabled_agent", "removed_agent_grant", "owner_block", "credential_block", "noauth", "shared_static_client", "deleted_client", "disabled_typed_client", "shared_oauth_registration", "sibling_issuer_client", "legacy_static_client"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
 				t.Parallel()
@@ -74,8 +73,6 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					_, err = features.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 					require.NoError(t, err)
 				}
-				ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
-				ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
 
 				upstream := newRecordingUpstream(t, "ping")
 				target, err := url.Parse(upstream.url)
@@ -99,7 +96,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						}
 						// Under enforcement a replaced source without reattachment is
 						// served by the authorizer's own, replacement connection.
-						authorizerReplacement := state == "replaced_source_without_reattach" && mode == "enforced" && token == "Bearer replacement-source-token"
+						authorizerReplacement := state == "replaced_source_without_reattach" && token == "Bearer replacement-source-token"
 						if state != "noauth" && state != "shared_static_client" && state != "disabled_typed_client" && state != "legacy_static_client" && token != "Bearer exact-owner-connection" && token != "Bearer reconnected-owner-connection" && !authorizerReplacement {
 							rejected.Add(1)
 							http.Error(w, "invalid upstream credential", http.StatusUnauthorized)
@@ -141,14 +138,14 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(siblingIssuerID), Visibility: mcpservers.VisibilityPrivate})
 						require.NoError(t, err)
 					}
-					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", issuerIDs)
+					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "")
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs))
 					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs, []uuid.UUID{clientID}))
 					if state == "sibling_issuer_client" {
 						siblingID := mcpServerBySlug(t, ctx, ti, projectID, fx.denied)
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
 						require.NoError(t, err)
-						siblingClientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "sibling-only-client", "", issuerIDs)
+						siblingClientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "sibling-only-client", "")
 						require.NotEqual(t, clientID, siblingClientID)
 						require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: siblingID, RemoteSessionClientID: siblingClientID}))
 						tx := testenv.BeginTx(t, ctx, ti.conn)
@@ -298,13 +295,13 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						credentials = append(credentials, request.authorization)
 					}
 				}
-				// Connection-owner policy remains connect-equivalent: only enforced
-				// mode applies typed-client enablement and mcp:blocked_auth.
-				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "credential_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced") ||
+				// Typed-client enablement and mcp:blocked_auth apply
+				// independently of consent enrollment.
+				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" ||
 					// Under enforcement an agent key without a usable attachment is
 					// served by its authorizer's own connection when the agent's own
-					// mcp:auth permits that owner; before enforcement it is denied.
-					((state == "missing_attachment" || state == "revoked_attachment" || state == "replaced_source_without_reattach") && mode == "enforced")
+					// mcp:auth permits that owner.
+					(state == "missing_attachment" || state == "revoked_attachment" || state == "replaced_source_without_reattach")
 				if allowed {
 					require.NoError(t, callErr)
 					require.Equal(t, http.StatusOK, response.Code)

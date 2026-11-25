@@ -15,17 +15,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
-func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
-	return metaMember{
+func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID, registrations ...string) metaMember {
+	member := metaMember{
 		slug:                  slug,
 		name:                  name,
 		projectID:             projectID,
 		remoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: issuer != uuid.Nil},
 	}
+	if len(registrations) > 0 {
+		member.associatedClients = make(map[uuid.UUID]bool, len(registrations))
+		for _, registration := range registrations {
+			member.associatedClients[gatewayTestClientID(issuer, registration)] = true
+		}
+	}
+	return member
+}
+
+func gatewayTestClientID(issuer uuid.UUID, label string) uuid.UUID {
+	return uuid.NewSHA1(issuer, []byte(label))
 }
 
 func gatewayTestCard(clientID string, issuer uuid.UUID, projectID uuid.NullUUID) remoteSessionCard {
-	return remoteSessionCard{ClientID: clientID, IssuerDisplay: clientID, remoteSessionIssuerID: issuer, projectID: projectID}
+	return remoteSessionCard{ClientID: gatewayTestClientID(issuer, clientID).String(), IssuerDisplay: clientID, remoteSessionIssuerID: issuer, projectID: projectID}
 }
 
 func serverBySlug(t *testing.T, view *gatewayConsentView, slug string) gatewayServer {
@@ -49,9 +60,9 @@ func TestGatewayServersView_StatusesAndOrder(t *testing.T) {
 	github, linear, notion := uuid.New(), uuid.New(), uuid.New()
 	members := []metaMember{
 		gatewayTestMember("docs", "Docs", uuid.Nil, project),
-		gatewayTestMember("github", "GitHub", github, project),
-		gatewayTestMember("linear", "Linear", linear, project),
-		gatewayTestMember("notion", "Notion", notion, project),
+		gatewayTestMember("github", "GitHub", github, project, "github-client"),
+		gatewayTestMember("linear", "Linear", linear, project, "linear-client"),
+		gatewayTestMember("notion", "Notion", notion, project, "notion-client"),
 	}
 	githubCard := gatewayTestCard("github-client", github, uuid.NullUUID{UUID: project, Valid: true})
 	githubCard.Connected = true
@@ -99,8 +110,8 @@ func TestGatewayServersView_MatchesCardsByProject(t *testing.T) {
 	first, second := uuid.New(), uuid.New()
 	github := uuid.New()
 	members := []metaMember{
-		gatewayTestMember("first.github", "GitHub", github, first),
-		gatewayTestMember("second.github", "GitHub", github, second),
+		gatewayTestMember("first.github", "GitHub", github, first, "first-client", "org-client"),
+		gatewayTestMember("second.github", "GitHub", github, second, "org-client"),
 	}
 	firstCard := gatewayTestCard("first-client", github, uuid.NullUUID{UUID: first, Valid: true})
 	firstCard.Connected = true
@@ -122,7 +133,7 @@ func TestGatewayServersView_ChainedCountsOnceChecked(t *testing.T) {
 
 	project := uuid.New()
 	idp := uuid.New()
-	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}
+	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project, "wiki-client")}
 	card := gatewayTestCard("wiki-client", idp, uuid.NullUUID{})
 	card.Chained = true
 	card.ChainCheck = chainCheckPending
@@ -144,7 +155,7 @@ func TestGatewayServersView_AnyUsableServiceConnects(t *testing.T) {
 
 	project := uuid.New()
 	github := uuid.New()
-	members := []metaMember{gatewayTestMember("github", "GitHub", github, project)}
+	members := []metaMember{gatewayTestMember("github", "GitHub", github, project, "project-client", "org-client")}
 	stale := gatewayTestCard("project-client", github, uuid.NullUUID{UUID: project, Valid: true})
 	stale.Expired = true
 	live := gatewayTestCard("org-client", github, uuid.NullUUID{})
@@ -163,19 +174,22 @@ func TestFocusedCards_NarrowsAndNotesSharedServices(t *testing.T) {
 	project := uuid.New()
 	github, linear := uuid.New(), uuid.New()
 	members := []metaMember{
-		gatewayTestMember("github", "GitHub", github, project),
-		gatewayTestMember("github-enterprise", "GitHub Enterprise", github, project),
-		gatewayTestMember("linear", "Linear", linear, project),
+		gatewayTestMember("github", "GitHub", github, project, "github-client"),
+		gatewayTestMember("github-enterprise", "GitHub Enterprise", github, project, "github-client"),
+		gatewayTestMember("linear", "Linear", linear, project, "linear-client"),
 	}
 	cards := []remoteSessionCard{
 		gatewayTestCard("github-client", github, uuid.NullUUID{}),
+		gatewayTestCard("github-sibling", github, uuid.NullUUID{}),
 		gatewayTestCard("linear-client", linear, uuid.NullUUID{}),
 	}
+	cards[1].Connected = true // The sibling is not assigned to either GitHub server.
 	view := gatewayServersView(members, cards)
+	require.Equal(t, gatewayServerNotConnected, serverBySlug(t, view, "github").Status)
 
 	focused := focusedCards(view, serverBySlug(t, view, "github"), cards)
 	require.Len(t, focused, 1)
-	require.Equal(t, "github-client", focused[0].ClientID)
+	require.Equal(t, gatewayTestClientID(github, "github-client").String(), focused[0].ClientID)
 	require.Equal(t, "Also connects 1 other server on this gateway", focused[0].SharedServerNote)
 
 	focused = focusedCards(view, serverBySlug(t, view, "linear"), cards)
@@ -213,7 +227,7 @@ func TestMetaGateMemberConnectURL(t *testing.T) {
 func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 	t.Parallel()
 
-	gate := metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: true}}
+	gate := metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{}}
 	link := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 	registration := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	for _, tc := range []struct {
@@ -241,7 +255,7 @@ func TestMetaGateMemberConnectURL_TypedChoiceDecides(t *testing.T) {
 
 	derived := gatewayTestMember("github", "", uuid.New(), uuid.New())
 	derived.authClient = &authClientResolution{outcome: authClientGap, noAuthAllowed: true}
-	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{enforced: false}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
+	require.Equal(t, link, metaGateContext{connectRoot: "https://app.example.com/mcp/tools", memberChoices: &memberChoices{consentPreview: true}}.memberConnectURL(derived), "without enforcement the derived issuer still decides")
 }
 
 // A member with nothing routed, or a rejected credential, names the page that
@@ -295,7 +309,7 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 	github := uuid.New()
 	view := gatewayServersView([]metaMember{
 		gatewayTestMember("docs", "Docs", uuid.Nil, project),
-		gatewayTestMember("eng.github", "GitHub", github, project),
+		gatewayTestMember("eng.github", "GitHub", github, project, "github-client"),
 	}, []remoteSessionCard{gatewayTestCard("github-client", github, uuid.NullUUID{})})
 
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
@@ -304,7 +318,7 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 	require.Contains(t, page, "Show servers")
 	// A server signing in through one service connects in place, with no
 	// stop on its own page; a server needing no sign-in has nothing to do.
-	require.Contains(t, page, `<input type="hidden" name="client_id" value="github-client" />`)
+	require.Contains(t, page, `<input type="hidden" name="client_id" value="`+gatewayTestClientID(github, "github-client").String()+`" />`)
 	require.Contains(t, page, "data-connect-link > Connect </button>")
 	require.NotContains(t, page, "data-gateway-server-page")
 	require.Contains(t, page, `id="consent-approve-button"`)
@@ -320,7 +334,7 @@ func TestConsentTemplate_GatewayServerPageHasNoApproval(t *testing.T) {
 	project := uuid.New()
 	github := uuid.New()
 	cards := []remoteSessionCard{gatewayTestCard("github-client", github, uuid.NullUUID{})}
-	view := gatewayServersView([]metaMember{gatewayTestMember("eng.github", "GitHub", github, project)}, cards)
+	view := gatewayServersView([]metaMember{gatewayTestMember("eng.github", "GitHub", github, project, "github-client")}, cards)
 	focus := view.Servers[0]
 	view.Focus = &focus
 
@@ -353,7 +367,7 @@ func TestConsentTemplate_GatewayChainPendingServerPage(t *testing.T) {
 	card.Chained = true
 	card.ChainCheck = chainCheckPending
 	cards := []remoteSessionCard{card}
-	view := gatewayServersView([]metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}, cards)
+	view := gatewayServersView([]metaMember{gatewayTestMember("wiki", "Wiki", idp, project, "wiki-client")}, cards)
 	require.Equal(t, gatewayServerChainPending, view.Servers[0].Status)
 	require.True(t, view.Servers[0].NeedsSignIn())
 
@@ -379,8 +393,8 @@ func TestConsentTemplate_GatewayListLinksServerPages(t *testing.T) {
 	linearCard := gatewayTestCard("linear-client", linear, uuid.NullUUID{})
 	linearCard.Connected = true
 	view := gatewayServersView([]metaMember{
-		gatewayTestMember("eng.github", "GitHub", github, project),
-		gatewayTestMember("eng.linear", "Linear", linear, project),
+		gatewayTestMember("eng.github", "GitHub", github, project, "project-client", "org-client"),
+		gatewayTestMember("eng.linear", "Linear", linear, project, "linear-client"),
 	}, []remoteSessionCard{projectCard, orgCard, linearCard})
 	require.Empty(t, serverBySlug(t, view, "eng.github").ConnectClientID)
 
@@ -408,7 +422,7 @@ func TestGatewayServersView_StatusIgnoresServiceOrder(t *testing.T) {
 
 	project := uuid.New()
 	idp := uuid.New()
-	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}
+	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project, "chained-client", "expired-client")}
 	pending := gatewayTestCard("chained-client", idp, uuid.NullUUID{})
 	pending.Chained = true
 	pending.ChainCheck = chainCheckPending

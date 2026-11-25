@@ -343,7 +343,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -382,7 +382,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+	if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
 		return err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)

@@ -9,15 +9,15 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	backfill "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-// Moving a server onto a user session issuer configures its sign-in there.
-// Under upstream auth enforcement a server that is the issuer's only consumer
-// offers the clients bound to it, and one that shares the issuer offers none.
-func TestUpdateMcpServer_IssuerMoveOffersSoleConsumerClientsUnderEnforcement(t *testing.T) {
+// Moving to another downstream issuer must not add upstream offers.
+func TestUpdateMcpServer_IssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -51,23 +51,36 @@ func TestUpdateMcpServer_IssuerMoveOffersSoleConsumerClientsUnderEnforcement(t *
 				return created.ID, remoteID
 			}
 			moved, movedBackend := create("moved", origin)
-			if tc.shared {
-				create("already there", target)
+			_, registration := seedRemoteRegistration(t, ctx, ti, orgID, projectID)
+			sibling, _ := create("configured on target", target)
+			siblingID := uuid.MustParse(sibling)
+			q := backfill.New(ti.conn)
+			offer, err := q.SeedAuthClientFixture(ctx, backfill.SeedAuthClientFixtureParams{
+				OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: backfill.TypeRemoteSession,
+				Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration),
+			})
+			require.NoError(t, err)
+			require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, backfill.SeedServerAuthClientLinkFixtureParams{
+				OrganizationID: orgID, ProjectID: projectID, McpServerID: siblingID, AuthClientID: offer, Source: "admin",
+			}))
+			if !tc.shared {
+				// Leave an offer record for a former owner, but no live target server.
+				deleted, err := mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: siblingID, ProjectID: projectID})
+				require.NoError(t, err)
+				require.True(t, deleted.Deleted)
 			}
-			_, client := linkRemoteClientWithID(t, ctx, ti, orgID, projectID, target)
+			links, err := q.ListServerAuthClientsFixture(ctx, siblingID)
+			require.NoError(t, err)
+			require.Equal(t, []uuid.UUID{offer}, links)
 
 			_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 				ID: moved, RemoteMcpServerID: &movedBackend, UserSessionIssuerID: &target, Visibility: types.McpServerVisibility("disabled"),
 			})
 			require.NoError(t, err)
 
-			links, err := backfill.New(ti.conn).ListServerAuthClientsFixture(ctx, uuid.MustParse(moved))
+			links, err = q.ListServerAuthClientsFixture(ctx, uuid.MustParse(moved))
 			require.NoError(t, err)
-			if tc.shared {
-				require.Empty(t, links, "an issuer another server uses configures nothing for the moved server")
-				return
-			}
-			require.Equal(t, []uuid.UUID{backfill.OAuthClientID(orgID, client, backfill.TypeRemoteSession)}, links)
+			require.Empty(t, links, "moving downstream issuer must not inherit an offer")
 		})
 	}
 }

@@ -88,6 +88,12 @@ func enableOrgAutoRefreshFeature(
 	require.NoError(t, err)
 }
 
+func seedSweepOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, signIn, clientID uuid.UUID, slug string) {
+	t.Helper()
+	serverID := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, slug, "https://"+slug+".example.com/mcp")
+	offerRegistration(t, ctx, ti.conn, organizationID, projectID, serverID, clientID)
+}
+
 func seedSweepSession(
 	t *testing.T,
 	ctx context.Context,
@@ -110,6 +116,7 @@ func seedSweepSession(
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, clientUUID, slug)
 	var refreshToken pgtype.Text
 	if withRefreshToken {
 		refreshToken = conv.ToPGText("refresh-ciphertext")
@@ -431,11 +438,8 @@ func seedSweepSharedGrant(
 	clientID := createRemoteClient(t, ctx, ti, remoteIssuerID, issuerA.String(), slug+"-client")
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientUUID,
-		UserSessionIssuerID:   issuerB,
-	}))
 
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerB, clientUUID, slug)
 	subject := urn.NewUserSubject("subject-" + slug)
 	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,

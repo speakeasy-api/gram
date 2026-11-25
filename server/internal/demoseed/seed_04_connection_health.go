@@ -143,6 +143,7 @@ func (c healthClock) at(days, hour, minute, second int) time.Time {
 // The story's fixed points.
 func (c healthClock) linearDown() (time.Time, time.Time) { return c.at(0, 9, 42, 0), c.at(0, 11, 6, 0) }
 func (c healthClock) cursorBrokenFrom() time.Time        { return c.at(-2, 10, 14, 0) }
+func (c healthClock) cursorNotionFailure() time.Time     { return c.now.Add(-14 * time.Minute) }
 func (c healthClock) wikiBrokenFrom() time.Time          { return c.at(-1, 16, 0, 0) }
 func (c healthClock) danaFrom() time.Time                { return c.at(-2, 9, 12, 0) }
 
@@ -219,7 +220,7 @@ func (s *seeder) seedConnectionHealth(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("health-org-choice-" + strconv.Itoa(i) + "-" + srv.key), ProjectID: proj, OrgID: org,
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
-				McpServerID: s.healthServerID(srv.key), RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+				McpServerID: s.healthServerID(srv.key), AuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert organization sign-in choice on %s: %w", srv.name, err)
 			}
@@ -335,7 +336,7 @@ func (s *seeder) seedHealthSessions(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("health-choice-" + strconv.Itoa(n) + "-" + srv.key), ProjectID: s.projectID(), OrgID: s.orgID(),
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: id, McpServerID: s.healthServerID(srv.key),
-				RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+				AuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert connection health session %d choice on %s: %w", n, srv.name, err)
 			}

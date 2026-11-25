@@ -123,8 +123,11 @@ func createIssuerGatedHTTPToolFixture(
 	t.Helper()
 
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, slugPrefix)
-	toolset := fixture.Toolset
+	return issuerGatedHTTPToolFixture{remoteSessionResolverFixture: fixture, ToolName: addOAuthSecuredHTTPTool(t, ctx, ti, fixture.Toolset, upstreamURL)}
+}
 
+func addOAuthSecuredHTTPTool(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, upstreamURL string) string {
+	t.Helper()
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,
 		OrganizationID: toolset.OrganizationID,
@@ -189,5 +192,5 @@ func createIssuerGatedHTTPToolFixture(
 	})
 	require.NoError(t, err)
 
-	return issuerGatedHTTPToolFixture{remoteSessionResolverFixture: fixture, ToolName: toolName}
+	return toolName
 }

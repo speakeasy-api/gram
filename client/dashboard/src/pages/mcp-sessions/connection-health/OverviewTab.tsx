@@ -23,7 +23,6 @@ import {
   useConnectionAttempts,
   useDeniedClients,
   useRangeClock,
-  useKnownViewer,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -79,7 +78,7 @@ const SIGN_IN_ACTIVITY_FILTERS: AttemptFilters = {
   steps: [...SIGN_IN_STEPS],
 };
 
-/** MCP Sessions › Overview: how sign-in through this provider is going. */
+/** MCP Sign-in › Overview: how sign-in through this MCP sign-in is going. */
 export function OverviewTab({
   provider,
 }: {
@@ -104,7 +103,6 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
-  const known = useKnownViewer();
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -123,23 +121,19 @@ export function OverviewTab({
 
   return (
     <div className="space-y-10 pb-8">
-      <div className="space-y-3">
-        <SuspectedProblems
-          query={problems}
-          now={now}
-          onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-          rule={SIGN_IN_PROBLEMS_RULE}
-          empty="No suspected problems signing in right now."
-          expectVisible={
-            known?.loggingEnabled === true && known.viewerScope === "all"
-          }
-        />
-
-        <ServiceProblemsNote
-          viewerScope={problems.data?.viewerScope ?? known?.viewerScope}
-          serversHref={routes.mcpSessions.provider.mcpServers.href(providerId)}
-        />
-      </div>
+      <SuspectedProblems
+        query={problems}
+        now={now}
+        onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+        rule={SIGN_IN_PROBLEMS_RULE}
+        note={
+          <ServiceProblemsNote
+            serversHref={routes.mcpSessions.provider.mcpServers.href(
+              providerId,
+            )}
+          />
+        }
+      />
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}
 
@@ -217,7 +211,7 @@ export function OverviewTab({
 
       <OverviewSection
         title="Sign-in activity"
-        description="Latest first. MCP sign-ins and renewals through this provider."
+        description="Latest first. Sign-ins and renewals."
         action={
           <ArrowLink
             to={logsHref(
@@ -240,7 +234,7 @@ export function OverviewTab({
           </p>
         ) : activityRows.length === 0 ? (
           <p className="text-muted-foreground border px-4 py-6 text-sm">
-            No MCP sign-ins or renewals in the last 30 days.
+            No sign-ins or renewals in the last 30 days.
           </p>
         ) : (
           <AttemptsTable
@@ -387,7 +381,7 @@ function KillswitchesInForce({
   return (
     <OverviewSection
       title={`Killswitches in force · ${killswitches.length}${hasMore ? "+" : ""}`}
-      description="Across this organization, not only this provider. They block tool calls right now."
+      description="Across this organization, not only this MCP sign-in. They block tool calls right now."
       action={<ArrowLink to={orgRoutes.killswitch.href()}>View all</ArrowLink>}
     >
       <Table columns={columns} data={killswitches} rowKey={(k) => k.id} />
@@ -499,7 +493,7 @@ function Configuration({
   return (
     <OverviewSection
       title="Configuration"
-      description="How people sign in through this provider."
+      description="How people sign in here."
       action={
         <Link
           to={settingsHref}

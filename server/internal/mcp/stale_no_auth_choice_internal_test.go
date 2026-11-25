@@ -155,9 +155,9 @@ func TestAgentKeyStaleChoiceGetsOwnerCopy(t *testing.T) {
 	f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
 	f.service.staleNoAuthLog = newOnceLog()
 	agent := urn.NewAgentSubject(uuid.New())
-	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, enforced: true, profile: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
+	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, profile: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
 	members := []metaMember{{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
-	choices.apply(t.Context(), f.service.logger, members, true)
+	choices.apply(t.Context(), f.service.logger, members)
 	require.Empty(t, buf.String(), "nothing is logged until the member is called")
 	gate := &metaGateContext{organizationID: f.orgID, memberChoices: choices, authentication: &issuerGateAuthentication{subject: agent}}
 	message := f.service.memberFailureMessage(t.Context(), f.service.logger, gate, members[0], members[0].upstreamUnavailable)
@@ -186,7 +186,7 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 			issuerID := uuid.New()
 			require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), Slug: "issuer-" + issuerID.String()[:8]}))
 			if tc.bound {
-				require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: issuerID}))
+				require.NoError(t, f.q.SetServerUserSessionIssuerFixture(t.Context(), authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: f.serverID, UserSessionIssuerID: validUUID(issuerID)}))
 			}
 			member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 			member.authClient = new(gapWithChoice(authClientReasonNoAuthForbidden))
@@ -221,7 +221,7 @@ func TestStaleChoiceRemedyIsCachedPerPersonAndServer(t *testing.T) {
 	first, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_1"), member)
 	require.NoError(t, err)
 	require.False(t, first)
-	require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: issuerID}))
+	require.NoError(t, f.q.SetServerUserSessionIssuerFixture(t.Context(), authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: f.serverID, UserSessionIssuerID: validUUID(issuerID)}))
 	cached, err := f.service.consentCanReplaceChoice(t.Context(), gate("user_1"), member)
 	require.NoError(t, err)
 	require.False(t, cached, "the same person and server reuse the answer")

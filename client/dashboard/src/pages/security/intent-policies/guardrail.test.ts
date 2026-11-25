@@ -15,7 +15,7 @@ const effectClass: IntentLabelQuestion = {
   key: "effect_class",
   kind: "multi_noul",
   instructions: "",
-  options: ["read", "write_local", "outbound"].map((key) => ({
+  options: ["read", "write", "outbound"].map((key) => ({
     key,
     description: "",
     ordinal: 0,
@@ -44,19 +44,18 @@ const cond = (
   label,
   op,
   values,
-  pattern: "",
 });
 
 describe("labelsRead", () => {
-  it("lists each label once and appends tool.args for a pattern", () => {
+  it("lists each label once in condition order", () => {
     const c = contract({
       conditions: [
-        cond("history_rewrite", "is", "true"),
-        cond("history_rewrite", "is", "true"),
-        { join: "or", label: "", op: "", values: [], pattern: "git push" },
+        cond("target_locations", "includes", "remote"),
+        cond("target_locations", "includes", "credential_store"),
+        cond("effect_class", "includes", "destructive"),
       ],
     });
-    expect(labelsRead(c)).toEqual(["history_rewrite", "tool.args"]);
+    expect(labelsRead(c)).toEqual(["target_locations", "effect_class"]);
   });
 });
 
@@ -74,10 +73,7 @@ describe("checkedOptions", () => {
         cond("effect_class", "includes anything other than", "read"),
       ],
     });
-    expect([...checkedOptions(c, effectClass)]).toEqual([
-      "write_local",
-      "outbound",
-    ]);
+    expect([...checkedOptions(c, effectClass)]).toEqual(["write", "outbound"]);
   });
 });
 
@@ -118,11 +114,12 @@ describe("ruleHits", () => {
 describe("tokenizeExpression", () => {
   it("marks refs, outcomes, and strings, keeping the text intact", () => {
     const expr =
-      "label.carries_secret && 'outbound' in action.effect_class ? BLOCK : ABSTAIN";
+      "'credential' in label.payload_data && 'outbound' in action.effect_class ? BLOCK : ABSTAIN";
     const tokens = tokenizeExpression(expr);
     expect(tokens.map((t) => t.text).join("")).toBe(expr);
     expect(tokens.filter((t) => t.kind !== "plain")).toEqual([
-      { text: "label.carries_secret", kind: "ref" },
+      { text: "'credential'", kind: "string" },
+      { text: "label.payload_data", kind: "ref" },
       { text: "'outbound'", kind: "string" },
       { text: "action.effect_class", kind: "ref" },
       { text: "BLOCK", kind: "block" },

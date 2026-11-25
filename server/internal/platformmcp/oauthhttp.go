@@ -4,9 +4,11 @@ package platformmcp
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +58,18 @@ const (
 //go:embed oauth_page.html
 var oauthPageHTML string
 
+// oauthPageScript is served as an external file because the ingress CSP
+// forbids inline scripts. The URL carries a content hash so it can be cached
+// as immutable.
+//
+//go:embed oauth_page.js
+var oauthPageScript []byte
+
+var oauthPageScriptURL = func() string {
+	sum := sha256.Sum256(oauthPageScript)
+	return "/platform-mcp/oauth-page-" + hex.EncodeToString(sum[:])[:8] + ".js"
+}()
+
 var (
 	oauthPageTemplate      = template.Must(template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML)).Parse(consentpage.LogoTemplate))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
@@ -97,6 +111,7 @@ type oauthPageData struct {
 	State            string
 	CSRFToken        string
 	ScriptNonce      string
+	ScriptURL        string
 	AutoClose        bool
 	// WorkspaceName prefills the workspace form, and WorkspaceError explains
 	// why a submitted name was refused.
@@ -384,6 +399,13 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
 	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
 	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
+	mux.Handle("GET", oauthPageScriptURL, serveOAuthPageScript)
+}
+
+func serveOAuthPageScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = w.Write(oauthPageScript)
 }
 
 func handlerFunc(handler http.Handler) http.HandlerFunc {
@@ -1638,6 +1660,7 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 	data.ScriptNonce = scriptNonce
+	data.ScriptURL = oauthPageScriptURL
 	data.Styles = consentpage.Styles
 
 	var page strings.Builder
@@ -1647,14 +1670,19 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
+	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(scriptNonce))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }
 
-func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
-	formAction := consentpage.FormActionSources(redirectURI)
-	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
+// oauthPageContentSecurityPolicy omits form-action on purpose. Chrome checks
+// form-action on every hop of the redirect chain after a form submission, and
+// OAuth clients such as ChatGPT redirect their callback onward to origins we
+// cannot know. Allowing only the registered callback origin blocks the final
+// navigation after the single-use state is already spent. The MCP consent page
+// leaves form-action unset for the same reason.
+func oauthPageContentSecurityPolicy(scriptNonce string) string {
+	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {

@@ -53,7 +53,7 @@ func TestGatewayReviewUnchosenFailureIsMemberLocal(t *testing.T) {
 				for i, id := range ids {
 					members[i] = metaMember{serverID: id, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
 				}
-				choices.apply(ctx, testenv.NewLogger(t), members, false)
+				choices.apply(ctx, testenv.NewLogger(t), members)
 				for _, member := range members {
 					if member.serverID == broken {
 						require.Error(t, member.upstreamUnavailable)

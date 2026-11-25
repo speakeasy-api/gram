@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -46,7 +45,6 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 					_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 					require.NoError(t, err)
 				}
-				ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
 
 				upstream := newRecordingUpstream(t, "ping")
 				remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.url})
@@ -64,7 +62,7 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 				}
 				if credential == authz.AuthClientTypeRemoteSession {
 					wantOwner = ac.UserID
-					clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", []uuid.UUID{issuerID})
+					clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "")
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}))
 					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}, []uuid.UUID{clientID}))
 					owner := urn.NewUserSubject(ac.UserID)

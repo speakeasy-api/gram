@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
@@ -661,7 +662,6 @@ func TestStore_RequestsTheScopesRecordedAtTurnOn(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	q := repo.New(f.db)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
@@ -680,7 +680,6 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 	f := newChainStoreFixture(t)
 	ctx := t.Context()
 	q := repo.New(f.db)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "email"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
@@ -688,11 +687,16 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 	require.NoError(t, err)
 	remote, err := remotemcprepo.New(f.db).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: f.req.ProjectID, TransportType: "streamable-http", Url: testResource})
 	require.NoError(t, err)
-	_, err = mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+	server, err := mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: f.req.ProjectID, Name: pgtype.Text{String: "oidc-only", Valid: true}, Slug: pgtype.Text{String: "oidc-only", Valid: true},
 		RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, Visibility: "private", UserSessionIssuerID: uuid.NullUUID{UUID: f.req.UserSessionIssuerID, Valid: true},
 	})
 	require.NoError(t, err)
+
+	offers := authclientbackfill.New(f.db)
+	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: f.req.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true}, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: f.sel.clientID, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.req.ProjectID, OrganizationID: f.req.OrganizationID, McpServerID: server.ID, AuthClientID: authClientID, Source: "admin"}))
 
 	// Turn on's rule over the connection, recorded as preparation records it.
 	connection, err := remotesessions.ConnectionScopes(ctx, f.db, remotesessions.BindingConnection{ProjectID: f.req.ProjectID, OrganizationID: f.req.OrganizationID, UserSessionIssuerID: f.req.UserSessionIssuerID, ClientID: f.sel.clientID, Resource: testResource, Discover: true})

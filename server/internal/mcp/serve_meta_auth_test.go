@@ -26,6 +26,8 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 		oauth bool
 		// client attaches a sign-in client to the gateway's issuer.
 		client bool
+		// assigned places that registration on this particular hosted member.
+		assigned bool
 		// configured stores the tools' API key in the member environment.
 		configured bool
 		// private turns off the toolset's public MCP access; the caller holds
@@ -33,12 +35,13 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 		private bool
 		listed  bool
 	}{
-		{name: "unsupported", oauth: false, client: false, configured: false, private: false, listed: false},
-		{name: "configured", oauth: false, client: false, configured: true, private: false, listed: true},
-		{name: "oauth", oauth: true, client: true, configured: false, private: false, listed: true},
-		{name: "oauth without client", oauth: true, client: false, configured: false, private: false, listed: false},
-		{name: "configured with sign-in but no client", oauth: true, client: false, configured: true, private: false, listed: true},
-		{name: "private toolset", oauth: false, client: false, configured: true, private: true, listed: false},
+		{name: "unsupported", oauth: false, client: false, assigned: false, configured: false, private: false, listed: false},
+		{name: "configured", oauth: false, client: false, assigned: false, configured: true, private: false, listed: true},
+		{name: "oauth", oauth: true, client: true, assigned: true, configured: false, private: false, listed: true},
+		{name: "oauth with only an issuer link", oauth: true, client: true, assigned: false, configured: false, private: false, listed: false},
+		{name: "oauth without client", oauth: true, client: false, assigned: false, configured: false, private: false, listed: false},
+		{name: "configured with sign-in but no client", oauth: true, client: false, assigned: false, configured: true, private: false, listed: true},
+		{name: "private toolset", oauth: false, client: false, assigned: false, configured: true, private: true, listed: false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -58,7 +61,9 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 				if tt.client {
 					client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGTextEmpty(auth.ActiveOrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: "gateway-oauth-client"})
 					require.NoError(t, err)
-					require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: fx.issuerID}))
+					if tt.assigned {
+						assignHostedOAuth(t, ctx, ti.conn, auth.ActiveOrganizationID, *auth.ProjectID, server.ID, client.ID)
+					}
 				}
 			} else {
 				ti.addToolWithSecurity(ctx, t, toolset.ID, *auth.ProjectID, auth.ActiveOrganizationID)

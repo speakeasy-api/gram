@@ -91,6 +91,7 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
+	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, clientUUID, slug)
 	var refreshToken pgtype.Text
 	if seed.withRefreshToken {
 		refreshToken = conv.ToPGText("refresh-ciphertext")
@@ -277,7 +278,7 @@ func TestRecheckSweep_ClaimsUnexpiredAccessWithoutRefreshGrant(t *testing.T) {
 }
 
 // A platform-wide client is claimed under every organization that binds it, so an organization without a route never hides a sibling organization's endpoint.
-func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
+func TestRecheckSweep_PlatformRegistrationDoesNotTransferGrantsAcrossOrganizations(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -297,7 +298,7 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Two eligible organizations: one binds the client through its only organization-level issuer, with no stored endpoint behind it, so only its organization gateway presents the grant; the other serves it through a stored endpoint.
+	// The same platform registration is linked in another organization, but that does not transfer this tenant’s grant.
 	routelessOrg := createOrganization(t, ctx, ti.conn, slug+"-routeless")
 	routeless, err := testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
 		OrganizationID:     conv.ToPGText(routelessOrg),
@@ -307,9 +308,6 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 	})
 	require.NoError(t, err)
 	routable := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
-	for _, usi := range []uuid.UUID{routeless, routable} {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: usi}))
-	}
 	remoteServer, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: *authCtx.ProjectID, TransportType: "streamable-http", Url: "https://" + slug + ".example.com/mcp"})
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -333,6 +331,7 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 	seedGramSession(t, ctx, ti, subject, routable, slug+"-b", 24*time.Hour)
 
 	// Due now: the window's cutoff is ahead of the grant's creation.
+	offerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID, client.ID)
 	window := newRecheckWindow()
 	window.recheckCutoff = time.Now().Add(time.Hour)
 	rows, err := q.ClaimDueRemoteSessionRecheckCandidates(ctx, window.claimParams())
@@ -344,42 +343,22 @@ func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
 		}
 	}
 	require.NotNil(t, claimed, "the platform client's grant is claimed")
-	require.ElementsMatch(t, []string{routelessOrg, authCtx.ActiveOrganizationID}, claimed.OrganizationIds)
+	require.ElementsMatch(t, []string{authCtx.ActiveOrganizationID}, claimed.OrganizationIds)
 
 	_, err = q.GetDueRemoteSessionRecheckCandidate(ctx, repo.GetDueRemoteSessionRecheckCandidateParams{ID: session.ID, NowTs: conv.ToPGTimestamptz(window.now), RecheckCutoff: conv.ToPGTimestamptz(window.recheckCutoff), OrganizationIds: claimed.OrganizationIds})
 	require.NoError(t, err)
 
 	placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
-		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: claimed.OrganizationIds, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
+		ID: session.ID, UpdatedAt: session.UpdatedAt, GrantGeneration: session.GrantGeneration, OrganizationIds: claimed.OrganizationIds, NowTs: conv.ToPGTimestamptz(window.now),
 	})
 	require.NoError(t, err)
-	require.Len(t, placements, 2)
+	require.Len(t, placements, 1)
 	require.Equal(t, slug+"-endpoint", placements[0].Slug, "stored endpoints are tried before an organization gateway")
 	require.Equal(t, authCtx.ActiveOrganizationID, placements[0].OrganizationID, "the placement names the organization it is served under")
 	require.False(t, placements[0].OrganizationGateway)
-	require.True(t, placements[1].OrganizationGateway)
-	require.Equal(t, slug+"-routeless", placements[1].Slug, "an organization gateway is addressed by its organization's slug")
-	require.Equal(t, routelessOrg, placements[1].OrganizationID)
-
 	placements, err = q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
-		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: []string{routelessOrg}, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
+		ID: session.ID, UpdatedAt: session.UpdatedAt, GrantGeneration: session.GrantGeneration, OrganizationIds: []string{routelessOrg}, NowTs: conv.ToPGTimestamptz(window.now),
 	})
 	require.NoError(t, err)
-	require.Len(t, placements, 1, "the organization gateway alone presents the grant there")
-	require.True(t, placements[0].OrganizationGateway)
-
-	// A second organization-level issuer withdraws the gateway, leaving that
-	// organization nothing to present the grant through.
-	_, err = testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
-		OrganizationID:     conv.ToPGText(routelessOrg),
-		Slug:               slug + "-routeless-second-usi",
-		AuthnChallengeMode: "interactive",
-		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
-	})
-	require.NoError(t, err)
-	placements, err = q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
-		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: []string{routelessOrg}, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
-	})
-	require.NoError(t, err)
-	require.Empty(t, placements, "an organization with no endpoint or gateway would have hidden the grant")
+	require.Empty(t, placements, "a foreign sign-in and junction link cannot present the grant")
 }

@@ -240,16 +240,6 @@ func TestShadowMandatoryCountsEvaluationFailures(t *testing.T) {
 	require.Equal(t, int64(1), h.points(t)[shadowKey(mandatorySurfaceHostedConnect, mandatoryCallerUnrepresented, "api_key", true, "error", "none", "none")], "a client that went away records nothing")
 }
 
-func TestShadowMandatoryRecordsSkippedChecks(t *testing.T) {
-	t.Parallel()
-
-	h := newShadowHarness(t, true)
-	h.service.newMandatoryShadow(sessionContext(t, shadowOrg), shadowOrg).recordSkipped(t.Context(), mandatorySurfaceAuthClient, true, mandatoryReasonResolverOff, "server_1", "project_1")
-	require.Equal(t, map[attribute.Set]int64{
-		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonResolverOff): 1,
-	}, h.points(t), "a check that was not evaluated is never an allow")
-}
-
 func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 	t.Parallel()
 

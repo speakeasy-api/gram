@@ -1575,7 +1575,7 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 	{
 		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"duration\": \"2h\",\n      \"message\": \"aaa\",\n      \"requested_until\": \"1970-01-01T00:00:01Z\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
 		}
 		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest" || body.Scope == "channels:connect" || body.Scope == "channels:admin" || body.Scope == "channels:read_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all"}))
@@ -1584,6 +1584,14 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 			if utf8.RuneCountInString(*body.Message) > 1000 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
 			}
+		}
+		if body.Duration != nil {
+			if !(*body.Duration == "1h" || *body.Duration == "2h" || *body.Duration == "4h") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.duration", *body.Duration, []any{"1h", "2h", "4h"}))
+			}
+		}
+		if body.RequestedUntil != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -1602,10 +1610,12 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 		}
 	}
 	v := &access.RequestAccessPayload{
-		Scope:        body.Scope,
-		ResourceID:   body.ResourceID,
-		ResourceName: body.ResourceName,
-		Message:      body.Message,
+		Scope:          body.Scope,
+		ResourceID:     body.ResourceID,
+		ResourceName:   body.ResourceName,
+		Message:        body.Message,
+		Duration:       body.Duration,
+		RequestedUntil: body.RequestedUntil,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

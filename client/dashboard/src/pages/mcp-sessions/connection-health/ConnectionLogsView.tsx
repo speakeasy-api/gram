@@ -543,7 +543,7 @@ export function ConnectionLogsView({
         description={
           serverId
             ? "Reference search covers the last 30 days of this server."
-            : "Reference search covers the last 30 days of this provider."
+            : "Reference search covers the last 30 days of this MCP sign-in."
         }
       />
     ) : filtersActive || search ? (
@@ -640,7 +640,7 @@ export function ConnectionLogsView({
                     to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, serverId)}`}
                     className="text-foreground inline-flex items-center gap-1 hover:underline"
                   >
-                    Open in MCP Sessions with this server
+                    Open in MCP Sign-in with this server
                     <ArrowRight className="size-3.5" aria-hidden />
                   </Link>
                 ) : null}

@@ -949,14 +949,30 @@ WHERE registration.id = @registration_id
   AND registration.status = 'registered'
   AND registration.deleted IS FALSE;
 
--- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
-SELECT id, user_session_issuer_id
-FROM platform_mcp_catalog_registrations
-WHERE remote_mcp_server_id = @remote_mcp_server_id
-  AND organization_id = @organization_id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-ORDER BY id;
+-- name: LockPlatformMCPCatalogResourceOffers :many
+-- A stale registration cannot claim a resource through a different MCP server
+-- or a server that has moved to another source or sign-in. Hold the offer
+-- link while claiming/writing display so an explicit detach cannot interleave.
+SELECT m.id AS mcp_server_id, ac.remote_session_client_id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = m.id AND offer.project_id = m.project_id
+  AND offer.organization_id = p.organization_id AND offer.deleted IS FALSE
+JOIN mcp_auth_clients AS ac ON ac.id = offer.auth_client_id AND ac.organization_id = offer.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+  AND ac.deleted IS FALSE AND ac.enabled AND ac.client_type = 'remote_session'
+WHERE m.project_id = @project_id
+  AND m.remote_mcp_server_id = @remote_mcp_server_id
+  AND m.deleted IS FALSE AND m.visibility <> 'disabled'
+  AND EXISTS (
+    SELECT 1 FROM platform_mcp_catalog_registrations AS r
+    WHERE r.mcp_server_id = m.id AND r.project_id = m.project_id
+      AND r.organization_id = p.organization_id AND r.remote_mcp_server_id = m.remote_mcp_server_id
+      AND r.user_session_issuer_id = m.user_session_issuer_id
+      AND r.status = 'registered' AND r.deleted IS FALSE
+  )
+ORDER BY m.id, offer.auth_client_id
+FOR SHARE OF offer;
 
 -- name: ListPlatformMCPInventoryAuthorizationCandidates :many
 SELECT m.id, m.project_id

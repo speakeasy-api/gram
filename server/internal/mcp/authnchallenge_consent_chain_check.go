@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,31 +54,34 @@ type consentChainCheckResult struct {
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
 func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
-	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
-	var err error
-	enforcedDirect := false
-	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
-		enforcedDirect, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-		if err != nil {
-			return nil, routing, err
-		}
+	hosted, err := s.hostedConsentRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		return nil, routing, err
 	}
-	if !enforcedDirect {
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	if !directProxiedConsent(endpoint) && slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		_, offered := typed[client.ID]
+		_, assigned := hosted[client.ID]
+		return !offered && !assigned
+	}) {
 		statuses, err = s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
 		if err != nil {
 			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
-	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
+	exact := make(map[uuid.UUID]uuid.UUID, len(hosted)+len(typed))
+	maps.Copy(exact, hosted)
+	maps.Copy(exact, typed)
+	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, exact)
 	if err != nil {
 		return nil, routing, err
 	}
 	if len(statuses) > 0 {
-		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
+		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses, hosted)
 		if err != nil {
 			return nil, routing, err
 		}

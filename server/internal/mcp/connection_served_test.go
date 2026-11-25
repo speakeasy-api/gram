@@ -170,10 +170,11 @@ func TestGatewayMemberServedRecordsTheConnection(t *testing.T) {
 	metaSlug := "meta-served-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 	upstream := newRecordingUpstream(t, "ping")
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-served", "", []uuid.UUID{issuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-served", "")
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.url, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-served-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-served", upstream.url)
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -212,10 +213,11 @@ func TestGatewayMemberFailureNamesTheServiceSignIn(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refused", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refused", "")
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-refused-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -253,10 +255,11 @@ func TestGatewayMemberErrorResultIsNotServed(t *testing.T) {
 		Response:    testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "tool failed"}}, IsError: true},
 	}}})
 	t.Cleanup(upstream.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tool-error", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tool-error", "")
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-tool-error-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typedClient := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typedClient})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-tool-error", upstream.URL)
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))

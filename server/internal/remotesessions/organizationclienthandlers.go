@@ -1008,8 +1008,8 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := txRepo.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx, deleted.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete user session issuer attachments for deleted client").LogError(ctx, logger)
+	if err := txRepo.RetirePrincipalAttachmentsForDeletedRegistration(ctx, repo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire principal attachments for deleted client").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -1027,6 +1027,9 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	// which they offered its typed client are retired in the same transaction.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
+	}
+	if err := txRepo.RetireOffersForDeletedRegistration(ctx, repo.RetireOffersForDeletedRegistrationParams{ID: deleted.ID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), ProjectID: deleted.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "retire typed offers for deleted client").LogError(ctx, logger)
 	}
 	if err := bindingServers.Derive(ctx, dbtx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the deleted client's servers").LogError(ctx, logger)
@@ -1056,8 +1059,8 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	return nil
 }
 
-// RemoveClientFromMcpServer detaches a client from an MCP server by clearing
-// the MCP server's user_session_issuer link, scoped to the caller's organization.
+// RemoveClientFromMcpServer removes exactly one server's association. The
+// issuer, registration, other offers, and attachment FK parent stay intact.
 func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgclientsgen.RemoveClientFromMcpServerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -1159,34 +1162,41 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return err.LogWarn(ctx, logger)
 	}
 
-	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
+	if err := s.detachDerivedServerOffers(ctx, dbtx, authCtx, server.ProjectID, server.ID, clientID); err != nil {
+		return err.LogError(ctx, logger)
+	}
+
+	affected, err := upstreamclientsrepo.New(dbtx).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		McpServerID: server.ID, ProjectID: server.ProjectID, RemoteSessionClientID: clientID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "detach remote session client from user session issuer").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "detach remote session client from server").LogError(ctx, logger)
 	}
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
-
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
+		if err := upstreamclientsrepo.New(dbtx).RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "preserve hosted upstream authentication requirement").LogError(ctx, logger)
+		}
+	}
+	// The FK parent survives, but this operation revokes the typed offer that
+	// an attached agent may need to use its grant on the target server. Keep
+	// the explicit agent-detach requirement rather than silently stranding it.
+	attached, err := txRepo.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
+		OrganizationID: authCtx.ActiveOrganizationID, RemoteSessionClientID: clientID, UserSessionIssuerID: server.UserSessionIssuerID.UUID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check agent attachments before detach").LogError(ctx, logger)
+	}
+	if attached {
+		return oops.E(oops.CodeConflict, nil, agentBindingsOnReplacedClientMessage).LogWarn(ctx, logger)
+	}
 	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
 		return err
 	}
-
-	// The binding is removed for every server on the issuer, in any project,
-	// so their associations with this client go with it.
-	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
-		RemoteSessionClientID: clientID,
-		OrganizationID:        authCtx.ActiveOrganizationID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove mcp server associations for detached client").LogError(ctx, logger)
-	}
-	// Same transaction as the binding removal: a server that stops reaching
-	// the registration stops offering the client derived from it.
-	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the detached client's servers").LogError(ctx, logger)
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, server.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the detached server").LogError(ctx, logger)
 	}
 	if err := bindingServers.Derive(ctx, dbtx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the detached client's servers").LogError(ctx, logger)

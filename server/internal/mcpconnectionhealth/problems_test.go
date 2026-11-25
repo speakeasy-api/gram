@@ -124,6 +124,34 @@ func TestListSuspectedProblems_ListsTheProvidersProblems(t *testing.T) {
 	require.Equal(t, "The server, or the API one of its tools calls, rejected the credential saved for it.", p.Fact)
 }
 
+func TestListSuspectedProblems_ListsWhatEachPersonFixesLast(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	for range 7 {
+		person := urn.NewUserSubject("user-" + uuid.NewString())
+		ti.attemptAs(t, mcpconnectionattempts.GatewayScope(ti.org, ti.project, ti.server, mcpconnectionattempts.AppDCR), person, time.Hour, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession)
+	}
+	me := urn.NewUserSubject(ti.userID)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+
+	res := ti.listProblems(t, ctx, nil, nil)
+	require.Len(t, res.Problems, 2)
+	admin := res.Problems[0]
+	require.Equal(t, int64(1), admin.PeopleCount, "one person's problem an admin fixes comes before seven people's that each fixes")
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("admin")), admin.WhoFixes)
+	connect := res.Problems[1]
+	require.Equal(t, int64(7), connect.PeopleCount)
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("person")), connect.WhoFixes)
+	require.Equal(t, "7 people need to connect an account for Linear", connect.Headline)
+	require.Equal(t, "For each person, the connection their app asked for on Linear is missing, has expired, or can no longer be used. If their app shows a connection link, they can use it to connect or reconnect.", connect.Fact)
+
+	got := ti.getProblem(t, ctx, connect.ID)
+	require.True(t, got.Found)
+	require.Equal(t, new(gen.SuspectedProblemWhoFixes("person")), got.Problem.WhoFixes)
+}
+
 func TestListSuspectedProblems_FiltersByPart(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

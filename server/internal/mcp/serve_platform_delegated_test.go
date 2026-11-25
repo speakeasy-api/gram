@@ -21,16 +21,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// managedAssistantWithAgent creates the project's managed assistant, puts the
-// org on the Platform MCP variant, and creates an agent owned by the context's
-// user. The agent holds no policy grants of its own.
+// managedAssistantWithAgent creates the project's managed assistant and an
+// agent owned by the context's user. The agent holds no policy grants of its own.
 func managedAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
@@ -39,7 +37,6 @@ func managedAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextv
 		ProjectID:   *authCtx.ProjectID,
 		AssistantID: managedID,
 	}))
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	agent, err := agentrepo.New(ti.conn).CreateAgent(t.Context(), agentrepo.CreateAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,

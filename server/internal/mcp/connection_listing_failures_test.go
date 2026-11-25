@@ -189,7 +189,7 @@ func TestGatewayDirectListingPersonCredentialWritesNothing(t *testing.T) {
 			issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 			metaSlug := "meta-listing-" + uuid.NewString()[:8]
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-listing", "", []uuid.UUID{issuerID})
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-listing", "")
 			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-listing-user-"+uuid.NewString())
 			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
@@ -220,10 +220,11 @@ func TestGatewayConsentSavedKeyBesideASignIn(t *testing.T) {
 	slug := "gateway-key-" + uuid.NewString()[:8]
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer.ID)
 	upstream := statusUpstream(t, http.StatusUnauthorized).URL
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gateway-key", "", []uuid.UUID{issuer.ID})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gateway-key", "")
 	member := createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", upstream, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, remoteClient)), 0)
 	seedRemoteHeader(t, ctx, ti.conn, projectID, member.remoteServerID, "Authorization", "Bearer saved-key", "", false)
 
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, member.mcpServerID, remoteClient, "remote_session")
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
 	withConsentFlow(t, ctx, ti, stateID)
 	page := consentGetPageWithContext(t, ctx, ti, slug, stateID)

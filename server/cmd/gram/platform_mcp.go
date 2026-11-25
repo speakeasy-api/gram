@@ -188,7 +188,7 @@ type platformMCPConfig struct {
 	Telemetry platformmcp.DiagnosticsTelemetryReader
 	// ToolUsage is the target-aware tool usage read behind
 	// get_tool_usage_summary: the same pipeline the dashboard Insights board
-	// and the managed platform_get_tool_usage_summary tool read. Nil keeps the
+	// reads. Nil keeps the
 	// tool visible as unavailable rather than serving an empty breakdown.
 	ToolUsage platformmcp.ToolUsageBreakdownReader
 	// SessionCapture resolves the organization's metrics mode, which decides

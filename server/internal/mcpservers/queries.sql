@@ -12,7 +12,8 @@ INSERT INTO mcp_servers (
     unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility,
-    network_access_mode
+    network_access_mode,
+    requires_upstream_auth
 )
 VALUES (
     @id,
@@ -27,7 +28,9 @@ VALUES (
     @unproxied_mcp_server_id,
     @tool_variations_group_id,
     @visibility,
-    sqlc.narg('network_access_mode')
+    sqlc.narg('network_access_mode'),
+    CASE WHEN sqlc.narg('toolset_id')::uuid IS NOT NULL
+              AND sqlc.narg('user_session_issuer_id')::uuid IS NULL THEN FALSE END
 )
 RETURNING *;
 
@@ -631,96 +634,62 @@ WHERE project_id = @project_id
 ORDER BY id;
 
 -- name: ResyncMCPServerRemoteSessionIssuers :execrows
--- Recomputes mcp_servers.remote_session_issuer_id for the servers on each named
--- user session issuer. A server with a live client association takes its one
--- provider, or NULL with several. A server with none falls back to the live
--- client bindings on its issuer: exactly one distinct remote issuer stamps it,
--- none or several leave it NULL and readers fail closed. The fallback only
--- feeds readers of this column and goes away with it.
---
--- Best effort: runs post-commit outside the mutating transaction, so it takes
--- no advisory lock and a raced run merely leaves a stale value, which the
--- consent-time lookup degrades on and the next run heals.
---
--- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
--- removal signal; the column's ON DELETE SET NULL never fires. The filters
--- mirror the serve-time credential resolver: the column must never name an
--- issuer that resolver would refuse.
---
--- Tenancy: the ids arrive from an untenanted join table, so the derivation is
--- pinned to the caller's own project — a foreign id derives no row and writes
--- nothing — and only that project's servers are written. Organization-level
--- clients of the caller's organization count toward the derivation, matching
--- what the attach surface permits. An association counts only through a live
--- client and provider visible to the association's own project, its
--- organization, or globally, the tiers the resolver admits; foreign keys pin
--- the association to the server's project and organization.
-WITH resolved AS (
-    SELECT input.user_session_issuer_id,
-           CASE WHEN count(DISTINCT i.id) = 1
-                THEN (array_agg(DISTINCT i.id))[1]
-           END AS remote_session_issuer_id
-    FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
-    JOIN user_session_issuers AS usi
-      ON usi.id = input.user_session_issuer_id
-     AND (usi.project_id = @project_id::uuid
-          OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-    LEFT JOIN remote_session_client_user_session_issuers AS link
-           ON link.user_session_issuer_id = input.user_session_issuer_id
-    LEFT JOIN remote_session_clients AS c
-           ON c.id = link.remote_session_client_id
-          AND c.deleted IS FALSE
-          AND (c.project_id = @project_id::uuid
-               OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
-    LEFT JOIN remote_session_issuers AS i
-           ON i.id = c.remote_session_issuer_id
-          AND i.deleted IS FALSE
-    GROUP BY input.user_session_issuer_id
-), associated AS (
-    SELECT server.id,
-           resolved.remote_session_issuer_id AS resolved_issuer_id,
-           ARRAY(
-               SELECT DISTINCT c.remote_session_issuer_id
-               FROM mcp_server_remote_session_clients AS a
-               JOIN remote_session_clients AS c
-                 ON c.id = a.remote_session_client_id
-                AND c.deleted IS FALSE
-                AND (c.project_id = a.project_id
-                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
-               JOIN remote_session_issuers AS provider
-                 ON provider.id = c.remote_session_issuer_id
-                AND provider.deleted IS FALSE
-                AND (provider.project_id = a.project_id
-                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
-               WHERE a.mcp_server_id = server.id
-                 AND a.deleted IS FALSE
-           )::uuid[] AS association_provider_ids
-    FROM resolved
-    JOIN mcp_servers AS server
-      ON server.user_session_issuer_id = resolved.user_session_issuer_id
-     AND server.project_id = @project_id::uuid
+-- Stamp exactly one live upstream provider for the server. A typed OAuth
+-- offer is authoritative, including disabled/detached offers; servers without
+-- typed OAuth history may still use direct server associations. Sign-in
+-- issuer links are FK compatibility only and never determine this stamp.
+WITH scoped AS (
+    SELECT server.id, project.id AS project_id, project.organization_id, signin.id AS signin_id
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
+    JOIN user_session_issuers AS signin ON signin.id = server.user_session_issuer_id
+      AND (signin.project_id = project.id OR (signin.project_id IS NULL AND signin.organization_id = project.organization_id))
+    WHERE signin.id = ANY(@user_session_issuer_ids::uuid[])
+      AND project.id = @project_id::uuid AND project.organization_id = @organization_id::text
+      AND NOT server.deleted
+), typed AS (
+    SELECT server.id, auth_client.remote_session_client_id,
+           NOT offer.deleted AND auth_client.enabled AND NOT auth_client.deleted AS live
+    FROM scoped AS server
+    JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
+      AND offer.project_id = server.project_id AND offer.organization_id = server.organization_id
+    JOIN mcp_auth_clients AS auth_client ON auth_client.id = offer.auth_client_id
+      AND auth_client.organization_id = server.organization_id
+      AND (auth_client.project_id IS NULL OR auth_client.project_id = server.project_id)
+    WHERE auth_client.client_type IN ('remote_session', 'service_account', 'ema')
+), candidates AS (
+    SELECT id, remote_session_client_id FROM typed WHERE live
+    UNION ALL
+    SELECT server.id, association.remote_session_client_id
+    FROM scoped AS server
+    JOIN mcp_server_remote_session_clients AS association ON association.mcp_server_id = server.id
+      AND association.project_id = server.project_id AND association.organization_id = server.organization_id
+      AND NOT association.deleted
+    WHERE NOT EXISTS (SELECT 1 FROM typed WHERE typed.id = server.id)
 ), derived AS (
-    -- Associations decide when there are any: one provider stamps it, several
-    -- leave it NULL. With none, the issuer's bindings decide.
-    SELECT id,
-           CASE WHEN cardinality(association_provider_ids) = 0 THEN resolved_issuer_id
-                WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1]
-           END AS remote_session_issuer_id
-    FROM associated
+    SELECT server.id, server.signin_id,
+           CASE WHEN count(DISTINCT provider.id) = 1 THEN (array_agg(DISTINCT provider.id) FILTER (WHERE provider.id IS NOT NULL))[1] END AS remote_session_issuer_id
+    FROM scoped AS server
+    LEFT JOIN candidates ON candidates.id = server.id
+    LEFT JOIN remote_session_clients AS registration ON registration.id = candidates.remote_session_client_id
+      AND NOT registration.deleted
+      AND (registration.project_id = server.project_id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = server.organization_id)))
+    LEFT JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id
+      AND NOT provider.deleted
+      AND (provider.project_id = server.project_id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = server.organization_id)))
+    GROUP BY server.id, server.signin_id
 )
-UPDATE mcp_servers AS s
+UPDATE mcp_servers AS server
 SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
 FROM derived
-WHERE s.id = derived.id
-  AND s.project_id = @project_id::uuid
-  -- Belt and suspenders on the caller's org/project pair agreeing.
-  AND EXISTS (SELECT 1
-              FROM projects AS p
-              WHERE p.id = s.project_id
-                AND p.organization_id = @organization_id::text)
-  AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id;
+WHERE server.id = derived.id
+  AND NOT server.deleted
+  AND server.user_session_issuer_id = derived.signin_id
+  AND server.project_id = @project_id::uuid
+  AND EXISTS (SELECT 1 FROM projects AS project
+              WHERE project.id = server.project_id AND project.organization_id = @organization_id::text AND NOT project.deleted)
+  AND server.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id;
 
 -- name: ListProjectsSharingOrganizationUserSessionIssuers :many
 -- Projects of the organization with a live MCP server on one of the named

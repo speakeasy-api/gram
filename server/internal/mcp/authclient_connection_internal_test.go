@@ -437,27 +437,29 @@ func TestAdmittedAgentAuthClientUsesTheAttachedConnectionOwner(t *testing.T) {
 	}
 }
 
-// Without enforcement the connect-equivalent rule decides, so a failed read of
-// an attached connection's consent never refuses the request: only enforcement
-// needs it, and the shadow skips it.
-func TestAttachedConsentReadFailureSparesUnenforcedOrganizations(t *testing.T) {
+// Failure to read another user's attachment consent must refuse serving,
+// even without typed consent enrollment. The connect-equivalent test
+// control reads consent only for shadowing and is never refused by it.
+func TestAttachedConsentReadFailureRefusesMandatoryServing(t *testing.T) {
 	t.Parallel()
 
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_auth_client_consent_unenforced")
 	require.NoError(t, err)
 	personal := personalAuthGrant()
-	for _, shadow := range []bool{false, true} {
+	for _, tc := range []struct{ mandatory, shadow bool }{{true, false}, {true, true}, {false, false}, {false, true}} {
 		f := newAuthClientFixture(t, pool)
 		client := f.oauthClient(authClientTypeRemoteSession)
 		selector := f.choose(validUUID(client))
 		selector.userSessionIssuerID = uuid.New()
 		flags := new(feature.InMemory)
-		flags.SetFlag(feature.FlagMandatoryAuthzShadow, f.orgID, shadow)
+		flags.SetFlag(feature.FlagMandatoryAuthzShadow, f.orgID, tc.shadow)
 		f.service.features = flags
 		f.service.logger = testenv.NewLogger(t)
 		f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider().Meter("test"), testenv.NewLogger(t))
 		f.service.mandatoryShadowLog = newOnceLog()
-		f.service.authClientPermitter = connectPermitter{}
+		if tc.mandatory {
+			f.service.authClientPermitter = nil
+		}
 		reads := 0
 		f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient(), authz.EngineOpts{
 			AdmitPrincipalCredential: func(context.Context, *pgxpool.Pool) (authz.PrincipalCredentialAdmission, error) {
@@ -475,9 +477,14 @@ func TestAttachedConsentReadFailureSparesUnenforcedOrganizations(t *testing.T) {
 		agentID := uuid.New()
 
 		res, err := f.service.resolveAuthClientForServing(admittedAgentContext(t, f.orgID, agentID), selector, f.serverID, f.projectID, urn.NewAgentSubject(agentID))
-		require.NoError(t, err, "shadow=%v", shadow)
-		require.Equal(t, authClientResolved, res.outcome, "shadow=%v", shadow)
-		if shadow {
+		if tc.mandatory {
+			require.ErrorContains(t, err, "database unavailable")
+			require.Equal(t, 1, reads, "serving must read the connection owner's consent")
+			continue
+		}
+		require.NoError(t, err, "shadow=%v", tc.shadow)
+		require.Equal(t, authClientResolved, res.outcome, "shadow=%v", tc.shadow)
+		if tc.shadow {
 			require.Equal(t, 1, reads, "the shadow reads consent")
 			continue
 		}
@@ -640,11 +647,9 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 		t.Helper()
 		f := newAuthClientFixture(t, pool)
 		client := handback(t, f)
-		// The credential chose both the client and its registration, which
-		// stays bound to the sign-in.
+		// The credential chose both the client and its registration.
 		selector := &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: uuid.New(), credentialID: uuid.New()}
 		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: selector.userSessionIssuerID, ProjectID: validUUID(f.projectID), Slug: "usi-" + selector.userSessionIssuerID.String()[:8]}))
-		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: selector.userSessionIssuerID}))
 		require.NoError(t, f.q.SeedOAuthSelectionFixture(t.Context(), authclientbackfill.SeedOAuthSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: selector.credentialID, McpServerID: f.serverID, RemoteSessionClientID: f.registration}))
 		require.NoError(t, f.q.SwapUpstreamAuthClientFixture(t.Context(), authclientbackfill.SwapUpstreamAuthClientFixtureParams{AuthClientID: validUUID(client), CredentialID: selector.credentialID, McpServerID: f.serverID}))
 		enforcedShadowService(t, f)
@@ -702,17 +707,16 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				t.Parallel()
 				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
 				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID}
-				choices := &memberChoices{selector: selector, enforced: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
+				choices := &memberChoices{selector: selector, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
 				choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
+					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, member)
 				}
 				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
-				choices.apply(ctx, testenv.NewLogger(t), members, true)
+				choices.apply(ctx, testenv.NewLogger(t), members)
 				member := members[0]
 				require.NoError(t, member.upstreamUnavailable)
 				require.Equal(t, authClientLegacy, member.authClient.outcome)
 				require.Equal(t, hb.reason, member.authClient.reason)
-				require.False(t, member.typedAuthClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, member.authClient.attachedSession)
 
 				if replaced {

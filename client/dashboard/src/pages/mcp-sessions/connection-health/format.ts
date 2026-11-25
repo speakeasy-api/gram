@@ -27,9 +27,9 @@ export function outcomeLabel(outcome: string): string {
 
 export const STEP_LABELS: Record<StepGroup, string> = {
   connect: "Connect",
-  sign_in: "MCP sign-in",
+  sign_in: "Sign-in",
   service_sign_in: "Service sign-in",
-  sign_in_renewal: "MCP sign-in renewal",
+  sign_in_renewal: "Sign-in renewal",
   service_renewal: "Service sign-in renewal",
   listing_tools: "Listing tools",
   request: "Request",
@@ -73,6 +73,25 @@ export const SOURCE_LABELS: Record<Source, string> = {
   speakeasy_setting: "A Speakeasy setting",
   speakeasy: "Speakeasy",
 };
+
+/** Where a problem's failures came from, in one sentence true for every reason with that source; name is the service or app when known. */
+export function sourceSentence(source: Source, name?: string): string {
+  const named = (what: string) => (name ? `${what} (${name})` : what);
+  switch (source) {
+    case "service":
+      return `These failures came from ${named("the service")}.`;
+    case "server":
+      return "These failures came from the MCP server.";
+    case "app":
+      return `These failures point to ${named("the app")}.`;
+    case "identity_provider":
+      return "These failures came from the identity provider, or it could not be reached.";
+    case "speakeasy_setting":
+      return "A Speakeasy admin should look into these failures.";
+    case "speakeasy":
+      return "Speakeasy should look into these failures.";
+  }
+}
 
 const UNNAMED_SERVER: Record<string, string> = {
   authorization_server: "Shared sign-in",
@@ -204,8 +223,14 @@ function sameDay(a: Date, b: Date): boolean {
 
 /** "09:48 today", or "16 Nov, 16:05" on another day. */
 export function formatSince(iso: string, now: Date): string {
+  const at = formatAt(iso, now);
+  return sameDay(new Date(iso), now) ? `${at} today` : at;
+}
+
+/** "09:48" today, or "16 Nov, 16:05" on another day. */
+export function formatAt(iso: string, now: Date): string {
   const date = new Date(iso);
-  if (sameDay(date, now)) return `${TIME_MINUTES.format(date)} today`;
+  if (sameDay(date, now)) return TIME_MINUTES.format(date);
   return `${DAY_MONTH.format(date)}, ${TIME_MINUTES.format(date)}`;
 }
 

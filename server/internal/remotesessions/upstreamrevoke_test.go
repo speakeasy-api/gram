@@ -30,10 +30,13 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -218,12 +221,6 @@ func seedRevocableSession(
 	})
 	require.NoError(t, err)
 
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
-	})
-	require.NoError(t, err)
-
 	accessToken := slug + "-access"
 	accessEnc, err := enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
@@ -320,12 +317,6 @@ func seedRevocableClient(
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGTextEmpty("client_secret_post"),
-	})
-	require.NoError(t, err)
-
-	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuer,
 	})
 	require.NoError(t, err)
 
@@ -699,12 +690,25 @@ func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T)
 
 	clientID, fixtures := seedRevocableClient(t, ctx, ti, "delete-client-cascade", upstream.URL+"/revoke", 2)
 
+	fx := fixtures[0]
+	server := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "retire-target", "https://registration.example.com/mcp")
+	target := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, clientID)
+	other := seedRevocableSession(t, ctx, ti, "retire-sibling", "", "secret", true)
+	sibling := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, other.clientID)
+
 	err := ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
 		ID:               clientID.String(),
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
+	require.NoError(t, err)
+
+	offers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, server)
+	require.NoError(t, err)
+	require.NotContains(t, offers, target)
+	require.Contains(t, offers, sibling)
+	_, err = repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: other.subject, RemoteSessionClientID: other.clientID})
 	require.NoError(t, err)
 
 	want := []string{fixtures[0].refreshToken, fixtures[1].refreshToken}
@@ -714,6 +718,36 @@ func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T)
 	for _, fx := range fixtures {
 		requireSessionRevoked(t, ctx, ti, fx)
 	}
+}
+
+func TestAttachTypedOffer_RejectsConcurrentRegistrationDeletion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	fx := seedRevocableSession(t, ctx, ti, "offer-delete-race", "", "secret", true)
+	first := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "offer-first", "https://registration.example.com/first")
+	second := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, fx.userIssuerID, "offer-second", "https://registration.example.com/second")
+	typed := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, first, fx.clientID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	q := repo.New(tx)
+	_, err := q.LockRemoteSessionClientForSessionWrite(ctx, fx.clientID)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := authclients.AttachToServer(ctx, ti.conn, audit.NewLogger(), fx.organizationID,
+			urn.NewPrincipal(urn.PrincipalTypeUser, "test-actor"), nil, typed, second)
+		done <- err
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+	_, err = q.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: fx.clientID, ProjectID: conv.ToNullUUID(fx.projectID)})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.ErrorContains(t, <-done, "OAuth registration is no longer available")
+	offers, err := authclientbackfill.New(ti.conn).ListServerAuthClientsFixture(ctx, second)
+	require.NoError(t, err)
+	require.Empty(t, offers)
 }
 
 // newDisconnectChallengeManager builds the manager behind the consent screen

@@ -79,9 +79,12 @@ func seedAttemptChallenge(t *testing.T, ctx context.Context, ti *testInstance, t
 	return stateID
 }
 
-func postConsentAction(t *testing.T, ctx context.Context, ti *testInstance, slug, stateID, action string) *url.URL {
+func postConsentAction(t *testing.T, ctx context.Context, ti *testInstance, slug, stateID, action string, authClient ...string) *url.URL {
 	t.Helper()
 	form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {action}}
+	if len(authClient) > 0 {
+		form.Set("auth_client", authClient[0])
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := serveConsentRoute(t, ctx, ti, slug, req)
@@ -1277,9 +1280,11 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 			upstream := "https://chained.example.test/mcp"
 			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", "chained-"+uuid.NewString()[:8], 1, upstream)
-			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "")
 			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 			require.NoError(t, err)
+			seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, memberID, upstreamClient, "ema")
+			seedMetaMemberConnectGrant(t, ctx, ti.conn, auth.ActiveOrganizationID, memberID)
 			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: tc.reason})
 			rec := recordConnections(t, ti)
 
@@ -1328,9 +1333,10 @@ func TestGatewayConsentRefusedMemberIsNotUnavailable(t *testing.T) {
 			upstream := "https://chained.example.test/mcp"
 			memberSlug := "chained-" + uuid.NewString()[:8]
 			memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Chained", memberSlug, 1, upstream)
-			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+			upstreamClient := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "chained-"+uuid.NewString()[:8], "")
 			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 			require.NoError(t, err)
+			seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, memberID, upstreamClient, "ema")
 			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: reason})
 
 			stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)

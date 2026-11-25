@@ -15,7 +15,7 @@ func TestPlatformWorkloadResourceWithoutServedToolsets(t *testing.T) {
 	serverURL := &url.URL{Scheme: "https", Host: "api.example"}
 	// The token endpoint can run in a process that serves no platform toolsets.
 	s := &Service{aiCatalog: aivendorstest.NewStore(), serverURL: serverURL}
-	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
+	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
 		got, ok := s.platformWorkloadResource(platformtools.PlatformToolsetURL(serverURL, slug))
 		require.True(t, ok, slug)
 		require.Equal(t, slug, got)

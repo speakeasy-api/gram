@@ -130,7 +130,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	ti.service.SetBindingRefreshAttempts(attempts)
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Exact popup agent"})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-popup-client", "", []uuid.UUID{issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-popup-client", "")
 	source, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "fixture-token", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	binding, err := bindings.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: issuerID.String(), RemoteSessionID: source.ID.String()})
