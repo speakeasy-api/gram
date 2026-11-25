@@ -54,12 +54,13 @@ func testCreatePublishesOAuthBeforeCommit(t *testing.T, enforced bool) {
 		RemoteMCPServerID:   uuid.NullUUID{UUID: source, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer, Valid: true}, server.RemoteSessionIssuerID)
 	links, err := backfill.New(tx).ListServerAuthClientsFixture(ctx, server.ID)
 	require.NoError(t, err)
 	if enforced {
+		require.False(t, server.RemoteSessionIssuerID.Valid, "an issuer link alone does not stamp the server")
 		require.Empty(t, links, "downstream sign-in selection must not promote legacy links into offers")
 	} else {
+		require.Equal(t, uuid.NullUUID{UUID: remoteIssuer, Valid: true}, server.RemoteSessionIssuerID, "the direct association still stamps the legacy server")
 		require.Equal(t, []uuid.UUID{backfill.OAuthClientID(auth.ActiveOrganizationID, remoteClient, backfill.TypeRemoteSession)}, links)
 	}
 	require.NoError(t, tx.Rollback(ctx))
@@ -130,11 +131,7 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, second)
 			require.NoError(t, err)
-			if tc.enforced {
-				require.Empty(t, links, "an enforced server offers a client nobody configured for it")
-			} else {
-				require.Equal(t, []uuid.UUID{typedClient}, links)
-			}
+			require.Empty(t, links, "the sibling's offer cannot stamp or qualify a new server")
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)
 			require.Equal(t, []uuid.UUID{typedClient}, links)
