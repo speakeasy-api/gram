@@ -467,6 +467,10 @@ func (s *Service) buildRemoteConnectURL(
 			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(rerr))
 			return "", false, oops.E(oops.CodeForbidden, rerr, "connection is not authorized for this server").LogWarn(ctx, logger)
 		}
+		if errors.Is(rerr, remotesessions.ErrTypedAuthorizationChanged) {
+			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(rerr))
+			return "", false, oops.E(oops.CodeConflict, rerr, "server upstream configuration changed; refresh and try again").LogWarn(ctx, logger)
+		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "select upstream login server").LogError(ctx, logger)
 	}

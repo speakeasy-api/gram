@@ -608,10 +608,10 @@ func (s *Service) buildMemberDispatch(
 	// registration. In particular, a token resolved for a different member
 	// (even at the same provider) must never become a tool input.
 	tokens, err := s.resolveMemberTokens(ctx, gate, member)
-	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, err
+	var qualified map[uuid.UUID]remotesessions.UpstreamToken
+	if err == nil {
+		qualified, err = hostedMemberTokens(tokens, member)
 	}
-	qualified, err := hostedMemberTokens(tokens, member)
 	if err != nil {
 		switch {
 		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable),
