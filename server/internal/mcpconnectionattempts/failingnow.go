@@ -21,20 +21,51 @@ const (
 	EpisodeLookback = 7 * 24 * time.Hour
 
 	// failingReadTimeout and failingReadMemoryBytes cap each ClickHouse read, so a very
-	// large organization fails its own read instead of holding the caller.
-	failingReadTimeout     = 60 * time.Second
+	// large organization fails its own read instead of holding the caller. The timeout
+	// matches the 30 second budget of the requests that wait on it.
+	failingReadTimeout     = 30 * time.Second
 	failingReadMemoryBytes = 2 << 30
+
+	// maxEpisodeAttempts caps the attempts one episode read returns: 2,000 people failing
+	// at once, each with 100 attempts in the lookback.
+	maxEpisodeAttempts = 200_000
 )
 
 func failingReadContext(ctx context.Context) context.Context {
-	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+	return clickhouse.Context(ctx, clickhouse.WithSettings(failingReadSettings()))
+}
+
+func failingReadSettings() clickhouse.Settings {
+	return clickhouse.Settings{
 		"max_execution_time": int(failingReadTimeout / time.Second),
 		"max_memory_usage":   failingReadMemoryBytes,
-	}))
+	}
+}
+
+// episodeReadContext also caps the rows the episode read returns.
+func episodeReadContext(ctx context.Context) context.Context {
+	settings := failingReadSettings()
+	settings["max_result_rows"] = maxEpisodeAttempts
+	settings["result_overflow_mode"] = "throw"
+	return clickhouse.Context(ctx, clickhouse.WithSettings(settings))
 }
 
 // ErrLogsOff means the organization has logs turned off, so its connections are not shown.
 var ErrLogsOff = errors.New("logs are off for this organization")
+
+// ErrReadTooLarge means a read hit its time, memory or row cap.
+var ErrReadTooLarge = errors.New("the read is over its limits")
+
+// readLimitCodes are the ClickHouse errors of a read over its caps.
+var readLimitCodes = []int32{158, 159, 241, 307, 396}
+
+// readFailed wraps a ClickHouse error, marking a read over its caps.
+func readFailed(what string, err error) error {
+	if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && slices.Contains(readLimitCodes, exception.Code) {
+		return fmt.Errorf("%s: %w: %w", what, ErrReadTooLarge, err)
+	}
+	return fmt.Errorf("%s: %w", what, err)
+}
 
 // FailingNowFilter selects whose failures to read.
 type FailingNowFilter struct {
@@ -243,7 +274,7 @@ func appendOnce(values []string, v string) []string {
 func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any) ([]lastServed, error) {
 	rows, err := ch.Query(failingReadContext(ctx), query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query served connections: %w", err)
+		return nil, readFailed("query served connections", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
@@ -260,7 +291,7 @@ func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any)
 		out = append(out, s)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read served connection rows: %w", err)
+		return nil, readFailed("read served connection rows", err)
 	}
 	return out, nil
 }
@@ -328,7 +359,7 @@ func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID stri
 func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, kinds, ids []string) ([]ServedByFamily, error) {
 	rows, err := ch.Query(failingReadContext(ctx), servedByFamilyQuery, organizationID, projectID == uuid.Nil, projectID, kinds, ids)
 	if err != nil {
-		return nil, fmt.Errorf("query served by family: %w", err)
+		return nil, readFailed("query served by family", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
@@ -345,7 +376,7 @@ func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID str
 		out = append(out, s)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read served by family rows: %w", err)
+		return nil, readFailed("read served by family rows", err)
 	}
 	return out, nil
 }

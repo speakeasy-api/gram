@@ -197,7 +197,7 @@ export class McpConnectionHealth extends ClientSDK {
    * listProjectSuspectedProblems mcpConnectionHealth
    *
    * @remarks
-   * List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.
+   * List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.
    */
   async listProjectSuspectedProblems(
     request: ListMcpProjectSuspectedProblemsRequest,

@@ -284,27 +284,27 @@ func (q *Queries) ListMemberNames(ctx context.Context, arg ListMemberNamesParams
 }
 
 const listServerNames = `-- name: ListServerNames :many
-SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind, server.user_session_issuer_id AS issuer_id, server.slug
+SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind
 FROM mcp_servers AS server
 WHERE server.project_id = $1
   AND server.deleted IS FALSE
   AND server.id = ANY($2::uuid[])
 UNION ALL
-SELECT gateway.id, gateway.name, 'gateway'::text AS kind, gateway.user_session_issuer_id, NULL::text
+SELECT gateway.id, gateway.name, 'gateway'::text AS kind
 FROM meta_mcp_servers AS gateway
 WHERE gateway.project_id = $1
   AND gateway.organization_id = $3::text
   AND gateway.deleted IS FALSE
   AND gateway.id = ANY($2::uuid[])
 UNION ALL
-SELECT toolset.id, toolset.name, 'toolset'::text AS kind, NULL::uuid, toolset.slug
+SELECT toolset.id, toolset.name, 'toolset'::text AS kind
 FROM toolsets AS toolset
 WHERE toolset.project_id = $1
   AND toolset.organization_id = $3::text
   AND toolset.deleted IS FALSE
   AND toolset.id = ANY($2::uuid[])
 UNION ALL
-SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind, issuer.id, issuer.slug
+SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
 FROM user_session_issuers AS issuer
 WHERE (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
   AND issuer.deleted IS FALSE
@@ -318,14 +318,11 @@ type ListServerNamesParams struct {
 }
 
 type ListServerNamesRow struct {
-	ID       uuid.UUID
-	Name     string
-	Kind     string
-	IssuerID uuid.NullUUID
-	Slug     pgtype.Text
+	ID   uuid.UUID
+	Name string
+	Kind string
 }
 
-// Each row's MCP sign-in and slug link to its pages.
 func (q *Queries) ListServerNames(ctx context.Context, arg ListServerNamesParams) ([]ListServerNamesRow, error) {
 	rows, err := q.db.Query(ctx, listServerNames, arg.ProjectID, arg.Ids, arg.OrganizationID)
 	if err != nil {
@@ -335,12 +332,76 @@ func (q *Queries) ListServerNames(ctx context.Context, arg ListServerNamesParams
 	var items []ListServerNamesRow
 	for rows.Next() {
 		var i ListServerNamesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Kind); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerSignIns = `-- name: ListServerSignIns :many
+SELECT server.id, 'mcp'::text AS kind, issuer.id AS issuer_id, server.slug, server.deleted
+FROM mcp_servers AS server
+JOIN user_session_issuers AS issuer
+  ON issuer.id = server.user_session_issuer_id
+  AND issuer.deleted IS FALSE
+  AND (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $2::text))
+WHERE server.project_id = $1
+  AND server.id = ANY($3::uuid[])
+UNION ALL
+SELECT gateway.id, 'gateway'::text AS kind, issuer.id, NULL::text, gateway.deleted
+FROM meta_mcp_servers AS gateway
+JOIN user_session_issuers AS issuer
+  ON issuer.id = gateway.user_session_issuer_id
+  AND issuer.deleted IS FALSE
+  AND (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $2::text))
+WHERE gateway.project_id = $1
+  AND gateway.organization_id = $2::text
+  AND gateway.id = ANY($3::uuid[])
+UNION ALL
+SELECT issuer.id, 'authorization_server'::text AS kind, issuer.id, NULL::text, FALSE
+FROM user_session_issuers AS issuer
+WHERE (issuer.project_id = $1 OR (issuer.project_id IS NULL AND issuer.organization_id = $2::text))
+  AND issuer.deleted IS FALSE
+  AND issuer.id = ANY($3::uuid[])
+`
+
+type ListServerSignInsParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListServerSignInsRow struct {
+	ID       uuid.UUID
+	Kind     string
+	IssuerID uuid.UUID
+	Slug     pgtype.Text
+	Deleted  bool
+}
+
+// The live MCP sign-in of each server and gateway in the project, deleted servers
+// included as Connection Logs attributes their attempts, and each live MCP sign-in
+// among the ids. Only an MCP server's slug is read.
+func (q *Queries) ListServerSignIns(ctx context.Context, arg ListServerSignInsParams) ([]ListServerSignInsRow, error) {
+	rows, err := q.db.Query(ctx, listServerSignIns, arg.ProjectID, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerSignInsRow
+	for rows.Next() {
+		var i ListServerSignInsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
 			&i.Kind,
 			&i.IssuerID,
 			&i.Slug,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -368,28 +429,6 @@ type SetGatewayIssuerFixtureParams struct {
 // Test fixture: moves a gateway in a project to another MCP authentication provider.
 func (q *Queries) SetGatewayIssuerFixture(ctx context.Context, arg SetGatewayIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setGatewayIssuerFixture, arg.IssuerID, arg.ID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const setServerIssuerFixture = `-- name: SetServerIssuerFixture :execrows
-UPDATE mcp_servers
-SET user_session_issuer_id = $1
-WHERE id = $2
-  AND project_id = $3
-`
-
-type SetServerIssuerFixtureParams struct {
-	IssuerID  uuid.NullUUID
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-// Test fixture: puts an MCP server in a project on an MCP sign-in.
-func (q *Queries) SetServerIssuerFixture(ctx context.Context, arg SetServerIssuerFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setServerIssuerFixture, arg.IssuerID, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

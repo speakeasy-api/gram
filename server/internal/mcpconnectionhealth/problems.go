@@ -67,8 +67,7 @@ type listed struct {
 	problems       []problems.Problem
 }
 
-// readProblems groups the project's failures, or with issuerID the provider's attributed as Connection
-// Logs attributes them, then keeps those on serverID when set. Callers without log:read get none.
+// readProblems groups the provider's failures in the project, then keeps those on serverID when set.
 func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, serverID *string, now time.Time) (listed, error) {
 	var out listed
 	if serverID != nil {
@@ -78,13 +77,9 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		}
 		out.serverID = parsed.String()
 	}
-	var err error
-	if issuerID != "" {
-		var issuer repo.GetProviderIssuerRow
-		if issuer, err = s.provider(ctx, c, issuerID); err != nil {
-			return out, err
-		}
-		out.issuerID = issuer.ID
+	issuer, err := s.provider(ctx, c, issuerID)
+	if err != nil {
+		return out, err
 	}
 	if out.loggingEnabled, err = s.loggingOn(ctx, c); err != nil || !out.loggingEnabled {
 		return out, err
@@ -93,27 +88,16 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	if c.ownSubjects != nil {
 		return out, nil
 	}
-	if out.issuerID != uuid.Nil {
-		if out.issuerServers, err = s.issuerServerIDs(ctx, c, out.issuerID); err != nil {
-			return out, err
-		}
-	}
-
-	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
-	recordedSince, err := s.logsOnSince(ctx, c)
-	if err != nil {
+	out.issuerID = issuer.ID
+	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
 		return out, err
 	}
-	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, problems.ReadScope{
+	all, err := s.groupProblems(ctx, problems.ReadScope{
 		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false,
 		IssuerID: out.issuerID, IssuerServerIDs: out.issuerServers,
-	}, recordedSince, now)
-	switch {
-	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
-		out.loggingEnabled = false
-		return out, nil
-	case err != nil:
-		return out, oops.E(oops.CodeUnexpected, err, "read suspected problems").LogError(ctx, s.logger)
+	}, now)
+	if err != nil {
+		return out, err
 	}
 	for _, p := range all {
 		if out.serverID == "" || peopleOn(p, out.serverID) > 0 {
@@ -123,29 +107,56 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	return out, nil
 }
 
+// groupProblems reads the scope's suspected problems for a caller already allowed to see them, with logs on.
+func (s *Service) groupProblems(ctx context.Context, scope problems.ReadScope, now time.Time) ([]problems.Problem, error) {
+	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
+	recordedSince, err := s.logsOnSince(ctx, scope.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	// The caller has just checked that logs are on.
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	all, err := problems.Read(ctx, s.ch, s.db, logsOn, scope, recordedSince, now)
+	if err != nil {
+		return nil, s.unexpected(ctx, err, "read suspected problems")
+	}
+	return all, nil
+}
+
 // logsOnSince is when the organization's logs were last turned on, zero when no row says so; nothing is recorded while they are off.
-func (s *Service) logsOnSince(ctx context.Context, c caller) (time.Time, error) {
-	at, err := repo.New(s.db).GetLogsOnSince(ctx, repo.GetLogsOnSinceParams{OrganizationID: c.organizationID, FeatureName: string(productfeatures.FeatureLogs)})
+func (s *Service) logsOnSince(ctx context.Context, organizationID string) (time.Time, error) {
+	at, err := repo.New(s.db).GetLogsOnSince(ctx, repo.GetLogsOnSinceParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return time.Time{}, nil
 	case err != nil:
-		return time.Time{}, oops.E(oops.CodeUnexpected, err, "read when logs were turned on").LogError(ctx, s.logger)
+		return time.Time{}, s.unexpected(ctx, err, "read when logs were turned on")
 	}
 	return at.Time, nil
 }
 
+const problemsUnavailable = "suspected problems took too long to read, try again in a minute"
+
+// unexpected logs an unexpected failure, or answers temporarily unavailable with one
+// warning once the request's budget ran out or a read hit its limits.
+func (s *Service) unexpected(ctx context.Context, err error, message string) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, mcpconnectionattempts.ErrReadTooLarge) {
+		return oops.E(oops.CodeUnavailable, err, problemsUnavailable).LogWarn(ctx, s.logger)
+	}
+	return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, s.logger)
+}
+
 // pastDeadline turns any failure after the request's budget ran out into temporarily
-// unavailable. Refusals keep their own code.
+// unavailable. Refusals, and failures already answered as unavailable, keep their own code.
 func (s *Service) pastDeadline(ctx context.Context, err error) error {
 	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return err
 	}
 	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) && slices.Contains([]oops.Code{oops.CodeUnauthorized, oops.CodeForbidden, oops.CodeNotFound, oops.CodeBadRequest}, shareable.Code) {
+	if errors.As(err, &shareable) && slices.Contains([]oops.Code{oops.CodeUnauthorized, oops.CodeForbidden, oops.CodeNotFound, oops.CodeBadRequest, oops.CodeUnavailable}, shareable.Code) {
 		return err
 	}
-	return oops.E(oops.CodeUnavailable, err, "suspected problems took too long to read, try again in a minute").LogWarn(ctx, s.logger)
+	return oops.E(oops.CodeUnavailable, err, problemsUnavailable).LogWarn(ctx, s.logger)
 }
 
 // peopleOn counts the problem's people failing on a server, gateway member or toolset.
@@ -266,7 +277,7 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count suspected problem attempts").LogError(ctx, s.logger)
+		return nil, s.unexpected(ctx, err, "count suspected problem attempts")
 	}
 
 	result.Found = true

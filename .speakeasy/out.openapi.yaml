@@ -37659,7 +37659,7 @@ paths:
         name: McpDeniedClients
   /rpc/mcpConnectionHealth.listProjectSuspectedProblems:
     post:
-      description: List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.
+      description: List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.
       operationId: listMcpProjectSuspectedProblems
       parameters:
         - allowEmptyValue: true
@@ -114885,14 +114885,14 @@ components:
         scope:
           $ref: '#/components/schemas/SuspectedProblemScope'
         server:
-          $ref: '#/components/schemas/SuspectedProblemLinkServer'
+          $ref: '#/components/schemas/SuspectedProblemServerLink'
         since:
           type: string
           description: When its earliest failure ended.
           format: date-time
         user_session_issuer_id:
           type: string
-          description: The MCP sign-in whose Overview and Connection Logs list the problem. Missing when no page in the project does.
+          description: 'The MCP sign-in whose list has this problem: set only when every failure in it belongs to that one MCP sign-in, so its Overview or Connection Logs show the same problem.'
           format: uuid
         who_fixes:
           description: Who has to fix it, unknown when that is not known.
@@ -124468,19 +124468,6 @@ components:
       description: Connection Logs filters that show the problem's failed attempts.
       required:
         - from
-    SuspectedProblemLinkServer:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        slug:
-          type: string
-      description: An MCP server whose Sessions tab lists the problem.
-      required:
-        - id
     SuspectedProblemMessage:
       type: object
       properties:
@@ -124579,6 +124566,21 @@ components:
       required:
         - server
         - attempts
+    SuspectedProblemServerLink:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Missing when the MCP server has no name or slug.
+        slug:
+          type: string
+          description: Missing when the MCP server has none.
+      description: An MCP server whose Sessions tab lists the problem.
+      required:
+        - id
     SwitchOrgEncryptionKeyRequestBody:
       type: object
       properties:
@@ -131622,7 +131624,7 @@ tags:
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpConnectionHealth
-    description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
+    description: Read MCP connection attempts, sign-in activity, sessions and suspected problems for one MCP sign-in in a project, and a project's suspected problems across its MCP sign-ins.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpFeedback

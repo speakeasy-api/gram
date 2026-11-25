@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/singleflight"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_connection_health/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
@@ -55,6 +56,13 @@ type Service struct {
 
 	// problemsDeadline bounds one suspected problems request.
 	problemsDeadline time.Duration
+
+	// projectFlights merges concurrent reads of one project's suspected problems.
+	projectFlights singleflight.Group
+
+	// flightStarted and flightJoined are test seams: a shared read starts, a caller joins one.
+	flightStarted func()
+	flightJoined  func()
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -83,6 +91,9 @@ func NewService(
 		now:         time.Now,
 
 		problemsDeadline: defaultProblemsDeadline,
+		projectFlights:   singleflight.Group{},
+		flightStarted:    nil,
+		flightJoined:     nil,
 	}
 }
 
@@ -150,7 +161,7 @@ func (s *Service) beginLogs(ctx context.Context) (caller, error) {
 func (s *Service) loggingOn(ctx context.Context, c caller) (bool, error) {
 	enabled, err := s.logsEnabled(ctx, c.organizationID)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "check whether logs are enabled").LogError(ctx, s.logger)
+		return false, s.unexpected(ctx, err, "check whether logs are enabled")
 	}
 	return enabled, nil
 }
@@ -170,7 +181,7 @@ func (s *Service) provider(ctx context.Context, c caller, issuerID string) (repo
 	case errors.Is(err, pgx.ErrNoRows):
 		return repo.GetProviderIssuerRow{}, oops.E(oops.CodeNotFound, err, "provider not found").LogWarn(ctx, s.logger)
 	case err != nil:
-		return repo.GetProviderIssuerRow{}, oops.E(oops.CodeUnexpected, err, "load provider").LogError(ctx, s.logger)
+		return repo.GetProviderIssuerRow{}, s.unexpected(ctx, err, "load provider")
 	}
 	return issuer, nil
 }
@@ -227,12 +238,12 @@ func (s *Service) issuerServerIDs(ctx context.Context, c caller, issuerID uuid.U
 		OrganizationID: c.organizationID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list provider servers").LogError(ctx, s.logger)
+		return nil, s.unexpected(ctx, err, "list provider servers")
 	}
 	// The organization gateway's project view records no issuer on some rows.
 	gatewayIssuer, _, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), c.organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, s.logger)
+		return nil, s.unexpected(ctx, err, "resolve organization gateway issuer")
 	}
 	if gatewayIssuer == issuerID {
 		ids = append(ids, orggateway.ProjectGatewayID(c.organizationID, c.projectID))

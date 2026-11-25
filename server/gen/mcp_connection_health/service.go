@@ -14,8 +14,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Read MCP connection attempts, sign-in activity and sessions for one MCP
-// authentication provider in a project.
+// Read MCP connection attempts, sign-in activity, sessions and suspected
+// problems for one MCP sign-in in a project, and a project's suspected
+// problems across its MCP sign-ins.
 type Service interface {
 	// List connection attempts for a provider, newest first. Repeats of the same
 	// failure fold into one row.
@@ -43,8 +44,9 @@ type Service interface {
 	// cleared, or without log:read.
 	GetSuspectedProblem(context.Context, *GetSuspectedProblemPayload) (res *GetSuspectedProblemResult, err error)
 	// List the project's suspected problems across all its MCP sign-ins, grouped
-	// and counted from this project's failures only. Each problem says which MCP
-	// sign-in and MCP server pages list it. Empty without log:read.
+	// and counted from this project's failures only, in the same order as one MCP
+	// sign-in's list. A problem names an MCP sign-in, and an MCP server, only when
+	// that page lists the same problem. Empty without log:read.
 	ListProjectSuspectedProblems(context.Context, *ListProjectSuspectedProblemsPayload) (res *ListProjectSuspectedProblemsResult, err error)
 }
 
@@ -505,12 +507,14 @@ type ListSuspectedProblemsResult struct {
 }
 
 type ProjectSuspectedProblem struct {
-	// The MCP sign-in whose Overview and Connection Logs list the problem. Missing
-	// when no page in the project does.
+	// The MCP sign-in whose list has this problem: set only when every failure in
+	// it belongs to that one MCP sign-in, so its Overview or Connection Logs show
+	// the same problem.
 	UserSessionIssuerID *string
-	// The first MCP server its people fail on directly. Missing when they fail
-	// only on gateways, toolsets or before reaching a server.
-	Server *SuspectedProblemLinkServer
+	// The MCP server whose Sessions tab lists this problem: set only when every
+	// failure in it was on that one MCP server, reached directly, and it is on the
+	// MCP sign-in above.
+	Server *SuspectedProblemServerLink
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
 	ID       string
@@ -626,13 +630,6 @@ type SuspectedProblemFilters struct {
 	Services []string
 }
 
-// An MCP server whose Sessions tab lists the problem.
-type SuspectedProblemLinkServer struct {
-	ID   string
-	Slug *string
-	Name *string
-}
-
 type SuspectedProblemMessage struct {
 	Reason string
 	// What happened, in one sentence for the person.
@@ -682,6 +679,15 @@ type SuspectedProblemServer struct {
 	Server   *ConnectionServer
 	Member   *ConnectionServer
 	Attempts int64
+}
+
+// An MCP server whose Sessions tab lists the problem.
+type SuspectedProblemServerLink struct {
+	ID string
+	// Missing when the MCP server has none.
+	Slug *string
+	// Missing when the MCP server has no name or slug.
+	Name *string
 }
 
 // Who has to fix it, unknown when that is not known.

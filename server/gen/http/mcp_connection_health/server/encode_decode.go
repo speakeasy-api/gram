@@ -2959,7 +2959,7 @@ func marshalMcpconnectionhealthProjectSuspectedProblemToProjectSuspectedProblemR
 		res.WhoFixes = &whoFixes
 	}
 	if v.Server != nil {
-		res.Server = marshalMcpconnectionhealthSuspectedProblemLinkServerToSuspectedProblemLinkServerResponseBody(v.Server)
+		res.Server = marshalMcpconnectionhealthSuspectedProblemServerLinkToSuspectedProblemServerLinkResponseBody(v.Server)
 	}
 	if v.Scope != nil {
 		res.Scope = marshalMcpconnectionhealthSuspectedProblemScopeToSuspectedProblemScopeResponseBody(v.Scope)
@@ -2971,14 +2971,14 @@ func marshalMcpconnectionhealthProjectSuspectedProblemToProjectSuspectedProblemR
 	return res
 }
 
-// marshalMcpconnectionhealthSuspectedProblemLinkServerToSuspectedProblemLinkServerResponseBody
-// builds a value of type *SuspectedProblemLinkServerResponseBody from a value
-// of type *mcpconnectionhealth.SuspectedProblemLinkServer.
-func marshalMcpconnectionhealthSuspectedProblemLinkServerToSuspectedProblemLinkServerResponseBody(v *mcpconnectionhealth.SuspectedProblemLinkServer) *SuspectedProblemLinkServerResponseBody {
+// marshalMcpconnectionhealthSuspectedProblemServerLinkToSuspectedProblemServerLinkResponseBody
+// builds a value of type *SuspectedProblemServerLinkResponseBody from a value
+// of type *mcpconnectionhealth.SuspectedProblemServerLink.
+func marshalMcpconnectionhealthSuspectedProblemServerLinkToSuspectedProblemServerLinkResponseBody(v *mcpconnectionhealth.SuspectedProblemServerLink) *SuspectedProblemServerLinkResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &SuspectedProblemLinkServerResponseBody{
+	res := &SuspectedProblemServerLinkResponseBody{
 		ID:   v.ID,
 		Slug: v.Slug,
 		Name: v.Name,

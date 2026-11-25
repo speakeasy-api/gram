@@ -10,15 +10,21 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * An MCP server whose Sessions tab lists the problem.
  */
-export type SuspectedProblemLinkServer = {
+export type SuspectedProblemServerLink = {
   id: string;
+  /**
+   * Missing when the MCP server has no name or slug.
+   */
   name?: string | undefined;
+  /**
+   * Missing when the MCP server has none.
+   */
   slug?: string | undefined;
 };
 
 /** @internal */
-export const SuspectedProblemLinkServer$inboundSchema: z.ZodMiniType<
-  SuspectedProblemLinkServer,
+export const SuspectedProblemServerLink$inboundSchema: z.ZodMiniType<
+  SuspectedProblemServerLink,
   unknown
 > = z.object({
   id: z.string(),
@@ -26,12 +32,12 @@ export const SuspectedProblemLinkServer$inboundSchema: z.ZodMiniType<
   slug: z.optional(z.string()),
 });
 
-export function suspectedProblemLinkServerFromJSON(
+export function suspectedProblemServerLinkFromJSON(
   jsonString: string,
-): SafeParseResult<SuspectedProblemLinkServer, SDKValidationError> {
+): SafeParseResult<SuspectedProblemServerLink, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => SuspectedProblemLinkServer$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SuspectedProblemLinkServer' from JSON`,
+    (x) => SuspectedProblemServerLink$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SuspectedProblemServerLink' from JSON`,
   );
 }
