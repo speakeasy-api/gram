@@ -28,8 +28,32 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read hooks generator version").LogError(ctx, s.logger)
 	}
-	// One snapshot, so a stage completing mid-read can't pair the old default
-	// pin with the completed stage.
+	result, err := s.readHooksPublishState(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	if s.hookFleetVersions.Latest != nil {
+		result.CurrentBinaryVersion = new(s.hookFleetVersions.Latest.String())
+	}
+	if s.hookFleet != nil {
+		today := time.Now().UTC().Truncate(24 * time.Hour)
+		rows, err := s.hookFleet.VersionMix(ctx, today.AddDate(0, 0, -hooksReleaseFleetWindowDays), today)
+		if err != nil {
+			// The repository counts still help without the fleet, so the
+			// page shows them and marks the installs unavailable.
+			_ = oops.E(oops.CodeUnexpected, err, "read hook version mix").LogError(ctx, s.logger)
+		} else {
+			result.Fleet = summarizeHooksReleaseFleet(rows, s.hookFleetVersions)
+		}
+	}
+	return result, nil
+}
+
+// readHooksPublishState reads the pins, the stage and the publish state
+// from one snapshot, so a stage completing mid-read can't pair the old default
+// pin with the completed stage. The transaction ends before the slower fleet
+// read.
+func (s *Service) readHooksPublishState(ctx context.Context, current int) (*gen.AdminHooksReleaseProgress, error) {
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin hooks release progress read").LogError(ctx, s.logger)
@@ -52,23 +76,7 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
 	}
-
-	result := summarizeHooksPublishState(repos, current, defaultPin, stage, overrides, s.staffOrg)
-	if s.hookFleetVersions.Latest != nil {
-		result.CurrentBinaryVersion = new(s.hookFleetVersions.Latest.String())
-	}
-	if s.hookFleet != nil {
-		today := time.Now().UTC().Truncate(24 * time.Hour)
-		rows, err := s.hookFleet.VersionMix(ctx, today.AddDate(0, 0, -hooksReleaseFleetWindowDays), today)
-		if err != nil {
-			// The repository counts still help without the fleet, so the
-			// page shows them and marks the installs unavailable.
-			_ = oops.E(oops.CodeUnexpected, err, "read hook version mix").LogError(ctx, s.logger)
-		} else {
-			result.Fleet = summarizeHooksReleaseFleet(rows, s.hookFleetVersions)
-		}
-	}
-	return result, nil
+	return summarizeHooksPublishState(repos, current, defaultPin, stage, overrides, s.staffOrg), nil
 }
 
 func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, stage *hooksrollout.Stage, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
