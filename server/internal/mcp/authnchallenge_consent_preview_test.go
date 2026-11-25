@@ -146,7 +146,7 @@ func TestConsentPagePreview(t *testing.T) {
 		// server to answer it, so the pending card reads neutral.
 		{"identity-chained-pending", withIsland(withCards(base, connectedCard, chainedCard(chainCheckPending, "")))},
 		{"identity-chained-connected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckConnected, "")))},
-		{"identity-chained-rejected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckRejected, "Supabase didn't accept your identity provider sign-in. Ask your administrator, or use your own Supabase account.")))},
+		{"identity-chained-rejected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckRejected, "Supabase didn't accept your company sign-in. Ask your Speakeasy admin, or use your own Supabase account.")))},
 		{"loopback-warning", func() consentTemplateData {
 			d := withIsland(withCards(base, connectedCard))
 			d.ClientIDOrigin = "claude.ai"

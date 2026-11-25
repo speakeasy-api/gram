@@ -121,10 +121,10 @@ type OktaResourceConnectionConfirmation struct {
 // 24 hours, by one party. Refusals do not change state: a connection refused
 // for some people can still be verified by others.
 type OktaResourceConnectionRefusal struct {
-	// identity_provider: the identity provider refused access, the permissions or
-	// the server, for example because the person is not assigned to the app there;
-	// service: the service refused the identity provider's sign-in. Setup problems
-	// and expired sign-ins are not counted.
+	// identity_provider: the identity provider refused access or the permissions,
+	// for example because the person is not assigned to the app there; service:
+	// the service refused the identity provider's sign-in. Setup problems and
+	// expired sign-ins are not counted.
 	RefusedBy string
 	// Distinct people refused in the last 24 hours who have not had a request
 	// answered by this server since.

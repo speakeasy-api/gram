@@ -35,12 +35,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	healthrepo "github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -650,7 +652,18 @@ func (s *Service) readRefusals(ctx context.Context, logger *slog.Logger, organiz
 	ctx, cancel := context.WithTimeout(ctx, refusalReadTimeout)
 	defer cancel()
 	// The window matches verifiedHold, so a refusal a held verified result hides is still shown.
-	refusals, err := s.refusals(ctx, mcpconnectionattempts.RefusalFilter{OrganizationID: organizationID, ProjectIDs: projects, ServerIDs: ids, Since: time.Now().Add(-verifiedHold)})
+	since := time.Now().Add(-verifiedHold)
+	// Nothing is recorded while logs are off, so a person refused before then may have connected since.
+	logsOn, err := healthrepo.New(s.db).GetLogsOnSince(ctx, healthrepo.GetLogsOnSinceParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		logger.WarnContext(ctx, "read when logs were turned on", attr.SlogError(err))
+		return nil
+	case logsOn.Time.After(since):
+		since = logsOn.Time
+	}
+	refusals, err := s.refusals(ctx, mcpconnectionattempts.RefusalFilter{OrganizationID: organizationID, ProjectIDs: projects, ServerIDs: ids, Since: since})
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
 		return nil

@@ -325,7 +325,7 @@ func TestServePublic_ChainedDelegationFailureMessages(t *testing.T) {
 		retryMessage = "Company sign-in for this server is temporarily unavailable. Try again in a moment."
 	)
 	// The paused sign-in reads as on the consent page, naming the service.
-	pausedMessage := regexp.MustCompile(`^Your saved company sign-in for \S+ isn't working right now\. Speakeasy keeps trying it every few minutes, so it may start working again by itself\. If it doesn't, ask your administrator, or use your own \S+ account\.$`)
+	pausedMessage := regexp.MustCompile(`^Your saved company sign-in for \S+ isn't working right now\. Speakeasy keeps trying it every few minutes, so it may start working again by itself\. If it doesn't, ask your Speakeasy admin, or use your own \S+ account\.$`)
 	setState := func(t *testing.T, ctx context.Context, f chainedRefreshFixture, state remotesessions_repo.SetTrustedDelegationStateFixtureParams) {
 		t.Helper()
 		state.OrganizationID, state.ClientID = f.org, f.idpClient

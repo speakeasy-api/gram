@@ -204,8 +204,8 @@ func TestConsentTemplateRendersCachedChainedServiceConnected(t *testing.T) {
 func TestConsentTemplateRendersRejectedChainedServiceWithOwnAccountButton(t *testing.T) {
 	t.Parallel()
 
-	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your identity provider sign-in.", 0)
-	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your identity provider sign-in.`, html)
+	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your company sign-in.", 0)
+	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your company sign-in.`, html)
 	require.Regexp(t, `value="connect" class="interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm" data-connect-link data-connect-fallback > Use your own account </button>`, html, "the same outlined button as every other state")
 	require.NotContains(t, html, "> Connect </button>")
 	require.Contains(t, html, "0 of 1 connected")
@@ -242,14 +242,14 @@ func TestConsentChainCheckKeptSignInSaysItRetries(t *testing.T) {
 
 	kept := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: "", Retained: true}, "Example")
 	require.Equal(t, chainCheckRejected, kept.Status)
-	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own Example account.", kept.Message)
+	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your Speakeasy admin, or use your own Example account.", kept.Message)
 
 	noToken := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
 	require.Equal(t, chainCheckRejected, noToken.Status)
-	require.Equal(t, "Sign-in to Example through your identity provider isn't set up correctly. Ask your administrator, or use your own Example account.", noToken.Message, "no kept sign-in means nothing retries")
+	require.Equal(t, "Company sign-in for Example isn't set up correctly. Ask your Speakeasy admin, or use your own Example account.", noToken.Message, "no kept sign-in means nothing retries")
 
 	unset := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
-	require.Equal(t, "Sign-in to Example through your identity provider isn't set up correctly. Ask your administrator, or use your own Example account.", unset.Message)
+	require.Equal(t, "Company sign-in for Example isn't set up correctly. Ask your Speakeasy admin, or use your own Example account.", unset.Message)
 }
 
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {

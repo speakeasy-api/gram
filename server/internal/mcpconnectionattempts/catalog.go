@@ -338,9 +338,10 @@ var (
 	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private or internal address Speakeasy can't reach.", "Use a public address, or connect the private network with a tunnel.")
 	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in doesn't exist.", "Check the server and sign-in addresses.")
 
-	// Refreshes refused because managed sign-in was refused, by who refused it.
-	CodeUpstreamEMAIdentityProviderRefused = define("upstream_ema_idp_refused", OutcomeFailed, WhoAdmin, "Your identity provider refused to renew the managed sign-in.", "Check this person is assigned to the app and allowed these permissions there.")
-	CodeUpstreamEMAServiceRefused          = define("upstream_ema_service_refused", OutcomeFailed, WhoAdmin, "The service refused to renew the managed sign-in.", "Check the service accepts sign-ins from your identity provider.")
+	// Refreshes refused because managed sign-in was refused, by who refused it. The
+	// company sign-in service's refusal is blocked, as access_denied is at request time.
+	CodeUpstreamEMAIdentityProviderRefused = define("upstream_ema_idp_refused", OutcomeBlocked, WhoAdmin, "Your company sign-in service refused to renew the managed sign-in.", "Check this person is assigned to the app and allowed these permissions there.")
+	CodeUpstreamEMAServiceRefused          = define("upstream_ema_service_refused", OutcomeFailed, WhoAdmin, "The service refused to renew the managed sign-in.", "Check the service accepts sign-ins from your company sign-in service.")
 	CodeUpstreamEMANotRenewed              = define("upstream_ema_not_renewed", OutcomeFailed, WhoAdmin, "The managed sign-in couldn't be renewed.", "Check the setup for managed sign-in.")
 )
 
@@ -348,18 +349,18 @@ var (
 type RefusedBy string
 
 const (
-	// RefusedByIdentityProvider is the organization's identity provider refusing the token exchange.
+	// RefusedByIdentityProvider is the organization's sign-in service refusing the token exchange.
 	RefusedByIdentityProvider RefusedBy = "identity_provider"
 
-	// RefusedByService is the service refusing the identity provider's sign-in.
+	// RefusedByService is the service refusing the sign-in service's assertion.
 	RefusedByService RefusedBy = "service"
 )
 
 // refusingParty is who refused, for each code that records a managed sign-in refusal.
+// invalid_target is a setup problem, not a refusal.
 var refusingParty = map[Code]RefusedBy{
 	CodeAccessDenied:                       RefusedByIdentityProvider,
 	CodeScopePolicyDenied:                  RefusedByIdentityProvider,
-	CodeInvalidTarget:                      RefusedByIdentityProvider,
 	CodeUpstreamEMAIdentityProviderRefused: RefusedByIdentityProvider,
 	CodeEMAProviderRejected:                RefusedByService,
 	CodeUpstreamEMAServiceRefused:          RefusedByService,

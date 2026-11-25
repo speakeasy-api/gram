@@ -111,11 +111,10 @@ server's own ID as `mcp_server_id`, never another identifier, and do not
 substitute generic MCP readiness for this check.
 A verified state can still come with `recent_refusals`: report each one, and
 say Connection Logs list who was refused. For `identity_provider`, use the
-Connection Log details to check the people are assigned to the app, have the
-required permissions, and can access the target server in the identity
-provider; for `service`, check
-the service accepts sign-ins from the organization's identity provider and that
-its client is set up.
+Connection Log details to check the people are assigned to the app and have the
+required permissions in the identity provider; for `service`, check the service
+accepts sign-ins from the organization's identity provider and that its client
+is set up.
 An enabled issuer or a saved vendor setting does not prove live user access.
 Only a separately authorized test using the connected MCP can establish that;
 never impersonate another user or create test data without permission.

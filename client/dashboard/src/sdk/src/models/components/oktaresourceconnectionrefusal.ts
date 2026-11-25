@@ -11,14 +11,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * identity_provider: the identity provider refused access, the permissions or the server, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
+ * identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
  */
 export const RefusedBy = {
   IdentityProvider: "identity_provider",
   Service: "service",
 } as const;
 /**
- * identity_provider: the identity provider refused access, the permissions or the server, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
+ * identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
  */
 export type RefusedBy = OpenEnum<typeof RefusedBy>;
 
@@ -35,7 +35,7 @@ export type OktaResourceConnectionRefusal = {
    */
   people: number;
   /**
-   * identity_provider: the identity provider refused access, the permissions or the server, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
+   * identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.
    */
   refusedBy: RefusedBy;
 };

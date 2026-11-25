@@ -29,9 +29,14 @@ func TestRefusedByMatchesConnectionLogsSource(t *testing.T) {
 		case mcpconnectionattempts.RefusedByService:
 			counted++
 			require.Equal(t, attemptlog.SourceService, source, code.String())
-		default:
+		case "":
+			if code == mcpconnectionattempts.CodeInvalidTarget {
+				// The sign-in service returned it, but it is a setup problem, not a refusal.
+				require.Equal(t, attemptlog.SourceIdentityProvider, source)
+				continue
+			}
 			require.NotEqual(t, attemptlog.SourceIdentityProvider, source, "%s is the identity provider's but not counted", code.String())
 		}
 	}
-	require.Equal(t, 6, counted)
+	require.Equal(t, 5, counted)
 }

@@ -149,11 +149,13 @@ export function observedNote(row: {
   return undefined;
 }
 
-function people(count: number): string {
-  return count === 1 ? "1 person" : `${count} people`;
+function peopleNotConnected(count: number): string {
+  return count === 1
+    ? "1 person who hasn't connected since"
+    : `${count} people who haven't connected since`;
 }
 
-/** People refused in the last day, next to a state that stays as it is. */
+/** People refused in the last day who haven't connected since, next to a state that stays as it is. */
 export function refusalNotes(
   refusals: OktaResourceConnectionRefusal[] | undefined,
 ): StateNoteCopy[] {
@@ -161,8 +163,8 @@ export function refusalNotes(
     const when = formatRelativeTime(refusal.lastRefusedAt) ?? "recently";
     const summary =
       refusal.refusedBy === "identity_provider"
-        ? `Your identity provider refused ${people(refusal.people)} in the last day, most recently ${when}. Check they are assigned to the app and allowed these permissions there.`
-        : `The service refused ${people(refusal.people)} in the last day, most recently ${when}. Check the service accepts sign-ins from your identity provider and that its client is set up.`;
+        ? `In the last day, your identity provider refused ${peopleNotConnected(refusal.people)}. Last refusal ${when}. Check they are assigned to the app and allowed these permissions there.`
+        : `In the last day, the service refused ${peopleNotConnected(refusal.people)}. Last refusal ${when}. Check the service accepts sign-ins from your identity provider and that its client is set up.`;
     return {
       summary,
       tooltip: `${summary} The status shows the setup, not each person's sign-in. To see who was refused, open Connection Logs for this server, or for the gateway they used to reach it.`,

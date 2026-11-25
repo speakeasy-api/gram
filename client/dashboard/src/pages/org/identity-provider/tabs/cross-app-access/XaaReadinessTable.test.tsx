@@ -50,7 +50,9 @@ describe("XaaReadinessTable", () => {
       name: "Recent refusals for Server 0",
     });
     expect(
-      within(notes).getByText(/^The service refused 2 people in the last day/),
+      within(notes).getByText(
+        /^In the last day, the service refused 2 people who haven't connected since/,
+      ),
     ).toBeTruthy();
     const serverRow = screen
       .getByText("Server 0")

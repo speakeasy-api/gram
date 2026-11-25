@@ -126,7 +126,7 @@ var adminMeanings = map[Code]adminMeaning{
 	CodeCredentialChoiceInvalid:            {"The sign-in the request chose does not fit this server.", ""},
 	CodeAddressNotAllowed:                  {"This server or its sign-in uses a private or internal address that Speakeasy does not connect to.", ""},
 	CodeAddressNotFound:                    {"The address for this server or its sign-in does not exist.", ""},
-	CodeUpstreamEMAIdentityProviderRefused: {"The organization's identity provider refused to renew the person's company-managed access.", ""},
+	CodeUpstreamEMAIdentityProviderRefused: {"The organization's sign-in service refused to renew the person's company-managed access.", ""},
 	CodeUpstreamEMAServiceRefused:          {"The service refused to renew the person's company-managed access.", ""},
 	CodeUpstreamEMANotRenewed:              {"The person's company-managed access couldn't be renewed, because of how it is set up or an answer Speakeasy couldn't read.", ""},
 }

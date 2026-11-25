@@ -109,7 +109,7 @@ var callerOwnOnRequest = []Code{
 	CodeApprovalNeedsAdmin, CodeRefreshTokenClientMismatch, CodeRefreshTokenUsedByOtherApp, CodeStoredSessionInvalid,
 	CodeStoredSignInUnreadable, CodeUpstreamCredentialNotChosen, CodeSignInMethodNotAccepted, CodeCredentialChoiceInvalid,
 	CodeAddressNotAllowed, CodeAddressNotFound, CodeKillswitchCheckUnavailable,
-	CodeUpstreamEMAIdentityProviderRefused, CodeUpstreamEMAServiceRefused, CodeUpstreamEMANotRenewed,
+	CodeUpstreamEMAServiceRefused, CodeUpstreamEMANotRenewed,
 }
 
 // A new failed reason must be placed: the server not answering anyone, or one caller's own.

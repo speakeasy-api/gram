@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -213,6 +214,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 		{name: "the identity provider just refused chaining", decision: identitychaining.RefreshRefused, wantReconnect: true, refused: identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonAccessDenied}, logged: mcpconnectionattempts.CodeUpstreamEMAIdentityProviderRefused, party: mcpconnectionattempts.RefusedByIdentityProvider},
 		{name: "the service just refused chaining", decision: identitychaining.RefreshRefused, wantReconnect: true, refused: identitychaining.Outcome{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonInvalidGrant}, logged: mcpconnectionattempts.CodeUpstreamEMAServiceRefused, party: mcpconnectionattempts.RefusedByService},
 		{name: "the setup just failed chaining", decision: identitychaining.RefreshRefused, wantReconnect: true, refused: identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidClient}, logged: mcpconnectionattempts.CodeUpstreamEMANotRenewed},
+		{name: "the company sign-in service does not know the server", decision: identitychaining.RefreshRefused, wantReconnect: true, refused: identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonInvalidTarget}, logged: mcpconnectionattempts.CodeUpstreamEMANotRenewed},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -259,6 +261,12 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 				}
 				require.Contains(t, reasons, tc.logged.String())
 				require.Equal(t, tc.party, tc.logged.RefusedBy(), "the refresh row's party is the call's")
+				// The company sign-in service's refusal is blocked, as access_denied is on the call.
+				wantOutcome := mcpconnectionattempts.OutcomeFailed
+				if tc.party == mcpconnectionattempts.RefusedByIdentityProvider {
+					wantOutcome = mcpconnectionattempts.OutcomeBlocked
+				}
+				require.Equal(t, string(wantOutcome), rec.Rows()[slices.Index(reasons, tc.logged.String())].Outcome)
 			}
 			if tc.wantReconnect {
 				require.Equal(t, http.StatusBadRequest, res.code, res.body)
@@ -465,44 +473,49 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 		party mcpconnectionattempts.RefusedBy
 		// linked also runs it with a stale linked session.
 		linked bool
+		// outcome is the code's class; detail is the row's detail, the failed stage for a refusal.
+		outcome mcpconnectionattempts.Outcome
+		detail  string
 	}
 	const (
-		idpRefused      = "Your identity provider didn't allow access to %[1]s. Ask your administrator, or use your own %[1]s account."
-		serviceRefused  = "%[1]s didn't accept your identity provider sign-in. Ask your administrator, or use your own %[1]s account."
-		savedTurnedDown = "Your identity provider turned down your saved sign-in for %[1]s. Reconnect to sign in again. If it keeps happening, ask your administrator, or use your own %[1]s account."
-		notSetUp        = "Sign-in to %[1]s through your identity provider isn't set up correctly. Ask your administrator, or use your own %[1]s account."
-		missingScopes   = "Your identity provider sign-in didn't include the permissions %[1]s needs. Ask your administrator, or use your own %[1]s account."
-		grantedLess     = "%[1]s accepted your identity provider sign-in but granted fewer permissions than Speakeasy needs. Ask your administrator to check what %[1]s allows, or use your own %[1]s account."
-		mismatch        = "Your identity provider's sign-in for %[1]s didn't match the setup Speakeasy expects. Ask your administrator, or use your own %[1]s account."
-		idpUnreadable   = "Your identity provider sent an answer Speakeasy couldn't read. Ask your administrator, or use your own %[1]s account."
-		svcUnreadable   = "%[1]s sent an answer Speakeasy couldn't read. Ask your administrator, or use your own %[1]s account."
-		ineligible      = "Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own %[1]s account."
+		idpRefused      = "Your company sign-in service didn't allow access to %[1]s. Ask your Speakeasy admin, or use your own %[1]s account."
+		serviceRefused  = "%[1]s didn't accept your company sign-in. Ask your Speakeasy admin, or use your own %[1]s account."
+		savedTurnedDown = "Your company sign-in service turned down your saved sign-in for %[1]s. Reconnect to sign in again. If it keeps happening, ask your Speakeasy admin, or use your own %[1]s account."
+		notSetUp        = "Company sign-in for %[1]s isn't set up correctly. Ask your Speakeasy admin, or use your own %[1]s account."
+		missingScopes   = "Your company sign-in didn't include the permissions %[1]s needs. Ask your Speakeasy admin, or use your own %[1]s account."
+		grantedLess     = "%[1]s accepted your company sign-in but gave fewer permissions than Speakeasy needs. Ask your Speakeasy admin to check what %[1]s allows, or use your own %[1]s account."
+		mismatch        = "Your company sign-in for %[1]s didn't match the setup Speakeasy expects. Ask your Speakeasy admin, or use your own %[1]s account."
+		idpUnreadable   = "Your company sign-in service sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own %[1]s account."
+		svcUnreadable   = "%[1]s sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own %[1]s account."
+		ineligible      = "Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your Speakeasy admin, or use your own %[1]s account."
 	)
+	blocked, failed := mcpconnectionattempts.OutcomeBlocked, mcpconnectionattempts.OutcomeFailed
+	exchange, validation, redemption := string(identitychaining.StageExchange), string(identitychaining.StageValidation), string(identitychaining.StageRedemption)
 	idp, svc := mcpconnectionattempts.RefusedByIdentityProvider, mcpconnectionattempts.RefusedByService
 	refusals := []refusal{
-		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, false, http.StatusUnauthorized, idpRefused, mcpconnectionattempts.CodeAccessDenied, idp, true},
-		{identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, false, http.StatusUnauthorized, idpRefused, mcpconnectionattempts.CodeScopePolicyDenied, idp, false},
-		{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false, http.StatusUnauthorized, idpRefused, mcpconnectionattempts.CodeInvalidTarget, idp, false},
-		{identitychaining.StageExchange, identitychaining.ReasonInvalidGrant, false, http.StatusUnauthorized, savedTurnedDown, mcpconnectionattempts.CodeReauthenticationRequired, "", false},
-		{identitychaining.StageExchange, identitychaining.ReasonInvalidClient, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", true},
-		{identitychaining.StageExchange, identitychaining.ReasonConfigurationRequired, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false},
-		{identitychaining.StageExchange, identitychaining.ReasonMalformedResponse, false, http.StatusUnauthorized, idpUnreadable, mcpconnectionattempts.CodeMalformedResponse, "", false},
-		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, false, http.StatusUnauthorized, ineligible, mcpconnectionattempts.CodeIneligibleIdentity, "", false},
-		{identitychaining.StageExchange, identitychaining.ReasonUnknownRejection, false, http.StatusUnauthorized, reconnectDescription, mcpconnectionattempts.CodeInvalidRemoteSession, "", false},
-		{identitychaining.StageValidation, identitychaining.ReasonMalformedAssertion, false, http.StatusUnauthorized, mismatch, mcpconnectionattempts.CodeMalformedAssertion, "", false},
-		{identitychaining.StageValidation, identitychaining.ReasonInsufficientScope, false, http.StatusUnauthorized, missingScopes, mcpconnectionattempts.CodeInsufficientScope, "", false},
-		{identitychaining.StageRedemption, identitychaining.ReasonAccessDenied, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false},
-		{identitychaining.StageRedemption, identitychaining.ReasonScopePolicyDenied, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false},
-		{identitychaining.StageRedemption, identitychaining.ReasonInvalidTarget, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false},
-		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, true},
-		{identitychaining.StageRedemption, identitychaining.ReasonUnknownRejection, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false},
-		{identitychaining.StageRedemption, identitychaining.ReasonInvalidClient, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false},
-		{identitychaining.StageRedemption, identitychaining.ReasonConfigurationRequired, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false},
-		{identitychaining.StageRedemption, identitychaining.ReasonInsufficientScope, false, http.StatusUnauthorized, grantedLess, mcpconnectionattempts.CodeInsufficientScope, "", false},
-		{identitychaining.StageRedemption, identitychaining.ReasonMalformedResponse, false, http.StatusUnauthorized, svcUnreadable, mcpconnectionattempts.CodeMalformedResponse, "", false},
-		{identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity, false, http.StatusForbidden, ineligible, mcpconnectionattempts.CodeIneligibleIdentity, "", false},
-		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, false, http.StatusForbidden, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false},
-		{identitychaining.StageExchange, identitychaining.ReasonTransientFailure, true, http.StatusServiceUnavailable, "", mcpconnectionattempts.Code{}, "", false},
+		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, false, http.StatusUnauthorized, idpRefused, mcpconnectionattempts.CodeAccessDenied, idp, true, blocked, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, false, http.StatusUnauthorized, idpRefused, mcpconnectionattempts.CodeScopePolicyDenied, idp, false, blocked, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeInvalidTarget, "", true, failed, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonInvalidGrant, false, http.StatusUnauthorized, savedTurnedDown, mcpconnectionattempts.CodeReauthenticationRequired, "", false, failed, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonInvalidClient, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", true, failed, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonConfigurationRequired, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false, failed, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonMalformedResponse, false, http.StatusUnauthorized, idpUnreadable, mcpconnectionattempts.CodeMalformedResponse, "", false, failed, exchange},
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, false, http.StatusUnauthorized, ineligible, mcpconnectionattempts.CodeIneligibleIdentity, "", false, blocked, "identity_chaining_ineligible"},
+		{identitychaining.StageExchange, identitychaining.ReasonUnknownRejection, false, http.StatusUnauthorized, reconnectDescription, mcpconnectionattempts.CodeInvalidRemoteSession, "", false, failed, exchange},
+		{identitychaining.StageValidation, identitychaining.ReasonMalformedAssertion, false, http.StatusUnauthorized, mismatch, mcpconnectionattempts.CodeMalformedAssertion, "", false, failed, validation},
+		{identitychaining.StageValidation, identitychaining.ReasonInsufficientScope, false, http.StatusUnauthorized, missingScopes, mcpconnectionattempts.CodeInsufficientScope, "", false, failed, validation},
+		{identitychaining.StageRedemption, identitychaining.ReasonAccessDenied, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonScopePolicyDenied, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidTarget, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, true, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonUnknownRejection, false, http.StatusUnauthorized, serviceRefused, mcpconnectionattempts.CodeEMAProviderRejected, svc, false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidClient, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonConfigurationRequired, false, http.StatusUnauthorized, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonInsufficientScope, false, http.StatusUnauthorized, grantedLess, mcpconnectionattempts.CodeInsufficientScope, "", false, failed, redemption},
+		{identitychaining.StageRedemption, identitychaining.ReasonMalformedResponse, false, http.StatusUnauthorized, svcUnreadable, mcpconnectionattempts.CodeMalformedResponse, "", false, failed, redemption},
+		{identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity, false, http.StatusForbidden, ineligible, mcpconnectionattempts.CodeIneligibleIdentity, "", false, blocked, "identity_chaining_ineligible"},
+		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, false, http.StatusForbidden, notSetUp, mcpconnectionattempts.CodeConfigurationRequired, "", false, failed, string(identitychaining.StageSelection)},
+		{identitychaining.StageExchange, identitychaining.ReasonTransientFailure, true, http.StatusServiceUnavailable, "", mcpconnectionattempts.Code{}, "", false, "", ""},
 	}
 	type gateCase struct {
 		name    string
@@ -617,6 +630,14 @@ func TestServePublic_IssuerGate_ChainingProviderRefusalChallengesTheChosenClient
 			if tc.refusal.code != (mcpconnectionattempts.Code{}) {
 				// Recorded even after a stale linked session's refresh row.
 				require.Contains(t, reasons, tc.refusal.code.String(), "the connection log names the outcome")
+				row := rec.Rows()[slices.Index(reasons, tc.refusal.code.String())]
+				meaning, ok := mcpconnectionattempts.MeaningOf(row.Reason)
+				require.True(t, ok)
+				require.Equal(t, tc.refusal.outcome, meaning.Outcome, "the outcome class")
+				require.Equal(t, string(tc.refusal.outcome), row.Outcome, "the row's outcome class")
+				require.Equal(t, tc.refusal.detail, row.SubReason, "the detail names the stage that failed")
+				require.Equal(t, remoteClient.ID.String(), row.RemoteSessionClientID, "the refused service client")
+				require.NotEmpty(t, row.ProviderHost, "the refused client's provider")
 			}
 			require.Equal(t, tc.refusal.party, tc.refusal.code.RefusedBy(), "readiness counts who refused")
 		})

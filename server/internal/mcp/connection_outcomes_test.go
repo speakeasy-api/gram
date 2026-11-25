@@ -786,7 +786,7 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	ctx, fx, state := seedRefusedChainCheck(t, "attempt-inelig-", identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity)
 	rec := recordConnections(t, fx.ti)
 	for range 3 {
-		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your administrator, or use your own ")
+		require.Contains(t, requireRefusedChainCheck(t, fx), "Ask your Speakeasy admin, or use your own ")
 	}
 
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
@@ -817,11 +817,17 @@ func TestConnectionOutcome_ChainCheckRecordsProviderRefusal(t *testing.T) {
 		who    mcpconnectionattempts.WhoFixes
 		party  mcpconnectionattempts.RefusedBy
 		says   string
+		// detail is the failed stage, which tells apart who sent a shared code.
+		detail string
 	}{
-		{"identity_provider", identitychaining.StageExchange, identitychaining.ReasonAccessDenied, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.WhoAdmin, mcpconnectionattempts.RefusedByIdentityProvider, "Your identity provider didn't allow access to "},
-		{"service", identitychaining.StageRedemption, identitychaining.ReasonAccessDenied, mcpconnectionattempts.CodeEMAProviderRejected, mcpconnectionattempts.WhoAdmin, mcpconnectionattempts.RefusedByService, " didn't accept your identity provider sign-in."},
+		{"identity_provider", identitychaining.StageExchange, identitychaining.ReasonAccessDenied, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.WhoAdmin, mcpconnectionattempts.RefusedByIdentityProvider, "Your company sign-in service didn't allow access to ", "exchange"},
+		{"service", identitychaining.StageRedemption, identitychaining.ReasonAccessDenied, mcpconnectionattempts.CodeEMAProviderRejected, mcpconnectionattempts.WhoAdmin, mcpconnectionattempts.RefusedByService, " didn't accept your company sign-in.", "redemption"},
 		// The exchange ran and turned the saved sign-in down: logged, but no one refused the person.
-		{"saved sign-in turned down", identitychaining.StageExchange, identitychaining.ReasonInvalidGrant, mcpconnectionattempts.CodeReauthenticationRequired, mcpconnectionattempts.WhoPerson, "", "turned down your saved sign-in for "},
+		{"saved sign-in turned down", identitychaining.StageExchange, identitychaining.ReasonInvalidGrant, mcpconnectionattempts.CodeReauthenticationRequired, mcpconnectionattempts.WhoPerson, "", "turned down your saved sign-in for ", "exchange"},
+		// The same code means the company sign-in service at validation and the service at redemption.
+		{"missing permissions", identitychaining.StageValidation, identitychaining.ReasonInsufficientScope, mcpconnectionattempts.CodeInsufficientScope, mcpconnectionattempts.WhoAdmin, "", "didn't include the permissions", "validation"},
+		{"fewer permissions", identitychaining.StageRedemption, identitychaining.ReasonInsufficientScope, mcpconnectionattempts.CodeInsufficientScope, mcpconnectionattempts.WhoAdmin, "", "gave fewer permissions", "redemption"},
+		{"not known to the sign-in service", identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, mcpconnectionattempts.CodeInvalidTarget, mcpconnectionattempts.WhoAdmin, "", "isn't set up correctly", "exchange"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -838,6 +844,7 @@ func TestConnectionOutcome_ChainCheckRecordsProviderRefusal(t *testing.T) {
 			require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID)
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.party, tc.code.RefusedBy(), "readiness counts who refused")
+			require.Equal(t, tc.detail, row.SubReason)
 			require.NotEmpty(t, row.SubjectURN, "the row names the person, so admins count people")
 			rec.RequireNotEnded()
 
@@ -1319,10 +1326,11 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 		code   mcpconnectionattempts.Code
 		who    mcpconnectionattempts.WhoFixes
 		says   string
+		detail string
 	}{
-		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "count as personal"},
-		{identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your administrator"},
-		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, mcpconnectionattempts.StepUpstreamEMA, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.WhoAdmin, "Your identity provider didn't allow access to "},
+		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "count as personal", ""},
+		{identitychaining.StageAuthorization, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Ask your Speakeasy admin", ""},
+		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, mcpconnectionattempts.StepUpstreamEMA, mcpconnectionattempts.CodeAccessDenied, mcpconnectionattempts.WhoAdmin, "Your company sign-in service didn't allow access to ", "exchange"},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -1368,6 +1376,7 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 			require.Equal(t, upstreamClient.String(), row.RemoteSessionClientID)
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, memberID.String(), row.MemberID, "readiness counts the refusal under the member")
+			require.Equal(t, tc.detail, row.SubReason)
 		})
 	}
 }

@@ -192,17 +192,19 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 			attr.SlogMcpURL(authentication.mcpURL),
 		)
-		return none, s.rejectRemoteSession(ctx, w, authentication, chainingRefused(s.chosenServiceName(ctx, logger, authentication), outcome, strictErr))
+		return none, s.rejectRemoteSession(ctx, w, authentication, s.chainingRefused(ctx, logger, authentication, outcome, strictErr))
 	}
 	service := ""
 	if verdict, ok := chainingVerdictOf(outcome); ok {
-		if verdict.message != nil {
-			service = s.chosenServiceName(ctx, logger, authentication)
-		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining failed for good", chainingGateReason(outcome), verdict.code)
+		refused := s.chainingRefused(ctx, logger, authentication, outcome, errIdentityChainingFailed)
+		service = refused.service
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining failed for good", chainingGateReason(outcome), verdict.code, refused)
 	}
 	return none, identityChainingError(outcome, service)
 }
+
+// errIdentityChainingFailed is a definitive managed sign-in failure with no stored session behind it.
+var errIdentityChainingFailed = errors.New("identity chaining failed for good")
 
 // chainingGateReason is the rejection metric's reason for a failed managed sign-in.
 func chainingGateReason(outcome identitychaining.Outcome) string {
@@ -290,45 +292,82 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 	return false
 }
 
-// chainingRefusedError is a refused managed sign-in: its error_description and Connection Logs code.
+// chainingRefusedError is a refused managed sign-in: its error_description, and the code and options of its Connection Logs row.
 type chainingRefusedError struct {
 	error
 	description string
 	code        mcpconnectionattempts.Code
+
+	// service is the name the description uses, empty when it reads neutrally.
+	service string
+
+	// stage is the stage that failed, empty for a refusal of the account itself, which reason names instead.
+	stage  identitychaining.Stage
+	reason string
+
+	// client and provider are the chosen service client and its issuer, zero when unknown.
+	client   uuid.UUID
+	provider string
 }
 
 func (e *chainingRefusedError) Unwrap() error { return e.error }
 
-// chainingRefused names outcome's refusal on err from chainingVerdicts.
-func chainingRefused(service string, outcome identitychaining.Outcome, err error) error {
-	refused := &chainingRefusedError{error: err, description: remoteSessionReconnectDescription, code: mcpconnectionattempts.CodeInvalidRemoteSession}
-	if verdict, ok := chainingVerdictOf(outcome); ok {
-		refused.code = verdict.code
-		if verdict.message != nil {
-			refused.description = verdict.message.description(service)
-		}
+// options are the row's options: the stage or reason as its detail, else detail, and the service client it refused.
+func (e *chainingRefusedError) options(detail string) []mcpconnectionattempts.Option {
+	switch {
+	case e.stage != "":
+		detail = string(e.stage)
+	case e.reason != "":
+		detail = e.reason
+	}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(detail)}
+	if e.client != uuid.Nil {
+		opts = append(opts, mcpconnectionattempts.RemoteSessionClient(e.client), mcpconnectionattempts.Provider(e.provider))
+	}
+	return opts
+}
+
+// chainingRefused names outcome's refusal on err from chainingVerdicts, for the chosen client.
+func (s *Service) chainingRefused(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication, outcome identitychaining.Outcome, err error) *chainingRefusedError {
+	refused := &chainingRefusedError{error: err, description: remoteSessionReconnectDescription, code: mcpconnectionattempts.CodeInvalidRemoteSession, service: "", stage: "", reason: "", client: uuid.Nil, provider: ""}
+	client, service, ok := s.chosenService(ctx, logger, authentication)
+	if ok {
+		refused.client, refused.provider = client.ID, client.IssuerURL
+	}
+	verdict, known := chainingVerdictOf(outcome)
+	if !known {
+		return refused
+	}
+	refused.code, refused.reason = verdict.code, chainingGateReason(outcome)
+	if refused.reason == issuerGateReasonIdentityChainingRefused {
+		refused.stage = outcome.Stage
+	}
+	if verdict.message != nil {
+		refused.service = service
+		refused.description = verdict.message.description(service)
 	}
 	return refused
 }
 
-// chosenServiceName is the service the consent page names for the chosen
-// client, or empty when it cannot be read.
-func (s *Service) chosenServiceName(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication) string {
+// chosenService is the chosen client's registration and the service the consent page names for it; ok is false when it cannot be read.
+func (s *Service) chosenService(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication) (remotesessions.Client, string, bool) {
+	var none remotesessions.Client
 	endpoint := authentication.endpoint
 	if !authentication.chosenClient.Valid || s.remoteChallengeMgr == nil {
-		return ""
+		return none, "", false
 	}
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, endpoint.ProjectID, endpoint.OrganizationID, []uuid.UUID{authentication.chosenClient.UUID})
 	if err != nil {
 		logger.WarnContext(ctx, "load refused client for its service name", attr.SlogError(err))
-		return ""
+		return none, "", false
 	}
 	if len(clients) != 1 {
-		return ""
+		return none, "", false
 	}
 	// A direct endpoint owns its upstream's resource alone, so no member rows are read.
 	owner := &resourceDisplayOwner{endpoint: endpoint, load: nil, loaded: true, upstreams: nil}
-	return s.serviceDisplayName(ctx, logger, owner, s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)[0])
+	client := s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)[0]
+	return client, s.serviceDisplayName(ctx, logger, owner, client), true
 }
 
 // identityChainingError is the client-facing failure for an applicable attempt, from chainingVerdicts.
@@ -384,19 +423,40 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 			}
 			return "", memberConnectionError{failure, verdict.code}
 		}
-		return "", memberConnectionError{memberChainingError{&metaMemberError{message: memberChainingText(member.slug, *verdict.message)}}, verdict.code}
+		chaining := memberChainingError{metaMemberError: &metaMemberError{message: memberChainingText(member.slug, *verdict.message)}, stage: ""}
+		if chainingGateReason(outcome) == issuerGateReasonIdentityChainingRefused {
+			chaining.stage = outcome.Stage
+		}
+		return "", memberConnectionError{chaining, verdict.code}
 	}
 }
 
-// memberChainingError is a member's definitive managed sign-in failure.
-type memberChainingError struct{ *metaMemberError }
+// memberChainingError is a member's definitive managed sign-in failure; stage is empty for a refusal of the account itself.
+type memberChainingError struct {
+	*metaMemberError
+	stage identitychaining.Stage
+}
 
 func (e memberChainingError) Unwrap() error { return e.metaMemberError }
+
+// memberChainingDetail is the failed stage as a refusal row's detail, none when err names no stage.
+func memberChainingDetail(err error) []mcpconnectionattempts.Option {
+	if chaining, ok := errors.AsType[memberChainingError](err); ok && chaining.stage != "" {
+		return []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(string(chaining.stage))}
+	}
+	return nil
+}
 
 // memberHeldRefusalError is a held connection's failure, answered as is, behind which managed sign-in was also refused.
 type memberHeldRefusalError struct {
 	error
 	refusal mcpconnectionattempts.Code
+
+	// chaining is the refusal, for its detail.
+	chaining error
+
+	// serviceClient is the service client of the held connection.
+	serviceClient uuid.UUID
 }
 
 func (e memberHeldRefusalError) Unwrap() error { return e.error }

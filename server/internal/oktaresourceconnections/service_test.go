@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	healthrepo "github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	oktaapprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
@@ -135,6 +136,27 @@ func TestList_ReportsRecentRefusals(t *testing.T) {
 		return nil, mcpconnectionattempts.ErrLogsOff
 	}
 	require.Empty(t, rowFor(t, list(t, ctx, si, true), refused.serverID).RecentRefusals)
+}
+
+// Logs turned back on within the day bound the read, since nothing was recorded while they were off.
+func TestList_RefusalsStartWhenLogsWereTurnedOn(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	capableServer(t, ctx, si, "Refused")
+	var since []time.Time
+	si.refusals = func(_ context.Context, filter mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error) {
+		since = append(since, filter.Since)
+		return nil, nil
+	}
+
+	list(t, ctx, si, true)
+	require.WithinDuration(t, time.Now().Add(-24*time.Hour), since[0], time.Minute, "no logs row keeps the day")
+
+	turnedOn := time.Now().Add(-2 * time.Hour).UTC()
+	require.NoError(t, healthrepo.New(si.conn).TurnLogsOnFixture(ctx, healthrepo.TurnLogsOnFixtureParams{OrganizationID: si.orgID, CreatedAt: pgtype.Timestamptz{Time: turnedOn, InfinityModifier: pgtype.Finite, Valid: true}}))
+	list(t, ctx, si, true)
+	require.WithinDuration(t, turnedOn, since[1], time.Second, "the read starts when logs were last turned on")
 }
 
 func TestList_ClientBindingStates(t *testing.T) {

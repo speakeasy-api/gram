@@ -904,10 +904,15 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 			continue
 		}
 		if held, ok := errors.AsType[memberHeldRefusalError](failed.err); ok {
-			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, held.refusal, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject))
+			opts := []mcpconnectionattempts.Option{
+				gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject),
+				mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)), mcpconnectionattempts.RemoteSessionClient(held.serviceClient),
+			}
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, held.refusal, append(opts, memberChainingDetail(held.chaining)...)...)
 		}
 		if what, recorded := gate.listingFailureHappened(failed.member, failed.err); recorded {
-			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)))
+			opts := []mcpconnectionattempts.Option{gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err))}
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, append(opts, memberChainingDetail(failed.err)...)...)
 		}
 	}
 }

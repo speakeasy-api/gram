@@ -11,7 +11,7 @@ import (
 var ResourceConnectionRefusal = Type("OktaResourceConnectionRefusal", func() {
 	Description("People whose Cross App Access sign-in to this server was refused in the last 24 hours, by one party. Refusals do not change state: a connection refused for some people can still be verified by others.")
 	Required("refused_by", "people", "last_refused_at")
-	Attribute("refused_by", String, "identity_provider: the identity provider refused access, the permissions or the server, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.", func() {
+	Attribute("refused_by", String, "identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.", func() {
 		Enum("identity_provider", "service")
 	})
 	Attribute("people", Int, "Distinct people refused in the last 24 hours who have not had a request answered by this server since.")

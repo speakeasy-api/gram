@@ -537,7 +537,8 @@ func TestChainMetaMember_RefusalBehindAHeldConnectionKeepsTheReconnect(t *testin
 	gate.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
 	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
 
-	unreadable := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	serviceClient := uuid.New()
+	unreadable := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: serviceClient, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
 	_, token, err := chainMetaMember(ctx, *gate, member, "https://docs.example.test/mcp", unreadable, nil)
 	require.Empty(t, token)
 	require.Contains(t, err.Error(), `server "docs" can't use its saved sign-in anymore`)
@@ -554,10 +555,20 @@ func TestChainMetaMember_RefusalBehindAHeldConnectionKeepsTheReconnect(t *testin
 	for _, row := range rows {
 		require.Equal(t, member.serverID.String(), row.MemberID)
 	}
+	refusal, beside := rows[0], rows[1]
+	if refusal.Reason != mcpconnectionattempts.CodeAccessDenied.String() {
+		refusal, beside = beside, refusal
+	}
+	require.Equal(t, serviceClient.String(), refusal.RemoteSessionClientID, "the refusal names the held connection's service client")
+	require.Equal(t, beside.RemoteSessionID, refusal.RemoteSessionID, "and carries the held row's options")
+	require.Equal(t, string(identitychaining.StageExchange), refusal.SubReason, "the detail names the failed stage")
+	require.Equal(t, string(mcpconnectionattempts.OutcomeBlocked), refusal.Outcome)
 
 	s.recordListingFailures(ctx, gate, []unavailableMember{{member: member, err: err}})
 	listed := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeAccessDenied)
 	require.Equal(t, member.serverID.String(), listed.MemberID)
+	require.Equal(t, serviceClient.String(), listed.RemoteSessionClientID)
+	require.Equal(t, string(identitychaining.StageExchange), listed.SubReason)
 
 	held := errors.New("held")
 	plain := metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) {

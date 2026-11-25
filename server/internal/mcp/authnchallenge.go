@@ -1422,7 +1422,7 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	// A managed sign-in refusal is its own event, whichever answer the request got.
 	refused, isRefused := errors.AsType[*chainingRefusedError](cause)
 	if isRefused && refused.code != code {
-		s.recordRequestOutcome(ctx, scope, refused.code, authentication.request, mcpconnectionattempts.Detail(issuerGateReasonIdentityChainingRefused), mcpconnectionattempts.Subject(&authentication.subject), client)
+		s.recordRequestOutcome(ctx, scope, refused.code, authentication.request, append(refused.options(issuerGateReasonIdentityChainingRefused), mcpconnectionattempts.Subject(&authentication.subject), client)...)
 	}
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
 	if (!isRefused || refused.code != code) && remotesessions.RefreshFailureRecorded(cause) {
@@ -1430,6 +1430,9 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 		return
 	}
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), client}
+	if isRefused && refused.code == code {
+		opts = append(refused.options(reason), mcpconnectionattempts.Subject(&authentication.subject), client)
+	}
 	if id, ok := remotesessions.UnreadableRemoteSessionID(cause); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
 	}

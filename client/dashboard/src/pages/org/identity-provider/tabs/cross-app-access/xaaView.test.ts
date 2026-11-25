@@ -229,7 +229,7 @@ it("parses future not-applicable reasons before rendering the list", () => {
 });
 
 describe("refusalNotes", () => {
-  it("says who refused how many people, when, and what to fix", () => {
+  it("says who refused how many people not connected since, when, and what to fix", () => {
     const lastRefusedAt = new Date(Date.now() - 3 * 60 * 60 * 1000);
     expect(
       refusalNotes([
@@ -237,8 +237,8 @@ describe("refusalNotes", () => {
         { refusedBy: "service", people: 1, lastRefusedAt },
       ]).map((note) => note.summary),
     ).toEqual([
-      "Your identity provider refused 2 people in the last day, most recently 3h ago. Check they are assigned to the app and allowed these permissions there.",
-      "The service refused 1 person in the last day, most recently 3h ago. Check the service accepts sign-ins from your identity provider and that its client is set up.",
+      "In the last day, your identity provider refused 2 people who haven't connected since. Last refusal 3h ago. Check they are assigned to the app and allowed these permissions there.",
+      "In the last day, the service refused 1 person who hasn't connected since. Last refusal 3h ago. Check the service accepts sign-ins from your identity provider and that its client is set up.",
     ]);
   });
 

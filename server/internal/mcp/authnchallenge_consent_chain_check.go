@@ -180,6 +180,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
 			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID),
 		}
+		if chainingGateReason(outcome) == issuerGateReasonIdentityChainingRefused && outcome.Stage != "" {
+			opts = append(opts, mcpconnectionattempts.Detail(string(outcome.Stage)))
+		}
 		// A gateway's refusal belongs to each member the refused request serves.
 		s.recordRefusedConsents(ctx, logger, attempt, client.ID, refusedSignIn, requestMembers[decidedBy], step, code, opts...)
 	}

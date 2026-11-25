@@ -14,54 +14,55 @@ type chainingMessage struct {
 	neutral string
 }
 
+// Each message is for the person connecting, in the catalog's words for people.
 var (
 	chainingIdentityProviderRefused = chainingMessage{
-		"Your identity provider didn't allow access to %[1]s. Ask your administrator, or use your own %[1]s account.",
-		"Your identity provider didn't allow access to the service. Ask your administrator, or use your own account for the service.",
+		"Your company sign-in service didn't allow access to %[1]s. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your company sign-in service didn't allow access to the service. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingServiceRefused = chainingMessage{
-		"%[1]s didn't accept your identity provider sign-in. Ask your administrator, or use your own %[1]s account.",
-		"The service didn't accept your identity provider sign-in. Ask your administrator, or use your own account for the service.",
+		"%[1]s didn't accept your company sign-in. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"The service didn't accept your company sign-in. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingSavedSignInTurnedDown = chainingMessage{
-		"Your identity provider turned down your saved sign-in for %[1]s. Reconnect to sign in again. If it keeps happening, ask your administrator, or use your own %[1]s account.",
-		"Your identity provider turned down your saved sign-in for the service. Reconnect to sign in again. If it keeps happening, ask your administrator, or use your own account for the service.",
+		"Your company sign-in service turned down your saved sign-in for %[1]s. Reconnect to sign in again. If it keeps happening, ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your company sign-in service turned down your saved sign-in for the service. Reconnect to sign in again. If it keeps happening, ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingNotSetUp = chainingMessage{
-		"Sign-in to %[1]s through your identity provider isn't set up correctly. Ask your administrator, or use your own %[1]s account.",
-		"Sign-in to the service through your identity provider isn't set up correctly. Ask your administrator, or use your own account for the service.",
+		"Company sign-in for %[1]s isn't set up correctly. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Company sign-in for the service isn't set up correctly. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingMissingPermissions = chainingMessage{
-		"Your identity provider sign-in didn't include the permissions %[1]s needs. Ask your administrator, or use your own %[1]s account.",
-		"Your identity provider sign-in didn't include the permissions the service needs. Ask your administrator, or use your own account for the service.",
+		"Your company sign-in didn't include the permissions %[1]s needs. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your company sign-in didn't include the permissions the service needs. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingServiceGrantedLess = chainingMessage{
-		"%[1]s accepted your identity provider sign-in but granted fewer permissions than Speakeasy needs. Ask your administrator to check what %[1]s allows, or use your own %[1]s account.",
-		"The service accepted your identity provider sign-in but granted fewer permissions than Speakeasy needs. Ask your administrator to check what the service allows, or use your own account for the service.",
+		"%[1]s accepted your company sign-in but gave fewer permissions than Speakeasy needs. Ask your Speakeasy admin to check what %[1]s allows, or use your own %[1]s account.",
+		"The service accepted your company sign-in but gave fewer permissions than Speakeasy needs. Ask your Speakeasy admin to check what the service allows, or use your own account for the service.",
 	}
 	chainingSignInMismatch = chainingMessage{
-		"Your identity provider's sign-in for %[1]s didn't match the setup Speakeasy expects. Ask your administrator, or use your own %[1]s account.",
-		"Your identity provider's sign-in for the service didn't match the setup Speakeasy expects. Ask your administrator, or use your own account for the service.",
+		"Your company sign-in for %[1]s didn't match the setup Speakeasy expects. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your company sign-in for the service didn't match the setup Speakeasy expects. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingIdentityProviderUnreadable = chainingMessage{
-		"Your identity provider sent an answer Speakeasy couldn't read. Ask your administrator, or use your own %[1]s account.",
-		"Your identity provider sent an answer Speakeasy couldn't read. Ask your administrator, or use your own account for the service.",
+		"Your company sign-in service sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your company sign-in service sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingServiceUnreadable = chainingMessage{
-		"%[1]s sent an answer Speakeasy couldn't read. Ask your administrator, or use your own %[1]s account.",
-		"The service sent an answer Speakeasy couldn't read. Ask your administrator, or use your own account for the service.",
+		"%[1]s sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"The service sent an answer Speakeasy couldn't read. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingSignInRequired = chainingMessage{
-		"A current identity provider sign-in for %[1]s is required. Close this page and start connecting again, or use your own %[1]s account.",
-		"A current identity provider sign-in for the service is required. Close this page and start connecting again, or use your own account for the service.",
+		"A current company sign-in for %[1]s is required. Close this page and start connecting again, or use your own %[1]s account.",
+		"A current company sign-in for the service is required. Close this page and start connecting again, or use your own account for the service.",
 	}
 	chainingSignInPaused = chainingMessage{
-		"Your saved company sign-in for %[1]s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own %[1]s account.",
-		"Your saved company sign-in for the service isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own account for the service.",
+		"Your saved company sign-in for %[1]s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your saved company sign-in for the service isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingIneligibleAccount = chainingMessage{
-		"Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own %[1]s account.",
-		"Your organization can't vouch for your account to the service, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own account for the service.",
+		"Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your Speakeasy admin, or use your own %[1]s account.",
+		"Your organization can't vouch for your account to the service, for example because your email isn't on one of its verified domains. Ask your Speakeasy admin, or use your own account for the service.",
 	}
 	chainingUnmanagedAccount = chainingMessage{
 		"You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %[1]s. Accounts you created yourself with your work email count as personal.",
@@ -104,10 +105,10 @@ type chainingKey struct {
 
 // chainingVerdicts is the one table of what each failed managed sign-in records and says.
 var chainingVerdicts = map[chainingKey]chainingVerdict{
-	// The identity provider's token exchange.
+	// The company sign-in service's token exchange.
 	{identitychaining.StageExchange, identitychaining.ReasonAccessDenied}:         {mcpconnectionattempts.CodeAccessDenied, &chainingIdentityProviderRefused},
 	{identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied}:    {mcpconnectionattempts.CodeScopePolicyDenied, &chainingIdentityProviderRefused},
-	{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget}:        {mcpconnectionattempts.CodeInvalidTarget, &chainingIdentityProviderRefused},
+	{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget}:        {mcpconnectionattempts.CodeInvalidTarget, &chainingNotSetUp},
 	{identitychaining.StageExchange, identitychaining.ReasonInvalidGrant}:         {mcpconnectionattempts.CodeReauthenticationRequired, &chainingSavedSignInTurnedDown},
 	{identitychaining.StageExchange, identitychaining.ReasonInvalidClient}:        {mcpconnectionattempts.CodeConfigurationRequired, &chainingNotSetUp},
 	{identitychaining.StageExchange, identitychaining.ReasonMalformedResponse}:    {mcpconnectionattempts.CodeMalformedResponse, &chainingIdentityProviderUnreadable},

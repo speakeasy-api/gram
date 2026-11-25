@@ -91,7 +91,7 @@ func TestManagedSignInRefusals_PartiesFromCatalog(t *testing.T) {
 		f.attempt(f.direct(AppDCR), time.Hour, StepUpstreamEMA, code, Subject(&p))
 		require.Equal(t, party, code.RefusedBy())
 	}
-	for _, code := range []Code{CodeConfigurationRequired, CodeInsufficientScope, CodeMalformedResponse, CodeMalformedAssertion, CodeReauthenticationRequired, CodeInvalidRemoteSession, CodeUpstreamEMARefused, CodeUpstreamEMANotRenewed} {
+	for _, code := range []Code{CodeConfigurationRequired, CodeInvalidTarget, CodeInsufficientScope, CodeMalformedResponse, CodeMalformedAssertion, CodeReauthenticationRequired, CodeInvalidRemoteSession, CodeUpstreamEMARefused, CodeUpstreamEMANotRenewed} {
 		p := person()
 		f.attempt(f.direct(AppDCR), time.Hour, StepUpstreamEMA, code, Subject(&p))
 		require.Empty(t, code.RefusedBy())

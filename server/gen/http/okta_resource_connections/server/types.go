@@ -875,10 +875,10 @@ type OktaResourceConnectionServerResponseBody struct {
 // OktaResourceConnectionRefusalResponseBody is used to define fields on
 // response body types.
 type OktaResourceConnectionRefusalResponseBody struct {
-	// identity_provider: the identity provider refused access, the permissions or
-	// the server, for example because the person is not assigned to the app there;
-	// service: the service refused the identity provider's sign-in. Setup problems
-	// and expired sign-ins are not counted.
+	// identity_provider: the identity provider refused access or the permissions,
+	// for example because the person is not assigned to the app there; service:
+	// the service refused the identity provider's sign-in. Setup problems and
+	// expired sign-ins are not counted.
 	RefusedBy string `form:"refused_by" json:"refused_by" xml:"refused_by"`
 	// Distinct people refused in the last 24 hours who have not had a request
 	// answered by this server since.
