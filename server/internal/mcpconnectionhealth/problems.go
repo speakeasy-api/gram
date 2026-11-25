@@ -67,7 +67,7 @@ type listed struct {
 	problems       []problems.Problem
 }
 
-// readProblems groups the provider's failures in the project, attributed as Connection
+// readProblems groups the project's failures, or with issuerID the provider's attributed as Connection
 // Logs attributes them, then keeps those on serverID when set. Callers without log:read get none.
 func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, serverID *string, now time.Time) (listed, error) {
 	var out listed
@@ -78,9 +78,13 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		}
 		out.serverID = parsed.String()
 	}
-	issuer, err := s.provider(ctx, c, issuerID)
-	if err != nil {
-		return out, err
+	var err error
+	if issuerID != "" {
+		var issuer repo.GetProviderIssuerRow
+		if issuer, err = s.provider(ctx, c, issuerID); err != nil {
+			return out, err
+		}
+		out.issuerID = issuer.ID
 	}
 	if out.loggingEnabled, err = s.loggingOn(ctx, c); err != nil || !out.loggingEnabled {
 		return out, err
@@ -89,9 +93,10 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	if c.ownSubjects != nil {
 		return out, nil
 	}
-	out.issuerID = issuer.ID
-	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
-		return out, err
+	if out.issuerID != uuid.Nil {
+		if out.issuerServers, err = s.issuerServerIDs(ctx, c, out.issuerID); err != nil {
+			return out, err
+		}
 	}
 
 	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
@@ -101,7 +106,7 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	}
 	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, problems.ReadScope{
 		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false,
-		IssuerID: issuer.ID, IssuerServerIDs: out.issuerServers,
+		IssuerID: out.issuerID, IssuerServerIDs: out.issuerServers,
 	}, recordedSince, now)
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
@@ -170,7 +175,7 @@ func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSu
 	if payload.Part != nil {
 		l.problems = slices.DeleteFunc(l.problems, func(p problems.Problem) bool { return partOf(p.Part) != *payload.Part })
 	}
-	l.problems, result.ProblemsTotal = capProblems(l.problems)
+	l.problems, result.ProblemsTotal = capProblems(l.problems, maxProblems)
 	if len(l.problems) == 0 {
 		return result, nil
 	}
@@ -269,12 +274,12 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	return result, nil
 }
 
-// capProblems lists what each person fixes last, keeps the first maxProblems and counts them all.
-func capProblems(ps []problems.Problem) ([]problems.Problem, int64) {
+// capProblems lists what each person fixes last, keeps the first limit and counts them all.
+func capProblems(ps []problems.Problem, limit int) ([]problems.Problem, int64) {
 	slices.SortStableFunc(ps, func(a, b problems.Problem) int {
 		return cmp.Compare(personFixes(a), personFixes(b))
 	})
-	return ps[:min(len(ps), maxProblems)], int64(len(ps))
+	return ps[:min(len(ps), limit)], int64(len(ps))
 }
 
 func personFixes(p problems.Problem) int {

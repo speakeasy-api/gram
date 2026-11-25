@@ -37657,6 +37657,111 @@ paths:
       x-speakeasy-name-override: listDeniedClients
       x-speakeasy-react-hook:
         name: McpDeniedClients
+  /rpc/mcpConnectionHealth.listProjectSuspectedProblems:
+    post:
+      description: List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.
+      operationId: listMcpProjectSuspectedProblems
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListProjectSuspectedProblemsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListProjectSuspectedProblemsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listProjectSuspectedProblems mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: listProjectSuspectedProblems
+      x-speakeasy-react-hook:
+        name: McpProjectSuspectedProblems
   /rpc/mcpConnectionHealth.listSuspectedProblems:
     post:
       description: 'List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider''s servers, gateways and authorization server count. Empty without log:read.'
@@ -108469,6 +108574,42 @@ components:
             $ref: '#/components/schemas/PlatformKillswitchPrescription'
       required:
         - prescriptions
+    ListProjectSuspectedProblemsRequestBody:
+      type: object
+      properties:
+        limit:
+          type: integer
+          description: Return at most this many problems, default 100.
+          format: int64
+          minimum: 1
+          maximum: 100
+    ListProjectSuspectedProblemsResult:
+      type: object
+      properties:
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSuspectedProblem'
+          description: Problems each person fixes themselves come last; most people first within each group.
+        problems_total:
+          type: integer
+          description: Problems before the limit.
+          format: int64
+        viewer_scope:
+          description: all when the caller reads the whole project, own when only their own attempts.
+          enum:
+            - all
+            - own
+          type: string
+          x-speakeasy-name-override: ConnectionViewerScope
+      required:
+        - logging_enabled
+        - viewer_scope
+        - problems
+        - problems_total
     ListProjectsResult:
       type: object
       properties:
@@ -114701,6 +114842,80 @@ components:
         - distinct_providers
         - models
         - tools
+    ProjectSuspectedProblem:
+      type: object
+      properties:
+        fact:
+          type: string
+          description: What the data establishes about it, in plain words.
+        filters:
+          $ref: '#/components/schemas/SuspectedProblemFilters'
+        headline:
+          type: string
+          description: Who cannot do what, in plain words.
+        id:
+          type: string
+          description: Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
+        last_failed_at:
+          type: string
+          format: date-time
+        part:
+          description: speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
+          enum:
+            - speakeasy
+            - service
+          type: string
+          x-speakeasy-name-override: SuspectedProblemPart
+        people_count:
+          type: integer
+          format: int64
+        people_on_server_count:
+          type: integer
+          description: People failing on the server asked for. Only with server_id.
+          format: int64
+        rule:
+          description: The rule a problem was listed by.
+          enum:
+            - same_server
+            - same_service
+            - same_app_version
+            - one_person
+          type: string
+          x-speakeasy-name-override: SuspectedProblemRule
+        scope:
+          $ref: '#/components/schemas/SuspectedProblemScope'
+        server:
+          $ref: '#/components/schemas/SuspectedProblemLinkServer'
+        since:
+          type: string
+          description: When its earliest failure ended.
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The MCP sign-in whose Overview and Connection Logs list the problem. Missing when no page in the project does.
+          format: uuid
+        who_fixes:
+          description: Who has to fix it, unknown when that is not known.
+          enum:
+            - person
+            - admin
+            - provider
+            - app
+            - speakeasy
+            - unknown
+          type: string
+          x-speakeasy-name-override: SuspectedProblemWhoFixes
+      required:
+        - id
+        - rule
+        - part
+        - scope
+        - since
+        - last_failed_at
+        - people_count
+        - headline
+        - fact
+        - filters
     PromoteRequestBody:
       type: object
       properties:
@@ -124253,6 +124468,19 @@ components:
       description: Connection Logs filters that show the problem's failed attempts.
       required:
         - from
+    SuspectedProblemLinkServer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+      description: An MCP server whose Sessions tab lists the problem.
+      required:
+        - id
     SuspectedProblemMessage:
       type: object
       properties:

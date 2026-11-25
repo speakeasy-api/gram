@@ -9,6 +9,7 @@ import { mcpConnectionHealthGetSignInSummary } from "../funcs/mcpConnectionHealt
 import { mcpConnectionHealthGetSuspectedProblem } from "../funcs/mcpConnectionHealthGetSuspectedProblem.js";
 import { mcpConnectionHealthListAttempts } from "../funcs/mcpConnectionHealthListAttempts.js";
 import { mcpConnectionHealthListDeniedClients } from "../funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListProjectSuspectedProblems } from "../funcs/mcpConnectionHealthListProjectSuspectedProblems.js";
 import { mcpConnectionHealthListSuspectedProblems } from "../funcs/mcpConnectionHealthListSuspectedProblems.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ConnectionAttemptCountsResult } from "../models/components/connectionattemptcountsresult.js";
@@ -18,6 +19,7 @@ import { ConnectionSignInSummaryResult } from "../models/components/connectionsi
 import { GetConnectionAttemptResult } from "../models/components/getconnectionattemptresult.js";
 import { GetSuspectedProblemResult } from "../models/components/getsuspectedproblemresult.js";
 import { ListConnectionAttemptsResult } from "../models/components/listconnectionattemptsresult.js";
+import { ListProjectSuspectedProblemsResult } from "../models/components/listprojectsuspectedproblemsresult.js";
 import { ListSuspectedProblemsResult } from "../models/components/listsuspectedproblemsresult.js";
 import {
   GetMcpConnectionAttemptRequest,
@@ -47,6 +49,10 @@ import {
   ListMcpDeniedClientsRequest,
   ListMcpDeniedClientsSecurity,
 } from "../models/operations/listmcpdeniedclients.js";
+import {
+  ListMcpProjectSuspectedProblemsRequest,
+  ListMcpProjectSuspectedProblemsSecurity,
+} from "../models/operations/listmcpprojectsuspectedproblems.js";
 import {
   ListMcpSuspectedProblemsRequest,
   ListMcpSuspectedProblemsSecurity,
@@ -180,6 +186,25 @@ export class McpConnectionHealth extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ConnectionDeniedClientsResult> {
     return unwrapAsync(mcpConnectionHealthListDeniedClients(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listProjectSuspectedProblems mcpConnectionHealth
+   *
+   * @remarks
+   * List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.
+   */
+  async listProjectSuspectedProblems(
+    request: ListMcpProjectSuspectedProblemsRequest,
+    security?: ListMcpProjectSuspectedProblemsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListProjectSuspectedProblemsResult> {
+    return unwrapAsync(mcpConnectionHealthListProjectSuspectedProblems(
       this,
       request,
       security,

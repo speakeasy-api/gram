@@ -24,27 +24,28 @@ WHERE gateway.project_id = @project_id
   AND gateway.user_session_issuer_id = @issuer_id;
 
 -- name: ListServerNames :many
-SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind
+-- Each row's MCP sign-in and slug link to its pages.
+SELECT server.id, COALESCE(server.name, server.slug, '')::text AS name, 'mcp'::text AS kind, server.user_session_issuer_id AS issuer_id, server.slug
 FROM mcp_servers AS server
 WHERE server.project_id = @project_id
   AND server.deleted IS FALSE
   AND server.id = ANY(@ids::uuid[])
 UNION ALL
-SELECT gateway.id, gateway.name, 'gateway'::text AS kind
+SELECT gateway.id, gateway.name, 'gateway'::text AS kind, gateway.user_session_issuer_id, NULL::text
 FROM meta_mcp_servers AS gateway
 WHERE gateway.project_id = @project_id
   AND gateway.organization_id = @organization_id::text
   AND gateway.deleted IS FALSE
   AND gateway.id = ANY(@ids::uuid[])
 UNION ALL
-SELECT toolset.id, toolset.name, 'toolset'::text AS kind
+SELECT toolset.id, toolset.name, 'toolset'::text AS kind, NULL::uuid, toolset.slug
 FROM toolsets AS toolset
 WHERE toolset.project_id = @project_id
   AND toolset.organization_id = @organization_id::text
   AND toolset.deleted IS FALSE
   AND toolset.id = ANY(@ids::uuid[])
 UNION ALL
-SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind
+SELECT issuer.id, issuer.slug, 'authorization_server'::text AS kind, issuer.id, issuer.slug
 FROM user_session_issuers AS issuer
 WHERE (issuer.project_id = @project_id OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text))
   AND issuer.deleted IS FALSE
@@ -145,6 +146,13 @@ ORDER BY days.day_start;
 -- name: SetGatewayIssuerFixture :execrows
 -- Test fixture: moves a gateway in a project to another MCP authentication provider.
 UPDATE meta_mcp_servers
+SET user_session_issuer_id = @issuer_id
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: SetServerIssuerFixture :execrows
+-- Test fixture: puts an MCP server in a project on an MCP sign-in.
+UPDATE mcp_servers
 SET user_session_issuer_id = @issuer_id
 WHERE id = @id
   AND project_id = @project_id;

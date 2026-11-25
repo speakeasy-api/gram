@@ -417,6 +417,7 @@ trackedFiles:
   src/funcs/mcpConnectionHealthGetSuspectedProblem.ts: {}
   src/funcs/mcpConnectionHealthListAttempts.ts: {}
   src/funcs/mcpConnectionHealthListDeniedClients.ts: {}
+  src/funcs/mcpConnectionHealthListProjectSuspectedProblems.ts: {}
   src/funcs/mcpConnectionHealthListSuspectedProblems.ts: {}
   src/funcs/mcpEndpointsCheckSlugAvailability.ts: {}
   src/funcs/mcpEndpointsCreate.ts: {}
@@ -1635,6 +1636,8 @@ trackedFiles:
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprescriptionsresponsebody.ts: {}
   src/models/components/listprojectsresult.ts: {}
+  src/models/components/listprojectsuspectedproblemsrequestbody.ts: {}
+  src/models/components/listprojectsuspectedproblemsresult.ts: {}
   src/models/components/listprompttemplatesresult.ts: {}
   src/models/components/listregistriesresponsebody.ts: {}
   src/models/components/listremotesessionclientsresult.ts: {}
@@ -1860,6 +1863,7 @@ trackedFiles:
   src/models/components/projectmcpusage.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
   src/models/components/projectsummary.ts: {}
+  src/models/components/projectsuspectedproblem.ts: {}
   src/models/components/promoterequestbody.ts: {}
   src/models/components/promptguardrailevalresult.ts: {}
   src/models/components/promptguardrailmessageverdict.ts: {}
@@ -2166,6 +2170,7 @@ trackedFiles:
   src/models/components/suspectedproblembucket.ts: {}
   src/models/components/suspectedproblemdetail.ts: {}
   src/models/components/suspectedproblemfilters.ts: {}
+  src/models/components/suspectedproblemlinkserver.ts: {}
   src/models/components/suspectedproblemmessage.ts: {}
   src/models/components/suspectedproblemperson.ts: {}
   src/models/components/suspectedproblemplace.ts: {}
@@ -2911,6 +2916,7 @@ trackedFiles:
   src/models/operations/listmcpendpoints.ts: {}
   src/models/operations/listmcpfeedback.ts: {}
   src/models/operations/listmcpplatformtoolsets.ts: {}
+  src/models/operations/listmcpprojectsuspectedproblems.ts: {}
   src/models/operations/listmcpregistries.ts: {}
   src/models/operations/listmcpserverauthclientchoices.ts: {}
   src/models/operations/listmcpservers.ts: {}
@@ -3962,6 +3968,7 @@ trackedFiles:
   src/react-query/mcpFeedbackSettings.core.ts: {}
   src/react-query/mcpFeedbackSettings.ts: {}
   src/react-query/mcpMetadataSet.ts: {}
+  src/react-query/mcpProjectSuspectedProblems.ts: {}
   src/react-query/mcpRegistriesClearCache.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.core.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.ts: {}
@@ -10934,6 +10941,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listMcpProjectSuspectedProblems:
+    speakeasy-default-list-mcp-project-suspected-problems:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"logging_enabled": false, "problems": [{"fact": "<value>", "filters": {"from": "2026-11-10T18:53:41.010Z"}, "headline": "<value>", "id": "<id>", "last_failed_at": "2024-08-23T16:02:17.392Z", "part": "service", "people_count": 517770, "rule": "same_service", "scope": {"id": "<id>", "kind": "person", "name": "<value>"}, "since": "2024-02-06T17:33:47.311Z"}], "problems_total": 518770, "viewer_scope": "own"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listMcpServerAuthClientChoices:
     speakeasy-default-list-mcp-server-auth-client-choices:
       parameters:

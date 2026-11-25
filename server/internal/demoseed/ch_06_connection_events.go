@@ -128,8 +128,8 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 		for n, ending := range connectionRequestEndings {
 			key := "connection-request-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
-			// Half the refreshes are the scheduled sweep, which reaches no server.
-			scheduled := ending.step == mcpconnectionattempts.StepProviderRefresh && hash64(s.name(key), "scheduled")%2 == 0
+			// Half the successful refreshes are the scheduled sweep, which reaches no server and has no answered request to end a failure.
+			scheduled := ending.step == mcpconnectionattempts.StepProviderRefresh && ending.what == mcpconnectionattempts.ResultRefreshed && hash64(s.name(key), "scheduled")%2 == 0
 			switch {
 			case ending.step == mcpconnectionattempts.StepSignInRenewal:
 				scope = mcpconnectionattempts.IdentityProviderScope(s.orgID(), mcpconnectionattempts.AppUnverified)

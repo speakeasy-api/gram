@@ -352,7 +352,7 @@ func TestCapProblems_KeepsTheFirstHundred(t *testing.T) {
 	for i := range all {
 		all[i].ID = strconv.Itoa(i)
 	}
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Len(t, shown, maxProblems)
 	require.Equal(t, int64(maxProblems+1), total)
 	require.Equal(t, "0", shown[0].ID, "the most people first stay")
@@ -368,7 +368,7 @@ func TestCapProblems_PutsWhatEachPersonFixesLast(t *testing.T) {
 		{ID: "speakeasy-1", WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 1},
 		{ID: "unknown-1", WhoFixes: mcpconnectionattempts.WhoNobody, People: 1},
 	}
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Equal(t, int64(6), total)
 	ids := make([]string, len(shown))
 	for i, p := range shown {
@@ -384,7 +384,7 @@ func TestCapProblems_CapsAfterOrdering(t *testing.T) {
 		all[i].ID, all[i].WhoFixes = strconv.Itoa(i), mcpconnectionattempts.WhoPerson
 	}
 	all[maxProblems].WhoFixes = mcpconnectionattempts.WhoAdmin
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Len(t, shown, maxProblems)
 	require.Equal(t, int64(maxProblems+1), total)
 	require.Equal(t, strconv.Itoa(maxProblems), shown[0].ID, "an admin's problem past the cap is listed first")

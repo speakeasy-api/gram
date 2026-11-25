@@ -42,6 +42,10 @@ type Service interface {
 	// Get one suspected problem of a provider by id. Not found once it has
 	// cleared, or without log:read.
 	GetSuspectedProblem(context.Context, *GetSuspectedProblemPayload) (res *GetSuspectedProblemResult, err error)
+	// List the project's suspected problems across all its MCP sign-ins, grouped
+	// and counted from this project's failures only. Each problem says which MCP
+	// sign-in and MCP server pages list it. Empty without log:read.
+	ListProjectSuspectedProblems(context.Context, *ListProjectSuspectedProblemsPayload) (res *ListProjectSuspectedProblemsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -64,7 +68,7 @@ const ServiceName = "mcpConnectionHealth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients", "listSuspectedProblems", "getSuspectedProblem"}
+var MethodNames = [9]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients", "listSuspectedProblems", "getSuspectedProblem", "listProjectSuspectedProblems"}
 
 type ConnectionApp struct {
 	// Client family, empty when the app is not on the list.
@@ -450,6 +454,29 @@ type ListDeniedClientsPayload struct {
 	To string
 }
 
+// ListProjectSuspectedProblemsPayload is the payload type of the
+// mcpConnectionHealth service listProjectSuspectedProblems method.
+type ListProjectSuspectedProblemsPayload struct {
+	// Return at most this many problems, default 100.
+	Limit            *int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListProjectSuspectedProblemsResult is the result type of the
+// mcpConnectionHealth service listProjectSuspectedProblems method.
+type ListProjectSuspectedProblemsResult struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool
+	ViewerScope    ConnectionViewerScope
+	// Problems each person fixes themselves come last; most people first within
+	// each group.
+	Problems []*ProjectSuspectedProblem
+	// Problems before the limit.
+	ProblemsTotal int64
+}
+
 // ListSuspectedProblemsPayload is the payload type of the mcpConnectionHealth
 // service listSuspectedProblems method.
 type ListSuspectedProblemsPayload struct {
@@ -475,6 +502,33 @@ type ListSuspectedProblemsResult struct {
 	Problems []*SuspectedProblem
 	// Problems before the cap.
 	ProblemsTotal int64
+}
+
+type ProjectSuspectedProblem struct {
+	// The MCP sign-in whose Overview and Connection Logs list the problem. Missing
+	// when no page in the project does.
+	UserSessionIssuerID *string
+	// The first MCP server its people fail on directly. Missing when they fail
+	// only on gateways, toolsets or before reaching a server.
+	Server *SuspectedProblemLinkServer
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID       string
+	Rule     SuspectedProblemRule
+	Part     SuspectedProblemPart
+	WhoFixes *SuspectedProblemWhoFixes
+	Scope    *SuspectedProblemScope
+	// When its earliest failure ended.
+	Since        string
+	LastFailedAt string
+	PeopleCount  int64
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64
+	// Who cannot do what, in plain words.
+	Headline string
+	// What the data establishes about it, in plain words.
+	Fact    string
+	Filters *SuspectedProblemFilters
 }
 
 type SuspectedProblem struct {
@@ -570,6 +624,13 @@ type SuspectedProblemFilters struct {
 	Reasons []string
 	// Service hosts.
 	Services []string
+}
+
+// An MCP server whose Sessions tab lists the problem.
+type SuspectedProblemLinkServer struct {
+	ID   string
+	Slug *string
+	Name *string
 }
 
 type SuspectedProblemMessage struct {

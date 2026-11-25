@@ -216,4 +216,18 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: subject("dana")}, People: people("dana"), Servers: serverIDs("linear")},
 		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("support").String()}, People: people("ana", "mei"), Servers: serverIDs("support")},
 	}, listedProblems, "an app version takes only servers where another app worked: Claude Code on GitHub and on Notion")
+
+	// The Project Overview reads the whole project and lists the same problems, the daily refusals still none.
+	projectWide, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false,
+	}, time.Time{}, now)
+	require.NoError(t, err)
+	ids := func(ps []problems.Problem) []string {
+		out := make([]string, len(ps))
+		for i, p := range ps {
+			out[i] = p.ID
+		}
+		return out
+	}
+	require.ElementsMatch(t, ids(got), ids(projectWide))
 }

@@ -235,6 +235,30 @@ var _ = Service("mcpConnectionHealth", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getSuspectedProblem")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpSuspectedProblem"}`)
 	})
+
+	Method("listProjectSuspectedProblems", func() {
+		Description("List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only. Each problem says which MCP sign-in and MCP server pages list it. Empty without log:read.")
+		Payload(func() {
+			Attribute("limit", Int, "Return at most this many problems, default 100.", func() {
+				Minimum(1)
+				Maximum(100)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(ListProjectSuspectedProblemsResult)
+		HTTP(func() {
+			POST("/rpc/mcpConnectionHealth.listProjectSuspectedProblems")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listMcpProjectSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listProjectSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpProjectSuspectedProblems"}`)
+	})
 })
 
 var RangeQuery = Type("ConnectionHealthRangeQuery", func() {
@@ -558,6 +582,29 @@ var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
 	loggingEnabled()
 	Attribute("problems", ArrayOf(Problem), "At most 100. Problems each person fixes themselves come last; most people first within each group.")
 	Attribute("problems_total", Int64, "Problems before the cap.")
+	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
+})
+
+var ProblemLinkServer = Type("SuspectedProblemLinkServer", func() {
+	Description("An MCP server whose Sessions tab lists the problem.")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("slug", String)
+	Attribute("name", String)
+	Required("id")
+})
+
+var ProjectProblem = Type("ProjectSuspectedProblem", func() {
+	Extend(Problem)
+	Attribute("user_session_issuer_id", String, "The MCP sign-in whose Overview and Connection Logs list the problem. Missing when no page in the project does.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("server", ProblemLinkServer, "The first MCP server its people fail on directly. Missing when they fail only on gateways, toolsets or before reaching a server.")
+})
+
+var ListProjectSuspectedProblemsResult = Type("ListProjectSuspectedProblemsResult", func() {
+	loggingEnabled()
+	Attribute("problems", ArrayOf(ProjectProblem), "Problems each person fixes themselves come last; most people first within each group.")
+	Attribute("problems_total", Int64, "Problems before the limit.")
 	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })
 
