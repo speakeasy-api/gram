@@ -228,3 +228,21 @@ CREATE TABLE app.chat_message_transcripts (message_id uuid NOT NULL PRIMARY KEY,
 	require.NoError(t, err)
 	require.NoError(t, checkTranscriptShadowSchema(t.Context(), tx))
 }
+
+func TestReadOnlyTranscripts(t *testing.T) {
+	t.Parallel()
+	none, err := configureReadOnlyTranscripts(newTranscriptShadowCLIContext(t, nil), testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.Nil(t, none, "no project keeps shadows")
+
+	listed := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: listed.String()})
+	transcripts, err := configureReadOnlyTranscripts(c, testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	require.NotNil(t, transcripts)
+	require.False(t, transcripts.Enabled(listed), "a read-only process cannot open shadows")
+	require.Nil(t, transcripts.Store())
+
+	_, err = configureReadOnlyTranscripts(newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "not-a-uuid"}), testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.Error(t, err)
+}

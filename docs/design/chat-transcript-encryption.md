@@ -138,10 +138,19 @@ the capping in Go for every project. Writes that change a shadowed field after
 insert (`UpdateToolCallOutcome`, `StoreToolCallSummary`) recapture the shadow in
 the same transaction.
 
+A process that reads chat messages without the shadow store (today `streams`,
+for the prompt-injection judge and signal evaluation) builds read-only
+`Transcripts` from the same project list. A read for a listed project there is
+reported, not hidden: an error log and `chat.transcript_shadow.plaintext_reads`
+by `gram.transcript_shadow.reader` and `gram.outcome:unopened`. Local
+development fails the read instead. A prod Datadog monitor pages on any count.
+A test plants a canary in plaintext behind a captured shadow, forges the source
+hash so SQL calls it current, and checks that every reader fails as stale
+instead of serving it.
+
 Still open: search (`ILIKE`), tool-call counts and the hooks tool-call lookup,
 byte budgets, and the kit projection compare still work on plaintext inside SQL.
-The `streams` process does not configure shadows, so its prompt-injection judge
-window and signal evaluation read plaintext for every project. Plain inserts
+Plain inserts
 stay in `chat/repo`; the writer captures their shadows in the same transaction.
 
 ## Shadow reads
