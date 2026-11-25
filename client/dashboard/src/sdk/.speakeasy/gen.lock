@@ -118,11 +118,13 @@ trackedFiles:
   src/funcs/agentHideMcpServer.ts: {}
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListPendingAccessRequests.ts: {}
+  src/funcs/agentListRequestableAccess.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportCrash.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentReportState.ts: {}
+  src/funcs/agentRequestAccess.ts: {}
   src/funcs/agentUnhideMcpServer.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/agentUpsertAiScanTarget.ts: {}
@@ -965,6 +967,7 @@ trackedFiles:
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/admitworkloadsubjectform.ts: {}
+  src/models/components/agentaccessrequesttarget.ts: {}
   src/models/components/agentconnectionblock.ts: {}
   src/models/components/agentconnectionblockidform.ts: {}
   src/models/components/agentcrashbuild.ts: {}
@@ -978,6 +981,7 @@ trackedFiles:
   src/models/components/agentkeyauthclientchoice.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentmcpserver.ts: {}
+  src/models/components/agentownaccessrequest.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpendingaccessrequest.ts: {}
@@ -989,6 +993,10 @@ trackedFiles:
   src/models/components/agentpolicygrantform.ts: {}
   src/models/components/agentpolicyselector.ts: {}
   src/models/components/agentpollingprincipal.ts: {}
+  src/models/components/agentrequestablepermission.ts: {}
+  src/models/components/agentrequestableproject.ts: {}
+  src/models/components/agentrequestaccessform.ts: {}
+  src/models/components/agentrequestaccessresult.ts: {}
   src/models/components/agentserverconnection.ts: {}
   src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
@@ -1632,6 +1640,7 @@ trackedFiles:
   src/models/components/listremotesessionclientsresult.ts: {}
   src/models/components/listremotesessionissuersresult.ts: {}
   src/models/components/listremotesessionsresult.ts: {}
+  src/models/components/listrequestableaccessresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
   src/models/components/listresponsebody.ts: {}
   src/models/components/listriskevalreviewsresult.ts: {}
@@ -2411,6 +2420,7 @@ trackedFiles:
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/admitworkloadsubject.ts: {}
+  src/models/operations/agentrequestaccess.ts: {}
   src/models/operations/analyticsdescribe.ts: {}
   src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
@@ -2820,6 +2830,7 @@ trackedFiles:
   src/models/operations/listagentpendingaccessrequests.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
   src/models/operations/listagentpolicyscopes.ts: {}
+  src/models/operations/listagentrequestableaccess.ts: {}
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
@@ -3321,6 +3332,9 @@ trackedFiles:
   src/react-query/agentPendingAccessRequests.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
+  src/react-query/agentRequestAccess.ts: {}
+  src/react-query/agentRequestableAccess.core.ts: {}
+  src/react-query/agentRequestableAccess.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
   src/react-query/agentSessions.core.ts: {}
@@ -4834,6 +4848,17 @@ examples:
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "699d2770-2c50-4076-b7ec-41ff4e2c2e85", "agent_name": "<value>", "created_at": "2025-07-09T02:12:37.415Z", "id": "55001c0c-1e9a-4559-95c4-5bffb2aa31f3", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "tags": [], "updated_at": "2025-05-31T20:36:13.884Z", "wildcard_active": true, "workload_issuer_id": "bb712eab-4d75-409f-a571-6d332e042074"}], "issuers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  agentRequestAccess:
+    speakeasy-default-agent-request-access:
+      requestBody:
+        application/json: {"scope": "<value>"}
+      responses:
+        "200":
+          application/json: {"created": true, "request": {"created_at": "2024-11-21T21:51:35.188Z", "expires_at": "2026-11-25T09:06:17.096Z", "id": "2f1fb116-cbe4-44b0-a2d4-9c927cf5caae", "permission_label": "<value>", "scope": "<value>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10034,6 +10059,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgentRequestableAccess:
+    speakeasy-default-list-agent-requestable-access:
+      responses:
+        "200":
+          application/json: {"pending": [], "permissions": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listAgentSessions:
     speakeasy-default-list-agent-sessions:
       parameters:

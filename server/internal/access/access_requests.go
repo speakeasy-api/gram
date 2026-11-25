@@ -111,16 +111,19 @@ type storedAccessRequest struct {
 
 // recordAccessRequest stores a pending request when the rollout is on for the
 // organization. It returns nil when requests are not stored: the rollout is
-// off, or the caller is not a signed-in member (an API key or an agent), who
-// keep the email-only behaviour. For members, a scope that cannot be given
+// off, or the caller does not act for a member (any other API key, or an
+// agent), who keep the email-only behaviour. For members, a scope that cannot be given
 // temporarily is refused, since an approval could not grant it.
-func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload) (*storedAccessRequest, error) {
+//
+// member says whether the caller acts for a member: a signed-in member, or a
+// device agent's per-user key whose owner the agent service has verified.
+func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.AuthContext, payload *gen.RequestAccessPayload, member bool) (*storedAccessRequest, error) {
 	if !s.AccessRequestsEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
 		return nil, nil
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID), attr.SlogUserID(ac.UserID))
 
-	if !isMemberCaller(ctx, ac) {
+	if !member {
 		return nil, nil
 	}
 	scope := authz.Scope(payload.Scope)

@@ -96,3 +96,13 @@ func CreateSessionHandoffAgentPath() string {
 func ListPendingAccessRequestsAgentPath() string {
 	return "/rpc/agent.listPendingAccessRequests"
 }
+
+// ListRequestableAccessAgentPath returns the URL path to the agent service listRequestableAccess HTTP endpoint.
+func ListRequestableAccessAgentPath() string {
+	return "/rpc/agent.listRequestableAccess"
+}
+
+// RequestAccessAgentPath returns the URL path to the agent service requestAccess HTTP endpoint.
+func RequestAccessAgentPath() string {
+	return "/rpc/agent.requestAccess"
+}
