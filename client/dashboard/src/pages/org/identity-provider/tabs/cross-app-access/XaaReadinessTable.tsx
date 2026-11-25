@@ -1,4 +1,6 @@
 import { ExternalLink, MoreHorizontal } from "lucide-react";
+import { Fragment, cloneElement } from "react";
+import type { ReactElement } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -139,15 +141,40 @@ function StateCell({
         />
       )}
       {note && <StateNote tooltip={note.tooltip} summary={note.summary} />}
-      {refusalNotes(row.recentRefusals).map((refusal) => (
-        <StateNote
-          key={refusal.summary}
-          tooltip={refusal.tooltip}
-          summary={refusal.summary}
-          clamp={false}
-        />
-      ))}
     </div>
+  );
+}
+
+/** Refusals span the row's width under it, lined up with the server name, so the narrow State column doesn't wrap them. */
+function RefusalNotesRow({
+  row,
+  span,
+}: {
+  row: OktaResourceConnectionServer;
+  span: number;
+}): JSX.Element | null {
+  const notes = refusalNotes(row.recentRefusals);
+  if (notes.length === 0) return null;
+  return (
+    <tr
+      aria-label={`Recent refusals for ${row.serverName}`}
+      className="[grid-column:1/-1] grid [grid-template-columns:subgrid] border-b last:border-none"
+    >
+      <td aria-hidden />
+      <td
+        colSpan={span - 1}
+        className="[grid-column:2/-1] flex flex-col gap-1 px-4 pb-3"
+      >
+        {notes.map((refusal) => (
+          <StateNote
+            key={refusal.summary}
+            tooltip={refusal.tooltip}
+            summary={refusal.summary}
+            clamp={false}
+          />
+        ))}
+      </td>
+    </tr>
   );
 }
 
@@ -411,6 +438,20 @@ export function XaaReadinessTable({
           columns={columns}
           data={rows}
           rowKey={(row) => row.mcpServerId}
+          renderRow={(row, rowElement) => {
+            if (refusalNotes(row.recentRefusals).length === 0) {
+              return rowElement;
+            }
+            return (
+              <Fragment key={row.mcpServerId}>
+                {cloneElement(
+                  rowElement as ReactElement<{ className?: string }>,
+                  { className: "border-b-0" },
+                )}
+                <RefusalNotesRow row={row} span={columns.length} />
+              </Fragment>
+            );
+          }}
           noResultsMessage={<Text muted>{emptyMessage}</Text>}
         />
       </div>
