@@ -549,7 +549,7 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 		clients, err := s.withTypedRegistrationClients(ctx, endpoint.OrganizationID, nil, typed)
 		return clients, typed, err
 	}
-	clients, err := s.listSignInClients(ctx, endpoint, loadMembers)
+	clients, err := s.listSignInClients(ctx, endpoint, challengeState, loadMembers)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -563,7 +563,7 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 
 // listSignInClients is the clients the endpoint's sign-in links that
 // listEndpointClients offers.
-func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
+func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
 	if usesTypedConsentInventory(ctx) && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) {
 		members, err := loadMembers()
 		if err != nil || !hasHostedConsentMember(members) {
@@ -606,8 +606,9 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 		if err != nil {
 			return nil, err
 		}
+		own := associated[endpoint.McpServerID.UUID]
 		return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
-			return !associated[endpoint.McpServerID.UUID][client.ID]
+			return !own[client.ID] || (challengeState.WorkloadReconnect != nil && client.ID != challengeState.WorkloadReconnect.ClientID)
 		}), nil
 	}
 	if endpoint.MetaMcpServerID.Valid {
