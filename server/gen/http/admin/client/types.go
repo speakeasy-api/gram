@@ -771,6 +771,9 @@ type ClearOrganizationHooksRolloutRequestBody struct {
 // StartHooksRolloutStageRequestBody is the type of the "admin" service
 // "startHooksRolloutStage" endpoint HTTP request body.
 type StartHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
 	// Hooks generator version to roll out. Must be above the default pin and not
 	// exceed the version this build publishes.
 	Version int `form:"version" json:"version" xml:"version"`
@@ -779,13 +782,27 @@ type StartHooksRolloutStageRequestBody struct {
 // PauseHooksRolloutStageRequestBody is the type of the "admin" service
 // "pauseHooksRolloutStage" endpoint HTTP request body.
 type PauseHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
 	// Why, recorded with the change.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
+// ResumeHooksRolloutStageRequestBody is the type of the "admin" service
+// "resumeHooksRolloutStage" endpoint HTTP request body.
+type ResumeHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
 }
 
 // CancelHooksRolloutStageRequestBody is the type of the "admin" service
 // "cancelHooksRolloutStage" endpoint HTTP request body.
 type CancelHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
 	// Why, recorded with the change.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
@@ -32638,6 +32655,9 @@ type AdminHooksRolloutPinResponseBody struct {
 // AdminHooksRolloutStageResponseBody is used to define fields on response body
 // types.
 type AdminHooksRolloutStageResponseBody struct {
+	// Increases with every change to the rollout. Send it back with a change so a
+	// rollout that moved on in the meantime is refused.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 	// Hooks generator version the rollout clears.
 	Version *int `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Share of organizations on the default pin that the rollout clears, beyond
@@ -33727,7 +33747,8 @@ func NewClearOrganizationHooksRolloutRequestBody(p *admin.ClearOrganizationHooks
 // payload of the "startHooksRolloutStage" endpoint of the "admin" service.
 func NewStartHooksRolloutStageRequestBody(p *admin.StartHooksRolloutStagePayload) *StartHooksRolloutStageRequestBody {
 	body := &StartHooksRolloutStageRequestBody{
-		Version: p.Version,
+		Revision: p.Revision,
+		Version:  p.Version,
 	}
 	return body
 }
@@ -33736,7 +33757,17 @@ func NewStartHooksRolloutStageRequestBody(p *admin.StartHooksRolloutStagePayload
 // payload of the "pauseHooksRolloutStage" endpoint of the "admin" service.
 func NewPauseHooksRolloutStageRequestBody(p *admin.PauseHooksRolloutStagePayload) *PauseHooksRolloutStageRequestBody {
 	body := &PauseHooksRolloutStageRequestBody{
-		Reason: p.Reason,
+		Revision: p.Revision,
+		Reason:   p.Reason,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageRequestBody builds the HTTP request body from the
+// payload of the "resumeHooksRolloutStage" endpoint of the "admin" service.
+func NewResumeHooksRolloutStageRequestBody(p *admin.ResumeHooksRolloutStagePayload) *ResumeHooksRolloutStageRequestBody {
+	body := &ResumeHooksRolloutStageRequestBody{
+		Revision: p.Revision,
 	}
 	return body
 }
@@ -33745,7 +33776,8 @@ func NewPauseHooksRolloutStageRequestBody(p *admin.PauseHooksRolloutStagePayload
 // payload of the "cancelHooksRolloutStage" endpoint of the "admin" service.
 func NewCancelHooksRolloutStageRequestBody(p *admin.CancelHooksRolloutStagePayload) *CancelHooksRolloutStageRequestBody {
 	body := &CancelHooksRolloutStageRequestBody{
-		Reason: p.Reason,
+		Revision: p.Revision,
+		Reason:   p.Reason,
 	}
 	return body
 }
@@ -101190,6 +101222,9 @@ func ValidateAdminHooksRolloutPinResponseBody(body *AdminHooksRolloutPinResponse
 // ValidateAdminHooksRolloutStageResponseBody runs the validations defined on
 // AdminHooksRolloutStageResponseBody
 func ValidateAdminHooksRolloutStageResponseBody(body *AdminHooksRolloutStageResponseBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}

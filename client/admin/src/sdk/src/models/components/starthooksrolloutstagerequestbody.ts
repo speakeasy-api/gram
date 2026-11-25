@@ -6,6 +6,10 @@ import * as z from "zod/v4-mini";
 
 export type StartHooksRolloutStageRequestBody = {
   /**
+   * The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.
+   */
+  revision: number;
+  /**
    * Hooks generator version to roll out. Must be above the default pin and not exceed the version this build publishes.
    */
   version: number;
@@ -13,6 +17,7 @@ export type StartHooksRolloutStageRequestBody = {
 
 /** @internal */
 export type StartHooksRolloutStageRequestBody$Outbound = {
+  revision: number;
   version: number;
 };
 
@@ -21,6 +26,7 @@ export const StartHooksRolloutStageRequestBody$outboundSchema: z.ZodMiniType<
   StartHooksRolloutStageRequestBody$Outbound,
   StartHooksRolloutStageRequestBody
 > = z.object({
+  revision: z.int(),
   version: z.int(),
 });
 

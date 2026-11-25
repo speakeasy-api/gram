@@ -25,6 +25,10 @@ export type AdminHooksRolloutStage = {
    */
   reason?: string | undefined;
   /**
+   * Increases with every change to the rollout. Send it back with a change so a rollout that moved on in the meantime is refused.
+   */
+  revision: number;
+  /**
    * When the last change was made.
    */
   setAt: Date;
@@ -53,6 +57,7 @@ export const AdminHooksRolloutStage$inboundSchema: z.ZodMiniType<
     ),
     percent: z.int(),
     reason: z.optional(z.string()),
+    revision: z.int(),
     set_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

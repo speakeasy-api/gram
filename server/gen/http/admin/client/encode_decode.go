@@ -31178,6 +31178,10 @@ func EncodeResumeHooksRolloutStageRequest(encoder func(*http.Request) goahttp.En
 			head := *p.AdminSessionToken
 			req.Header.Set("Authorization", head)
 		}
+		body := NewResumeHooksRolloutStageRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "resumeHooksRolloutStage", err)
+		}
 		return nil
 	}
 }
@@ -35866,6 +35870,7 @@ func unmarshalAdminHooksRolloutStageResponseBodyToAdminAdminHooksRolloutStage(v 
 		return nil
 	}
 	res := &admin.AdminHooksRolloutStage{
+		Revision:      *v.Revision,
 		Version:       *v.Version,
 		Percent:       *v.Percent,
 		State:         *v.State,

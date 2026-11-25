@@ -5168,6 +5168,7 @@ func ParseEndpoint(
 		adminPauseHooksRolloutStageAdminSessionTokenFlag = adminPauseHooksRolloutStageFlags.String("admin-session-token", "", "")
 
 		adminResumeHooksRolloutStageFlags                 = flag.NewFlagSet("resume-hooks-rollout-stage", flag.ExitOnError)
+		adminResumeHooksRolloutStageBodyFlag              = adminResumeHooksRolloutStageFlags.String("body", "REQUIRED", "")
 		adminResumeHooksRolloutStageAdminSessionTokenFlag = adminResumeHooksRolloutStageFlags.String("admin-session-token", "", "")
 
 		adminCancelHooksRolloutStageFlags                 = flag.NewFlagSet("cancel-hooks-rollout-stage", flag.ExitOnError)
@@ -13983,7 +13984,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildPauseHooksRolloutStagePayload(*adminPauseHooksRolloutStageBodyFlag, *adminPauseHooksRolloutStageAdminSessionTokenFlag)
 			case "resume-hooks-rollout-stage":
 				endpoint = c.ResumeHooksRolloutStage()
-				data, err = adminc.BuildResumeHooksRolloutStagePayload(*adminResumeHooksRolloutStageAdminSessionTokenFlag)
+				data, err = adminc.BuildResumeHooksRolloutStagePayload(*adminResumeHooksRolloutStageBodyFlag, *adminResumeHooksRolloutStageAdminSessionTokenFlag)
 			case "cancel-hooks-rollout-stage":
 				endpoint = c.CancelHooksRolloutStage()
 				data, err = adminc.BuildCancelHooksRolloutStagePayload(*adminCancelHooksRolloutStageBodyFlag, *adminCancelHooksRolloutStageAdminSessionTokenFlag)
@@ -36665,7 +36666,7 @@ func adminStartHooksRolloutStageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-hooks-rollout-stage --body '{\n      \"version\": 2\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin start-hooks-rollout-stage --body '{\n      \"revision\": 1,\n      \"version\": 2\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminPauseHooksRolloutStageUsage() {
@@ -36685,12 +36686,13 @@ func adminPauseHooksRolloutStageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin pause-hooks-rollout-stage --body '{\n      \"reason\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin pause-hooks-rollout-stage --body '{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminResumeHooksRolloutStageUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin resume-hooks-rollout-stage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -36699,11 +36701,12 @@ func adminResumeHooksRolloutStageUsage() {
 	fmt.Fprintln(os.Stderr, `Restarts a paused staged rollout. The day at the current share starts over.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resume-hooks-rollout-stage --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resume-hooks-rollout-stage --body '{\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminCancelHooksRolloutStageUsage() {
@@ -36723,7 +36726,7 @@ func adminCancelHooksRolloutStageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin cancel-hooks-rollout-stage --body '{\n      \"reason\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin cancel-hooks-rollout-stage --body '{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListTailscaleOAuthMigrationUsage() {

@@ -4267,7 +4267,10 @@ func BuildStartHooksRolloutStagePayload(adminStartHooksRolloutStageBody string, 
 	{
 		err = json.Unmarshal([]byte(adminStartHooksRolloutStageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"version\": 2\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"revision\": 1,\n      \"version\": 2\n   }'")
+		}
+		if body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", body.Revision, 0, true))
 		}
 		if body.Version < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", body.Version, 1, true))
@@ -4286,7 +4289,8 @@ func BuildStartHooksRolloutStagePayload(adminStartHooksRolloutStageBody string, 
 		}
 	}
 	v := &admin.StartHooksRolloutStagePayload{
-		Version: body.Version,
+		Revision: body.Revision,
+		Version:  body.Version,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -4301,7 +4305,10 @@ func BuildPauseHooksRolloutStagePayload(adminPauseHooksRolloutStageBody string, 
 	{
 		err = json.Unmarshal([]byte(adminPauseHooksRolloutStageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }'")
+		}
+		if body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", body.Revision, 0, true))
 		}
 		if utf8.RuneCountInString(body.Reason) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", body.Reason, utf8.RuneCountInString(body.Reason), 1, true))
@@ -4320,7 +4327,8 @@ func BuildPauseHooksRolloutStagePayload(adminPauseHooksRolloutStageBody string, 
 		}
 	}
 	v := &admin.PauseHooksRolloutStagePayload{
-		Reason: body.Reason,
+		Revision: body.Revision,
+		Reason:   body.Reason,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -4329,14 +4337,30 @@ func BuildPauseHooksRolloutStagePayload(adminPauseHooksRolloutStageBody string, 
 
 // BuildResumeHooksRolloutStagePayload builds the payload for the admin
 // resumeHooksRolloutStage endpoint from CLI flags.
-func BuildResumeHooksRolloutStagePayload(adminResumeHooksRolloutStageAdminSessionToken string) (*admin.ResumeHooksRolloutStagePayload, error) {
+func BuildResumeHooksRolloutStagePayload(adminResumeHooksRolloutStageBody string, adminResumeHooksRolloutStageAdminSessionToken string) (*admin.ResumeHooksRolloutStagePayload, error) {
+	var err error
+	var body ResumeHooksRolloutStageRequestBody
+	{
+		err = json.Unmarshal([]byte(adminResumeHooksRolloutStageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"revision\": 1\n   }'")
+		}
+		if body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", body.Revision, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 	var adminSessionToken *string
 	{
 		if adminResumeHooksRolloutStageAdminSessionToken != "" {
 			adminSessionToken = &adminResumeHooksRolloutStageAdminSessionToken
 		}
 	}
-	v := &admin.ResumeHooksRolloutStagePayload{}
+	v := &admin.ResumeHooksRolloutStagePayload{
+		Revision: body.Revision,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil
@@ -4350,7 +4374,10 @@ func BuildCancelHooksRolloutStagePayload(adminCancelHooksRolloutStageBody string
 	{
 		err = json.Unmarshal([]byte(adminCancelHooksRolloutStageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aa\",\n      \"revision\": 1\n   }'")
+		}
+		if body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", body.Revision, 0, true))
 		}
 		if utf8.RuneCountInString(body.Reason) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", body.Reason, utf8.RuneCountInString(body.Reason), 1, true))
@@ -4369,7 +4396,8 @@ func BuildCancelHooksRolloutStagePayload(adminCancelHooksRolloutStageBody string
 		}
 	}
 	v := &admin.CancelHooksRolloutStagePayload{
-		Reason: body.Reason,
+		Revision: body.Revision,
+		Reason:   body.Reason,
 	}
 	v.AdminSessionToken = adminSessionToken
 

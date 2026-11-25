@@ -36,7 +36,7 @@ func TestGetHooksRolloutProjectsPinsAndHistory(t *testing.T) {
 		CurrentVersion: 42,
 		DefaultPin:     &gen.AdminHooksRolloutPin{Version: 42, SetBy: "operator@example.com", SetAt: "2026-01-01T00:00:00Z"},
 		Stage: &gen.AdminHooksRolloutStage{
-			Version: 43, Percent: 25, State: "running", Reason: nil, SetBy: "hooks-rollout-schedule",
+			Revision: 7, Version: 43, Percent: 25, State: "running", Reason: nil, SetBy: "hooks-rollout-schedule",
 			SetAt: "2026-01-03T00:00:00Z", NextAdvanceAt: new("2026-01-04T00:00:00Z"),
 		},
 		CanaryOrganizationSlugs: []string{"canary-org"},

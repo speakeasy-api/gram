@@ -526,7 +526,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ClearOrganizationHooksRollout = service.strictAdminJSON(server.ClearOrganizationHooksRollout, func() any { return new(adminserver.ClearOrganizationHooksRolloutRequestBody) })
 	server.StartHooksRolloutStage = service.strictAdminJSON(server.StartHooksRolloutStage, func() any { return new(adminserver.StartHooksRolloutStageRequestBody) })
 	server.PauseHooksRolloutStage = service.strictAdminJSON(server.PauseHooksRolloutStage, func() any { return new(adminserver.PauseHooksRolloutStageRequestBody) })
-	server.ResumeHooksRolloutStage = service.preauthorizeAdmin(server.ResumeHooksRolloutStage)
+	server.ResumeHooksRolloutStage = service.strictAdminJSON(server.ResumeHooksRolloutStage, func() any { return new(adminserver.ResumeHooksRolloutStageRequestBody) })
 	server.CancelHooksRolloutStage = service.strictAdminJSON(server.CancelHooksRolloutStage, func() any { return new(adminserver.CancelHooksRolloutStageRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })

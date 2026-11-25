@@ -1036,6 +1036,9 @@ type AdminHooksRolloutSource string
 // the organizations that follow the default pin, moving to the next share each
 // day, and moves the default pin when it reaches 100 percent.
 type AdminHooksRolloutStage struct {
+	// Increases with every change to the rollout. Send it back with a change so a
+	// rollout that moved on in the meantime is refused.
+	Revision int64
 	// Hooks generator version the rollout clears.
 	Version int
 	// Share of organizations on the default pin that the rollout clears, beyond
@@ -2851,6 +2854,9 @@ type CallbackResult struct {
 // cancelHooksRolloutStage method.
 type CancelHooksRolloutStagePayload struct {
 	AdminSessionToken *string
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64
 	// Why, recorded with the change.
 	Reason string
 }
@@ -4067,6 +4073,9 @@ type OpenOrganizationInDashboardPayload struct {
 // pauseHooksRolloutStage method.
 type PauseHooksRolloutStagePayload struct {
 	AdminSessionToken *string
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64
 	// Why, recorded with the change.
 	Reason string
 }
@@ -4226,6 +4235,9 @@ type RepairOrganizationAssistantAgentNamesPayload struct {
 // resumeHooksRolloutStage method.
 type ResumeHooksRolloutStagePayload struct {
 	AdminSessionToken *string
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service
@@ -4451,6 +4463,9 @@ type SpendProduct struct {
 // startHooksRolloutStage method.
 type StartHooksRolloutStagePayload struct {
 	AdminSessionToken *string
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision int64
 	// Hooks generator version to roll out. Must be above the default pin and not
 	// exceed the version this build publishes.
 	Version int

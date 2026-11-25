@@ -48,8 +48,9 @@ var AdminHooksRolloutChange = Type("AdminHooksRolloutChange", func() {
 
 var AdminHooksRolloutStage = Type("AdminHooksRolloutStage", func() {
 	Description("The latest staged hooks rollout. A running rollout clears a growing share of the organizations that follow the default pin, moving to the next share each day, and moves the default pin when it reaches 100 percent.")
-	Required("version", "percent", "state", "set_by", "set_at")
+	Required("revision", "version", "percent", "state", "set_by", "set_at")
 
+	Attribute("revision", Int64, "Increases with every change to the rollout. Send it back with a change so a rollout that moved on in the meantime is refused.")
 	Attribute("version", Int, "Hooks generator version the rollout clears.")
 	Attribute("percent", Int, "Share of organizations on the default pin that the rollout clears, beyond canary organizations.")
 	Attribute("state", String, "One of running, paused, completed or cancelled. Running and paused rollouts clear organizations; completed and cancelled ones do not.")
@@ -179,7 +180,10 @@ func hooksRolloutMethods() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Meta("openapi:typename", "StartHooksRolloutStageRequestBody")
-			Required("version")
+			Required("revision", "version")
+			Attribute("revision", Int64, "The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.", func() {
+				Minimum(0)
+			})
 			Attribute("version", Int, "Hooks generator version to roll out. Must be above the default pin and not exceed the version this build publishes.", func() {
 				Minimum(1)
 				Maximum(maxHooksRolloutVersion)
@@ -198,7 +202,10 @@ func hooksRolloutMethods() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Meta("openapi:typename", "PauseHooksRolloutStageRequestBody")
-			Required("reason")
+			Required("revision", "reason")
+			Attribute("revision", Int64, "The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.", func() {
+				Minimum(0)
+			})
 			Attribute("reason", String, "Why, recorded with the change.", func() {
 				MinLength(1)
 				MaxLength(500)
@@ -216,6 +223,11 @@ func hooksRolloutMethods() {
 		Description("Restarts a paused staged rollout. The day at the current share starts over.")
 		Payload(func() {
 			security.AdminAuthPayload()
+			Meta("openapi:typename", "ResumeHooksRolloutStageRequestBody")
+			Required("revision")
+			Attribute("revision", Int64, "The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.", func() {
+				Minimum(0)
+			})
 		})
 		Result(AdminHooksRollout)
 		HTTP(func() {
@@ -230,7 +242,10 @@ func hooksRolloutMethods() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Meta("openapi:typename", "CancelHooksRolloutStageRequestBody")
-			Required("reason")
+			Required("revision", "reason")
+			Attribute("revision", Int64, "The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.", func() {
+				Minimum(0)
+			})
 			Attribute("reason", String, "Why, recorded with the change.", func() {
 				MinLength(1)
 				MaxLength(500)

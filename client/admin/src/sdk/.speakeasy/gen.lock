@@ -389,6 +389,7 @@ trackedFiles:
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/repairorganizationassistantagentnamesrequestbody.ts: {}
+  src/models/components/resumehooksrolloutstagerequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}

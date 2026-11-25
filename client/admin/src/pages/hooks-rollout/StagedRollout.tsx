@@ -9,6 +9,7 @@ import { hooksRolloutQuery, invalidateHooksRollout } from "@/lib/adminQueries";
 import {
   cancelHooksRolloutStage,
   errorMessage,
+  GramAdminError,
   pauseHooksRolloutStage,
   resumeHooksRolloutStage,
   startHooksRolloutStage,
@@ -24,23 +25,28 @@ const STAGE_STEPS = [
   { percent: 100, label: "100%" },
 ] as const;
 
-type StageAction =
+type StageAction = { revision: number } & (
   | { kind: "start"; version: number }
   | { kind: "pause"; reason: string }
   | { kind: "resume" }
-  | { kind: "cancel"; reason: string };
+  | { kind: "cancel"; reason: string }
+);
 
 function runStageAction(action: StageAction): Promise<AdminHooksRollout> {
   switch (action.kind) {
     case "start":
-      return startHooksRolloutStage(action.version);
+      return startHooksRolloutStage(action.revision, action.version);
     case "pause":
-      return pauseHooksRolloutStage(action.reason);
+      return pauseHooksRolloutStage(action.revision, action.reason);
     case "resume":
-      return resumeHooksRolloutStage();
+      return resumeHooksRolloutStage(action.revision);
     case "cancel":
-      return cancelHooksRolloutStage(action.reason);
+      return cancelHooksRolloutStage(action.revision, action.reason);
   }
+}
+
+function isStageConflict(error: unknown): boolean {
+  return error instanceof GramAdminError && error.status === 409;
 }
 
 function isActive(stage: AdminHooksRolloutStage | undefined): boolean {
@@ -75,6 +81,9 @@ export function StagedRollout({
   const [reason, setReason] = useState("");
   const stage = rollout.stage;
   const active = isActive(stage);
+  // Handlers close over the revision rendered when they were clicked, so a
+  // change made while the confirm dialog is open is refused.
+  const revision = stage?.revision ?? 0;
 
   const mutation = useMutation({
     mutationFn: runStageAction,
@@ -82,6 +91,9 @@ export function StagedRollout({
       setReason("");
       queryClient.setQueryData(hooksRolloutQuery.queryKey, updated);
       invalidateHooksRollout(queryClient);
+    },
+    onError: (error) => {
+      if (isStageConflict(error)) invalidateHooksRollout(queryClient);
     },
   });
   const disabled = mutation.isPending || stale;
@@ -93,7 +105,8 @@ export function StagedRollout({
         "It stays at its current share until resumed. Organizations it already cleared keep the new version.",
       confirmLabel: "Pause rollout",
     });
-    if (confirmed) mutation.mutate({ kind: "pause", reason: reason.trim() });
+    if (confirmed)
+      mutation.mutate({ kind: "pause", revision, reason: reason.trim() });
   };
 
   const resume = async () => {
@@ -103,7 +116,7 @@ export function StagedRollout({
         "The day at the current share starts over, then the rollout moves on to the next share.",
       confirmLabel: "Resume rollout",
     });
-    if (confirmed) mutation.mutate({ kind: "resume" });
+    if (confirmed) mutation.mutate({ kind: "resume", revision });
   };
 
   const cancel = async () => {
@@ -114,7 +127,12 @@ export function StagedRollout({
       confirmLabel: "Cancel rollout",
       destructive: true,
     });
-    if (confirmed) mutation.mutate({ kind: "cancel", reason: reason.trim() });
+    if (confirmed)
+      mutation.mutate({
+        kind: "cancel",
+        revision,
+        reason: reason.trim(),
+      });
   };
 
   return (
@@ -137,7 +155,9 @@ export function StagedRollout({
               rollout={rollout}
               disabled={disabled}
               confirm={confirm}
-              onStart={(version) => mutation.mutate({ kind: "start", version })}
+              onStart={(version) =>
+                mutation.mutate({ kind: "start", revision, version })
+              }
             />
           </>
         )}
@@ -186,7 +206,9 @@ export function StagedRollout({
         )}
         {mutation.isError && (
           <p role="alert" className="text-destructive text-sm">
-            {errorMessage(mutation.error)}
+            {isStageConflict(mutation.error)
+              ? "The rollout changed since this page loaded. Check its latest state and try again."
+              : errorMessage(mutation.error)}
           </p>
         )}
       </div>

@@ -92,7 +92,7 @@ func (s *Service) StartHooksRolloutStage(ctx context.Context, payload *gen.Start
 	if err := s.validateHooksRolloutVersion(ctx, payload.Version); err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Start(ctx, payload.Version, setBy); err != nil {
+	if err := hooksrollout.NewStageStore(s.db).Start(ctx, payload.Revision, payload.Version, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "start hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "started staged hooks rollout",
@@ -109,19 +109,19 @@ func (s *Service) PauseHooksRolloutStage(ctx context.Context, payload *gen.Pause
 	if err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Pause(ctx, reason, setBy); err != nil {
+	if err := hooksrollout.NewStageStore(s.db).Pause(ctx, payload.Revision, reason, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "pause hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "paused staged hooks rollout", attr.SlogAuthUserEmail(setBy))
 	return s.hooksRolloutResult(ctx)
 }
 
-func (s *Service) ResumeHooksRolloutStage(ctx context.Context, _ *gen.ResumeHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
+func (s *Service) ResumeHooksRolloutStage(ctx context.Context, payload *gen.ResumeHooksRolloutStagePayload) (*gen.AdminHooksRollout, error) {
 	setBy, err := hooksRolloutOperator(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Resume(ctx, setBy); err != nil {
+	if err := hooksrollout.NewStageStore(s.db).Resume(ctx, payload.Revision, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "resume hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "resumed staged hooks rollout", attr.SlogAuthUserEmail(setBy))
@@ -137,7 +137,7 @@ func (s *Service) CancelHooksRolloutStage(ctx context.Context, payload *gen.Canc
 	if err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Cancel(ctx, reason, setBy); err != nil {
+	if err := hooksrollout.NewStageStore(s.db).Cancel(ctx, payload.Revision, reason, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "cancel hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "cancelled staged hooks rollout", attr.SlogAuthUserEmail(setBy))
@@ -158,7 +158,8 @@ func (s *Service) hooksRolloutStageError(ctx context.Context, err error, msg str
 		return oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, s.logger)
 	case errors.Is(err, hooksrollout.ErrNoActiveStage),
 		errors.Is(err, hooksrollout.ErrStageNotRunning),
-		errors.Is(err, hooksrollout.ErrStageNotPaused):
+		errors.Is(err, hooksrollout.ErrStageNotPaused),
+		errors.Is(err, hooksrollout.ErrStageChanged):
 		return oops.E(oops.CodeConflict, err, "%s", err.Error()).LogWarn(ctx, s.logger)
 	default:
 		return oops.E(oops.CodeUnexpected, err, "%s", msg).LogError(ctx, s.logger)
@@ -324,6 +325,7 @@ func hooksRolloutStageView(stage *hooksrollout.Stage) *gen.AdminHooksRolloutStag
 		nextAdvanceAt = new(next.UTC().Format(time.RFC3339))
 	}
 	return &gen.AdminHooksRolloutStage{
+		Revision:      stage.Revision,
 		Version:       stage.Version,
 		Percent:       stage.Percent,
 		State:         string(stage.State),

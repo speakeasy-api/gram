@@ -953,6 +953,7 @@ export type AdminHooksRolloutStageState =
   | "cancelled";
 
 export type AdminHooksRolloutStage = {
+  revision: number;
   version: number;
   percent: number;
   state: AdminHooksRolloutStageState;
@@ -1016,33 +1017,43 @@ function hooksRolloutStageMutation(
   });
 }
 
+// revision is the stage revision the operator was shown, or 0 when no
+// rollout was ever staged. The server refuses the change with 409 when the
+// rollout has moved on since.
 export function startHooksRolloutStage(
+  revision: number,
   version: number,
 ): Promise<AdminHooksRollout> {
   return hooksRolloutStageMutation("/admin/hooksRollout.startStage", {
+    revision,
     version,
   });
 }
 
 export function pauseHooksRolloutStage(
+  revision: number,
   reason: string,
 ): Promise<AdminHooksRollout> {
   return hooksRolloutStageMutation("/admin/hooksRollout.pauseStage", {
+    revision,
     reason,
   });
 }
 
-export function resumeHooksRolloutStage(): Promise<AdminHooksRollout> {
-  return gramAdminMutation<AdminHooksRollout>(
-    "/admin/hooksRollout.resumeStage",
-    { method: "POST" },
-  );
+export function resumeHooksRolloutStage(
+  revision: number,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.resumeStage", {
+    revision,
+  });
 }
 
 export function cancelHooksRolloutStage(
+  revision: number,
   reason: string,
 ): Promise<AdminHooksRollout> {
   return hooksRolloutStageMutation("/admin/hooksRollout.cancelStage", {
+    revision,
     reason,
   });
 }

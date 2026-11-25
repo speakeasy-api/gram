@@ -12,6 +12,7 @@ import { adminResumeHooksRolloutStage } from "../funcs/adminResumeHooksRolloutSt
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { AdminHooksRollout } from "../models/components/adminhooksrollout.js";
+import { ResumeHooksRolloutStageRequestBody } from "../models/components/resumehooksrolloutstagerequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,6 +29,7 @@ import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type AdminResumeHooksRolloutStageMutationVariables = {
+  request: ResumeHooksRolloutStageRequestBody;
   options?: RequestOptions;
 };
 
@@ -48,7 +50,7 @@ export type AdminResumeHooksRolloutStageMutationError =
  * resumeHooksRolloutStage admin
  *
  * @remarks
- * Restarts a paused staged rollout. The day at the current share starts over.
+ * Restarts a resumed staged rollout. The day at the current share starts over.
  */
 export function useAdminResumeHooksRolloutStageMutation(
   options?: MutationHookOptions<
@@ -84,6 +86,7 @@ export function buildAdminResumeHooksRolloutStageMutation(
   return {
     mutationKey: mutationKeyAdminResumeHooksRolloutStage(),
     mutationFn: function adminResumeHooksRolloutStageMutationFn({
+      request,
       options,
     }): Promise<AdminResumeHooksRolloutStageMutationData> {
       const mergedOptions = {
@@ -100,6 +103,7 @@ export function buildAdminResumeHooksRolloutStageMutation(
       };
       return unwrapAsync(adminResumeHooksRolloutStage(
         client$,
+        request,
         mergedOptions,
       ));
     },

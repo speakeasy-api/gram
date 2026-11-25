@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AdminHooksRollout } from "@/lib/gramAdminApi";
+import { GramAdminError, type AdminHooksRollout } from "@/lib/gramAdminApi";
 import { HooksRollout } from "@/pages/hooks-rollout/HooksRollout";
 import { renderWithApp } from "@/test/harness";
 
@@ -76,6 +76,7 @@ const PINNED: AdminHooksRollout = {
 };
 
 const RUNNING: NonNullable<AdminHooksRollout["stage"]> = {
+  revision: 3,
   version: 46,
   percent: 25,
   state: "running",
@@ -218,7 +219,7 @@ describe("HooksRollout", () => {
       within(dialog).getByRole("button", { name: "Start rollout" }),
     );
     await waitFor(() =>
-      expect(mocks.startHooksRolloutStage).toHaveBeenCalledWith(46),
+      expect(mocks.startHooksRolloutStage).toHaveBeenCalledWith(0, 46),
     );
     expect(await screen.findByText("Running")).toBeTruthy();
   });
@@ -287,6 +288,7 @@ describe("HooksRollout", () => {
     );
     await waitFor(() =>
       expect(mocks.pauseHooksRolloutStage).toHaveBeenCalledWith(
+        3,
         "hooks error alert",
       ),
     );
@@ -321,7 +323,7 @@ describe("HooksRollout", () => {
       within(dialog).getByRole("button", { name: "Resume rollout" }),
     );
     await waitFor(() =>
-      expect(mocks.resumeHooksRolloutStage).toHaveBeenCalled(),
+      expect(mocks.resumeHooksRolloutStage).toHaveBeenCalledWith(3),
     );
     expect(await screen.findByRole("button", { name: "Pause" })).toBeTruthy();
     expect(screen.queryByText("Paused")).toBeNull();
@@ -355,8 +357,41 @@ describe("HooksRollout", () => {
       within(dialog).getByRole("button", { name: "Cancel rollout" }),
     );
     await waitFor(() =>
-      expect(mocks.cancelHooksRolloutStage).toHaveBeenCalledWith("bad release"),
+      expect(mocks.cancelHooksRolloutStage).toHaveBeenCalledWith(
+        3,
+        "bad release",
+      ),
     );
     expect(await screen.findByText(/was cancelled by/)).toBeTruthy();
+  });
+
+  it("refetches and explains when the rollout changed since it loaded", async () => {
+    mocks.getHooksRollout.mockResolvedValue({ ...PINNED, stage: RUNNING });
+    mocks.pauseHooksRolloutStage.mockImplementation(async () => {
+      mocks.getHooksRollout.mockResolvedValue({
+        ...PINNED,
+        stage: { ...RUNNING, revision: 4, percent: 100 },
+      });
+      throw new GramAdminError(409, {}, "gram admin 409 Conflict");
+    });
+    await renderWithApp(<HooksRollout />);
+
+    fireEvent.change(
+      await screen.findByLabelText("Reason for pausing or cancelling"),
+      { target: { value: "hooks error alert" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Pause rollout" }),
+    );
+    expect(
+      await screen.findByText(/The rollout changed since this page loaded/),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByText("100%").getAttribute("aria-current")).toBe(
+        "step",
+      ),
+    );
   });
 });

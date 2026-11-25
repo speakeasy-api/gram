@@ -257,6 +257,7 @@ import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remo
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/components/repairorganizationassistantagentnamesrequestbody.js";
+import { ResumeHooksRolloutStageRequestBody } from "../models/components/resumehooksrolloutstagerequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
@@ -616,10 +617,12 @@ export class Admin extends ClientSDK {
    * Restarts a paused staged rollout. The day at the current share starts over.
    */
   async resumeHooksRolloutStage(
+    request: ResumeHooksRolloutStageRequestBody,
     options?: RequestOptions,
   ): Promise<AdminHooksRollout> {
     return unwrapAsync(adminResumeHooksRolloutStage(
       this,
+      request,
       options,
     ));
   }

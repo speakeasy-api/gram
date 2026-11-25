@@ -9,11 +9,16 @@ export type PauseHooksRolloutStageRequestBody = {
    * Why, recorded with the change.
    */
   reason: string;
+  /**
+   * The stage revision the operator was shown, or 0 when no rollout was ever staged. A different current revision returns 409 Conflict.
+   */
+  revision: number;
 };
 
 /** @internal */
 export type PauseHooksRolloutStageRequestBody$Outbound = {
   reason: string;
+  revision: number;
 };
 
 /** @internal */
@@ -22,6 +27,7 @@ export const PauseHooksRolloutStageRequestBody$outboundSchema: z.ZodMiniType<
   PauseHooksRolloutStageRequestBody
 > = z.object({
   reason: z.string(),
+  revision: z.int(),
 });
 
 export function pauseHooksRolloutStageRequestBodyToJSON(

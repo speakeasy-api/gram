@@ -27890,13 +27890,33 @@ func DecodeResumeHooksRolloutStageRequest(mux goahttp.Muxer, decoder func(*http.
 	return func(r *http.Request) (*admin.ResumeHooksRolloutStagePayload, error) {
 		var payload *admin.ResumeHooksRolloutStagePayload
 		var (
+			body ResumeHooksRolloutStageRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateResumeHooksRolloutStageRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			adminSessionToken *string
 		)
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
 			adminSessionToken = &adminSessionTokenRaw
 		}
-		payload = NewResumeHooksRolloutStagePayload(adminSessionToken)
+		payload = NewResumeHooksRolloutStagePayload(&body, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -32411,6 +32431,7 @@ func marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(v *a
 		return nil
 	}
 	res := &AdminHooksRolloutStageResponseBody{
+		Revision:      v.Revision,
 		Version:       v.Version,
 		Percent:       v.Percent,
 		State:         v.State,

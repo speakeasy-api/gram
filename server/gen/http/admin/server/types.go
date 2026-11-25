@@ -771,6 +771,9 @@ type ClearOrganizationHooksRolloutRequestBody struct {
 // StartHooksRolloutStageRequestBody is the type of the "admin" service
 // "startHooksRolloutStage" endpoint HTTP request body.
 type StartHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 	// Hooks generator version to roll out. Must be above the default pin and not
 	// exceed the version this build publishes.
 	Version *int `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
@@ -779,13 +782,27 @@ type StartHooksRolloutStageRequestBody struct {
 // PauseHooksRolloutStageRequestBody is the type of the "admin" service
 // "pauseHooksRolloutStage" endpoint HTTP request body.
 type PauseHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 	// Why, recorded with the change.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// ResumeHooksRolloutStageRequestBody is the type of the "admin" service
+// "resumeHooksRolloutStage" endpoint HTTP request body.
+type ResumeHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 }
 
 // CancelHooksRolloutStageRequestBody is the type of the "admin" service
 // "cancelHooksRolloutStage" endpoint HTTP request body.
 type CancelHooksRolloutStageRequestBody struct {
+	// The stage revision the operator was shown, or 0 when no rollout was ever
+	// staged. A different current revision returns 409 Conflict.
+	Revision *int64 `form:"revision,omitempty" json:"revision,omitempty" xml:"revision,omitempty"`
 	// Why, recorded with the change.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
@@ -32602,6 +32619,9 @@ type AdminHooksRolloutPinResponseBody struct {
 // AdminHooksRolloutStageResponseBody is used to define fields on response body
 // types.
 type AdminHooksRolloutStageResponseBody struct {
+	// Increases with every change to the rollout. Send it back with a change so a
+	// rollout that moved on in the meantime is refused.
+	Revision int64 `form:"revision" json:"revision" xml:"revision"`
 	// Hooks generator version the rollout clears.
 	Version int `form:"version" json:"version" xml:"version"`
 	// Share of organizations on the default pin that the rollout clears, beyond
@@ -59336,7 +59356,8 @@ func NewClearOrganizationHooksRolloutPayload(body *ClearOrganizationHooksRollout
 // startHooksRolloutStage endpoint payload.
 func NewStartHooksRolloutStagePayload(body *StartHooksRolloutStageRequestBody, adminSessionToken *string) *admin.StartHooksRolloutStagePayload {
 	v := &admin.StartHooksRolloutStagePayload{
-		Version: *body.Version,
+		Revision: *body.Revision,
+		Version:  *body.Version,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -59347,7 +59368,8 @@ func NewStartHooksRolloutStagePayload(body *StartHooksRolloutStageRequestBody, a
 // pauseHooksRolloutStage endpoint payload.
 func NewPauseHooksRolloutStagePayload(body *PauseHooksRolloutStageRequestBody, adminSessionToken *string) *admin.PauseHooksRolloutStagePayload {
 	v := &admin.PauseHooksRolloutStagePayload{
-		Reason: *body.Reason,
+		Revision: *body.Revision,
+		Reason:   *body.Reason,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -59356,8 +59378,10 @@ func NewPauseHooksRolloutStagePayload(body *PauseHooksRolloutStageRequestBody, a
 
 // NewResumeHooksRolloutStagePayload builds a admin service
 // resumeHooksRolloutStage endpoint payload.
-func NewResumeHooksRolloutStagePayload(adminSessionToken *string) *admin.ResumeHooksRolloutStagePayload {
-	v := &admin.ResumeHooksRolloutStagePayload{}
+func NewResumeHooksRolloutStagePayload(body *ResumeHooksRolloutStageRequestBody, adminSessionToken *string) *admin.ResumeHooksRolloutStagePayload {
+	v := &admin.ResumeHooksRolloutStagePayload{
+		Revision: *body.Revision,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -59367,7 +59391,8 @@ func NewResumeHooksRolloutStagePayload(adminSessionToken *string) *admin.ResumeH
 // cancelHooksRolloutStage endpoint payload.
 func NewCancelHooksRolloutStagePayload(body *CancelHooksRolloutStageRequestBody, adminSessionToken *string) *admin.CancelHooksRolloutStagePayload {
 	v := &admin.CancelHooksRolloutStagePayload{
-		Reason: *body.Reason,
+		Revision: *body.Revision,
+		Reason:   *body.Reason,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -60612,8 +60637,16 @@ func ValidateClearOrganizationHooksRolloutRequestBody(body *ClearOrganizationHoo
 // ValidateStartHooksRolloutStageRequestBody runs the validations defined on
 // StartHooksRolloutStageRequestBody
 func ValidateStartHooksRolloutStageRequestBody(body *StartHooksRolloutStageRequestBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Revision != nil {
+		if *body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", *body.Revision, 0, true))
+		}
 	}
 	if body.Version != nil {
 		if *body.Version < 1 {
@@ -60631,8 +60664,16 @@ func ValidateStartHooksRolloutStageRequestBody(body *StartHooksRolloutStageReque
 // ValidatePauseHooksRolloutStageRequestBody runs the validations defined on
 // PauseHooksRolloutStageRequestBody
 func ValidatePauseHooksRolloutStageRequestBody(body *PauseHooksRolloutStageRequestBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Revision != nil {
+		if *body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", *body.Revision, 0, true))
+		}
 	}
 	if body.Reason != nil {
 		if utf8.RuneCountInString(*body.Reason) < 1 {
@@ -60647,11 +60688,33 @@ func ValidatePauseHooksRolloutStageRequestBody(body *PauseHooksRolloutStageReque
 	return
 }
 
+// ValidateResumeHooksRolloutStageRequestBody runs the validations defined on
+// ResumeHooksRolloutStageRequestBody
+func ValidateResumeHooksRolloutStageRequestBody(body *ResumeHooksRolloutStageRequestBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
+	if body.Revision != nil {
+		if *body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", *body.Revision, 0, true))
+		}
+	}
+	return
+}
+
 // ValidateCancelHooksRolloutStageRequestBody runs the validations defined on
 // CancelHooksRolloutStageRequestBody
 func ValidateCancelHooksRolloutStageRequestBody(body *CancelHooksRolloutStageRequestBody) (err error) {
+	if body.Revision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Revision != nil {
+		if *body.Revision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.revision", *body.Revision, 0, true))
+		}
 	}
 	if body.Reason != nil {
 		if utf8.RuneCountInString(*body.Reason) < 1 {
