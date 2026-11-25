@@ -6164,23 +6164,6 @@ CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
-  remote_session_client_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT remote_session_client_user_session_issuers_pkey PRIMARY KEY (remote_session_client_id, user_session_issuer_id),
-  CONSTRAINT remote_session_client_user_session_issuers_client_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_client_user_session_issuers_issuer_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
-);
-
-COMMENT ON COLUMN remote_session_client_user_session_issuers.remote_session_client_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.user_session_issuer_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_client_user_session_issuers.created_at IS '@access: confidential';
-
-CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
-ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
 -- Human delegation credentials, independent of downstream service sessions.
 -- Consumers require a live session, client and tenant with matching scope.
 -- Writes require an organization and client; project_id remains NULL.

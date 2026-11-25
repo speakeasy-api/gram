@@ -366,7 +366,7 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	seedMetaMember(t, ctx, ti.conn, otherProject.ID, otherMeta.ID, "other public", otherSlug, 0, mcpservers.VisibilityPublic)
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(otherSlug), ProjectID: otherProject.ID})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "")
 	authClientID := seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, otherServer.ID.String())
 
@@ -758,8 +758,8 @@ func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *tes
 	granted, denied := serverForSlug(fx.granted), serverForSlug(fx.denied)
 	reachable := "reachable-" + uuid.NewString()[:8]
 	hidden := "hidden-" + uuid.NewString()[:8]
-	reachableClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, reachable, "", nil)
-	hiddenClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, hidden, "", nil)
+	reachableClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, reachable, "")
+	hiddenClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, hidden, "")
 	for _, target := range []struct{ server, client uuid.UUID }{{granted.ID, reachableClient}, {denied.ID, hiddenClient}} {
 		associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, target.server, target.client)
 		seedServerAuthOffer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, target.server, target.client, "remote_session")

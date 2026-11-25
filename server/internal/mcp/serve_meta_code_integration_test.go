@@ -431,7 +431,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	upstream := newRecordingUpstream(t, "ping")
 	var exchanged atomic.Value
 	provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
-	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL)
 	remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
 	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
@@ -591,13 +591,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			upstream := newRecordingUpstream(t, "ping")
 			var exchanged atomic.Value
 			provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
-			// Legacy serving cases retain their fixture binding. The typed case
-			// must reconnect and serve without one for its offered registration.
-			bindings := []uuid.UUID{issuer}
-			if tc.typedAuth {
-				bindings = nil
-			}
-			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, bindings)
+			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL)
 			remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
 			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}

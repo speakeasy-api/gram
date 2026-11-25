@@ -51,8 +51,8 @@ func (o *migrationOrg) issuer() uuid.UUID {
 	return id
 }
 
-// client creates a project client bound to userIssuerID.
-func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
+// client creates a project registration without granting server access.
+func (o *migrationOrg) client() uuid.UUID {
 	o.t.Helper()
 	ctx := o.t.Context()
 	issuerID, clientID := uuid.New(), uuid.New()
@@ -69,7 +69,6 @@ func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
 		RemoteSessionIssuerID: issuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	require.NoError(o.t, o.q.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
 	return clientID
 }
 
@@ -140,21 +139,20 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationReportsUnusedProfilesApart(t
 	require.NotContains(t, enforced.Enforcement.Blockers, "Assistant profiles are not all recorded.")
 }
 
-// Under enforcement a client an issuer binds is not inferred onto the issuer's
-// only server, so it must not keep the organization reported as unmigrated.
-func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociations(t *testing.T) {
+// A project registration not offered by any server is not a readiness gap.
+func TestUpstreamOAuthMigration_UnplacedRegistrationIsNotAReadinessGap(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 
 	org := newMigrationOrg(t, ctx, db, "migrate-enforced")
 	issuer := org.issuer()
-	org.client(issuer)
+	org.client()
 	org.server(issuer)
 
 	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.Zero(t, before.PendingAssociations, "junction rows are not configuration")
+	require.Zero(t, before.PendingAssociations, "an unplaced registration is not server configuration")
 
 	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
@@ -218,21 +216,26 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.Empty(t, status.AuthClients.Warnings)
 }
 
-// seedCoveredMigrationFixture records the configuration and choice used by typed serving.
+// seedCoveredMigrationFixture explicitly offers a registration and records
+// the credential's typed choice without reconstructing legacy links.
 func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
 	tx := testenv.BeginTx(t, ctx, db)
 	q := authclientbackfill.New(tx)
-	_, err := q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration})
-	require.NoError(t, err)
-	client := authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession)
-	_, err = q.CreateAuthClient(ctx, authclientbackfill.CreateAuthClientParams{
-		ID: client, OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true},
-		ClientType: "remote_session", Name: "Fixture sign-in", RemoteSessionClientID: registration,
+	client, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true}, ClientType: "remote_session", Source: "admin",
+		RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, AuthClientID: client, Source: "backfill"}))
-	require.NoError(t, q.SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true}}))
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, AuthClientID: client, Source: "admin",
+	}))
+	require.NoError(t, q.SeedOAuthSelectionFixture(ctx, authclientbackfill.SeedOAuthSelectionFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration, CredentialID: credential,
+	}))
+	require.NoError(t, q.SwapUpstreamAuthClientFixture(ctx, authclientbackfill.SwapUpstreamAuthClientFixtureParams{
+		McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true},
+	}))
 	require.NoError(t, authclientbackfill.ProvisionFromTypedOffers(ctx, tx, org.id))
 	require.NoError(t, tx.Commit(ctx))
 }

@@ -1,4 +1,4 @@
-h1:IjQGN2WahNewpRKpV9sHygjmsxefEwX058nzuce/7fc=
+h1:mfH7UeNsYpwDQukWJ2bcszCgpEAOKBhnxOS38J1pDo4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -565,3 +565,4 @@ h1:IjQGN2WahNewpRKpV9sHygjmsxefEwX058nzuce/7fc=
 20261124185403_mcp-server-feedback.sql h1:+/1wcT/drSIheTFZzhNIRV8HlGeUHFkiWtyWWHZpFuQ=
 20261125184103_drop_principal_binding_issuer_client_fk.sql h1:WamWz6Altgddslvh/8RWH54yrj6BtqVsHYrPb1HeGy0=
 20261125195614_hooks-rollout-stages.sql h1:/wzA8ax1tWEuGThx2d7A/hXhfejMP3rT/N3fNLITrYs=
+20261125202742_drop-retired-usi-rsc-junction.sql h1:nftcvZxvG4+omcDXi2NENpOhwjV5KcciWcgea4rwg7Q=
