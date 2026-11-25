@@ -191,6 +191,7 @@ var _ = Service("remoteSessionClients", func() {
 
 		HTTP(func() {
 			POST("/rpc/remoteSessionClients.attachUserSessionIssuer")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -216,6 +217,7 @@ var _ = Service("remoteSessionClients", func() {
 
 		HTTP(func() {
 			POST("/rpc/remoteSessionClients.detachUserSessionIssuer")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()

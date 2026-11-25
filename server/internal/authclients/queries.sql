@@ -162,7 +162,7 @@ WHERE msac.mcp_server_id = @mcp_server_id
   AND ac.deleted IS FALSE
 RETURNING msac.auth_client_id;
 
--- name: GetOrganizationMCPServer :one
+-- name: ListOrganizationMCPServersByID :many
 SELECT
   ms.id,
   ms.project_id,
@@ -223,13 +223,27 @@ SELECT
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
       )
     )
-  )::boolean AS upstream_auth_pending
+  )::boolean AS upstream_auth_pending,
+  EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offered
+    JOIN mcp_auth_clients AS client
+      ON client.id = offered.auth_client_id
+     AND client.organization_id = offered.organization_id
+     AND client.deleted IS FALSE
+     AND client.enabled
+    WHERE offered.mcp_server_id = ms.id
+      AND offered.project_id = ms.project_id
+      AND offered.organization_id = p.organization_id
+      AND offered.deleted IS FALSE
+  ) AS offers_enabled_client
 FROM mcp_servers ms
 JOIN projects p
   ON p.id = ms.project_id
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
-WHERE ms.id = @id
+WHERE ms.id = ANY(@ids::uuid[])
+  AND (sqlc.narg(project_id)::uuid IS NULL OR ms.project_id = sqlc.narg(project_id)::uuid)
   AND ms.deleted IS FALSE;
 
 -- name: ListServerAuthClients :many
