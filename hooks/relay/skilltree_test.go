@@ -272,14 +272,16 @@ func TestExecuteSkillUploadSendsTreeWithV2(t *testing.T) {
 
 func TestExecuteSkillUploadFallsBackToV1WhenServerRejectsV2(t *testing.T) {
 	for _, status := range []int{http.StatusBadRequest, http.StatusRequestEntityTooLarge} {
-		server, uploads := skillUploadServer(t, status)
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server, uploads := skillUploadServer(t, status)
 
-		require.NoError(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)))
-		got := uploads()
-		require.Len(t, got, 2, "status %d", status)
-		require.Equal(t, skillContentSchemaV2, got[0].schemaVersion)
-		require.Equal(t, "hook.skill-content.v1", got[1].schemaVersion)
-		require.Empty(t, got[1].files)
+			require.NoError(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)))
+			got := uploads()
+			require.Len(t, got, 2)
+			require.Equal(t, skillContentSchemaV2, got[0].schemaVersion)
+			require.Equal(t, "hook.skill-content.v1", got[1].schemaVersion)
+			require.Empty(t, got[1].files)
+		})
 	}
 }
 
@@ -294,13 +296,15 @@ func TestExecuteSkillUploadDoesNotFallBackOnServerError(t *testing.T) {
 // v1 upload, instead of losing the capture. (cubic)
 func TestExecuteSkillUploadRetriesTransientV2Status(t *testing.T) {
 	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
-		server, uploads := skillUploadServerSequence(t, []int{status, http.StatusNoContent})
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server, uploads := skillUploadServerSequence(t, []int{status, http.StatusNoContent})
 
-		require.NoError(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)), "status %d", status)
-		got := uploads()
-		require.Len(t, got, 2, "status %d", status)
-		require.Equal(t, skillContentSchemaV2, got[0].schemaVersion)
-		require.Equal(t, skillContentSchemaV2, got[1].schemaVersion)
+			require.NoError(t, executeSkillUpload(t.Context(), treeUploadTask(server.URL)))
+			got := uploads()
+			require.Len(t, got, 2)
+			require.Equal(t, skillContentSchemaV2, got[0].schemaVersion)
+			require.Equal(t, skillContentSchemaV2, got[1].schemaVersion)
+		})
 	}
 }
 

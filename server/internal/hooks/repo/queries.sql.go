@@ -1147,6 +1147,44 @@ func (q *Queries) SkillRawHashNeedsPromptInjectionScan(ctx context.Context, arg 
 	return column_1, err
 }
 
+const skillVersionNeedsPromptInjectionScan = `-- name: SkillVersionNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_versions sv
+  JOIN skills s
+    ON s.id = sv.skill_id
+    AND s.project_id = $1
+    AND s.archived_at IS NULL
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE sv.id = $2
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean
+`
+
+type SkillVersionNeedsPromptInjectionScanParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+// Same check as SkillRawHashNeedsPromptInjectionScan for one live skill
+// version, the one whose supporting files matched a device's tree digest.
+func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `

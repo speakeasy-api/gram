@@ -113,6 +113,31 @@ SELECT EXISTS (
     )
 )::boolean;
 
+-- name: SkillVersionNeedsPromptInjectionScan :one
+-- Same check as SkillRawHashNeedsPromptInjectionScan for one live skill
+-- version, the one whose supporting files matched a device's tree digest.
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_versions sv
+  JOIN skills s
+    ON s.id = sv.skill_id
+    AND s.project_id = @project_id
+    AND s.archived_at IS NULL
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE sv.id = @skill_version_id
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean;
+
 -- name: ListSkillTreeCandidateFiles :many
 -- Lists the supporting files of every live skill version that could be the
 -- skill directory a device reports for a raw SKILL.md hash: the version the

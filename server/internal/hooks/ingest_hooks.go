@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -449,14 +448,16 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			}
 			contentRequired = !matched.Valid
 			// The matched version need not be the one the raw hash alias
-			// points to, so check that version's own scan coverage.
+			// points to, so check that version's own scan coverage. A failed
+			// check asks for the directory too, so the upload rescans it.
 			if !contentRequired && s.piScanner != nil {
-				contentRequired, err = riskRepo.New(s.db).SkillVersionNeedsPromptInjectionScan(writeCtx, riskRepo.SkillVersionNeedsPromptInjectionScanParams{
+				contentRequired, err = s.repo.SkillVersionNeedsPromptInjectionScan(writeCtx, repo.SkillVersionNeedsPromptInjectionScanParams{
 					ProjectID:      *authCtx.ProjectID,
-					SkillVersionID: matched,
+					SkillVersionID: matched.UUID,
 				})
 				if err != nil {
-					return nil, false, fmt.Errorf("check known skill tree scan state: %w", err)
+					s.logger.WarnContext(ctx, "check known skill tree scan state; requesting skill directory", attr.SlogError(err))
+					contentRequired = true
 				}
 			}
 		case s.piScanner != nil:
