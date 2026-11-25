@@ -31,6 +31,8 @@ type AppRouteBasic = {
   // only these scopes; the page owns any further eligibility, such as
   // billing state, and registration must not fetch it.
   commandPalette?: Scope[];
+  // Extra Command K search terms, such as a page's former name.
+  keywords?: string[];
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -60,6 +62,7 @@ type RouteEntry = {
   icon?: IconName;
   customIcon?: React.ComponentType<{ className?: string }>;
   stage?: ReleaseStage;
+  keywords?: string[];
 } & (
   | {
       external: true;
@@ -392,6 +395,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
           },
+          feedback: {
+            title: "MCP Server Agent Feedback",
+            url: "feedback",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -455,15 +462,16 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
   },
   mcpSessions: {
-    title: "MCP Sessions",
+    title: "MCP Sign-in",
     url: "mcp-sessions",
     icon: "users",
+    keywords: ["sessions", "mcp sessions", "authentication provider"],
     subPages: {
-      // One MCP Authentication Provider, chosen with the header's picker.
+      // One MCP sign-in, chosen with the header's picker.
       // The index opens the one an old `?issuerId=` link names, else the one
       // picked last, else the organization's default, else the first.
       provider: {
-        title: "MCP Authentication Provider",
+        title: "MCP sign-in",
         url: ":issuerId",
         subPages: {
           // Overview and Connection Logs: mcp-connection-health flag only.
@@ -485,7 +493,7 @@ const ROUTE_STRUCTURE = {
         legacyRedirect: true,
         subPages: {
           issuerDetail: {
-            title: "MCP Authentication Provider",
+            title: "MCP sign-in",
             url: ":issuerId",
             legacyRedirect: true,
           },
@@ -1206,12 +1214,13 @@ const ORG_ROUTE_STRUCTURE = {
     stage: "beta",
   },
   userSessionIssuers: {
-    title: "MCP Authentication",
+    title: "MCP Sign-in",
     url: "user-session-issuers",
     icon: "key-round",
+    keywords: ["mcp authentication", "authentication"],
     subPages: {
       issuerDetail: {
-        title: "MCP Authentication Provider",
+        title: "MCP sign-in",
         url: ":issuerId",
       },
     },
@@ -1308,7 +1317,7 @@ const ORG_ROUTE_STRUCTURE = {
     legacyRedirect: true,
   },
   legacyMcpSessions: {
-    title: "MCP Sessions",
+    title: "MCP Sign-in",
     url: "mcp-sessions",
     legacyRedirect: true,
   },

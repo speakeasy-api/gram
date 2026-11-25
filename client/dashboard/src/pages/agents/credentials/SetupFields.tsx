@@ -255,8 +255,8 @@ function recommendationReason(setupValues: SetupValues, count: number): string {
 
 /**
  * Where the chosen shared authorization server is managed. The dashboard
- * lists it on MCP Sessions as an MCP Authentication Provider, and not on the
- * Authorization Servers page, so the step names the page and links to it.
+ * lists it on the MCP Sign-in page, not on the Authorization Servers page,
+ * so the step names the page and links to it.
  */
 function SharedServerLocation({
   setupValues,
@@ -265,7 +265,7 @@ function SharedServerLocation({
 }): JSX.Element | null {
   const organization = useOrganization();
   const owner = setupValues.selectedProjectId;
-  // An organization-wide one shows on every project's MCP Sessions page, so
+  // An organization-wide one shows on every project's MCP Sign-in page, so
   // the current project's will do; a project's own shows only on that one.
   const ownerSlug =
     owner === ""
@@ -280,15 +280,15 @@ function SharedServerLocation({
 
   return (
     <Text muted small>
-      It is listed on the MCP Sessions page as an MCP Authentication Provider,
-      not on the Authorization Servers page.{" "}
+      It is listed on the MCP Sign-in page, not on the Authorization Servers
+      page.{" "}
       <Link
         to={routes.mcpSessions.provider.mcpServers.href(selected.id)}
         target="_blank"
         rel="noreferrer"
         className="text-foreground inline-flex items-center gap-1 underline underline-offset-4 hover:no-underline"
       >
-        Open {selected.label} in MCP Sessions
+        Open {selected.label} in MCP Sign-in
         <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
       </Link>
     </Text>

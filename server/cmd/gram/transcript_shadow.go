@@ -94,6 +94,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 
 // checkTranscriptShadowSchema checks only the sidecar contract used by the store.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
+// The table is looked up through the connection's search_path, the same way
+// the store's queries resolve it: deployed databases keep it outside public.
 // Every omitted NOT NULL column must be supplied by the database. All inferred
 // arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
 func checkTranscriptShadowSchema(ctx context.Context, db interface {
@@ -103,7 +105,7 @@ func checkTranscriptShadowSchema(ctx context.Context, db interface {
 	err := db.QueryRow(ctx, `
 WITH sidecar AS (
  SELECT oid FROM pg_catalog.pg_class
- WHERE oid = pg_catalog.to_regclass('public.chat_message_transcripts')
+ WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
  AND relkind IN ('r', 'p')
 ), required(name, type_oid) AS (
  VALUES ('message_id', 'uuid'::regtype),

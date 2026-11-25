@@ -57,6 +57,7 @@ func handleToolsList(
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -175,6 +176,10 @@ func handleToolsList(
 			}
 			t.InputSchema = injected
 		}
+	}
+
+	if local != nil {
+		tools = withLocalTools(tools, local(ctx, logger, toolset.OrganizationID, payload))
 	}
 
 	// An empty toolset must list [] rather than null: some clients reject a

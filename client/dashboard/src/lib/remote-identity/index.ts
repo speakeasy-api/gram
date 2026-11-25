@@ -7,42 +7,13 @@
  * consumers import — not everything the module happens to define. Internals
  * stay internal until something outside needs them.
  */
-export { deriveIdentityMode } from "./model/identity";
-export type { IdentityMode } from "./model/identity";
-
-export {
-  findPassThroughAuthorizationHeader,
-  findStaticAuthorizationHeader,
-  managedAuthorizationHeader,
-} from "./model/headers";
-
-export { REDACTED_SECRET } from "./model/secret";
 
 export { providerUrlLabel } from "./model/provider";
 
-export {
-  headerDraftErrors,
-  headerDraftFromCatalog,
-} from "./drafts/headerDrafts";
-export type {
-  HeaderDraft,
-  HeaderDraftError,
-  HeaderSource,
-} from "./drafts/headerDrafts";
-
-export { useHeaderDrafts } from "./drafts/useHeaderDrafts";
-export type { HeaderDraftsState } from "./drafts/useHeaderDrafts";
-
-export {
-  useAgentCredentialDraft,
-  useAgentCredentialFields,
-} from "./drafts/useCredentialDraft";
+export { useAgentCredentialFields } from "./drafts/useCredentialDraft";
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
-export {
-  issuerDisplayName,
-  useUserIdentityDraft,
-} from "./drafts/useIdentityDraft";
+export { issuerDisplayName } from "./drafts/useIdentityDraft";
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
 export { useRemoteSessionIssuersByIds } from "./queries/useRemoteSessionIssuersByIds";
@@ -56,17 +27,12 @@ export { AgentIdentityRow } from "./components/CredentialFields";
 export { IdentityExplainerCallout } from "./components/IdentityExplainer";
 export { identityModeCards } from "./components/IdentityModeCards";
 export { IssuerLink } from "./components/ProviderLink";
-export { UserIdentityRow } from "./components/ProviderRow";
 export { ScopeBadge } from "./components/ScopeBadge";
 export { ScopeMultiSelect } from "./components/ScopeMultiSelect";
 export { IssuerLogo } from "./components/IssuerLogo";
 export { ScopeList } from "./components/ScopeList";
 
-export {
-  isOAuthFormat,
-  keySetChoiceReady,
-  oauthFormatOf,
-} from "./model/serviceAccount";
+export { isOAuthFormat, keySetChoiceReady } from "./model/serviceAccount";
 export type {
   KeySetChoice,
   ServiceAccountFormat,

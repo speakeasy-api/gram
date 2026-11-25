@@ -36,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -1229,10 +1230,14 @@ func (s *Service) authenticateIssuerGate(
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
 	}
-	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
+	refuseForeignCaller := s.refuseForeignCaller
+	if endpoint.ToolsetID.Valid {
+		refuseForeignCaller = s.refuseForeignCallerOutsideTypedServing
+	}
+	if err := refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
-			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.CodeNoServerAccess, r,
+			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, r,
 				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		}
 		return ctx, nil, nil, err
@@ -1422,7 +1427,7 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
 		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
 	}
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1441,7 +1446,13 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 // Its connection owner must repair the grant; a new session cannot bypass it.
 func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
-	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {
+	// Typed serving cannot offer an anonymous caller a personal connection to
+	// repair. Hosted endpoints retain their existing reconnect policy.
+	reauthorizes := authentication.subject.Kind == urn.SessionSubjectKindUser
+	if authentication.refreshableUserSession && authentication.endpoint.ToolsetID.Valid {
+		reauthorizes = s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject)
+	}
+	if authentication.refreshableUserSession && reauthorizes {
 		errorCode = oautherr.CodeInvalidToken
 	}
 	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
@@ -1616,12 +1627,12 @@ func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err er
 
 // connectionAttempt reads the attempt from FlowID and CreatedAt, which survive rotation.
 // A stored field would break CompareAndSwap, which compares bytes, across replica versions.
-func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
+func (a AuthnChallengeState) connectionAttempt(catalog *aivendors.Snapshot, endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
 	id, err := uuid.Parse(a.FlowID)
 	if err != nil || a.CreatedAt.IsZero() {
 		return mcpconnectionattempts.NoAttempt
 	}
-	app := mcpconnectionattempts.AppOf(a.ClientID, mcpconnectionattempts.ClientIDAdmitted)
+	app := mcpconnectionattempts.AppOf(catalog, a.ClientID, mcpconnectionattempts.ClientIDAdmitted)
 	switch {
 	case a.WorkloadReconnect != nil:
 		app = mcpconnectionattempts.AppWorkload

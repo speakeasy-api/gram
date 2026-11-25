@@ -241,7 +241,7 @@ func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *tes
 	require.Contains(t, page, `data-consent-enabled="true"`)
 	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
-	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "auth_client": {chainedConsentChoice(t, fx)}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approved := httptest.NewRecorder()

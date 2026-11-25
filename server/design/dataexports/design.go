@@ -329,7 +329,7 @@ var DataExportRoute = Type("DataExportRoute", func() {
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "Project that owns the route.", func() { Format(FormatUUID) })
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Omitted when no OTEL destination is selected.", func() { Format(FormatUUID) })
@@ -344,7 +344,7 @@ var DataExportRoute = Type("DataExportRoute", func() {
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Description("Form for creating the selected data source's export route.")
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback")
 		Example("mcp_connection_logs")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
@@ -359,7 +359,7 @@ var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Description("Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs")
+		Enum("product_telemetry", "risk_findings", "tool_call_logs", "mcp_connection_logs", "mcp_feedback")
 		Example("mcp_connection_logs")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")

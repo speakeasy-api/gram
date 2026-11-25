@@ -96,6 +96,28 @@ type ListDeniedClientsRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 }
 
+// ListSuspectedProblemsRequestBody is the type of the "mcpConnectionHealth"
+// service "listSuspectedProblems" endpoint HTTP request body.
+type ListSuspectedProblemsRequestBody struct {
+	// The MCP authentication provider.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Keep problems with people on this server, gateway or toolset.
+	ServerID *string `form:"server_id,omitempty" json:"server_id,omitempty" xml:"server_id,omitempty"`
+	// Keep problems with this part of the connection.
+	Part *string `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
+}
+
+// GetSuspectedProblemRequestBody is the type of the "mcpConnectionHealth"
+// service "getSuspectedProblem" endpoint HTTP request body.
+type GetSuspectedProblemRequestBody struct {
+	// The MCP authentication provider.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The problem id from listSuspectedProblems.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Read the problem as listed for this server, gateway or toolset.
+	ServerID *string `form:"server_id,omitempty" json:"server_id,omitempty" xml:"server_id,omitempty"`
+}
+
 // ListAttemptsResponseBody is the type of the "mcpConnectionHealth" service
 // "listAttempts" endpoint HTTP response body.
 type ListAttemptsResponseBody struct {
@@ -159,6 +181,28 @@ type ListDeniedClientsResponseBody struct {
 	LoggingEnabled bool                                  `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
 	ViewerScope    string                                `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
 	Clients        []*ConnectionDeniedClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+}
+
+// ListSuspectedProblemsResponseBody is the type of the "mcpConnectionHealth"
+// service "listSuspectedProblems" endpoint HTTP response body.
+type ListSuspectedProblemsResponseBody struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool   `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
+	ViewerScope    string `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
+	// At most 100, most people first.
+	Problems []*SuspectedProblemResponseBody `form:"problems" json:"problems" xml:"problems"`
+	// Problems before the cap.
+	ProblemsTotal int64 `form:"problems_total" json:"problems_total" xml:"problems_total"`
+}
+
+// GetSuspectedProblemResponseBody is the type of the "mcpConnectionHealth"
+// service "getSuspectedProblem" endpoint HTTP response body.
+type GetSuspectedProblemResponseBody struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool                                `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
+	ViewerScope    string                              `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
+	Found          bool                                `form:"found" json:"found" xml:"found"`
+	Problem        *SuspectedProblemDetailResponseBody `form:"problem,omitempty" json:"problem,omitempty" xml:"problem,omitempty"`
 }
 
 // ListAttemptsUnauthorizedResponseBody is the type of the
@@ -1291,6 +1335,386 @@ type ListDeniedClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSuspectedProblemsUnauthorizedResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListSuspectedProblemsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsForbiddenResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "forbidden" error.
+type ListSuspectedProblemsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsBadRequestResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "bad_request" error.
+type ListSuspectedProblemsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsNotFoundResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "not_found" error.
+type ListSuspectedProblemsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsConflictResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "conflict" error.
+type ListSuspectedProblemsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsUnsupportedMediaResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListSuspectedProblemsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsInvalidResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "invalid" error.
+type ListSuspectedProblemsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsInvariantViolationResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListSuspectedProblemsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsUnexpectedResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "unexpected" error.
+type ListSuspectedProblemsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSuspectedProblemsGatewayErrorResponseBody is the type of the
+// "mcpConnectionHealth" service "listSuspectedProblems" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListSuspectedProblemsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemUnauthorizedResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetSuspectedProblemUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemForbiddenResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "forbidden" error.
+type GetSuspectedProblemForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemBadRequestResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "bad_request" error.
+type GetSuspectedProblemBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemNotFoundResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "not_found" error.
+type GetSuspectedProblemNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemConflictResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "conflict" error.
+type GetSuspectedProblemConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemUnsupportedMediaResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetSuspectedProblemUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemInvalidResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "invalid" error.
+type GetSuspectedProblemInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemInvariantViolationResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetSuspectedProblemInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemUnexpectedResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "unexpected" error.
+type GetSuspectedProblemUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSuspectedProblemGatewayErrorResponseBody is the type of the
+// "mcpConnectionHealth" service "getSuspectedProblem" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetSuspectedProblemGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ConnectionAttemptRowResponseBody is used to define fields on response body
 // types.
 type ConnectionAttemptRowResponseBody struct {
@@ -1473,6 +1897,158 @@ type ConnectionDeniedClientResponseBody struct {
 	LastAt           string  `form:"last_at" json:"last_at" xml:"last_at"`
 }
 
+// SuspectedProblemResponseBody is used to define fields on response body types.
+type SuspectedProblemResponseBody struct {
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID    string                             `form:"id" json:"id" xml:"id"`
+	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
+	Part  string                             `form:"part" json:"part" xml:"part"`
+	Scope *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
+	// When its earliest failure ended.
+	Since        string `form:"since" json:"since" xml:"since"`
+	LastFailedAt string `form:"last_failed_at" json:"last_failed_at" xml:"last_failed_at"`
+	PeopleCount  int64  `form:"people_count" json:"people_count" xml:"people_count"`
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64 `form:"people_on_server_count,omitempty" json:"people_on_server_count,omitempty" xml:"people_on_server_count,omitempty"`
+	// Who cannot do what, in plain words.
+	Headline string `form:"headline" json:"headline" xml:"headline"`
+	// What the data establishes about it, in plain words.
+	Fact    string                               `form:"fact" json:"fact" xml:"fact"`
+	Filters *SuspectedProblemFiltersResponseBody `form:"filters" json:"filters" xml:"filters"`
+}
+
+// SuspectedProblemScopeResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemScopeResponseBody struct {
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The server id, service host, family@version or subject URN.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The server's name, the service's host, the app's name and version, or the
+	// person's name.
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// SuspectedProblemFiltersResponseBody is used to define fields on response
+// body types.
+type SuspectedProblemFiltersResponseBody struct {
+	// Inclusive start of attempt start times.
+	From     string   `form:"from" json:"from" xml:"from"`
+	Outcomes []string `form:"outcomes,omitempty" json:"outcomes,omitempty" xml:"outcomes,omitempty"`
+	Steps    []string `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
+	// Server, gateway or toolset ids.
+	ServerIds []string `form:"server_ids,omitempty" json:"server_ids,omitempty" xml:"server_ids,omitempty"`
+	// Gateway member ids on the step that ended the attempt.
+	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Subject URNs.
+	People []string `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
+	// Network keys.
+	Networks []string `form:"networks,omitempty" json:"networks,omitempty" xml:"networks,omitempty"`
+	// App families. An empty string selects apps that are not on the list.
+	Apps []string `form:"apps,omitempty" json:"apps,omitempty" xml:"apps,omitempty"`
+	// App family and version as family@version.
+	AppVersions []string `form:"app_versions,omitempty" json:"app_versions,omitempty" xml:"app_versions,omitempty"`
+	// Reason codes.
+	Reasons []string `form:"reasons,omitempty" json:"reasons,omitempty" xml:"reasons,omitempty"`
+	// Service hosts.
+	Services []string `form:"services,omitempty" json:"services,omitempty" xml:"services,omitempty"`
+}
+
+// SuspectedProblemDetailResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemDetailResponseBody struct {
+	// Who returned the failures, when all agree.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Failed attempts per 10 minutes over at most the last 24 hours.
+	FailedPer10Minutes []*SuspectedProblemBucketResponseBody `form:"failed_per_10_minutes" json:"failed_per_10_minutes" xml:"failed_per_10_minutes"`
+	// The latest time any of its people last had the broken part working, when
+	// known.
+	LastConnectedAt *string `form:"last_connected_at,omitempty" json:"last_connected_at,omitempty" xml:"last_connected_at,omitempty"`
+	// People failing on the same scope who are not in this problem.
+	OtherFailuresOnService int64                                  `form:"other_failures_on_service" json:"other_failures_on_service" xml:"other_failures_on_service"`
+	Messages               []*SuspectedProblemMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	// At most 50 people, earliest failure first.
+	People []*SuspectedProblemPersonResponseBody `form:"people" json:"people" xml:"people"`
+	// Distinct people in the problem.
+	PeopleTotal int64 `form:"people_total" json:"people_total" xml:"people_total"`
+	// At most 50, most attempts first.
+	Servers []*SuspectedProblemServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Servers before the cap.
+	ServersTotal int64 `form:"servers_total" json:"servers_total" xml:"servers_total"`
+	// When the problem was read: the end of the chart, the message counts and the
+	// Connection Logs links.
+	AsOf string `form:"as_of" json:"as_of" xml:"as_of"`
+	// True when a filter list was too long to send and was left out, so the chart,
+	// messages and filters may include unrelated failures.
+	CountsWidened bool `form:"counts_widened" json:"counts_widened" xml:"counts_widened"`
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID    string                             `form:"id" json:"id" xml:"id"`
+	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
+	Part  string                             `form:"part" json:"part" xml:"part"`
+	Scope *SuspectedProblemScopeResponseBody `form:"scope" json:"scope" xml:"scope"`
+	// When its earliest failure ended.
+	Since        string `form:"since" json:"since" xml:"since"`
+	LastFailedAt string `form:"last_failed_at" json:"last_failed_at" xml:"last_failed_at"`
+	PeopleCount  int64  `form:"people_count" json:"people_count" xml:"people_count"`
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64 `form:"people_on_server_count,omitempty" json:"people_on_server_count,omitempty" xml:"people_on_server_count,omitempty"`
+	// Who cannot do what, in plain words.
+	Headline string `form:"headline" json:"headline" xml:"headline"`
+	// What the data establishes about it, in plain words.
+	Fact    string                               `form:"fact" json:"fact" xml:"fact"`
+	Filters *SuspectedProblemFiltersResponseBody `form:"filters" json:"filters" xml:"filters"`
+}
+
+// SuspectedProblemBucketResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemBucketResponseBody struct {
+	Start    string `form:"start" json:"start" xml:"start"`
+	Attempts int64  `form:"attempts" json:"attempts" xml:"attempts"`
+}
+
+// SuspectedProblemMessageResponseBody is used to define fields on response
+// body types.
+type SuspectedProblemMessageResponseBody struct {
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+	// What happened, in one sentence for the person.
+	Message string `form:"message" json:"message" xml:"message"`
+	// What happened, in one sentence for an administrator.
+	AdminMessage *string `form:"admin_message,omitempty" json:"admin_message,omitempty" xml:"admin_message,omitempty"`
+	Attempts     int64   `form:"attempts" json:"attempts" xml:"attempts"`
+}
+
+// SuspectedProblemPersonResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemPersonResponseBody struct {
+	Person *ConnectionPersonResponseBody `form:"person" json:"person" xml:"person"`
+	// At most 5.
+	Apps []*ConnectionAppResponseBody `form:"apps" json:"apps" xml:"apps"`
+	// Apps before the cap.
+	AppsTotal int64 `form:"apps_total" json:"apps_total" xml:"apps_total"`
+	// At most 5.
+	Servers []*SuspectedProblemPlaceResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Servers before the cap.
+	ServersTotal  int64  `form:"servers_total" json:"servers_total" xml:"servers_total"`
+	Attempts      int64  `form:"attempts" json:"attempts" xml:"attempts"`
+	FirstFailedAt string `form:"first_failed_at" json:"first_failed_at" xml:"first_failed_at"`
+}
+
+// SuspectedProblemPlaceResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemPlaceResponseBody struct {
+	Server *ConnectionServerResponseBody `form:"server" json:"server" xml:"server"`
+	Member *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+}
+
+// SuspectedProblemServerResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemServerResponseBody struct {
+	Server   *ConnectionServerResponseBody `form:"server" json:"server" xml:"server"`
+	Member   *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
+	Attempts int64                         `form:"attempts" json:"attempts" xml:"attempts"`
+}
+
 // ConnectionAttemptFiltersRequestBody is used to define fields on request body
 // types.
 type ConnectionAttemptFiltersRequestBody struct {
@@ -1612,6 +2188,45 @@ func NewListDeniedClientsResponseBody(res *mcpconnectionhealth.ConnectionDeniedC
 			}
 			body.Clients[i] = marshalMcpconnectionhealthConnectionDeniedClientToConnectionDeniedClientResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewListSuspectedProblemsResponseBody builds the HTTP response body from the
+// result of the "listSuspectedProblems" endpoint of the "mcpConnectionHealth"
+// service.
+func NewListSuspectedProblemsResponseBody(res *mcpconnectionhealth.ListSuspectedProblemsResult) *ListSuspectedProblemsResponseBody {
+	body := &ListSuspectedProblemsResponseBody{
+		LoggingEnabled: res.LoggingEnabled,
+		ViewerScope:    string(res.ViewerScope),
+		ProblemsTotal:  res.ProblemsTotal,
+	}
+	if res.Problems != nil {
+		body.Problems = make([]*SuspectedProblemResponseBody, len(res.Problems))
+		for i, val := range res.Problems {
+			if val == nil {
+				body.Problems[i] = nil
+				continue
+			}
+			body.Problems[i] = marshalMcpconnectionhealthSuspectedProblemToSuspectedProblemResponseBody(val)
+		}
+	} else {
+		body.Problems = []*SuspectedProblemResponseBody{}
+	}
+	return body
+}
+
+// NewGetSuspectedProblemResponseBody builds the HTTP response body from the
+// result of the "getSuspectedProblem" endpoint of the "mcpConnectionHealth"
+// service.
+func NewGetSuspectedProblemResponseBody(res *mcpconnectionhealth.GetSuspectedProblemResult) *GetSuspectedProblemResponseBody {
+	body := &GetSuspectedProblemResponseBody{
+		LoggingEnabled: res.LoggingEnabled,
+		ViewerScope:    string(res.ViewerScope),
+		Found:          res.Found,
+	}
+	if res.Problem != nil {
+		body.Problem = marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailResponseBody(res.Problem)
 	}
 	return body
 }
@@ -2501,6 +3116,306 @@ func NewListDeniedClientsGatewayErrorResponseBody(res *goa.ServiceError) *ListDe
 	return body
 }
 
+// NewListSuspectedProblemsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsUnauthorizedResponseBody(res *goa.ServiceError) *ListSuspectedProblemsUnauthorizedResponseBody {
+	body := &ListSuspectedProblemsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsForbiddenResponseBody(res *goa.ServiceError) *ListSuspectedProblemsForbiddenResponseBody {
+	body := &ListSuspectedProblemsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsBadRequestResponseBody(res *goa.ServiceError) *ListSuspectedProblemsBadRequestResponseBody {
+	body := &ListSuspectedProblemsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsNotFoundResponseBody(res *goa.ServiceError) *ListSuspectedProblemsNotFoundResponseBody {
+	body := &ListSuspectedProblemsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsConflictResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsConflictResponseBody(res *goa.ServiceError) *ListSuspectedProblemsConflictResponseBody {
+	body := &ListSuspectedProblemsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSuspectedProblemsUnsupportedMediaResponseBody {
+	body := &ListSuspectedProblemsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsInvalidResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsInvalidResponseBody(res *goa.ServiceError) *ListSuspectedProblemsInvalidResponseBody {
+	body := &ListSuspectedProblemsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsInvariantViolationResponseBody(res *goa.ServiceError) *ListSuspectedProblemsInvariantViolationResponseBody {
+	body := &ListSuspectedProblemsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsUnexpectedResponseBody(res *goa.ServiceError) *ListSuspectedProblemsUnexpectedResponseBody {
+	body := &ListSuspectedProblemsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSuspectedProblemsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listSuspectedProblems" endpoint of the
+// "mcpConnectionHealth" service.
+func NewListSuspectedProblemsGatewayErrorResponseBody(res *goa.ServiceError) *ListSuspectedProblemsGatewayErrorResponseBody {
+	body := &ListSuspectedProblemsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemUnauthorizedResponseBody(res *goa.ServiceError) *GetSuspectedProblemUnauthorizedResponseBody {
+	body := &GetSuspectedProblemUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemForbiddenResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemForbiddenResponseBody(res *goa.ServiceError) *GetSuspectedProblemForbiddenResponseBody {
+	body := &GetSuspectedProblemForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemBadRequestResponseBody(res *goa.ServiceError) *GetSuspectedProblemBadRequestResponseBody {
+	body := &GetSuspectedProblemBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemNotFoundResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemNotFoundResponseBody(res *goa.ServiceError) *GetSuspectedProblemNotFoundResponseBody {
+	body := &GetSuspectedProblemNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemConflictResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemConflictResponseBody(res *goa.ServiceError) *GetSuspectedProblemConflictResponseBody {
+	body := &GetSuspectedProblemConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSuspectedProblemUnsupportedMediaResponseBody {
+	body := &GetSuspectedProblemUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemInvalidResponseBody builds the HTTP response body from
+// the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemInvalidResponseBody(res *goa.ServiceError) *GetSuspectedProblemInvalidResponseBody {
+	body := &GetSuspectedProblemInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemInvariantViolationResponseBody(res *goa.ServiceError) *GetSuspectedProblemInvariantViolationResponseBody {
+	body := &GetSuspectedProblemInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemUnexpectedResponseBody(res *goa.ServiceError) *GetSuspectedProblemUnexpectedResponseBody {
+	body := &GetSuspectedProblemUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSuspectedProblemGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSuspectedProblem" endpoint of the
+// "mcpConnectionHealth" service.
+func NewGetSuspectedProblemGatewayErrorResponseBody(res *goa.ServiceError) *GetSuspectedProblemGatewayErrorResponseBody {
+	body := &GetSuspectedProblemGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListAttemptsPayload builds a mcpConnectionHealth service listAttempts
 // endpoint payload.
 func NewListAttemptsPayload(body *ListAttemptsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpconnectionhealth.ListAttemptsPayload {
@@ -2600,6 +3515,39 @@ func NewListDeniedClientsPayload(body *ListDeniedClientsRequestBody, sessionToke
 		ServerID:            body.ServerID,
 		From:                *body.From,
 		To:                  *body.To,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListSuspectedProblemsPayload builds a mcpConnectionHealth service
+// listSuspectedProblems endpoint payload.
+func NewListSuspectedProblemsPayload(body *ListSuspectedProblemsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpconnectionhealth.ListSuspectedProblemsPayload {
+	v := &mcpconnectionhealth.ListSuspectedProblemsPayload{
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		ServerID:            body.ServerID,
+	}
+	if body.Part != nil {
+		part := mcpconnectionhealth.SuspectedProblemPart(*body.Part)
+		v.Part = &part
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetSuspectedProblemPayload builds a mcpConnectionHealth service
+// getSuspectedProblem endpoint payload.
+func NewGetSuspectedProblemPayload(body *GetSuspectedProblemRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpconnectionhealth.GetSuspectedProblemPayload {
+	v := &mcpconnectionhealth.GetSuspectedProblemPayload{
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		ID:                  *body.ID,
+		ServerID:            body.ServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2778,6 +3726,44 @@ func ValidateListDeniedClientsRequestBody(body *ListDeniedClientsRequestBody) (e
 	}
 	if body.To != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListSuspectedProblemsRequestBody runs the validations defined on
+// ListSuspectedProblemsRequestBody
+func ValidateListSuspectedProblemsRequestBody(body *ListSuspectedProblemsRequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_id", *body.ServerID, goa.FormatUUID))
+	}
+	if body.Part != nil {
+		if !(*body.Part == "speakeasy" || *body.Part == "service") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.part", *body.Part, []any{"speakeasy", "service"}))
+		}
+	}
+	return
+}
+
+// ValidateGetSuspectedProblemRequestBody runs the validations defined on
+// GetSuspectedProblemRequestBody
+func ValidateGetSuspectedProblemRequestBody(body *GetSuspectedProblemRequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_id", *body.ServerID, goa.FormatUUID))
 	}
 	return
 }

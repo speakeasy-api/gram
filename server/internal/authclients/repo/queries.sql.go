@@ -385,66 +385,6 @@ func (q *Queries) GetAuthClient(ctx context.Context, arg GetAuthClientParams) (M
 	return i, err
 }
 
-const getAuthClientRegistration = `-- name: GetAuthClientRegistration :one
-SELECT c.id,
-       c.attachment_scope,
-       c.credential_owner,
-       c.project_id,
-       c.organization_id
-FROM remote_session_clients AS c
-JOIN remote_session_issuers AS rsi
-  ON rsi.id = c.remote_session_issuer_id
- AND rsi.deleted IS FALSE
- AND (
-   (rsi.project_id IS NOT NULL AND rsi.project_id = $1::uuid)
-   OR (rsi.project_id IS NULL AND rsi.organization_id = $2::text)
-   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
- )
-WHERE c.id = $3
-  AND c.deleted IS FALSE
-  AND (
-    (c.project_id IS NOT NULL AND c.project_id = $1::uuid)
-    OR (c.project_id IS NULL AND c.organization_id = $2::text)
-    OR (c.project_id IS NULL AND c.organization_id IS NULL)
-  )
-  AND (c.project_id IS NULL OR EXISTS (
-    SELECT 1
-    FROM projects p
-    WHERE p.id = c.project_id
-      AND p.organization_id = $2::text
-      AND p.deleted IS FALSE
-  ))
-`
-
-type GetAuthClientRegistrationParams struct {
-	ProjectID      uuid.NullUUID
-	OrganizationID string
-	ID             uuid.UUID
-}
-
-type GetAuthClientRegistrationRow struct {
-	ID              uuid.UUID
-	AttachmentScope pgtype.Text
-	CredentialOwner string
-	ProjectID       uuid.NullUUID
-	OrganizationID  pgtype.Text
-}
-
-// An OAuth registration a new remote_session or service_account client may
-// the organization, or platform-global.
-func (q *Queries) GetAuthClientRegistration(ctx context.Context, arg GetAuthClientRegistrationParams) (GetAuthClientRegistrationRow, error) {
-	row := q.db.QueryRow(ctx, getAuthClientRegistration, arg.ProjectID, arg.OrganizationID, arg.ID)
-	var i GetAuthClientRegistrationRow
-	err := row.Scan(
-		&i.ID,
-		&i.AttachmentScope,
-		&i.CredentialOwner,
-		&i.ProjectID,
-		&i.OrganizationID,
-	)
-	return i, err
-}
-
 const getOrganizationMCPServer = `-- name: GetOrganizationMCPServer :one
 SELECT
   ms.id,
@@ -1233,6 +1173,67 @@ func (q *Queries) LockAuthClientOfferingServers(ctx context.Context, arg LockAut
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAuthClientRegistration = `-- name: LockAuthClientRegistration :one
+SELECT c.id,
+       c.attachment_scope,
+       c.credential_owner,
+       c.project_id,
+       c.organization_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS rsi
+  ON rsi.id = c.remote_session_issuer_id
+ AND rsi.deleted IS FALSE
+ AND (
+   (rsi.project_id IS NOT NULL AND rsi.project_id = $1::uuid)
+   OR (rsi.project_id IS NULL AND rsi.organization_id = $2::text)
+   OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL)
+ )
+WHERE c.id = $3
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NOT NULL AND c.project_id = $1::uuid)
+    OR (c.project_id IS NULL AND c.organization_id = $2::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND (c.project_id IS NULL OR EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = c.project_id
+      AND p.organization_id = $2::text
+      AND p.deleted IS FALSE
+  ))
+FOR SHARE OF c
+`
+
+type LockAuthClientRegistrationParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type LockAuthClientRegistrationRow struct {
+	ID              uuid.UUID
+	AttachmentScope pgtype.Text
+	CredentialOwner string
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// An OAuth registration a new remote_session or service_account client may
+// the organization, or platform-global.
+func (q *Queries) LockAuthClientRegistration(ctx context.Context, arg LockAuthClientRegistrationParams) (LockAuthClientRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, lockAuthClientRegistration, arg.ProjectID, arg.OrganizationID, arg.ID)
+	var i LockAuthClientRegistrationRow
+	err := row.Scan(
+		&i.ID,
+		&i.AttachmentScope,
+		&i.CredentialOwner,
+		&i.ProjectID,
+		&i.OrganizationID,
+	)
+	return i, err
 }
 
 const lockIssuanceProfile = `-- name: LockIssuanceProfile :one

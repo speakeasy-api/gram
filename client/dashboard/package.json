@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.155.0",
+  "version": "0.156.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -25,7 +25,7 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.99",
+    "@ai-sdk/mcp": "2.0.101",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-ai-sdk": "~1.4.23",
@@ -85,7 +85,7 @@
     "react-error-boundary": "^6.1.2",
     "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^4.12.2",
+    "react-resizable-panels": "^4.24.0",
     "react-router": "^8.5.2",
     "recharts": "^3.9.2",
     "remark-gfm": "^4.0.1",

@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -848,14 +849,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate CIMD clients").LogError(ctx, logger)
 	}
-	// Read before the source's bindings join the target's: only these were
-	// configured for sign-in through the target.
-	targetRegistrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
-		IssuerIds: []uuid.UUID{target.ID}, OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "list target remote-session client links").LogError(ctx, logger)
-	}
 	// Carry only the bindings something still signs in through. The rest
 	// leave with the source; users' grants for them still move below, so
 	// binding such a client to the target later makes them usable again. A
@@ -879,15 +872,29 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			})
 		}
 	}
-	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
-	}
 	run.remoteSessionsMigrated, err = q.UpdateRemoteSessionsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
 	}
-	if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+	rekeys, err := q.ListPrincipalRemoteSessionBindingRekeys(ctx, repo.ListPrincipalRemoteSessionBindingRekeysParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
+	if err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "list agent connection attachment rekeys").LogError(ctx, logger)
+	}
+	if len(rekeys) > 0 {
+		bindingIDs, clientIDs := make([]uuid.UUID, 0, len(rekeys)), make([]uuid.UUID, 0, len(rekeys))
+		for _, rekey := range rekeys {
+			bindingIDs = append(bindingIDs, rekey.ID)
+			clientIDs = append(clientIDs, rekey.RemoteSessionClientID)
+		}
+		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID}); err != nil {
+			return run, oops.E(oops.CodeUnexpected, err, "ensure attachment parents for migration").LogError(ctx, logger)
+		}
+		if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID, BindingIds: bindingIDs}); err != nil {
+			return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+		}
+	}
+	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
 	}
 	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
@@ -895,15 +902,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if _, err := q.UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionEMABindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate EMA bindings").LogError(ctx, logger)
 	}
-	mcpServerProjectIDs, err := q.ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx, repo.ListMCPServerProjectIDsForUserSessionIssuerMigrationParams{
-		SourceIssuerID: conv.ToNullUUID(source.ID),
-		TargetIssuerID: conv.ToNullUUID(target.ID),
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
-	}
-	movedServerProjects := map[uuid.UUID]bool{}
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
@@ -915,9 +913,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			}
 			if err := auditHostedIssuerMoves(ctx, dbtx, s.audit, authCtx, moved, source.ID); err != nil {
 				return 0, err
-			}
-			for _, server := range moved {
-				movedServerProjects[server.ProjectID] = true
 			}
 			return int64(len(moved)), nil
 		}},
@@ -933,18 +928,8 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			return run, oops.E(oops.CodeUnexpected, err, "migrate user session issuer %s", operation.name).LogError(ctx, logger)
 		}
 	}
-	for _, projectID := range mcpServerProjectIDs {
-		// The migration moves the servers onto the target, which configures
-		// their sign-in there, so a moved server that is the target's only
-		// consumer offers the clients the target bound. A server already on
-		// the target was not configured by this move, and a binding that only
-		// the source held was configured for neither.
-		if movedServerProjects[projectID] {
-			if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, organizationID, projectID, []uuid.UUID{target.ID}, slices.Concat([]uuid.UUID{}, targetRegistrations)); err != nil {
-				return run, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
-			}
-		}
-	}
+	// A downstream sign-in move does not configure new upstream offers. In
+	// particular, target links can exist solely as attachment FK parents.
 	// Retire the source before reconciling: prune and the organization
 	// gateway decide from how many organization-level issuers are live, which
 	// the commit changes when the source is one of them.
