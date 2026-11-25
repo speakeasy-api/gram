@@ -23,6 +23,13 @@ type GetSkillToolInput struct {
 	IncludeContent bool   `json:"include_content,omitempty" jsonschema:"include the latest version's SKILL.md content; off by default because a manifest is up to 64 KiB"`
 }
 
+type GetSkillFileToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	SkillID     string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
+	VersionID   string `json:"version_id" jsonschema:"skill version ID, from get_skill or list_skill_versions"`
+	Path        string `json:"path" jsonschema:"the supporting file's path relative to the skill root, exactly as the version's files list reports it, for example references/REFERENCE.md"`
+}
+
 type ListSkillVersionsToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
@@ -58,7 +65,7 @@ type ApproveSkillSuggestionToolInput struct {
 	SuggestionID string               `json:"suggestion_id" jsonschema:"suggestion ID returned by list_skill_suggestions"`
 	ChangeIDs    []string             `json:"change_ids,omitempty" jsonschema:"IDs of the reviewed changes to take, from list_skill_suggestions; name every change to take the whole suggestion. Exactly one of change_ids or content is required"`
 	Content      string               `json:"content,omitempty" jsonschema:"complete edited SKILL.md to record instead of the proposed changes, at most 65536 UTF-8 bytes; use when the user corrected the suggestion. Exactly one of change_ids or content is required"`
-	Files        []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the files of the version the suggestion was written against, pass an empty list to remove them all, or pass the complete new set"`
+	Files        []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the files of the version the suggestion was written against, pass an empty list to remove them all, or pass the complete new set; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"`
 	Confirmed    bool                 `json:"confirmed" jsonschema:"set true only after the user explicitly confirms recording this new version of this exact skill"`
 }
 
@@ -80,7 +87,7 @@ type SkillFileToolInput struct {
 type CreateSkillToolInput struct {
 	ProjectSlug string               `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Content     string               `json:"content" jsonschema:"the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"`
-	Files       []SkillFileToolInput `json:"files,omitempty" jsonschema:"optional supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries; at most 100 files, 5 MiB each and 10 MiB in total"`
+	Files       []SkillFileToolInput `json:"files,omitempty" jsonschema:"optional supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"`
 }
 
 type AddSkillVersionToolInput struct {
@@ -88,7 +95,7 @@ type AddSkillVersionToolInput struct {
 	SkillID                 string               `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Content                 string               `json:"content" jsonschema:"the complete replacement SKILL.md; versions are immutable, so a correction is a new version rather than an edit"`
 	ExpectedLatestVersionID string               `json:"expected_latest_version_id" jsonschema:"the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"`
-	Files                   []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the current version's files, pass an empty list to remove them all, or pass the complete new set; at most 100 files, 5 MiB each and 10 MiB in total"`
+	Files                   []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the current version's files, pass an empty list to remove them all, or pass the complete new set; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"`
 }
 
 type UpdateSkillMetadataToolInput struct {
@@ -290,6 +297,17 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillToolInput) (*mcp.CallToolResult, GetSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (GetSkillOutput, error) {
 			return skills.GetSkill(ctx, principal, GetSkillInput(input))
+		})
+	})
+
+	addTool(reg, &mcp.Tool{
+		Name:        "get_skill_file",
+		Title:       "Read a Skill's Supporting File",
+		Description: "Read one supporting file of a skill version, such as a scripts/, references/ or assets/ entry listed in the files of get_skill or list_skill_versions. Read SKILL.md itself with get_skill and include_content. Text files come back as content and binary files as content_base64. Constraints: a file larger than 256 KiB comes back as metadata only, with content_omitted set.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillFileToolInput) (*mcp.CallToolResult, GetSkillFileOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (GetSkillFileOutput, error) {
+			return skills.GetSkillFile(ctx, principal, GetSkillFileInput(input))
 		})
 	})
 
@@ -509,6 +527,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 	}{
 		{"list_skills", "List Skills", "List the skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
 		{"get_skill", "Get a Skill", "Read one skill in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
+		{"get_skill_file", "Read a Skill's Supporting File", "Read one supporting file of a skill version. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
 		{"list_skill_versions", "List Skill Versions", "List a skill's versions. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
 		{"list_skill_feedback", "List Skill Feedback", "Review privacy-minimized feedback for one skill. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},
 		{"list_skill_suggestions", "List Skill Suggestions", "Review open proposed skill improvements. This is not switched on for your organization yet.", true, ExternalAuthorizationMember, bothAudiences},

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +28,11 @@ import (
 // checked here as well so an oversized manifest is refused before it is copied
 // into a payload and shipped across the process, rather than after.
 const maxSkillContentBytes = 64 << 10
+
+// maxSkillFileReadBytes bounds the supporting-file content get_skill_file
+// returns inline. Larger files, typically binary assets, come back as
+// metadata only so one read cannot fill an agent's context.
+const maxSkillFileReadBytes = 256 << 10
 
 // maxSkillIdempotencyKeyLength is the ceiling the other Platform MCP mutations
 // hold their caller-generated idempotency keys to.
@@ -78,6 +84,7 @@ type SkillsManagement interface {
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
+	GetVersionFile(context.Context, *genskills.GetVersionFilePayload) (*types.SkillVersionFileContent, error)
 	ListFeedback(context.Context, *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error)
 	ListSuggestions(context.Context, *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error)
 	ListSuggestionFeedback(context.Context, *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error)
@@ -490,6 +497,77 @@ func (s *SkillsService) ListSkillVersions(ctx context.Context, principal Princip
 		Versions:    versions,
 		NextCursor:  stringOrEmpty(result.NextCursor),
 	}, nil
+}
+
+type GetSkillFileInput struct {
+	ProjectSlug string
+	SkillID     string
+	VersionID   string
+	Path        string
+}
+
+// GetSkillFileOutput is one supporting file of a skill version. Text files
+// come back as content and other files as content_base64; a file larger than
+// the inline ceiling comes back without either.
+type GetSkillFileOutput struct {
+	ProjectSlug    string `json:"project_slug"`
+	SkillID        string `json:"skill_id"`
+	VersionID      string `json:"version_id"`
+	Path           string `json:"path"`
+	ContentType    string `json:"content_type"`
+	SHA256         string `json:"sha256"`
+	SizeBytes      int64  `json:"size_bytes"`
+	Content        string `json:"content,omitempty" jsonschema:"the file's text, when it is valid UTF-8"`
+	ContentBase64  string `json:"content_base64,omitempty" jsonschema:"the file's bytes, standard base64-encoded, when they are not valid UTF-8 text"`
+	ContentOmitted bool   `json:"content_omitted,omitempty" jsonschema:"true when the file is larger than 262144 bytes and its content is not returned; view it in the AI Control Plane dashboard instead"`
+}
+
+func (s *SkillsService) GetSkillFile(ctx context.Context, principal Principal, input GetSkillFileInput) (GetSkillFileOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return GetSkillFileOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SkillID); err != nil {
+		return GetSkillFileOutput{}, ErrRegistrationInvalid
+	}
+	if _, err := uuid.Parse(input.VersionID); err != nil {
+		return GetSkillFileOutput{}, ErrRegistrationInvalid
+	}
+	if strings.TrimSpace(input.Path) == "" {
+		return GetSkillFileOutput{}, ErrRegistrationInvalid
+	}
+	file, err := s.skills.GetVersionFile(ctx, &genskills.GetVersionFilePayload{
+		SkillID:          input.SkillID,
+		VersionID:        input.VersionID,
+		Path:             input.Path,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return GetSkillFileOutput{}, err
+	}
+	output := GetSkillFileOutput{
+		ProjectSlug:    project.Slug,
+		SkillID:        input.SkillID,
+		VersionID:      input.VersionID,
+		Path:           file.Path,
+		ContentType:    file.ContentType,
+		SHA256:         file.Sha256,
+		SizeBytes:      file.SizeBytes,
+		Content:        "",
+		ContentBase64:  "",
+		ContentOmitted: false,
+	}
+	switch {
+	case len(file.Content) > maxSkillFileReadBytes:
+		output.ContentOmitted = true
+	case utf8.Valid(file.Content):
+		output.Content = string(file.Content)
+	default:
+		output.ContentBase64 = base64.StdEncoding.EncodeToString(file.Content)
+	}
+	return output, nil
 }
 
 type CreateSkillInput struct {

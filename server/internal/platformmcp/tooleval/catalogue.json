@@ -6852,6 +6852,40 @@
       }
     },
     {
+      "name": "get_skill_file",
+      "description": "Read one supporting file of a skill version, such as a scripts/, references/ or assets/ entry listed in the files of get_skill or list_skill_versions. Read SKILL.md itself with get_skill and include_content. Text files come back as content and binary files as content_base64. Constraints: a file larger than 256 KiB comes back as metadata only, with content_omitted set.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "the project's slug, as list_projects returns it"
+          },
+          "skill_id": {
+            "type": "string",
+            "description": "skill ID returned by list_skills"
+          },
+          "version_id": {
+            "type": "string",
+            "description": "skill version ID, from get_skill or list_skill_versions"
+          },
+          "path": {
+            "type": "string",
+            "description": "the supporting file's path relative to the skill root, exactly as the version's files list reports it, for example references/REFERENCE.md"
+          }
+        },
+        "required": ["project_slug", "skill_id", "version_id", "path"],
+        "additionalProperties": false
+      },
+      "read_only": true,
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "list_skill_versions",
       "description": "List a skill's versions, newest first. A version is a fixed snapshot of the instructions: it is never edited in place, so a correction is recorded as a new version with add_skill_version.",
       "input_schema": {
@@ -7045,7 +7079,7 @@
               "required": ["path"],
               "additionalProperties": false
             },
-            "description": "supporting files of the new version besides SKILL.md. Omit to keep the files of the version the suggestion was written against, pass an empty list to remove them all, or pass the complete new set"
+            "description": "supporting files of the new version besides SKILL.md. Omit to keep the files of the version the suggestion was written against, pass an empty list to remove them all, or pass the complete new set; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"
           },
           "confirmed": {
             "type": "boolean",
@@ -7132,7 +7166,7 @@
               "required": ["path"],
               "additionalProperties": false
             },
-            "description": "optional supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries; at most 100 files, 5 MiB each and 10 MiB in total"
+            "description": "optional supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"
           }
         },
         "required": ["project_slug", "content"],
@@ -7193,7 +7227,7 @@
               "required": ["path"],
               "additionalProperties": false
             },
-            "description": "supporting files of the new version besides SKILL.md. Omit to keep the current version's files, pass an empty list to remove them all, or pass the complete new set; at most 100 files, 5 MiB each and 10 MiB in total"
+            "description": "supporting files of the new version besides SKILL.md. Omit to keep the current version's files, pass an empty list to remove them all, or pass the complete new set; at most 100 files. Through this tool the whole call, SKILL.md included, must fit in 64 KiB, so upload larger files or binary assets in the AI Control Plane dashboard"
           }
         },
         "required": [

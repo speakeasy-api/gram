@@ -59,6 +59,8 @@ type recordingSkillsManagement struct {
 	linked                    []*genskills.LinkPayload
 	unlinked                  []string
 	linksErr                  error
+	versionFileRead           *genskills.GetVersionFilePayload
+	versionFile               *types.SkillVersionFileContent
 }
 
 func (s *recordingSkillsManagement) Create(_ context.Context, payload *genskills.CreatePayload) (*genskills.RecordSkillResult, error) {
@@ -141,6 +143,14 @@ func (s *recordingSkillsManagement) ApproveSuggestion(_ context.Context, payload
 		return nil, s.err
 	}
 	return s.approveOut, nil
+}
+
+func (s *recordingSkillsManagement) GetVersionFile(_ context.Context, payload *genskills.GetVersionFilePayload) (*types.SkillVersionFileContent, error) {
+	s.versionFileRead = payload
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.versionFile, nil
 }
 
 func (s *recordingSkillsManagement) DismissSuggestion(_ context.Context, payload *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error) {
@@ -1445,4 +1455,192 @@ func TestAddSkillVersionKeepsOmittedFilesDistinctFromEmpty(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, skills.addedVersion.Files, "an empty list removes every supporting file")
 	require.Empty(t, skills.addedVersion.Files)
+}
+
+func TestApproveSkillSuggestionKeepsOmittedFilesDistinctFromEmpty(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{
+		skill: approvedSkill(),
+		approveOut: &genskills.ApproveSkillSuggestionResult{
+			Suggestion: testSuggestion("approved", testChangeIDFirst),
+			Outcome:    string(SkillSuggestionApplied),
+			Version:    newVersion(),
+		},
+	}
+	service := testSkillsService(t, skills)
+	input := ApproveSkillSuggestionInput{
+		ProjectSlug:  testSkillProjectSlug,
+		SuggestionID: testSuggestionID,
+		ChangeIDs:    []string{testChangeIDFirst},
+		Content:      "",
+		Files:        nil,
+	}
+
+	_, err := service.ApproveSkillSuggestion(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	require.Nil(t, skills.approved.Files, "omitted files keep the suggestion's base version files")
+
+	input.Files = []SkillFileToolInput{}
+	_, err = service.ApproveSkillSuggestion(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	require.NotNil(t, skills.approved.Files, "an empty list removes every supporting file")
+	require.Empty(t, skills.approved.Files)
+
+	input.Files = []SkillFileToolInput{{Path: "assets/logo.png", Content: "", ContentBase64: base64.StdEncoding.EncodeToString([]byte{0x89, 'P'}), ContentType: ""}}
+	_, err = service.ApproveSkillSuggestion(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	require.Len(t, skills.approved.Files, 1)
+	require.Equal(t, []byte{0x89, 'P'}, skills.approved.Files[0].Content)
+}
+
+func TestApproveSkillSuggestionRefusesAmbiguousOrInvalidFileContent(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		file SkillFileToolInput
+		want error
+	}{
+		{name: "both", file: SkillFileToolInput{Path: "a.md", Content: "x", ContentBase64: "eA==", ContentType: ""}, want: ErrSkillFileContentAmbiguous},
+		{name: "invalid base64", file: SkillFileToolInput{Path: "a.bin", Content: "", ContentBase64: "not base64!", ContentType: ""}, want: ErrSkillFileContentInvalid},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			skills := &recordingSkillsManagement{skill: approvedSkill()}
+			service := testSkillsService(t, skills)
+			_, err := service.ApproveSkillSuggestion(t.Context(), testPrincipal(), ApproveSkillSuggestionInput{
+				ProjectSlug:  testSkillProjectSlug,
+				SuggestionID: testSuggestionID,
+				ChangeIDs:    []string{testChangeIDFirst},
+				Content:      "",
+				Files:        []SkillFileToolInput{test.file},
+			})
+			require.ErrorIs(t, err, test.want)
+			require.Nil(t, skills.approved, "a malformed file never reaches the skills service")
+		})
+	}
+}
+
+func TestApproveSkillSuggestionToolForwardsFilesFromItsSchema(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{
+		skill: approvedSkill(),
+		approveOut: &genskills.ApproveSkillSuggestionResult{
+			Suggestion: testSuggestion("approved", testChangeIDFirst),
+			Outcome:    string(SkillSuggestionApplied),
+			Version:    newVersion(),
+		},
+	}
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, skills), nil, nil, nil, nil, CatalogDescriptor{})
+	var descriptor Descriptor
+	for _, candidate := range registrar.Descriptors() {
+		if candidate.Name == "approve_skill_suggestion" {
+			descriptor = candidate
+		}
+	}
+	require.Equal(t, "approve_skill_suggestion", descriptor.Name)
+
+	ctx := contextWithPrincipal(t.Context(), testPrincipal())
+	_, err := descriptor.Invoke(ctx, json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"suggestion_id":%q,"change_ids":[%q],"files":[{"path":"references/a.md","content":"hello"}],"confirmed":true}`, testSkillProjectSlug, testSuggestionID, testChangeIDFirst)))
+	require.NoError(t, err)
+	require.NotNil(t, skills.approved)
+	require.Len(t, skills.approved.Files, 1)
+	require.Equal(t, "references/a.md", skills.approved.Files[0].Path)
+	require.Equal(t, []byte("hello"), skills.approved.Files[0].Content)
+
+	_, err = descriptor.Invoke(ctx, json.RawMessage(fmt.Sprintf(`{"project_slug":%q,"suggestion_id":%q,"change_ids":[%q],"files":[{"path":"a.md","content":"x","content_base64":"eA=="}],"confirmed":true}`, testSkillProjectSlug, testSuggestionID, testChangeIDFirst)))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	var body skillsRefusalResult
+	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &body))
+	require.Equal(t, "invalid_request", body.Code)
+}
+
+func TestGetSkillFileReturnsTextBinaryOrMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	large := make([]byte, maxSkillFileReadBytes+1)
+	for _, test := range []struct {
+		name        string
+		content     []byte
+		wantText    string
+		wantBase64  string
+		wantOmitted bool
+	}{
+		{name: "text", content: []byte("# Reference\n"), wantText: "# Reference\n", wantBase64: "", wantOmitted: false},
+		{name: "binary", content: []byte{0x89, 'P', 'N', 'G', 0xff}, wantText: "", wantBase64: base64.StdEncoding.EncodeToString([]byte{0x89, 'P', 'N', 'G', 0xff}), wantOmitted: false},
+		{name: "too large", content: large, wantText: "", wantBase64: "", wantOmitted: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			skills := &recordingSkillsManagement{
+				skill: testSkill(),
+				versionFile: &types.SkillVersionFileContent{
+					Path:        "references/a.md",
+					ContentType: "text/markdown; charset=utf-8",
+					Sha256:      "def456",
+					SizeBytes:   int64(len(test.content)),
+					Content:     test.content,
+				},
+			}
+			service := testSkillsService(t, skills)
+
+			output, err := service.GetSkillFile(t.Context(), testPrincipal(), GetSkillFileInput{
+				ProjectSlug: testSkillProjectSlug,
+				SkillID:     testSkillID,
+				VersionID:   testSkillVersionID,
+				Path:        "references/a.md",
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, testSkillID, skills.versionFileRead.SkillID)
+			require.Equal(t, testSkillVersionID, skills.versionFileRead.VersionID)
+			require.Equal(t, "references/a.md", skills.versionFileRead.Path)
+			require.Equal(t, testSkillProjectSlug, output.ProjectSlug)
+			require.Equal(t, "def456", output.SHA256)
+			require.Equal(t, int64(len(test.content)), output.SizeBytes)
+			require.Equal(t, test.wantText, output.Content)
+			require.Equal(t, test.wantBase64, output.ContentBase64)
+			require.Equal(t, test.wantOmitted, output.ContentOmitted)
+		})
+	}
+}
+
+func TestGetSkillFileRefusesMalformedIdentifiersBeforeReading(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{skill: testSkill()}
+	service := testSkillsService(t, skills)
+	for _, input := range []GetSkillFileInput{
+		{ProjectSlug: testSkillProjectSlug, SkillID: "not-a-uuid", VersionID: testSkillVersionID, Path: "a.md"},
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: "not-a-uuid", Path: "a.md"},
+		{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, VersionID: testSkillVersionID, Path: " "},
+	} {
+		_, err := service.GetSkillFile(t.Context(), testPrincipal(), input)
+		require.ErrorIs(t, err, ErrRegistrationInvalid)
+	}
+	require.Nil(t, skills.versionFileRead)
+}
+
+func TestGetSkillFileToolIsAReadForMembers(t *testing.T) {
+	t.Parallel()
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, testSkillsService(t, &recordingSkillsManagement{skill: testSkill()}), nil, nil, nil, nil, CatalogDescriptor{})
+	for _, descriptor := range registrar.Descriptors() {
+		if descriptor.Name != "get_skill_file" {
+			continue
+		}
+		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
+		require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
+		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+		require.Equal(t, discoverySkillRead, descriptor.Meta.DiscoveryScopes)
+		require.NotNil(t, descriptor.Annotations)
+		require.True(t, descriptor.Annotations.ReadOnlyHint)
+		return
+	}
+	t.Fatal("get_skill_file is not registered")
 }
