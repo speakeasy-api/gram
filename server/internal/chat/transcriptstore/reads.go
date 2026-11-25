@@ -27,7 +27,7 @@ func chatMessageBody(m *chatrepo.ChatMessage) Body {
 var unsetBody Body
 
 // chatMessages converts embedded rows to the chat repo model and opens them.
-func (t *Transcripts) chatMessages(ctx context.Context, db DBTX, projectID uuid.UUID, n int, row func(int) (plainrepo.ChatMessage, joinedRow)) ([]chatrepo.ChatMessage, error) {
+func (t *Transcripts) chatMessages(ctx context.Context, db DBTX, projectID uuid.UUID, reader string, n int, row func(int) (plainrepo.ChatMessage, joinedRow)) ([]chatrepo.ChatMessage, error) {
 	messages := make([]chatrepo.ChatMessage, n)
 	joined := make([]joinedRow, n)
 	for i := range n {
@@ -37,7 +37,7 @@ func (t *Transcripts) chatMessages(ctx context.Context, db DBTX, projectID uuid.
 		j.chatID = messages[i].ChatID
 		joined[i] = j
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, reader, joined); err != nil {
 		return nil, err
 	}
 	return messages, nil
@@ -50,7 +50,7 @@ func (t *Transcripts) ListLatestGenerationChatMessages(ctx context.Context, db D
 	if err != nil {
 		return nil, fmt.Errorf("list latest generation chat messages: %w", err)
 	}
-	return t.chatMessages(ctx, db, projectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+	return t.chatMessages(ctx, db, projectID, "ListLatestGenerationChatMessages", len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
 		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
@@ -62,7 +62,7 @@ func (t *Transcripts) ListChatMessagesByGeneration(ctx context.Context, db DBTX,
 	if err != nil {
 		return nil, fmt.Errorf("list chat messages by generation: %w", err)
 	}
-	return t.chatMessages(ctx, db, projectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+	return t.chatMessages(ctx, db, projectID, "ListChatMessagesByGeneration", len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
 		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
@@ -84,7 +84,7 @@ func (t *Transcripts) ListChatMessagesAfterPage(ctx context.Context, db DBTX, pa
 	if err != nil {
 		return nil, fmt.Errorf("list chat messages after page: %w", err)
 	}
-	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+	return t.chatMessages(ctx, db, page.ProjectID, "ListChatMessagesAfterPage", len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
 		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
@@ -95,7 +95,7 @@ func (t *Transcripts) ListChatMessagesBeforePage(ctx context.Context, db DBTX, p
 	if err != nil {
 		return nil, fmt.Errorf("list chat messages before page: %w", err)
 	}
-	return t.chatMessages(ctx, db, page.ProjectID, len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
+	return t.chatMessages(ctx, db, page.ProjectID, "ListChatMessagesBeforePage", len(rows), func(i int) (plainrepo.ChatMessage, joinedRow) {
 		return rows[i].ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: rows[i].ShadowCiphertext, current: rows[i].ShadowCurrent, shape: nil}
 	})
 }
@@ -125,7 +125,7 @@ func (t *Transcripts) ListRiskWindowedMessages(ctx context.Context, db DBTX, w R
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, w.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, w.ProjectID, "ListRiskWindowedMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -156,7 +156,7 @@ func (t *Transcripts) ListSearchWindowedMessages(ctx context.Context, db DBTX, w
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, w.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, w.ProjectID, "ListSearchWindowedMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -194,7 +194,7 @@ func (t *Transcripts) ListChatMessagesForMatch(ctx context.Context, db DBTX, pro
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: chatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "ListChatMessagesForMatch", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -207,7 +207,7 @@ func (t *Transcripts) GetKitProjectionMessage(ctx context.Context, db DBTX, proj
 	if err != nil {
 		return chatrepo.ChatMessage{}, fmt.Errorf("get kit projection message: %w", err)
 	}
-	messages, err := t.chatMessages(ctx, db, projectID, 1, func(int) (plainrepo.ChatMessage, joinedRow) {
+	messages, err := t.chatMessages(ctx, db, projectID, "GetKitProjectionMessage", 1, func(int) (plainrepo.ChatMessage, joinedRow) {
 		return row.ChatMessage, joinedRow{body: unsetBody, chatID: uuid.Nil, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}
 	})
 	if err != nil {
@@ -233,14 +233,15 @@ type GetToolCallSummaryContextRow = plainrepo.GetToolCallSummaryContextRow
 func (t *Transcripts) GetToolCallSummaryContext(ctx context.Context, db DBTX, c ToolCallSummaryContext) (GetToolCallSummaryContextRow, error) {
 	row, err := plainrepo.New(db).GetToolCallSummaryContext(ctx, plainrepo.GetToolCallSummaryContextParams{OpenShadows: t.Enabled(c.ProjectID), ToolCallID: pgtype.Text{String: c.ToolCallID, Valid: true}, MessageID: c.MessageID, ChatID: c.ChatID, ProjectID: c.ProjectID})
 	if err != nil {
-		return row, fmt.Errorf("get tool call summary context: %w", err)
+		return GetToolCallSummaryContextRow{}, fmt.Errorf("get tool call summary context: %w", err)
 	}
 	joined := []joinedRow{
 		{body: Body{MessageID: c.MessageID, Content: nil, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: &row.ToolCallSummaries, StorageError: nil}, chatID: row.ChatID, ciphertext: row.CallsShadowCiphertext, current: row.CallsShadowCurrent, shape: nil},
 		{body: Body{MessageID: row.ResultMessageID, Content: &row.ResultContent, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ResultShadowCiphertext, current: row.ResultShadowCurrent, shape: nil},
 	}
-	if err := t.openJoined(ctx, db, c.ProjectID, joined); err != nil {
-		return row, err
+	if err := t.openJoined(ctx, db, c.ProjectID, "GetToolCallSummaryContext", joined); err != nil {
+		// Never hand back the plaintext that failed the check.
+		return GetToolCallSummaryContextRow{}, err
 	}
 	return row, nil
 }
@@ -261,7 +262,7 @@ func (t *Transcripts) ListClaudeUserMessagesForPromptAttachmentParent(ctx contex
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: chatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "ListClaudeUserMessagesForPromptAttachmentParent", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -292,7 +293,7 @@ func (t *Transcripts) ListChatTranscriptMessagesPage(ctx context.Context, db DBT
 		r := &rows[i]
 		joined[i] = joinedRow{body: Body{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: nil, StorageError: nil}, chatID: page.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, page.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, page.ProjectID, "ListChatTranscriptMessagesPage", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
