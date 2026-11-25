@@ -9,6 +9,7 @@ import {
   GlobeIcon,
   HistoryIcon,
   LayoutGridIcon,
+  LockKeyholeIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
@@ -139,6 +140,10 @@ export function RecordNav({
   });
   const onHooks = !!matchRoute({
     to: "/organizations/$idOrSlug/hooks",
+    params: { idOrSlug },
+  });
+  const onEncryption = !!matchRoute({
+    to: "/organizations/$idOrSlug/encryption",
     params: { idOrSlug },
   });
 
@@ -383,6 +388,23 @@ export function RecordNav({
                 >
                   <WebhookIcon />
                   <span>Hooks</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onEncryption}
+                tooltip="Encryption"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/encryption"
+                  params={{ idOrSlug }}
+                  {...currentProps(onEncryption)}
+                >
+                  <LockKeyholeIcon />
+                  <span>Encryption</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

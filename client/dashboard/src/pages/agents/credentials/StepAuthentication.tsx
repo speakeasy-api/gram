@@ -1,3 +1,5 @@
+import { useRoutes } from "@/routes";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { ServerInfoPopover } from "./ServerInfoPopover";
 import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import {
@@ -32,6 +34,21 @@ import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
+
+function IdentityRepairLink({ server }: { server: InventoryServer }) {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  const href = routes.mcp.details.settings.href(mcpServerRouteParam(server));
+  return (
+    <a
+      className="underline"
+      href={`${href}#authentication`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      Open Sign-in settings
+    </a>
+  );
+}
 
 export function StepAuthentication({
   servers,
@@ -100,9 +117,8 @@ export function StepAuthentication({
     if (readStatus === "ready") onConnected?.(reading);
   }, [reading, readStatus, onConnected]);
   const [openRows, setOpenRows] = useState<string[]>([]);
-  // Editing shows the agent's assigned connection, unless it no longer works
-  // and the editor has a usable one: saving assigns that in its place,
-  // exactly as creating does.
+  // Editing shows only the existing agent assignment; an available personal
+  // connection is a candidate until the editor chooses to assign it.
   const displayed = displayedConnections(connections);
   // The server whose connection status is being refreshed, and then the one
   // whose refreshed status is told once it is read. One refresh re-reads
@@ -142,7 +158,7 @@ export function StepAuthentication({
     <div className="space-y-5">
       {showHeader && (
         <WizardStepHeader
-          title="MCP sign-in"
+          title="Server sign-in"
           description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
         />
       )}
@@ -215,9 +231,11 @@ export function StepAuthentication({
                     ? "Checking connection…"
                     : connection.status === "error"
                       ? "Could not check connection"
-                      : connection.status === "forbidden"
-                        ? "Connection not visible to you"
-                        : "Requires connection";
+                      : connection.status === "setup-required"
+                        ? "Upstream setup required"
+                        : connection.status === "forbidden"
+                          ? "Connection not visible to you"
+                          : "Requires connection";
           const missingSignIns = sharedChosen
             ? null
             : missingSignInsSentence(server, connection);
@@ -250,7 +268,7 @@ export function StepAuthentication({
                       />
                     )}
                     <Badge
-                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // Blue, like the step's Server sign-in arrow: each pill
                       // says how Speakeasy signs in to that server.
                       variant={
                         sharedChosen
@@ -384,30 +402,46 @@ export function StepAuthentication({
                           : "Use your connection"}
                       </Button>
                     )}
-                    {server.connectUrl && !assignable && (
-                      <Button
-                        size="xs"
-                        variant={expired || !session ? "primary" : "secondary"}
-                        onClick={() => {
-                          const url = new URL(server.connectUrl!);
-                          if (session?.remoteSessionClientId) {
-                            url.searchParams.set(
-                              "reauthenticate_client_id",
-                              session.remoteSessionClientId,
-                            );
-                          }
-                          if (oauth.open(url.toString()))
-                            connecting.current = server.id;
-                        }}
-                      >
-                        {session ? "Reauthenticate" : "Connect account"}
-                      </Button>
-                    )}
-                    {!server.connectUrl && !session && !assignable && (
+                    {connection?.status === "setup-required" && (
                       <Text small muted>
-                        Connection setup is unavailable for this server.
+                        Finish configuring this server’s upstream credentials.{" "}
+                        <IdentityRepairLink server={server} />
                       </Text>
                     )}
+                    {connection?.status !== "setup-required" &&
+                      connection?.status !== "error" &&
+                      connection?.status !== "checking" &&
+                      connection &&
+                      !assignable &&
+                      server.connectUrl && (
+                        <Button
+                          size="xs"
+                          variant={
+                            expired || !session ? "primary" : "secondary"
+                          }
+                          onClick={() => {
+                            const url = new URL(server.connectUrl!);
+                            if (session?.remoteSessionClientId) {
+                              url.searchParams.set(
+                                "reauthenticate_client_id",
+                                session.remoteSessionClientId,
+                              );
+                            }
+                            if (oauth.open(url.toString()))
+                              connecting.current = server.id;
+                          }}
+                        >
+                          {session ? "Reauthenticate" : "Connect account"}
+                        </Button>
+                      )}
+                    {connection?.status !== "setup-required" &&
+                      !server.connectUrl &&
+                      !session &&
+                      !assignable && (
+                        <Text small muted>
+                          Connection setup is unavailable for this server.
+                        </Text>
+                      )}
                     <Button
                       variant="tertiary"
                       size="sm"

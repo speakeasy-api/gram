@@ -412,14 +412,19 @@ trackedFiles:
   src/funcs/mcpConnectionHealthGetAttemptCounts.ts: {}
   src/funcs/mcpConnectionHealthGetSessionActivity.ts: {}
   src/funcs/mcpConnectionHealthGetSignInSummary.ts: {}
+  src/funcs/mcpConnectionHealthGetSuspectedProblem.ts: {}
   src/funcs/mcpConnectionHealthListAttempts.ts: {}
   src/funcs/mcpConnectionHealthListDeniedClients.ts: {}
+  src/funcs/mcpConnectionHealthListSuspectedProblems.ts: {}
   src/funcs/mcpEndpointsCheckSlugAvailability.ts: {}
   src/funcs/mcpEndpointsCreate.ts: {}
   src/funcs/mcpEndpointsDelete.ts: {}
   src/funcs/mcpEndpointsGet.ts: {}
   src/funcs/mcpEndpointsList.ts: {}
   src/funcs/mcpEndpointsUpdate.ts: {}
+  src/funcs/mcpFeedbackGetSettings.ts: {}
+  src/funcs/mcpFeedbackList.ts: {}
+  src/funcs/mcpFeedbackUpdateSettings.ts: {}
   src/funcs/mcpMetadataExport.ts: {}
   src/funcs/mcpMetadataGet.ts: {}
   src/funcs/mcpMetadataSet.ts: {}
@@ -1405,6 +1410,8 @@ trackedFiles:
   src/models/components/getsigninsummaryrequestbody.ts: {}
   src/models/components/getskillresult.ts: {}
   src/models/components/getstripecheckoutstatusresponsebody.ts: {}
+  src/models/components/getsuspectedproblemrequestbody.ts: {}
+  src/models/components/getsuspectedproblemresult.ts: {}
   src/models/components/gettoolusageclientsresult.ts: {}
   src/models/components/gettoolusageclienttoolbreakdownresult.ts: {}
   src/models/components/gettoolusagefilteroptionspayload.ts: {}
@@ -1602,6 +1609,7 @@ trackedFiles:
   src/models/components/listkeysresult.ts: {}
   src/models/components/listmanageddevicesresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
+  src/models/components/listmcpfeedbackresult.ts: {}
   src/models/components/listmcpplatformtoolsetsresult.ts: {}
   src/models/components/listmcpserverauthclientchoicesresponsebody.ts: {}
   src/models/components/listmcpserversresult.ts: {}
@@ -1666,6 +1674,8 @@ trackedFiles:
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listspendruleeventsresult.ts: {}
   src/models/components/listspendrulesresult.ts: {}
+  src/models/components/listsuspectedproblemsrequestbody.ts: {}
+  src/models/components/listsuspectedproblemsresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtemporarygrantsresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
@@ -1716,6 +1726,11 @@ trackedFiles:
   src/models/components/mcpexportauthentication.ts: {}
   src/models/components/mcpexportauthheader.ts: {}
   src/models/components/mcpexporttool.ts: {}
+  src/models/components/mcpfeedback.ts: {}
+  src/models/components/mcpfeedbackcounts.ts: {}
+  src/models/components/mcpfeedbacksettings.ts: {}
+  src/models/components/mcpfeedbacktool.ts: {}
+  src/models/components/mcpfeedbacktoolcount.ts: {}
   src/models/components/mcpmetadata.ts: {}
   src/models/components/mcpnetworktrafficpoint.ts: {}
   src/models/components/mcpregistry.ts: {}
@@ -2142,6 +2157,15 @@ trackedFiles:
   src/models/components/summarizerequestbody.ts: {}
   src/models/components/summarizetoolcallrequestbody.ts: {}
   src/models/components/summarizetoolcallresult.ts: {}
+  src/models/components/suspectedproblem.ts: {}
+  src/models/components/suspectedproblembucket.ts: {}
+  src/models/components/suspectedproblemdetail.ts: {}
+  src/models/components/suspectedproblemfilters.ts: {}
+  src/models/components/suspectedproblemmessage.ts: {}
+  src/models/components/suspectedproblemperson.ts: {}
+  src/models/components/suspectedproblemplace.ts: {}
+  src/models/components/suspectedproblemscope.ts: {}
+  src/models/components/suspectedproblemserver.ts: {}
   src/models/components/switchorgencryptionkeyrequestbody.ts: {}
   src/models/components/syncdirectorygroupsresult.ts: {}
   src/models/components/syncedagentuser.ts: {}
@@ -2261,6 +2285,7 @@ trackedFiles:
   src/models/components/updatemarketplacesettingsrequestbody.ts: {}
   src/models/components/updatemarketplacesettingsresult.ts: {}
   src/models/components/updatemcpendpointform.ts: {}
+  src/models/components/updatemcpfeedbacksettingsform.ts: {}
   src/models/components/updatemcpserverform.ts: {}
   src/models/components/updatememberrolesform.ts: {}
   src/models/components/updatemetamcpmemberform.ts: {}
@@ -2666,6 +2691,7 @@ trackedFiles:
   src/models/operations/getmcpconnectionattempt.ts: {}
   src/models/operations/getmcpconnectionattemptcounts.ts: {}
   src/models/operations/getmcpendpoint.ts: {}
+  src/models/operations/getmcpfeedbacksettings.ts: {}
   src/models/operations/getmcpmetadata.ts: {}
   src/models/operations/getmcpnetworktraffic.ts: {}
   src/models/operations/getmcpserver.ts: {}
@@ -2676,6 +2702,7 @@ trackedFiles:
   src/models/operations/getmcpsessionactivity.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmcpsigninsummary.ts: {}
+  src/models/operations/getmcpsuspectedproblem.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getmetamcpserverusage.ts: {}
   src/models/operations/getmeterusage.ts: {}
@@ -2880,6 +2907,7 @@ trackedFiles:
   src/models/operations/listmcpconnectionattempts.ts: {}
   src/models/operations/listmcpdeniedclients.ts: {}
   src/models/operations/listmcpendpoints.ts: {}
+  src/models/operations/listmcpfeedback.ts: {}
   src/models/operations/listmcpplatformtoolsets.ts: {}
   src/models/operations/listmcpregistries.ts: {}
   src/models/operations/listmcpserverauthclientchoices.ts: {}
@@ -2887,6 +2915,7 @@ trackedFiles:
   src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
   src/models/operations/listmcpservertoolmetadata.ts: {}
+  src/models/operations/listmcpsuspectedproblems.ts: {}
   src/models/operations/listmembers.ts: {}
   src/models/operations/listmetamcpmembers.ts: {}
   src/models/operations/listmetamcpservers.ts: {}
@@ -3204,6 +3233,7 @@ trackedFiles:
   src/models/operations/updatejsonwebkeyset.ts: {}
   src/models/operations/updatemarketplacesettings.ts: {}
   src/models/operations/updatemcpendpoint.ts: {}
+  src/models/operations/updatemcpfeedbacksettings.ts: {}
   src/models/operations/updatemcpserver.ts: {}
   src/models/operations/updatememberroles.ts: {}
   src/models/operations/updatemetamcpmember.ts: {}
@@ -3925,6 +3955,10 @@ trackedFiles:
   src/react-query/mcpDeniedClients.ts: {}
   src/react-query/mcpEndpoints.core.ts: {}
   src/react-query/mcpEndpoints.ts: {}
+  src/react-query/mcpFeedback.core.ts: {}
+  src/react-query/mcpFeedback.ts: {}
+  src/react-query/mcpFeedbackSettings.core.ts: {}
+  src/react-query/mcpFeedbackSettings.ts: {}
   src/react-query/mcpMetadataSet.ts: {}
   src/react-query/mcpRegistriesClearCache.ts: {}
   src/react-query/mcpRegistriesGetServerDetails.core.ts: {}
@@ -3939,6 +3973,8 @@ trackedFiles:
   src/react-query/mcpServers.ts: {}
   src/react-query/mcpSessionActivity.ts: {}
   src/react-query/mcpSignInSummary.ts: {}
+  src/react-query/mcpSuspectedProblem.ts: {}
+  src/react-query/mcpSuspectedProblems.ts: {}
   src/react-query/members.core.ts: {}
   src/react-query/members.ts: {}
   src/react-query/metaMcpMembers.core.ts: {}
@@ -4448,6 +4484,7 @@ trackedFiles:
   src/react-query/updateJsonWebKeySet.ts: {}
   src/react-query/updateMarketplaceSettings.ts: {}
   src/react-query/updateMcpEndpoint.ts: {}
+  src/react-query/updateMcpFeedbackSettings.ts: {}
   src/react-query/updateMcpServer.ts: {}
   src/react-query/updateMemberRoles.ts: {}
   src/react-query/updateMetaMcpMember.ts: {}
@@ -4604,6 +4641,7 @@ trackedFiles:
   src/sdk/mcpapproval.ts: {}
   src/sdk/mcpconnectionhealth.ts: {}
   src/sdk/mcpendpoints.ts: {}
+  src/sdk/mcpfeedback.ts: {}
   src/sdk/mcpmetadata.ts: {}
   src/sdk/mcpregistries.ts: {}
   src/sdk/mcpservers.ts: {}
@@ -8233,6 +8271,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getMcpFeedbackSettings:
+    speakeasy-default-get-mcp-feedback-settings:
+      parameters:
+        query:
+          mcp_server_id: "fd41f744-ed75-4d0d-8231-dcd5629b63db"
+      responses:
+        "200":
+          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": false, "mcp_server_id": "3b93be06-4aca-44b8-96d7-376f59a52eb2", "tool": {"description": "pfft shrilly fooey useless uselessly", "input_schema": "{key: 4572659462938067, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}, "version": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getMcpMetadata:
     speakeasy-default-get-mcp-metadata:
       parameters:
@@ -8322,6 +8372,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getMcpSuspectedProblem:
+    speakeasy-default-get-mcp-suspected-problem:
+      requestBody:
+        application/json: {"id": "<id>", "user_session_issuer_id": "b56b4975-49cb-4de0-911d-12ea137e05b3"}
+      responses:
+        "200":
+          application/json: {"found": true, "logging_enabled": true, "viewer_scope": "own"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getMetaMcpServer:
     speakeasy-default-get-meta-mcp-server:
       parameters:
@@ -10840,6 +10901,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listMcpFeedback:
+    speakeasy-default-list-mcp-feedback:
+      parameters:
+        query:
+          mcp_server_id: "aef78ea8-e90d-470f-8742-62d4c6e85dc5"
+          limit: 20
+      responses:
+        "200":
+          application/json: {"counts": {"blocked": 42458, "cosmetic": 574634, "degraded": 924894, "total": 683879, "unspecified": 773226, "window_end": "2026-07-23T17:50:24.538Z", "window_start": "2024-04-25T11:04:29.585Z"}, "feedback": [], "tools": [{"blocked_count": 204576, "feedback_count": 408033, "tool_name": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listMcpServerAuthClientChoices:
     speakeasy-default-list-mcp-server-auth-client-choices:
       parameters:
@@ -10891,6 +10965,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMcpSuspectedProblems:
+    speakeasy-default-list-mcp-suspected-problems:
+      requestBody:
+        application/json: {"user_session_issuer_id": "3a5c8124-c801-4f27-8efc-d863b859804a"}
+      responses:
+        "200":
+          application/json: {"logging_enabled": false, "problems": [], "problems_total": 218600, "viewer_scope": "own"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listMembers:
     speakeasy-default-list-members:
       responses:
@@ -14648,6 +14733,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2026-11-09T02:02:44.350Z", "id": "09091fa5-6078-49bc-bf27-5523608dd9ba", "is_domain_root": true, "project_id": "6f2e4b1f-7ae3-4209-bf20-d630b432a5ac", "slug": "<value>", "updated_at": "2024-06-04T09:09:41.724Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateMcpFeedbackSettings:
+    speakeasy-default-update-mcp-feedback-settings:
+      requestBody:
+        application/json: {"enabled": true, "mcp_server_id": "2fbc0c99-6977-48dd-8802-a2f82889951f"}
+      responses:
+        "200":
+          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": true, "mcp_server_id": "f224ec1d-83ac-4e6e-b74d-87e9db1c1597", "tool": {"description": "badly that aboard tousle", "input_schema": "{key: 5150263157313882, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}, "version": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

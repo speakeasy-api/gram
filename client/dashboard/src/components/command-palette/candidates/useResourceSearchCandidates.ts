@@ -293,10 +293,11 @@ export function mapResourceSearchItems(
     const mcpSignIn: LauncherCandidate = {
       ...identity,
       id: `agent-mcp-sign-in:${item.id}`,
-      title: `${item.name} · MCP sign-in`,
+      title: `${item.name} · Server sign-in`,
       detail: "Change MCP servers · reconnect expired sign-ins",
       keywords: [
         ...identity.keywords,
+        "mcp sign-in",
         "mcp",
         "servers",
         "sign-in",

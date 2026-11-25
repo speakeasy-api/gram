@@ -176,7 +176,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return err
 			}
 			defer lockDB.Close()
-			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, config, publicationRequester)
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, orgEncryption.NetworkIngressCredentials(logger, encryptionClient), orgEncryption.Service, orgEncryption.Provisioner, config, publicationRequester)
 			if err != nil {
 				return err
 			}

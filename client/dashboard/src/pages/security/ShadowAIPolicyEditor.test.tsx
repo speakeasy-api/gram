@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -19,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   mutateCreate: vi.fn<(variables: unknown) => Promise<{ id: string }>>(),
   mutateUpdate: vi.fn<(variables: unknown) => Promise<unknown>>(),
   setDecision: vi.fn<(variables: unknown) => Promise<unknown>>(),
+  decisionOptions: undefined as
+    | { onError?: (error: Error) => void }
+    | undefined,
   step: null as string | null,
 }));
 
@@ -59,7 +63,12 @@ vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/setAIToolDecision.js", () => ({
-  useSetAIToolDecisionMutation: () => ({ mutateAsync: mocks.setDecision }),
+  useSetAIToolDecisionMutation: (options?: {
+    onError?: (error: Error) => void;
+  }) => {
+    mocks.decisionOptions = options;
+    return { mutateAsync: mocks.setDecision };
+  },
 }));
 
 vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
@@ -227,18 +236,56 @@ describe("ShadowAIPolicyEditor", () => {
     await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
   });
 
-  it("names the target whose decision failed and withholds the success toast", async () => {
-    mocks.setDecision.mockRejectedValue(new Error("boom"));
+  const httpError = (status: number) =>
+    new GramError("failed", {
+      response: new Response("", { status }),
+      request: new Request("http://localhost/rpc"),
+      body: "",
+    });
+
+  it.each([
+    [
+      "an unavailable catalog",
+      httpError(503),
+      "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before. Try again in a few minutes.",
+    ],
+    [
+      "a rate-limited request",
+      httpError(429),
+      "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before. Try again in a few minutes.",
+    ],
+    [
+      "a refused request",
+      httpError(400),
+      "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before.",
+    ],
+    [
+      "an unknown outcome",
+      new Error("network down"),
+      "Shadow AI policy created, but Speakeasy could not confirm whether the decision for Cursor was saved. Refresh the page to see the current decision.",
+    ],
+  ])(
+    "names the target and says what happened for %s",
+    async (_case, error, message) => {
+      mocks.setDecision.mockRejectedValue(error);
+      renderEditor(null);
+
+      fireEvent.click(within(cursorControl()).getByText("Deny"));
+      fireEvent.click(screen.getByText("Create policy"));
+
+      await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith(message);
+      expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+    },
+  );
+
+  it("replaces the generic error toast for a failed decision", () => {
     renderEditor(null);
 
-    fireEvent.click(within(cursorControl()).getByText("Deny"));
-    fireEvent.click(screen.getByText("Create policy"));
+    mocks.decisionOptions?.onError?.(new Error("boom"));
 
-    await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
-    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
-      expect.stringContaining("the decision for Cursor could not be saved"),
-    );
-    expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+    expect(mocks.decisionOptions?.onError).toBeTypeOf("function");
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 
   it("writes nothing until the policy is created", () => {

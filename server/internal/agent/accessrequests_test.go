@@ -16,6 +16,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,7 +40,7 @@ func attachAccessRequests(t *testing.T, ti *testInstance, enabled bool) {
 	orgHosts := orghost.New(orghost.Config{ServerURL: siteURL, SiteURL: siteURL})
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagAccessRequests, ti.orgID, enabled)
-	service := access.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, ti.sessions, nil, ti.authz, audit.NewLogger(), email.NewService(logger, nil, email.NewTemplateIDs(nil), false), orgHosts, nil).
+	service := access.NewService(aivendorstest.NewStore(), logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, ti.sessions, nil, ti.authz, audit.NewLogger(), email.NewService(logger, nil, email.NewTemplateIDs(nil), false), orgHosts, nil).
 		WithFeatures(flags)
 	ti.service.WithAccessRequests(service)
 }

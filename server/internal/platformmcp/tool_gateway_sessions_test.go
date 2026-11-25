@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	gatewaygen "github.com/speakeasy-api/gram/server/gen/gateway_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -107,6 +108,7 @@ func TestGatewaySessionToolContract(t *testing.T) {
 	adminCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
 	memberCtx := authz.GrantsToContext(t.Context(), []authz.Grant{authz.NewGrant(authz.ScopeOrgRead, principal.OrganizationID)})
 	tools := []*mcp.Tool{{Name: listGatewaySessionsToolName}}
+	live.withAICatalog(aivendorstest.NewStore())
 	require.Len(t, live.FilterExternalTools(adminCtx, principal, tools), 1)
 	require.Empty(t, live.FilterExternalTools(memberCtx, principal, tools))
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 )
@@ -94,7 +95,7 @@ func TestTallyRowsFoldsNamesSharedByTooFewOrganizations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			counts := newTally(staff.NewOrganization("org-staff"))
+			counts := newTally(aivendors.CompiledSnapshot(), staff.NewOrganization("org-staff"))
 			ended := mcpconnectionattempts.Ending{Step: "inbound_token", Outcome: mcpconnectionattempts.OutcomeConnected, Reason: "", At: BackfillStart}
 			for _, a := range tt.attempts {
 				summary := mcpconnectionattempts.AttemptSummary{OrganizationID: a.org, ProviderHost: a.provider, AppKey: a.app, ClientFamily: a.client, Weight: 1}

@@ -62,6 +62,7 @@ import (
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpconnectionhealthc "github.com/speakeasy-api/gram/server/gen/http/mcp_connection_health/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
+	mcpfeedbackc "github.com/speakeasy-api/gram/server/gen/http/mcp_feedback/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
@@ -162,8 +163,9 @@ func UsageCommands() []string {
 		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
-		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients)",
+		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients|list-suspected-problems|get-suspected-problem)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
+		"mcp-feedback (get-settings|update-settings|list)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|set-setup-guide-completed|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
@@ -208,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -1920,6 +1922,18 @@ func ParseEndpoint(
 		mcpConnectionHealthListDeniedClientsApikeyTokenFlag      = mcpConnectionHealthListDeniedClientsFlags.String("apikey-token", "", "")
 		mcpConnectionHealthListDeniedClientsProjectSlugInputFlag = mcpConnectionHealthListDeniedClientsFlags.String("project-slug-input", "", "")
 
+		mcpConnectionHealthListSuspectedProblemsFlags                = flag.NewFlagSet("list-suspected-problems", flag.ExitOnError)
+		mcpConnectionHealthListSuspectedProblemsBodyFlag             = mcpConnectionHealthListSuspectedProblemsFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthListSuspectedProblemsSessionTokenFlag     = mcpConnectionHealthListSuspectedProblemsFlags.String("session-token", "", "")
+		mcpConnectionHealthListSuspectedProblemsApikeyTokenFlag      = mcpConnectionHealthListSuspectedProblemsFlags.String("apikey-token", "", "")
+		mcpConnectionHealthListSuspectedProblemsProjectSlugInputFlag = mcpConnectionHealthListSuspectedProblemsFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetSuspectedProblemFlags                = flag.NewFlagSet("get-suspected-problem", flag.ExitOnError)
+		mcpConnectionHealthGetSuspectedProblemBodyFlag             = mcpConnectionHealthGetSuspectedProblemFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetSuspectedProblemSessionTokenFlag     = mcpConnectionHealthGetSuspectedProblemFlags.String("session-token", "", "")
+		mcpConnectionHealthGetSuspectedProblemApikeyTokenFlag      = mcpConnectionHealthGetSuspectedProblemFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetSuspectedProblemProjectSlugInputFlag = mcpConnectionHealthGetSuspectedProblemFlags.String("project-slug-input", "", "")
+
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
 		mcpEndpointsCreateMcpEndpointFlags                = flag.NewFlagSet("create-mcp-endpoint", flag.ExitOnError)
@@ -1962,6 +1976,30 @@ func ParseEndpoint(
 		mcpEndpointsDeleteMcpEndpointSessionTokenFlag     = mcpEndpointsDeleteMcpEndpointFlags.String("session-token", "", "")
 		mcpEndpointsDeleteMcpEndpointApikeyTokenFlag      = mcpEndpointsDeleteMcpEndpointFlags.String("apikey-token", "", "")
 		mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag = mcpEndpointsDeleteMcpEndpointFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackFlags = flag.NewFlagSet("mcp-feedback", flag.ContinueOnError)
+
+		mcpFeedbackGetSettingsFlags                = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		mcpFeedbackGetSettingsMcpServerIDFlag      = mcpFeedbackGetSettingsFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpFeedbackGetSettingsSessionTokenFlag     = mcpFeedbackGetSettingsFlags.String("session-token", "", "")
+		mcpFeedbackGetSettingsApikeyTokenFlag      = mcpFeedbackGetSettingsFlags.String("apikey-token", "", "")
+		mcpFeedbackGetSettingsProjectSlugInputFlag = mcpFeedbackGetSettingsFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackUpdateSettingsFlags                = flag.NewFlagSet("update-settings", flag.ExitOnError)
+		mcpFeedbackUpdateSettingsBodyFlag             = mcpFeedbackUpdateSettingsFlags.String("body", "REQUIRED", "")
+		mcpFeedbackUpdateSettingsSessionTokenFlag     = mcpFeedbackUpdateSettingsFlags.String("session-token", "", "")
+		mcpFeedbackUpdateSettingsApikeyTokenFlag      = mcpFeedbackUpdateSettingsFlags.String("apikey-token", "", "")
+		mcpFeedbackUpdateSettingsProjectSlugInputFlag = mcpFeedbackUpdateSettingsFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		mcpFeedbackListMcpServerIDFlag      = mcpFeedbackListFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpFeedbackListSeverityFlag         = mcpFeedbackListFlags.String("severity", "", "")
+		mcpFeedbackListToolNameFlag         = mcpFeedbackListFlags.String("tool-name", "", "")
+		mcpFeedbackListCursorFlag           = mcpFeedbackListFlags.String("cursor", "", "")
+		mcpFeedbackListLimitFlag            = mcpFeedbackListFlags.String("limit", "20", "")
+		mcpFeedbackListSessionTokenFlag     = mcpFeedbackListFlags.String("session-token", "", "")
+		mcpFeedbackListApikeyTokenFlag      = mcpFeedbackListFlags.String("apikey-token", "", "")
+		mcpFeedbackListProjectSlugInputFlag = mcpFeedbackListFlags.String("project-slug-input", "", "")
 
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
@@ -5126,6 +5164,40 @@ func ParseEndpoint(
 		adminClearOrganizationHooksRolloutBodyFlag              = adminClearOrganizationHooksRolloutFlags.String("body", "REQUIRED", "")
 		adminClearOrganizationHooksRolloutAdminSessionTokenFlag = adminClearOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
 
+		adminListTailscaleOAuthMigrationFlags                 = flag.NewFlagSet("list-tailscaleoauth-migration", flag.ExitOnError)
+		adminListTailscaleOAuthMigrationAdminSessionTokenFlag = adminListTailscaleOAuthMigrationFlags.String("admin-session-token", "", "")
+
+		adminRunTailscaleOAuthMigrationStepFlags                 = flag.NewFlagSet("run-tailscaleoauth-migration-step", flag.ExitOnError)
+		adminRunTailscaleOAuthMigrationStepBodyFlag              = adminRunTailscaleOAuthMigrationStepFlags.String("body", "REQUIRED", "")
+		adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag = adminRunTailscaleOAuthMigrationStepFlags.String("admin-session-token", "", "")
+
+		adminGetOrganizationEncryptionFlags                 = flag.NewFlagSet("get-organization-encryption", flag.ExitOnError)
+		adminGetOrganizationEncryptionOrganizationIDFlag    = adminGetOrganizationEncryptionFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationEncryptionAdminSessionTokenFlag = adminGetOrganizationEncryptionFlags.String("admin-session-token", "", "")
+
+		adminListOrganizationEncryptionTransitionsFlags                 = flag.NewFlagSet("list-organization-encryption-transitions", flag.ExitOnError)
+		adminListOrganizationEncryptionTransitionsUseCaseFlag           = adminListOrganizationEncryptionTransitionsFlags.String("use-case", "", "")
+		adminListOrganizationEncryptionTransitionsStateFlag             = adminListOrganizationEncryptionTransitionsFlags.String("state", "", "")
+		adminListOrganizationEncryptionTransitionsLimitFlag             = adminListOrganizationEncryptionTransitionsFlags.String("limit", "50", "")
+		adminListOrganizationEncryptionTransitionsOffsetFlag            = adminListOrganizationEncryptionTransitionsFlags.String("offset", "", "")
+		adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag = adminListOrganizationEncryptionTransitionsFlags.String("admin-session-token", "", "")
+
+		adminEnrollOrganizationEncryptionFlags                 = flag.NewFlagSet("enroll-organization-encryption", flag.ExitOnError)
+		adminEnrollOrganizationEncryptionBodyFlag              = adminEnrollOrganizationEncryptionFlags.String("body", "REQUIRED", "")
+		adminEnrollOrganizationEncryptionAdminSessionTokenFlag = adminEnrollOrganizationEncryptionFlags.String("admin-session-token", "", "")
+
+		adminRollbackOrganizationEncryptionFlags                 = flag.NewFlagSet("rollback-organization-encryption", flag.ExitOnError)
+		adminRollbackOrganizationEncryptionBodyFlag              = adminRollbackOrganizationEncryptionFlags.String("body", "REQUIRED", "")
+		adminRollbackOrganizationEncryptionAdminSessionTokenFlag = adminRollbackOrganizationEncryptionFlags.String("admin-session-token", "", "")
+
+		adminRunOrganizationEncryptionFlags                 = flag.NewFlagSet("run-organization-encryption", flag.ExitOnError)
+		adminRunOrganizationEncryptionBodyFlag              = adminRunOrganizationEncryptionFlags.String("body", "REQUIRED", "")
+		adminRunOrganizationEncryptionAdminSessionTokenFlag = adminRunOrganizationEncryptionFlags.String("admin-session-token", "", "")
+
+		adminFinalizeOrganizationEncryptionFlags                 = flag.NewFlagSet("finalize-organization-encryption", flag.ExitOnError)
+		adminFinalizeOrganizationEncryptionBodyFlag              = adminFinalizeOrganizationEncryptionFlags.String("body", "REQUIRED", "")
+		adminFinalizeOrganizationEncryptionAdminSessionTokenFlag = adminFinalizeOrganizationEncryptionFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsCreateUserSessionClientFlags                = flag.NewFlagSet("create-user-session-client", flag.ExitOnError)
@@ -6169,6 +6241,8 @@ func ParseEndpoint(
 	mcpConnectionHealthGetSignInSummaryFlags.Usage = mcpConnectionHealthGetSignInSummaryUsage
 	mcpConnectionHealthGetSessionActivityFlags.Usage = mcpConnectionHealthGetSessionActivityUsage
 	mcpConnectionHealthListDeniedClientsFlags.Usage = mcpConnectionHealthListDeniedClientsUsage
+	mcpConnectionHealthListSuspectedProblemsFlags.Usage = mcpConnectionHealthListSuspectedProblemsUsage
+	mcpConnectionHealthGetSuspectedProblemFlags.Usage = mcpConnectionHealthGetSuspectedProblemUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
@@ -6177,6 +6251,11 @@ func ParseEndpoint(
 	mcpEndpointsUpdateMcpEndpointFlags.Usage = mcpEndpointsUpdateMcpEndpointUsage
 	mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.Usage = mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage
 	mcpEndpointsDeleteMcpEndpointFlags.Usage = mcpEndpointsDeleteMcpEndpointUsage
+
+	mcpFeedbackFlags.Usage = mcpFeedbackUsage
+	mcpFeedbackGetSettingsFlags.Usage = mcpFeedbackGetSettingsUsage
+	mcpFeedbackUpdateSettingsFlags.Usage = mcpFeedbackUpdateSettingsUsage
+	mcpFeedbackListFlags.Usage = mcpFeedbackListUsage
 
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
@@ -6857,6 +6936,14 @@ func ParseEndpoint(
 	adminGetOrganizationHooksRolloutFlags.Usage = adminGetOrganizationHooksRolloutUsage
 	adminSetOrganizationHooksRolloutFlags.Usage = adminSetOrganizationHooksRolloutUsage
 	adminClearOrganizationHooksRolloutFlags.Usage = adminClearOrganizationHooksRolloutUsage
+	adminListTailscaleOAuthMigrationFlags.Usage = adminListTailscaleOAuthMigrationUsage
+	adminRunTailscaleOAuthMigrationStepFlags.Usage = adminRunTailscaleOAuthMigrationStepUsage
+	adminGetOrganizationEncryptionFlags.Usage = adminGetOrganizationEncryptionUsage
+	adminListOrganizationEncryptionTransitionsFlags.Usage = adminListOrganizationEncryptionTransitionsUsage
+	adminEnrollOrganizationEncryptionFlags.Usage = adminEnrollOrganizationEncryptionUsage
+	adminRollbackOrganizationEncryptionFlags.Usage = adminRollbackOrganizationEncryptionUsage
+	adminRunOrganizationEncryptionFlags.Usage = adminRunOrganizationEncryptionUsage
+	adminFinalizeOrganizationEncryptionFlags.Usage = adminFinalizeOrganizationEncryptionUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsCreateUserSessionClientFlags.Usage = userSessionClientsCreateUserSessionClientUsage
@@ -7097,6 +7184,8 @@ func ParseEndpoint(
 			svcf = mcpConnectionHealthFlags
 		case "mcp-endpoints":
 			svcf = mcpEndpointsFlags
+		case "mcp-feedback":
+			svcf = mcpFeedbackFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
 		case "registry-discovery":
@@ -8320,6 +8409,12 @@ func ParseEndpoint(
 			case "list-denied-clients":
 				epf = mcpConnectionHealthListDeniedClientsFlags
 
+			case "list-suspected-problems":
+				epf = mcpConnectionHealthListSuspectedProblemsFlags
+
+			case "get-suspected-problem":
+				epf = mcpConnectionHealthGetSuspectedProblemFlags
+
 			}
 
 		case "mcp-endpoints":
@@ -8341,6 +8436,19 @@ func ParseEndpoint(
 
 			case "delete-mcp-endpoint":
 				epf = mcpEndpointsDeleteMcpEndpointFlags
+
+			}
+
+		case "mcp-feedback":
+			switch epn {
+			case "get-settings":
+				epf = mcpFeedbackGetSettingsFlags
+
+			case "update-settings":
+				epf = mcpFeedbackUpdateSettingsFlags
+
+			case "list":
+				epf = mcpFeedbackListFlags
 
 			}
 
@@ -10292,6 +10400,30 @@ func ParseEndpoint(
 			case "clear-organization-hooks-rollout":
 				epf = adminClearOrganizationHooksRolloutFlags
 
+			case "list-tailscaleoauth-migration":
+				epf = adminListTailscaleOAuthMigrationFlags
+
+			case "run-tailscaleoauth-migration-step":
+				epf = adminRunTailscaleOAuthMigrationStepFlags
+
+			case "get-organization-encryption":
+				epf = adminGetOrganizationEncryptionFlags
+
+			case "list-organization-encryption-transitions":
+				epf = adminListOrganizationEncryptionTransitionsFlags
+
+			case "enroll-organization-encryption":
+				epf = adminEnrollOrganizationEncryptionFlags
+
+			case "rollback-organization-encryption":
+				epf = adminRollbackOrganizationEncryptionFlags
+
+			case "run-organization-encryption":
+				epf = adminRunOrganizationEncryptionFlags
+
+			case "finalize-organization-encryption":
+				epf = adminFinalizeOrganizationEncryptionFlags
+
 			}
 
 		case "user-session-clients":
@@ -11820,6 +11952,12 @@ func ParseEndpoint(
 			case "list-denied-clients":
 				endpoint = c.ListDeniedClients()
 				data, err = mcpconnectionhealthc.BuildListDeniedClientsPayload(*mcpConnectionHealthListDeniedClientsBodyFlag, *mcpConnectionHealthListDeniedClientsSessionTokenFlag, *mcpConnectionHealthListDeniedClientsApikeyTokenFlag, *mcpConnectionHealthListDeniedClientsProjectSlugInputFlag)
+			case "list-suspected-problems":
+				endpoint = c.ListSuspectedProblems()
+				data, err = mcpconnectionhealthc.BuildListSuspectedProblemsPayload(*mcpConnectionHealthListSuspectedProblemsBodyFlag, *mcpConnectionHealthListSuspectedProblemsSessionTokenFlag, *mcpConnectionHealthListSuspectedProblemsApikeyTokenFlag, *mcpConnectionHealthListSuspectedProblemsProjectSlugInputFlag)
+			case "get-suspected-problem":
+				endpoint = c.GetSuspectedProblem()
+				data, err = mcpconnectionhealthc.BuildGetSuspectedProblemPayload(*mcpConnectionHealthGetSuspectedProblemBodyFlag, *mcpConnectionHealthGetSuspectedProblemSessionTokenFlag, *mcpConnectionHealthGetSuspectedProblemApikeyTokenFlag, *mcpConnectionHealthGetSuspectedProblemProjectSlugInputFlag)
 			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11842,6 +11980,19 @@ func ParseEndpoint(
 			case "delete-mcp-endpoint":
 				endpoint = c.DeleteMcpEndpoint()
 				data, err = mcpendpointsc.BuildDeleteMcpEndpointPayload(*mcpEndpointsDeleteMcpEndpointIDFlag, *mcpEndpointsDeleteMcpEndpointSessionTokenFlag, *mcpEndpointsDeleteMcpEndpointApikeyTokenFlag, *mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag)
+			}
+		case "mcp-feedback":
+			c := mcpfeedbackc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = mcpfeedbackc.BuildGetSettingsPayload(*mcpFeedbackGetSettingsMcpServerIDFlag, *mcpFeedbackGetSettingsSessionTokenFlag, *mcpFeedbackGetSettingsApikeyTokenFlag, *mcpFeedbackGetSettingsProjectSlugInputFlag)
+			case "update-settings":
+				endpoint = c.UpdateSettings()
+				data, err = mcpfeedbackc.BuildUpdateSettingsPayload(*mcpFeedbackUpdateSettingsBodyFlag, *mcpFeedbackUpdateSettingsSessionTokenFlag, *mcpFeedbackUpdateSettingsApikeyTokenFlag, *mcpFeedbackUpdateSettingsProjectSlugInputFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = mcpfeedbackc.BuildListPayload(*mcpFeedbackListMcpServerIDFlag, *mcpFeedbackListSeverityFlag, *mcpFeedbackListToolNameFlag, *mcpFeedbackListCursorFlag, *mcpFeedbackListLimitFlag, *mcpFeedbackListSessionTokenFlag, *mcpFeedbackListApikeyTokenFlag, *mcpFeedbackListProjectSlugInputFlag)
 			}
 		case "mcp-metadata":
 			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13806,6 +13957,30 @@ func ParseEndpoint(
 			case "clear-organization-hooks-rollout":
 				endpoint = c.ClearOrganizationHooksRollout()
 				data, err = adminc.BuildClearOrganizationHooksRolloutPayload(*adminClearOrganizationHooksRolloutBodyFlag, *adminClearOrganizationHooksRolloutAdminSessionTokenFlag)
+			case "list-tailscaleoauth-migration":
+				endpoint = c.ListTailscaleOAuthMigration()
+				data, err = adminc.BuildListTailscaleOAuthMigrationPayload(*adminListTailscaleOAuthMigrationAdminSessionTokenFlag)
+			case "run-tailscaleoauth-migration-step":
+				endpoint = c.RunTailscaleOAuthMigrationStep()
+				data, err = adminc.BuildRunTailscaleOAuthMigrationStepPayload(*adminRunTailscaleOAuthMigrationStepBodyFlag, *adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag)
+			case "get-organization-encryption":
+				endpoint = c.GetOrganizationEncryption()
+				data, err = adminc.BuildGetOrganizationEncryptionPayload(*adminGetOrganizationEncryptionOrganizationIDFlag, *adminGetOrganizationEncryptionAdminSessionTokenFlag)
+			case "list-organization-encryption-transitions":
+				endpoint = c.ListOrganizationEncryptionTransitions()
+				data, err = adminc.BuildListOrganizationEncryptionTransitionsPayload(*adminListOrganizationEncryptionTransitionsUseCaseFlag, *adminListOrganizationEncryptionTransitionsStateFlag, *adminListOrganizationEncryptionTransitionsLimitFlag, *adminListOrganizationEncryptionTransitionsOffsetFlag, *adminListOrganizationEncryptionTransitionsAdminSessionTokenFlag)
+			case "enroll-organization-encryption":
+				endpoint = c.EnrollOrganizationEncryption()
+				data, err = adminc.BuildEnrollOrganizationEncryptionPayload(*adminEnrollOrganizationEncryptionBodyFlag, *adminEnrollOrganizationEncryptionAdminSessionTokenFlag)
+			case "rollback-organization-encryption":
+				endpoint = c.RollbackOrganizationEncryption()
+				data, err = adminc.BuildRollbackOrganizationEncryptionPayload(*adminRollbackOrganizationEncryptionBodyFlag, *adminRollbackOrganizationEncryptionAdminSessionTokenFlag)
+			case "run-organization-encryption":
+				endpoint = c.RunOrganizationEncryption()
+				data, err = adminc.BuildRunOrganizationEncryptionPayload(*adminRunOrganizationEncryptionBodyFlag, *adminRunOrganizationEncryptionAdminSessionTokenFlag)
+			case "finalize-organization-encryption":
+				endpoint = c.FinalizeOrganizationEncryption()
+				data, err = adminc.BuildFinalizeOrganizationEncryptionPayload(*adminFinalizeOrganizationEncryptionBodyFlag, *adminFinalizeOrganizationEncryptionAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -21687,6 +21862,8 @@ func mcpConnectionHealthUsage() {
 	fmt.Fprintln(os.Stderr, `    get-sign-in-summary: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.`)
 	fmt.Fprintln(os.Stderr, `    get-session-activity: Count a provider's active sessions per day and report the average session length.`)
 	fmt.Fprintln(os.Stderr, `    list-denied-clients: List apps refused at sign-in through a provider, with the reason and the last time.`)
+	fmt.Fprintln(os.Stderr, `    list-suspected-problems: List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `    get-suspected-problem: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-connection-health COMMAND --help\n", os.Args[0])
@@ -21833,6 +22010,54 @@ func mcpConnectionHealthListDeniedClientsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-denied-clients --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthListSuspectedProblemsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health list-suspected-problems", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-suspected-problems --body '{\n      \"part\": \"service\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetSuspectedProblemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-suspected-problem", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-suspected-problem --body '{\n      \"id\": \"abc123\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its
@@ -22003,6 +22228,99 @@ func mcpEndpointsDeleteMcpEndpointUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints delete-mcp-endpoint --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpFeedbackUsage displays the usage of the mcp-feedback command and its
+// subcommands.
+func mcpFeedbackUsage() {
+	fmt.Fprintln(os.Stderr, `Managing the feedback tool an MCP server can offer the agents that use it, and reading the feedback they sent.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-feedback COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-settings: Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.`)
+	fmt.Fprintln(os.Stderr, `    update-settings: Switch an MCP server's feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.`)
+	fmt.Fprintln(os.Stderr, `    list: List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-feedback COMMAND --help\n", os.Args[0])
+}
+func mcpFeedbackGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback get-settings --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFeedbackUpdateSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback update-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Switch an MCP server's feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback update-settings --body '{\n      \"enabled\": false,\n      \"expected_version\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFeedbackListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -severity STRING")
+	fmt.Fprint(os.Stderr, " -tool-name STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -severity STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback list --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --severity \"degraded\" --tool-name \"abc123\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpMetadataUsage displays the usage of the mcp-metadata command and its
@@ -33633,7 +33951,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
 	fmt.Fprintln(os.Stderr, `    run-upstreamoauth-migration: Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
 	fmt.Fprintln(os.Stderr, `    enable-upstream-auth-enforcement: Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.`)
-	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
+	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
@@ -33659,6 +33977,14 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
 	fmt.Fprintln(os.Stderr, `    clear-organization-hooks-rollout: Removes an organization's hooks version override so it follows the default pin again.`)
+	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-encryption: Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.`)
+	fmt.Fprintln(os.Stderr, `    list-organization-encryption-transitions: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+	fmt.Fprintln(os.Stderr, `    enroll-organization-encryption: Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.`)
+	fmt.Fprintln(os.Stderr, `    rollback-organization-encryption: Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.`)
+	fmt.Fprintln(os.Stderr, `    run-organization-encryption: Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.`)
+	fmt.Fprintln(os.Stderr, `    finalize-organization-encryption: Moves one organization's use case from dual_write to org_kms, then starts a run that destroys its platform-key copies, including every unreadable value. Irreversible: rollback is no longer possible afterwards. Refused unless no value waits for an organization-key copy, every value is attributed to the organization, a clean verification ran since the last backfill, the use case spent the minimum time in dual_write, the confirmation matches, and the acknowledged unreadable count matches the count when finalize runs.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -35792,7 +36118,7 @@ func adminDisableUpstreamAuthEnforcementUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
+	fmt.Fprintln(os.Stderr, `Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -36299,6 +36625,170 @@ func adminClearOrganizationHooksRolloutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-hooks-rollout --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListTailscaleOAuthMigrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-tailscaleoauth-migration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-tailscaleoauth-migration --admin-session-token \"abc123\"")
+}
+
+func adminRunTailscaleOAuthMigrationStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin run-tailscaleoauth-migration-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-tailscaleoauth-migration-step --body '{\n      \"organization_id\": \"abc123\",\n      \"step\": \"backfill\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationEncryptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-encryption", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reports an organization's encryption configuration and, for each use case that moves to organization keys, its transition state with live counts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-encryption --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListOrganizationEncryptionTransitionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-organization-encryption-transitions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -use-case STRING")
+	fmt.Fprint(os.Stderr, " -state STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -use-case STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-encryption-transitions --use-case \"abc123\" --state \"dual_write\" --limit 2 --offset 1 --admin-session-token \"abc123\"")
+}
+
+func adminEnrollOrganizationEncryptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin enroll-organization-encryption", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Moves one organization's use case from platform_key to dual_write. Provisions the organization's key and data key first and changes nothing if that fails. Each enroll can mint a KMS key, so enroll several organizations one at a time.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin enroll-organization-encryption --body '{\n      \"organization_id\": \"abc123\",\n      \"use_case\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminRollbackOrganizationEncryptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin rollback-organization-encryption", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin rollback-organization-encryption --body '{\n      \"organization_id\": \"abc123\",\n      \"use_case\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminRunOrganizationEncryptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin run-organization-encryption", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-organization-encryption --body '{\n      \"organization_id\": \"abc123\",\n      \"use_case\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminFinalizeOrganizationEncryptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin finalize-organization-encryption", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Moves one organization's use case from dual_write to org_kms, then starts a run that destroys its platform-key copies, including every unreadable value. Irreversible: rollback is no longer possible afterwards. Refused unless no value waits for an organization-key copy, every value is attributed to the organization, a clean verification ran since the last backfill, the use case spent the minimum time in dual_write, the confirmation matches, and the acknowledged unreadable count matches the count when finalize runs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin finalize-organization-encryption --body '{\n      \"acknowledged_unreadable_values\": 1,\n      \"confirmation\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"use_case\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

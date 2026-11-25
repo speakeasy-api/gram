@@ -36,3 +36,13 @@ func GetSessionActivityMcpConnectionHealthPath() string {
 func ListDeniedClientsMcpConnectionHealthPath() string {
 	return "/rpc/mcpConnectionHealth.listDeniedClients"
 }
+
+// ListSuspectedProblemsMcpConnectionHealthPath returns the URL path to the mcpConnectionHealth service listSuspectedProblems HTTP endpoint.
+func ListSuspectedProblemsMcpConnectionHealthPath() string {
+	return "/rpc/mcpConnectionHealth.listSuspectedProblems"
+}
+
+// GetSuspectedProblemMcpConnectionHealthPath returns the URL path to the mcpConnectionHealth service getSuspectedProblem HTTP endpoint.
+func GetSuspectedProblemMcpConnectionHealthPath() string {
+	return "/rpc/mcpConnectionHealth.getSuspectedProblem"
+}

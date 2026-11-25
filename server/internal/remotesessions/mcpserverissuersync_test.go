@@ -382,7 +382,7 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
+		require.NoError(t, testrepo.New(ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{
 			RemoteSessionClientID: clientID,
 			ProjectID:             conv.ToNullUUID(projectID),
 		}))

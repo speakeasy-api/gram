@@ -3,6 +3,14 @@ package feature
 type Flag string
 
 const (
+	// FlagMCPFeedbackExport gates queueing MCP server feedback for the OTLP
+	// data export. Every report is stored either way. Evaluated server-side
+	// with local evaluation when a report is stored, keyed by organization ID
+	// with no groups, so it is targeted by a release condition with no
+	// properties. Fails closed. It holds the export back until every log relay
+	// routes feedback records to the feedback export rather than to telemetry,
+	// and is removed once that is deployed and the flag is at 100%.
+	FlagMCPFeedbackExport Flag = "mcp-feedback-export"
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
 	// FlagToolApprovals gates creating require_approval risk policies (tool
@@ -207,31 +215,10 @@ const (
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 
-	// FlagAuthClientResolver makes the typed auth client resolver
-	// authoritative for an organization's direct proxied servers. Off, the
-	// upstream client choice keeps serving and is the rollback.
-	//
-	// Precondition: the organization's backfill is complete and its choices
-	// are mapped onto auth clients (AIM-595), including the ones issuance
-	// writes. Until then an OAuth choice with no auth client falls back to the
-	// upstream client choice, so the flag only takes effect for mapped
-	// choices. Evaluated
-	// locally with the organization id as the distinct id, so the PostHog flag
-	// must be person-aggregated and match distinct_id in a list of
-	// organization ids.
-	FlagAuthClientResolver Flag = "auth-client-resolver"
-
-	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
-	// the upstream client choice, without acquiring credentials or writing,
-	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
-	// Targeted the same way as FlagAuthClientResolver.
-	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
-
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
-	// records where they disagree, without changing any response. Auth clients
-	// are only evaluated where FlagAuthClientResolver or its shadow is on.
-	// Targeted the same way as FlagAuthClientResolver.
+	// records where they disagree, without changing any response.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
@@ -243,7 +230,7 @@ const (
 	// wherever a request reads the server's associations and no credential
 	// choice governs; elsewhere the request is recorded as a governing choice
 	// or as not having read the associations, and keeps the column.
-	// Targeted the same way as FlagAuthClientResolver.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
 
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
@@ -253,8 +240,7 @@ const (
 	// do not protect owner blocks, so enable it only once every replica reads
 	// them; that release is then the rollback floor. Off, unavailable or
 	// failing, no such grant is written; reading and enforcing existing ones,
-	// and protecting existing blocks, never depend on it. Targeted the same
-	// way as FlagAuthClientResolver.
+	// and protecting existing blocks, never depend on it. Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 
 	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
@@ -269,14 +255,6 @@ const (
 	// full catalogue, because the ChatGPT app directory rejects tools that run
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
-
-	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
-	// person's own MCP servers through list_my_servers, search_my_tools,
-	// describe_tools and execute_tool, which run the organization gateway's
-	// tools as that person, and names those servers in the connection's
-	// instructions. Evaluated server-side on every call with the organization
-	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
-	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
