@@ -145,7 +145,7 @@ func TestReconcileIssuerScopeBatchesEachLivePageByReach(t *testing.T) {
 	require.NoError(t, authclientbackfill.LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
 	require.NoError(t, authclientbackfill.PreflightServerAssociations(t.Context(), tx, f.orgID, affected, untouched))
 	writes := 0
-	skipped, err := ReconcileIssuerScopeInLockedTransaction(t.Context(), observeCredentialBatchWrites{Tx: tx, writes: &writes}, f.orgID, issuer, []uuid.UUID{affected}, moved)
+	skipped, err := ReconcileTypedIssuerScopeInLockedTransaction(t.Context(), observeCredentialBatchWrites{Tx: tx, writes: &writes}, f.orgID, issuer, []uuid.UUID{affected}, moved)
 	require.NoError(t, err)
 	require.Zero(t, skipped)
 	require.Equal(t, 6, writes, "405 lineages need two shared statements per page, not one per lineage")

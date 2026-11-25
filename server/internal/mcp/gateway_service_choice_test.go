@@ -55,7 +55,7 @@ func seedServiceChoiceGateway(t *testing.T, connected int) (context.Context, ser
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil, offers: make(map[uuid.UUID]uuid.UUID), upstream: upstream.url}
 	for i := range connected {
-		registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "service-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+		registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "service-"+uuid.NewString()[:8], "")
 		fx.offers[registration] = seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID, registration, authz.AuthClientTypeRemoteSession)
 		insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "service-token-"+string(rune('a'+i)), upstream.url)
 		fx.services = append(fx.services, registration)
@@ -176,7 +176,7 @@ func TestGatewayConsentIgnoresAPickOutsideTheConnectedServices(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedServiceChoiceGateway(t, 2)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unconnected-"+uuid.NewString()[:8], "", []uuid.UUID{fx.issuerID})
+	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unconnected-"+uuid.NewString()[:8], "")
 	offer := seedConsentAuthOffer(t, ctx, fx.ti, auth.ActiveOrganizationID, *auth.ProjectID, fx.serverID, unconnected, "remote_session")
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
 	fallback := selectedService(t, fx, consentPageWithPicks(t, ctx, fx, stateID, nil))
