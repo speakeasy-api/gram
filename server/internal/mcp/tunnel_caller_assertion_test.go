@@ -104,7 +104,7 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	t.Cleanup(upstream.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
 	subject := urn.NewUserSubject(auth.UserID)
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, "assertion-routing", "", []uuid.UUID{sessionIssuer})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, "assertion-routing", "")
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, auth.ActiveOrganizationID, remoteClient)))
 	typed := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, projectID, serverID, remoteClient, "remote_session", subject)
 	bearer := mintMetaIssuerBearer(t, ti, slug, sessionIssuer, subject, metaServingChoice{organizationID: auth.ActiveOrganizationID, serverID: serverID, clientID: typed})
@@ -292,7 +292,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	require.EqualValues(t, 2, accepted.Load(), "a consent credential must never forward tools/call")
 	// Manual connection verification exercises the SDK discovery, handshake,
 	// list, and detached DELETE paths with the same live consent proof.
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "", []uuid.UUID{sessionIssuer.ID})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "")
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, endpoint.OrganizationID, remoteClient)))
 	seedConsentAuthOffer(t, ctx, ti, endpoint.OrganizationID, projectID, serverID, remoteClient, "remote_session")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sessionIssuer.ID, remoteClient, *state.Subject, "upstream-oauth", resource)

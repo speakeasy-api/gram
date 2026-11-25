@@ -1,7 +1,14 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import type { MintUserSessionRequestBody } from "@gram/client/models/components/mintusersessionrequestbody.js";
-import { useQuery } from "@tanstack/react-query";
+import type { MintUserSessionResponseBody } from "@gram/client/models/components/mintusersessionresponsebody.js";
+import {
+  queryOptions,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 /**
  * The resource a minted JWT's audience binds to. The unified mint RPC takes
@@ -82,50 +89,9 @@ export function useUserSessionToken({
   /** Opt out of the QueryClient error boundary for inline error handling. */
   throwOnError?: false;
 }): UseUserSessionTokenResult {
-  const session = useSession();
-  const ambientProject = useProject();
-  const project = projectOverride ?? ambientProject;
-  const mintMutation = useMintUserSessionMutation();
-
-  const { kind, id } = target;
-  const isIssuerGated = !!userSessionIssuerId;
-  const enabled = !!id && isIssuerGated;
-
-  const query = useQuery({
-    queryKey: [
-      "userSessionToken",
-      kind,
-      project.id,
-      id,
-      userSessionIssuerId,
-      session.user.id,
-      ...(target.kind === "metaMcpServer"
-        ? [target.discoveryMode, target.connectionVersion]
-        : []),
-    ],
-    queryFn: async () => {
-      if (!enabled) return null;
-      const result = await mintMutation.mutateAsync({
-        request: {
-          gramProject: project.id,
-          mintUserSessionRequestBody: mintRequestBody(target),
-        },
-        security: {
-          sessionHeaderGramSession: session.session,
-          projectSlugHeaderGramProject: project.slug,
-        },
-      });
-      return result;
-    },
-    enabled,
-    // The minted JWT is good for ~1h; refresh well before expiry so the
-    // connection always has headroom.
-    staleTime: 1000 * 60 * 45,
-    refetchInterval: 1000 * 60 * 45,
-    refetchOnWindowFocus: false,
-    retry: false,
-    ...(throwOnError === false ? { throwOnError: false } : {}),
-  });
+  const options = useUserSessionTokenOptions(projectOverride);
+  const enabled = !!target.id && !!userSessionIssuerId;
+  const query = useQuery(options(target, userSessionIssuerId, throwOnError));
 
   return {
     // Gate on `enabled` so a non-issuer-gated target never surfaces a token
@@ -139,5 +105,86 @@ export function useUserSessionToken({
     refetch: () => {
       if (enabled) void query.refetch({ cancelRefetch: false });
     },
+  };
+}
+
+type UserSessionTokenOptionsFactory = (
+  target: UserSessionTokenTarget,
+  userSessionIssuerId: string | undefined,
+  throwOnError?: false,
+) => UseQueryOptions<MintUserSessionResponseBody | null>;
+
+// Keep an opaque revision per dashboard cache, shared by all token consumers.
+// A renewed login never reuses the prior session's tokens or exposes its ID in keys.
+const sessionRevisions = new WeakMap<
+  QueryClient,
+  { session: string; id: string }
+>();
+
+function tokenSessionRevision(client: QueryClient, session: string): string {
+  const current = sessionRevisions.get(client);
+  if (current?.session === session) return current.id;
+  const id = crypto.randomUUID();
+  sessionRevisions.set(client, { session, id });
+  return id;
+}
+
+/** Shared token query policy for clients that connect to several targets. */
+export function useUserSessionTokenOptions(projectOverride?: {
+  id: string;
+  slug: string;
+}): UserSessionTokenOptionsFactory {
+  const session = useSession();
+  const ambientProject = useProject();
+  const project = projectOverride ?? ambientProject;
+  const mintMutation = useMintUserSessionMutation();
+  const sessionRevision = tokenSessionRevision(
+    useQueryClient(),
+    session.session,
+  );
+
+  return (
+    target: UserSessionTokenTarget,
+    userSessionIssuerId: string | undefined,
+    throwOnError?: false,
+  ) => {
+    const { kind, id } = target;
+    const enabled = !!id && !!userSessionIssuerId;
+    return queryOptions<MintUserSessionResponseBody | null>({
+      queryKey: [
+        "userSessionToken",
+        kind,
+        project.id,
+        id,
+        userSessionIssuerId,
+        session.user.id,
+        sessionRevision,
+        ...(target.kind === "metaMcpServer"
+          ? [target.discoveryMode, target.connectionVersion]
+          : []),
+      ],
+      queryFn: async () => {
+        if (!enabled) return null;
+        const result = await mintMutation.mutateAsync({
+          request: {
+            gramProject: project.id,
+            mintUserSessionRequestBody: mintRequestBody(target),
+          },
+          security: {
+            sessionHeaderGramSession: session.session,
+            projectSlugHeaderGramProject: project.slug,
+          },
+        });
+        return result;
+      },
+      enabled,
+      // The minted JWT is good for ~1h; refresh well before expiry so the
+      // connection always has headroom.
+      staleTime: 1000 * 60 * 45,
+      refetchInterval: 1000 * 60 * 45,
+      refetchOnWindowFocus: false,
+      retry: false,
+      ...(throwOnError === false ? { throwOnError: false } : {}),
+    });
   };
 }

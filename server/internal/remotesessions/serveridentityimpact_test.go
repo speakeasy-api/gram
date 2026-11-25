@@ -208,7 +208,6 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 
 	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
 	require.NoError(t, err)
-	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 	require.Equal(t, []uuid.UUID{orgClientID}, serverAssociatedClients(t, ctx, ti, targetID))
 	require.Empty(t, serverAssociatedClients(t, ctx, ti, otherServerID), "the commit does not offer the client in another project")
 }

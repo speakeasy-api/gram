@@ -37,6 +37,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/identity"
@@ -81,6 +82,7 @@ type Service struct {
 	sessionCaptureEnabled FeatureChecker
 	authz                 *authz.Engine
 	identities            *identity.Resolver
+	features              feature.Provider
 }
 
 var _ telem_gen.Service = (*Service)(nil)
@@ -99,6 +101,7 @@ func NewService(
 	sessionCaptureEnabled FeatureChecker,
 	posthogClient PosthogClient,
 	authzEngine *authz.Engine,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
 	chRepo := repo.New(chReadConn)
@@ -128,6 +131,7 @@ func NewService(
 		chatSessions:          chatSessions,
 		authz:                 authzEngine,
 		identities:            identity.NewResolver(logger, db),
+		features:              features,
 	}
 }
 
@@ -2183,25 +2187,36 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		HookSource:          hookSource,
 		AccountType:         accountType,
 		ExternalOrgID:       externalOrgID,
-	}, payload.IncludeTimeSeries)
+	}, payload.IncludeTimeSeries, payload.ToolCallsOnly)
 }
 
 // observabilityOverview reads the overview for one scope: its summary, the
 // same summary for the period immediately before, the time series, and the
 // tool breakdowns. One grouped ClickHouse query serves all of them, so a page
 // load costs one scan and one connection.
-func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries bool) (*telem_gen.GetObservabilityOverviewResult, error) {
-	intervalSeconds := calculateInterval(scope.TimeStart, scope.TimeEnd)
+func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries, toolCallsOnly bool) (*telem_gen.GetObservabilityOverviewResult, error) {
+	intervalSeconds := CalculateInterval(scope.TimeStart, scope.TimeEnd)
 
-	overview, err := s.chRepo.GetObservabilityOverview(ctx, repo.GetObservabilityOverviewParams{
-		Scope:             scope,
-		IntervalSeconds:   intervalSeconds,
-		IncludeTimeSeries: includeTimeSeries,
-		ToolLimit:         10,
-	})
+	params := repo.GetObservabilityOverviewParams{
+		Scope:                    scope,
+		IntervalSeconds:          intervalSeconds,
+		IncludeTimeSeries:        includeTimeSeries,
+		ToolLimit:                10,
+		ToolCallsOnly:            toolCallsOnly,
+		ToolCallSummariesEnabled: false,
+	}
+	params.ToolCallSummariesEnabled = params.ToolCallSummariesEligible() && s.toolCallSummariesEnabled(ctx)
+
+	overview, err := s.chRepo.GetObservabilityOverview(ctx, params)
+	if err != nil && params.ToolCallSummariesEnabled && ctx.Err() == nil {
+		s.logger.WarnContext(ctx, "read overview from tool call summaries, falling back to telemetry_logs", attr.SlogError(err))
+		params.ToolCallSummariesEnabled = false
+		overview, err = s.chRepo.GetObservabilityOverview(ctx, params)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving observability overview")
 	}
+	trace.SpanFromContext(ctx).SetAttributes(attr.TelemetryOverviewSource(string(overview.Source)))
 
 	return &telem_gen.GetObservabilityOverviewResult{
 		Summary:               toObservabilitySummary(overview.Summary),
@@ -2211,6 +2226,20 @@ func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverv
 		TopToolsByFailureRate: toToolMetrics(overview.TopToolsByFailureRate),
 		IntervalSeconds:       intervalSeconds,
 	}, nil
+}
+
+// toolCallSummariesEnabled is true only when the flag is explicitly on.
+func (s *Service) toolCallSummariesEnabled(ctx context.Context) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return false
+	}
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMCPOverviewSummaryTable, authCtx.ActiveOrganizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate mcp-overview-summary-table flag", attr.SlogError(err))
+	}
+	return evaluation == feature.EvaluationEnabled
 }
 
 // GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
@@ -2621,9 +2650,9 @@ func (s *Service) fetchOverviewChatMetrics(
 	return unavailable
 }
 
-// calculateInterval determines the appropriate time bucket interval based on the time range.
+// CalculateInterval determines the appropriate time bucket interval based on the time range.
 // Returns interval in seconds.
-func calculateInterval(timeStart, timeEnd int64) int64 {
+func CalculateInterval(timeStart, timeEnd int64) int64 {
 	durationNanos := timeEnd - timeStart
 	durationHours := durationNanos / (int64(time.Hour))
 

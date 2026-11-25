@@ -125,7 +125,8 @@ func configureReadOnlyTranscripts(c *cli.Context, logger *slog.Logger, meterProv
 }
 
 // checkTranscriptShadowSchema checks the tables the store writes: the sidecar
-// and its tool-call ID table, including the metadata columns capture fills.
+// and its tool-call ID table, including the metadata columns capture fills and
+// the (message_id, tool_call_id) conflict target its inserts use.
 // Catalog reads neither touch transcript payloads nor execute trial inserts.
 // The table is looked up through the connection's search_path, the same way
 // the store's queries resolve it: deployed databases keep it outside public.
@@ -149,6 +150,16 @@ WITH sidecar AS (
         ('ciphertext', 'text'::regtype),
         ('source_hash', 'bytea'::regtype),
         ('updated_at', 'timestamptz'::regtype)
+), tool_call_arbiters AS (
+ -- InsertToolCallIDs resolves conflicts on (message_id, tool_call_id).
+ SELECT i.indimmediate, i.indisready
+ FROM pg_catalog.pg_index i
+ WHERE i.indrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
+   AND i.indisunique AND i.indisvalid
+   AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts = 2
+   AND (SELECT array_agg(a.attname::text ORDER BY a.attname::text)
+        FROM pg_catalog.pg_attribute a
+        WHERE a.attrelid = i.indrelid AND a.attnum = ANY ((i.indkey::int2[])[0:1])) = ARRAY['message_id', 'tool_call_id']
 ), arbiters AS (
  SELECT i.indimmediate, i.indisready
  FROM pg_catalog.pg_index i
@@ -191,7 +202,9 @@ SELECT EXISTS (SELECT 1 FROM sidecar)
   WHERE a.attrelid = pg_catalog.to_regclass('chat_message_transcript_tool_calls')
     AND a.attname = tool_call.name AND a.atttypid = tool_call.type_oid
     AND a.attnotnull AND NOT a.attisdropped
- ))`).Scan(&compatible)
+ ))
+ AND EXISTS (SELECT 1 FROM tool_call_arbiters WHERE indimmediate AND indisready)
+ AND NOT EXISTS (SELECT 1 FROM tool_call_arbiters WHERE NOT indimmediate)`).Scan(&compatible)
 	if err != nil {
 		return fmt.Errorf("check chat transcript shadow schema: %w", err)
 	}

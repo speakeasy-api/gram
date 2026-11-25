@@ -98,11 +98,6 @@ func TestListRemoteSessions_GatewayLoginOrder(t *testing.T) {
 				RemoteSessionIssuerID: env.issuerID, ClientID: "listing-client", TokenEndpointAuthMethod: conv.ToPGText("none"),
 			})
 			require.NoError(t, err)
-			for _, issuer := range []uuid.UUID{memberIssuer, gatewayIssuer} {
-				require.NoError(t, env.q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-					RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer,
-				}))
-			}
 
 			// The proxied member offers this registration independently of the
 			// issuer links used later for the listing and attachment assertions.

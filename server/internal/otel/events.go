@@ -337,7 +337,7 @@ func parseEventTimeRange(from, to string) (timeStart, timeEnd int64, err error) 
 }
 
 // calculateEventInterval determines the bucket width for a time range,
-// mirroring the telemetry service's calculateInterval.
+// mirroring the telemetry service's CalculateInterval.
 func calculateEventInterval(timeStart, timeEnd int64) int64 {
 	durationHours := (timeEnd - timeStart) / int64(time.Hour)
 

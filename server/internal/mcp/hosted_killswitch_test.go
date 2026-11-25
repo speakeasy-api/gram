@@ -114,10 +114,6 @@ func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInsta
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, repo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
 	assignHostedOAuth(t, ctx, ti.conn, organizationID, projectID, serverID, remoteClient.ID)
 }
 

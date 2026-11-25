@@ -647,11 +647,9 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 		t.Helper()
 		f := newAuthClientFixture(t, pool)
 		client := handback(t, f)
-		// The credential chose both the client and its registration, which
-		// stays bound to the sign-in.
+		// The credential chose both the client and its registration.
 		selector := &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: uuid.New(), credentialID: uuid.New()}
 		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: selector.userSessionIssuerID, ProjectID: validUUID(f.projectID), Slug: "usi-" + selector.userSessionIssuerID.String()[:8]}))
-		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: selector.userSessionIssuerID}))
 		require.NoError(t, f.q.SeedOAuthSelectionFixture(t.Context(), authclientbackfill.SeedOAuthSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: selector.credentialID, McpServerID: f.serverID, RemoteSessionClientID: f.registration}))
 		require.NoError(t, f.q.SwapUpstreamAuthClientFixture(t.Context(), authclientbackfill.SwapUpstreamAuthClientFixtureParams{AuthClientID: validUUID(client), CredentialID: selector.credentialID, McpServerID: f.serverID}))
 		enforcedShadowService(t, f)

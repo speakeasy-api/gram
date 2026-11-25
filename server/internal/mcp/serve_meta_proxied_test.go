@@ -411,8 +411,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 
 	// One client per upstream authorization server, both bound to the
 	// meta MCP's shared issuer — the shape meta MCP consent produces.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-b", "")
 
 	subject := createTestUser(t, ctx, ti, "meta-cred-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", upstreamA.url)
@@ -525,8 +525,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnresolvedMemberCarriesNoToken(t *
 	upstream := newRecordingUpstream(t, "ping")
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, upstream.url)
 
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-ambig-b", "")
 
 	subject := createTestUser(t, ctx, ti, "meta-ambig-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-one", upstream.url)
@@ -564,8 +564,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 
 	// Two tokens exist so no lone-entry shortcut could ever apply, but only
 	// member B's resource is claimed; member A matches nothing.
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-b", "", []uuid.UUID{sharedIssuerID})
-	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-c", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-b", "")
+	clientC := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-anon-c", "")
 
 	subject := createTestUser(t, ctx, ti, "meta-anon-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
@@ -608,8 +608,8 @@ func TestServePublic_MetaEndpoint_UnconnectedMemberDoesNotBlockConnectedMember(t
 	// tile. Member A's client stays attached with no token on purpose: the
 	// partial resolver must skip it, where the strict resolver would have
 	// failed the whole session.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "")
 
 	subject := createTestUser(t, ctx, ti, "meta-partial-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
@@ -653,7 +653,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_MetadataProbeAfterToolCall(t *test
 	upstream := newRecordingUpstream(t, "ping", withMetadataProbeHeldUntilToolCall())
 	member := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member-probe", 0, upstream.url)
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-probe", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-probe", "")
 	subject := createTestUser(t, ctx, ti, "meta-probe-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-member", upstream.url)
 	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, clientID, "remote_session", subject)
@@ -700,7 +700,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	}))
 	t.Cleanup(deny.Close)
 	member := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, deny.URL)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-401", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-401", "")
 	subject := createTestUser(t, ctx, ti, "meta-401-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member})
 
@@ -741,7 +741,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPa
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-connect", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-connect", "")
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
 	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-connect-user-"+uuid.NewString())
@@ -783,7 +783,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnreachedProxiedMemberLogsFailedRo
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreached", "", []uuid.UUID{sharedIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreached", "")
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
 	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-unreached-user-"+uuid.NewString())
