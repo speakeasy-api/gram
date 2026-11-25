@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -124,8 +125,9 @@ func newTrialCapFixture(t *testing.T) *trialCapFixture {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
-	provisioner.baseURL = upstream.URL
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", partition.US, "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{})
+	provisioner.inferenceURL = upstream.URL
+	provisioner.managementURL = upstream.URL
 
 	return &trialCapFixture{
 		provisioner: provisioner,
@@ -346,7 +348,8 @@ func TestGetCreditsUsed_DisabledKeyReadsThroughProvisioningKey(t *testing.T) {
 		})
 	}))
 	t.Cleanup(upstream.Close)
-	fixture.provisioner.baseURL = upstream.URL
+	fixture.provisioner.inferenceURL = upstream.URL
+	fixture.provisioner.managementURL = upstream.URL
 
 	used, limit, err := fixture.provisioner.GetCreditsUsed(ctx, fixture.orgID, KeyTypeChat)
 	require.NoError(t, err)

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/tooleval"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -138,6 +139,7 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 	client := openrouter.NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		openrouter.EndpointsFor(partition.US),
 		provisioner,
 		&openrouter.PlatformKeyResolver{Provisioner: provisioner},
 		nil,
