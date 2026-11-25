@@ -1,0 +1,32 @@
+server/design/intentpolicies/design.go
+  h_e404c1a6a54184 133,135,138
+server/internal/intentpolicies/impl.go
+  h_e404c1a6a54184 264
+server/internal/intentpolicies/intentpolicies_test.go
+  h_e404c1a6a54184 77-79,99
+server/internal/intentpolicies/setup_test.go
+  h_e404c1a6a54184 7,45,51-56,77,83-95
+server/internal/intentpolicy/contracts_test.go
+  h_e404c1a6a54184 25-30,75-123,125,139-219,234,243,246,253,256,268-278,284-286,288-289
+server/internal/intentpolicy/evaluator_test.go
+  h_e404c1a6a54184 36,51-52,61,64-80,104-112,120,129-131,139,146-150,155,157-160,168
+server/internal/intentpolicy/gemini.go
+  h_e404c1a6a54184 29,72
+server/internal/intentpolicy/guardrail.go
+  h_e404c1a6a54184 3,7-12,15,18,21-47,50,52-57,71,77,80,83,87-97,100-106,109,111,113-118,122-132,147,153-173,176-184,187-195,198-207,210-218,221-229,232-240,243-250,253-262
+server/internal/intentpolicy/jev.go
+  h_e404c1a6a54184 69
+server/internal/intentpolicy/types.go
+  h_e404c1a6a54184 131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "313aff6e576cde9a544cbed9fb73113b0ece011d",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
