@@ -95,7 +95,6 @@ func (s *Service) resolveMetaMemberResource(
 // dispatch routes through it.
 //
 // Typed consent limits claims to registrations offered by the proxied member.
-// Legacy keepalive checks can still use existing associations.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -104,7 +103,10 @@ func (s *Service) claimingMetaMembers(
 	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
+	return s.claimingMetaMembersForValidation(ctx, endpoint, client, usesTypedConsentInventory(ctx))
+}
 
+func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, typedOffers bool) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	// A member claims the clients associated with it rather than every
 	// client of its authorization server.
 	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
@@ -112,7 +114,7 @@ func (s *Service) claimingMetaMembers(
 		organizationRows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 			OrganizationID:        endpoint.OrganizationID,
 			ProjectID:             client.ProjectID,
-			TypedOffers:           usesTypedConsentInventory(ctx),
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
@@ -133,7 +135,7 @@ func (s *Service) claimingMetaMembers(
 		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionClient(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionClientParams{
 			MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 			ProjectID:             endpoint.ProjectID,
-			TypedOffers:           usesTypedConsentInventory(ctx),
+			TypedOffers:           typedOffers,
 			RemoteSessionClientID: client.ID,
 		})
 		if err != nil {
