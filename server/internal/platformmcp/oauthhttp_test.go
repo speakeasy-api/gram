@@ -342,8 +342,8 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	scriptNonce, _, found := strings.Cut(noncePart, "'")
 	require.True(t, found)
 	require.NotEmpty(t, scriptNonce)
-	require.Contains(t, connect.Body.String(), `nonce="`+scriptNonce+`"`)
-	require.Contains(t, connect.Body.String(), `action.name = "action"`)
+	require.Contains(t, connect.Body.String(), `<script nonce="`+scriptNonce+`" src="`+oauthPageScriptURL+`"></script>`)
+	require.NotContains(t, connect.Body.String(), `action.name = "action"`, "the ingress CSP blocks inline scripts")
 	require.Contains(t, contentSecurityPolicy, "form-action 'self' http://127.0.0.1:3000")
 
 	approve := httptest.NewRecorder()
@@ -360,6 +360,19 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	replayed := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(replayed, approveRequest)
 	require.Equal(t, http.StatusBadRequest, replayed.Code)
+}
+
+func TestOAuthPageScriptIsServedFromHashedURL(t *testing.T) {
+	t.Parallel()
+
+	require.Regexp(t, `^/platform-mcp/oauth-page-[0-9a-f]{8}\.js$`, oauthPageScriptURL)
+	w := httptest.NewRecorder()
+	serveOAuthPageScript(w, httptest.NewRequest(http.MethodGet, oauthPageScriptURL, nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "application/javascript; charset=utf-8", w.Header().Get("Content-Type"))
+	require.Contains(t, w.Header().Get("Cache-Control"), "immutable")
+	require.Contains(t, w.Body.String(), `action.name = "action"`)
+	require.Contains(t, w.Body.String(), "window.close()")
 }
 
 func TestOAuthPageContentSecurityPolicyAllowsSafeRedirectSources(t *testing.T) {
