@@ -294,6 +294,73 @@ func TestCatalog_PatternsAreValid(t *testing.T) {
 	require.Positive(t, found, "expected at least one catalog pattern; if patterns were removed, delete this guard deliberately")
 }
 
+func TestPatternsOverlap(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		a, b    string
+		overlap bool
+	}{
+		{"https://example.com/oauth/*/client.json", "https://example.com/*/*/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.com/*/tenant/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/client.json", true},
+		{"https://example.com/oauth/*/client.json", "https://example.org/oauth/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com:8443/oauth/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/other/*/client.json", false},
+		{"https://example.com/oauth/*/client.json", "https://example.com/oauth/*/client.json?v=1", false},
+		{chatGPTPattern, codexPattern, false},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.overlap, PatternsOverlap(tc.a, tc.b), "%s / %s", tc.a, tc.b)
+		require.Equal(t, tc.overlap, PatternsOverlap(tc.b, tc.a), "%s / %s", tc.b, tc.a)
+		if tc.overlap {
+			witness := overlapWitness(tc.a, tc.b)
+			require.True(t, matchesPattern(tc.a, witness), witness)
+			require.True(t, matchesPattern(tc.b, witness), witness)
+		}
+	}
+}
+
+// overlapWitness builds a client ID that matches both overlapping patterns.
+func overlapWitness(a, b string) string {
+	prefix, aRest, _ := splitAuthorityAndPath(a)
+	_, bRest, _ := splitAuthorityAndPath(b)
+	aPath, suffix := splitPathAndSuffix(aRest)
+	bPath, _ := splitPathAndSuffix(bRest)
+	bSegments := strings.Split(bPath, "/")
+	segments := strings.Split(aPath, "/")
+	for i, segment := range segments {
+		switch {
+		case segment != "*":
+		case bSegments[i] != "*":
+			segments[i] = bSegments[i]
+		default:
+			segments[i] = "x"
+		}
+	}
+	return prefix + "/" + strings.Join(segments, "/") + suffix
+}
+
+func TestCompiledPatternsDoNotOverlap(t *testing.T) {
+	t.Parallel()
+	var patterns []string
+	for _, entry := range CIMDDocuments() {
+		if entry.Document.Pattern {
+			require.NoError(t, validatePattern(entry.Document.URL), entry.Document.URL)
+			patterns = append(patterns, entry.Document.URL)
+		}
+	}
+	require.GreaterOrEqual(t, len(patterns), 2)
+	pairs := 0
+	for i := range patterns {
+		for j := i + 1; j < len(patterns); j++ {
+			pairs++
+			require.False(t, PatternsOverlap(patterns[i], patterns[j]), "%s overlaps %s", patterns[i], patterns[j])
+		}
+	}
+	t.Logf("%d patterns, %d pairs checked", len(patterns), pairs)
+}
+
 // TestCatalogAdmits_ChatGPTConnectorNamespace exercises the end-to-end
 // reason wildcards exist: an unbounded, server-generated connector id.
 func TestCatalogAdmits_ChatGPTConnectorNamespace(t *testing.T) {

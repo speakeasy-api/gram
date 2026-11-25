@@ -25,7 +25,7 @@ import (
 // but only while its exact grant, owner, tenant and configuration remain live.
 func TestRemoteSessionSweeps_AttachmentReachParity(t *testing.T) {
 	t.Parallel()
-	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
+	states := []string{"detach", "session-revoked", "agent-suspended", "agent-revoked", "owner-reassignment", "owner-departed", "owner-deleted", "owner-transfer", "config-unlinked", "config-deleted", "source-deleted", "client-deleted", "registration-retired", "issuer-deleted", "project-deleted", "opt-out", "policy-disabled"}
 	for _, state := range states {
 		t.Run("refresh/"+state, func(t *testing.T) {
 			t.Parallel()
@@ -141,14 +141,15 @@ func checkAttachmentReachLifecycle(t *testing.T, state string, checkRecheck bool
 		}
 		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentConfigFixture(ctx, testrepo.SoftDeleteAttachmentConfigFixtureParams{ID: id, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 	case "client-deleted":
+		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentClientFixture(ctx, testrepo.SoftDeleteAttachmentClientFixtureParams{ID: session.RemoteSessionClientID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
+	case "registration-retired":
 		err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: client, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 		require.NoError(t, err)
-		fixtures := testrepo.New(ti.conn)
 		_, err = fixtures.GetPrincipalRemoteSessionBindingSessionFixture(ctx, binding.ID)
-		require.NoError(t, err, "the compatibility FK did not physically remove the attachment")
+		require.NoError(t, err, "registration deletion physically removed the attachment")
 		active, err := fixtures.CountActivePrincipalRemoteSessionBindingsForSessionFixture(ctx, session.ID)
 		require.NoError(t, err)
-		require.Zero(t, active, "the registration deletion explicitly retired its attachment")
+		require.Zero(t, active, "registration deletion did not retire the attachment")
 	case "issuer-deleted":
 		_, err = testrepo.New(ti.conn).SoftDeleteAttachmentIssuerFixture(ctx, testrepo.SoftDeleteAttachmentIssuerFixtureParams{ID: uuid.MustParse(issuer), ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}})
 	case "project-deleted":
@@ -218,10 +219,11 @@ func requireAttachmentRecheckReach(t *testing.T, ctx context.Context, q *repo.Qu
 	} else {
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 	}
-	endpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+	params := repo.GetRemoteSessionRecheckEndpointsParams{
 		ID: session.ID, UpdatedAt: session.UpdatedAt, GrantGeneration: session.GrantGeneration,
 		OrganizationIds: []string{org}, NowTs: conv.ToPGTimestamptz(window.now),
-	})
+	}
+	endpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, params)
 	require.NoError(t, err)
 	if !want {
 		require.Empty(t, rows)
@@ -231,6 +233,12 @@ func requireAttachmentRecheckReach(t *testing.T, ctx context.Context, q *repo.Qu
 	require.Len(t, rows, 1)
 	require.Equal(t, session.ID, rows[0].ID)
 	require.Len(t, endpoints, 1)
+	_, err = q.GetDueRemoteSessionRecheckCandidate(ctx, window.candidateParams(session.ID, "org_unrelated"))
+	require.ErrorIs(t, err, pgx.ErrNoRows, "an attachment cannot reauthorize a recheck claimed by another tenant")
+	params.OrganizationIds = []string{"org_unrelated"}
+	foreignEndpoints, err := q.GetRemoteSessionRecheckEndpoints(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, foreignEndpoints, "a valid attachment cannot produce a probe target for another tenant")
 	require.Equal(t, "attachment-probe", endpoints[0].Slug)
 	return repo.ClearRemoteSessionRecheckLeaseParams{ID: session.ID, ClaimedAt: rows[0].ClaimedAt, OrganizationIds: []string{org}, NowTs: conv.ToPGTimestamptz(window.now)}
 }

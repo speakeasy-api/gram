@@ -11,6 +11,7 @@ import { useMemo } from "react";
 
 /** The most requests the server lists in one response. */
 export const MAX_LISTED_ACCESS_REQUESTS = 200;
+import { requestedDurationLabel } from "./requestedDuration";
 import { scopeLabel } from "./scopeCatalogue";
 
 /**
@@ -62,6 +63,21 @@ export function AccessRequestsTab({
             {row.resourceName || "Every resource"}
           </Text>
         ),
+      },
+      {
+        key: "requestedDurationSeconds",
+        header: "Wants it",
+        width: "140px",
+        render: (row) => {
+          const asked = requestedDurationLabel(row, new Date());
+          return (
+            <Text muted small className="whitespace-nowrap">
+              {asked
+                ? asked[0]!.toUpperCase() + asked.slice(1)
+                : "No preference"}
+            </Text>
+          );
+        },
       },
       {
         key: "createdAt",

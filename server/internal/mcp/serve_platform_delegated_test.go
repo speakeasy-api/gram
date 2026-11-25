@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -20,16 +21,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// managedAssistantWithAgent creates the project's managed assistant, puts the
-// org on the Platform MCP variant, and creates an agent owned by the context's
-// user. The agent holds no policy grants of its own.
+// managedAssistantWithAgent creates the project's managed assistant and an
+// agent owned by the context's user. The agent holds no policy grants of its own.
 func managedAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
@@ -38,7 +37,6 @@ func managedAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextv
 		ProjectID:   *authCtx.ProjectID,
 		AssistantID: managedID,
 	}))
-	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
 	agent, err := agentrepo.New(ti.conn).CreateAgent(t.Context(), agentrepo.CreateAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -193,7 +191,7 @@ func TestAssistantPlatformTool_WorkloadTurnIsToldItNeedsAPerson(t *testing.T) {
 		ti.logger, nil, nil, authorizer, "", "test-cursor-key",
 		platformmcp.NewPostgresReader(ti.logger, ti.conn).WithAuthorization(ti.authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		platformmcp.CatalogDescriptor{},
-	).AssistantTools()
+	).WithAICatalog(aivendorstest.NewStore()).AssistantTools()
 	var listProjects *assistant_platform_mcp_adapter.Tool
 	for _, tool := range assistant_platform_mcp_adapter.Tools(descriptors, authorizer) {
 		if tool.Descriptor().Name == "list_projects" {

@@ -6,22 +6,7 @@ import { useAssistantsAvailable } from "@/hooks/useAssistantsAvailability";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { useNavigate } from "react-router";
-
-export interface Investigation {
-  /** What the person asks, as it appears in the chat. */
-  question: string;
-  /** The facts on screen, sent as Additional context. */
-  context: string;
-}
-
-/** Context rides in the message's tagged block, which the chat shows as Additional context. */
-function investigationPrompt({ question, context }: Investigation): string {
-  const safe = context.replaceAll(
-    "</dashboard_context>",
-    "&lt;/dashboard_context&gt;",
-  );
-  return `<dashboard_context>\n${safe}\n</dashboard_context>\n\n${question}`;
-}
+import { investigationPrompt, type Investigation } from "./investigation";
 
 function useInvestigate(): (investigation: Investigation) => void {
   const routes = useRoutes();

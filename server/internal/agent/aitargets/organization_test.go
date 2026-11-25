@@ -1,6 +1,8 @@
 package aitargets_test
 
 import (
+	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -103,12 +105,113 @@ func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 	require.Equal(t, "not reviewed", entries[0].Decision.Rationale)
 }
 
-// The served version names the compiled-in defaults revision and nothing
-// else. An organization's edits change the served targets, which the
-// snapshot ETag hashes; that is what makes an agent re-apply the list.
-func TestListVersionIsTheDefaultsRevision(t *testing.T) {
+func compiledProducts() []aivendors.Product {
+	products := aivendors.Products()
+	for i := range products {
+		products[i].Family = ""
+		products[i].Aliases = nil
+	}
+	return products
+}
+
+// firstScanned is the index of the first scanned product.
+func firstScanned(products []aivendors.Product) int {
+	return slices.IndexFunc(products, aivendors.Product.IsScanned)
+}
+
+func otherCategory(c aivendors.Category) aivendors.Category {
+	if c == aivendors.CategoryAssistant {
+		return aivendors.CategoryHarness
+	}
+	return aivendors.CategoryAssistant
+}
+
+func servedFor(products []aivendors.Product, entries []aitargets.Entry) *aitargets.Snapshot {
+	return aitargets.NewOrganizationList(aivendors.NewSnapshot(products), entries).Snapshot
+}
+
+// list_version and the etag follow what devices are served and nothing else.
+func TestOrganizationListVersionFollowsTheServedBuiltIns(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
+
+	base := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
+	require.GreaterOrEqual(t, base.ListVersion, int32(1), "devices reserve 0 for their embedded list")
+	require.LessOrEqual(t, base.ListVersion, int32(math.MaxInt32))
+	require.Equal(t, aitargets.ListVersion(aitargets.Defaults(aivendors.CompiledSnapshot())), base.ListVersion)
+	require.NotEqual(t, -1, firstScanned(compiledProducts()), "the mutations below edit a scanned product")
+
+	unchanged := map[string]func(products []aivendors.Product) []aivendors.Product{
+		"document added": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].Documents = append(products[i].Documents, aivendors.Document{URL: "https://example.com/oauth/added.json", DisplayName: "Added", Enabled: true, Pattern: false})
+			return products
+		},
+		"client info name changed": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].ClientInfoNames = append(products[i].ClientInfoNames, "renamed-client")
+			return products
+		},
+		"unscanned product added": func(products []aivendors.Product) []aivendors.Product {
+			return append(products, aivendors.Product{ID: "admission-only", VendorKey: "admission-only", DisplayName: "Admission Only"})
+		},
+		"family and aliases set": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].Family = "added-family"
+			products[i].Aliases = []aivendors.Alias{{Name: "added alias", Client: aivendors.ClientUnknown}}
+			return products
+		},
+		"vendor key changed": func(products []aivendors.Product) []aivendors.Product {
+			i := firstScanned(products)
+			products[i].VendorKey = "renamed-vendor"
+			return products
+		},
+		"input order reversed": func(products []aivendors.Product) []aivendors.Product {
+			slices.Reverse(products)
+			for i := range products {
+				slices.Reverse(products[i].Documents)
+			}
+			return products
+		},
+	}
+	for name, mutate := range unchanged {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := servedFor(mutate(compiledProducts()), nil)
+			require.Equal(t, base.ListVersion, got.ListVersion)
+			require.Equal(t, base.ETag, got.ETag)
+		})
+	}
+
+	changed := map[string]func(p *aivendors.Product){
+		"display name": func(p *aivendors.Product) { p.DisplayName += " (renamed)" },
+		"category":     func(p *aivendors.Product) { p.Category = otherCategory(p.Category) },
+		"bundle ids": func(p *aivendors.Product) {
+			p.Signatures.BundleIDs = append(p.Signatures.BundleIDs, "com.example.added")
+		},
+		"binaries":    func(p *aivendors.Product) { p.Signatures.Binaries = append(p.Signatures.Binaries, "added-binary") },
+		"config dirs": func(p *aivendors.Product) { p.Signatures.ConfigDirs = append(p.Signatures.ConfigDirs, "~/.added") },
+		"process names": func(p *aivendors.Product) {
+			p.Signatures.ProcessNames = append(p.Signatures.ProcessNames, "added-process")
+		},
+		"version plist key": func(p *aivendors.Product) { p.VersionPlistKey += "Added" },
+	}
+	for name, mutate := range changed {
+		t.Run("served field changed: "+name, func(t *testing.T) {
+			t.Parallel()
+			products := compiledProducts()
+			mutate(&products[firstScanned(products)])
+			got := servedFor(products, nil)
+			require.NotEqual(t, base.ListVersion, got.ListVersion)
+			require.NotEqual(t, base.ETag, got.ETag)
+		})
+	}
+
+	t.Run("organization edit", func(t *testing.T) {
+		t.Parallel()
+		got := servedFor(compiledProducts(), []aitargets.Entry{organizationRow("an-organization-target")})
+		require.Equal(t, base.ListVersion, got.ListVersion, "an organization edit does not move the version")
+		require.NotEqual(t, base.ETag, got.ETag, "an organization edit moves the etag")
+	})
 }
 
 // ChatGPT ships as two desktop builds that a device tells apart by bundle id

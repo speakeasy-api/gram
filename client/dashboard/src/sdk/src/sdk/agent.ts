@@ -11,6 +11,7 @@ import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentHideMcpServer } from "../funcs/agentHideMcpServer.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
+import { agentListPendingAccessRequests } from "../funcs/agentListPendingAccessRequests.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportCrash } from "../funcs/agentReportCrash.js";
@@ -28,6 +29,7 @@ import { GetMyConnectionsResult } from "../models/components/getmyconnectionsres
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
+import { ListPendingAccessRequestsResult } from "../models/components/listpendingaccessrequestsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import { ReportCrashResult } from "../models/components/reportcrashresult.js";
 import { ReportStateResult } from "../models/components/reportstateresult.js";
@@ -64,6 +66,10 @@ import {
   HideAgentMcpServerRequest,
   HideAgentMcpServerSecurity,
 } from "../models/operations/hideagentmcpserver.js";
+import {
+  ListAgentPendingAccessRequestsRequest,
+  ListAgentPendingAccessRequestsSecurity,
+} from "../models/operations/listagentpendingaccessrequests.js";
 import {
   ListAiScanTargetsRequest,
   ListAiScanTargetsSecurity,
@@ -267,6 +273,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAiScanTargetsResult> {
     return unwrapAsync(agentListAiScanTargets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPendingAccessRequests agent
+   *
+   * @remarks
+   * List the organization's pending access requests for an organization administrator, newest first, at most 50, each with a link that opens it in the dashboard to decide. Decisions are made in the dashboard or Slack, never from the device agent. A user who is not an administrator gets an empty list. Requires a per-user key; the org install key, device-agent tokens and agent identities are refused. Answers not found while access requests are off for the organization.
+   */
+  async listPendingAccessRequests(
+    request?: ListAgentPendingAccessRequestsRequest | undefined,
+    security?: ListAgentPendingAccessRequestsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListPendingAccessRequestsResult> {
+    return unwrapAsync(agentListPendingAccessRequests(
       this,
       request,
       security,

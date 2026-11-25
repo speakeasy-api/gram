@@ -1142,6 +1142,13 @@ func (s *RefreshService) refresh(
 		}
 	}
 
+	// A hosted request accepts only an unqualified grant. Recheck after
+	// acquiring the lock and deriving any legacy fallback, before sending
+	// credentials or asking the provider for an audience we cannot use.
+	if ctx.Value(hostedTokenResourceKey{}) == true && resource != "" {
+		return zero, nil, nil, ErrNoValidToken
+	}
+
 	// Read after the lock: this caller may have waited on it for seconds, and
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)

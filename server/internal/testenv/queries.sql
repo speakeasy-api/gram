@@ -2863,6 +2863,27 @@ UPDATE ai_products
 SET display_name = @display_name, deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
+-- Appends a NULL to every array column, which the schema allows.
+-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = @id;
+
+-- Stores binaries as a nested array, which the schema allows.
+-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = @id;
+
+-- Inserts even where a soft-deleted row holds the URL, unlike the seed.
+-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES (@id, @ai_product_id, @url, @display_name, @enabled, @is_pattern);
+
 -- name: EditDocumentFixture :exec
 UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,

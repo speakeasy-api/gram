@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -211,6 +212,57 @@ func TestWithoutCredentialCeilingKeepsLivePolicies(t *testing.T) {
 	got, ok := CredentialCeilingFromContext(ctx)
 	require.True(t, ok)
 	require.Empty(t, got)
+}
+
+// Removing the credential policy twice must leave the agent policy bounding
+// the call. Here the agent may read project-one only, while the credential and
+// the owner may read every project.
+func TestWithoutCredentialCeilingTwiceKeepsAgentPolicy(t *testing.T) {
+	t.Parallel()
+	everyProject := []Grant{NewGrant(ScopeProjectRead, WildcardResource)}
+	agent := []Grant{NewGrant(ScopeProjectRead, "project-one")}
+	ctx := principalPolicyTestContext(t, everyProject, agent, everyProject)
+
+	ctx = WithoutCredentialCeiling(WithoutCredentialCeiling(ctx))
+
+	policies, ok := currentGrantAuthorizationFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, [][]Grant{agent, everyProject}, policies.policies)
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
+	requireForbidden(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-two"}))
+}
+
+// A refresh admits the workload again with its credential policy, removes it
+// once, and a later removal leaves the agent policy in place.
+func TestWithoutCredentialCeilingAfterRefreshKeepsAgentPolicy(t *testing.T) {
+	t.Parallel()
+	everyProject := []Grant{NewGrant(ScopeProjectRead, WildcardResource)}
+	agent := []Grant{NewGrant(ScopeProjectRead, "project-one")}
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
+		AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) {
+			return WorkloadSessionAdmission{
+				AgentPrincipal: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+				OwnerUserID:    "user_123",
+				Ceiling:        everyProject,
+				Agent:          agent,
+				Owner:          everyProject,
+			}, nil
+		},
+	})
+	authCtx := &contextvalues.AuthContext{ActiveOrganizationID: "org-test"}
+	ctx := contextvalues.WithAuthenticatedActor(t.Context(), authCtx, urn.NewWorkloadPrincipal(uuid.New(), "subject"))
+	ctx, err := engine.PrepareContext(ctx)
+	require.NoError(t, err)
+	ctx = WithoutCredentialCeiling(ctx)
+
+	ctx, err = engine.RefreshContext(ctx)
+	require.NoError(t, err)
+	ctx = WithoutCredentialCeiling(ctx)
+
+	policies, ok := currentGrantAuthorizationFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, [][]Grant{agent, everyProject}, policies.policies)
 }
 
 func TestCredentialCeilingFromContextIsImmutable(t *testing.T) {

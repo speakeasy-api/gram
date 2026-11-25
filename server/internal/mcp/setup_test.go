@@ -691,7 +691,6 @@ func buildTestMCPService(
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
-	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		background.SkillEfficacySignalCooldown,
@@ -712,18 +711,17 @@ func buildTestMCPService(
 				logger, nil, nil, platformMCPAuthorizer, "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
-			).AssistantTools(),
+			).WithAICatalog(aivendorstest.NewStore()).AssistantTools(),
 			platformMCPAuthorizer,
 		)
 		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           assistantSkillTools,
-		AssistantTriggerTools:         nil,
-		ManagedAssistantInsightsTools: managedLogsTools,
-		PlatformMCPReadTools:          platformMCPReadTools,
-		PlatformMCPReadActingContext:  platformMCPReadActingContext,
+		AssistantMemoryTools:         nil,
+		AssistantSkillTools:          assistantSkillTools,
+		AssistantTriggerTools:        nil,
+		PlatformMCPReadTools:         platformMCPReadTools,
+		PlatformMCPReadActingContext: platformMCPReadActingContext,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}

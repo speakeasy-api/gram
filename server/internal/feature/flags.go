@@ -3,6 +3,14 @@ package feature
 type Flag string
 
 const (
+	// FlagMCPFeedbackExport gates queueing MCP server feedback for the OTLP
+	// data export. Every report is stored either way. Evaluated server-side
+	// with local evaluation when a report is stored, keyed by organization ID
+	// with no groups, so it is targeted by a release condition with no
+	// properties. Fails closed. It holds the export back until every log relay
+	// routes feedback records to the feedback export rather than to telemetry,
+	// and is removed once that is deployed and the flag is at 100%.
+	FlagMCPFeedbackExport Flag = "mcp-feedback-export"
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
 	// FlagToolApprovals gates creating require_approval risk policies (tool
@@ -80,13 +88,6 @@ const (
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
 
-	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
-	// assistant the Platform MCP read toolset — the "platform" platform
-	// toolset re-serving the Platform MCP read tools over the assistant
-	// runtime channel. Targeted by PostHog organization group (org slug),
-	// like FlagBudgets. Evaluated server-side only; removed once the toolset
-	// is GA.
-	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
 	// both surfaces; targeted by organization group (org slug), like
@@ -210,7 +211,7 @@ const (
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
 	// records where they disagree, without changing any response.
-	// Targeted locally with the organization ID as the distinct ID.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
@@ -222,7 +223,7 @@ const (
 	// wherever a request reads the server's associations and no credential
 	// choice governs; elsewhere the request is recorded as a governing choice
 	// or as not having read the associations, and keeps the column.
-	// Targeted locally with the organization ID as the distinct ID.
+	// Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
 
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
@@ -232,7 +233,7 @@ const (
 	// do not protect owner blocks, so enable it only once every replica reads
 	// them; that release is then the rollback floor. Off, unavailable or
 	// failing, no such grant is written; reading and enforcing existing ones,
-	// and protecting existing blocks, never depend on it. Targeted locally with the organization ID as the distinct ID.
+	// and protecting existing blocks, never depend on it. Use a person-aggregated PostHog flag matching distinct_id to the organization ID.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 
 	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP
@@ -260,32 +261,6 @@ const (
 	// progressive surface when the organization can use Code Mode.
 	VariantPlatformMCPDiscoveryCodeMode Variant = "code_mode"
 )
-
-// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
-// unrecognized key, an unavailable provider, or an evaluation error — resolves
-// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
-// PostHog outage can never strip the managed assistant's tools.
-const (
-	// VariantAssistantToolsLegacy serves the managed assistant the
-	// "managed-assistant" platform toolset (logs, chats, users, risk,
-	// deployments, skills, plugins, docs, changelog).
-	VariantAssistantToolsLegacy Variant = "legacy"
-	// VariantAssistantToolsPlatformMCP serves the managed assistant the
-	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
-	// legacy toolset, not in addition to it.
-	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
-)
-
-// AssistantToolsVariant normalizes a resolved variant to one of the two known
-// keys, collapsing everything unrecognized onto the legacy default. Both the
-// attach path (assistants service) and the serve path (mcp service) must agree
-// on this mapping or a toolset would be attached and then 404 at request time.
-func AssistantToolsVariant(variant Variant) Variant {
-	if variant == VariantAssistantToolsPlatformMCP {
-		return VariantAssistantToolsPlatformMCP
-	}
-	return VariantAssistantToolsLegacy
-}
 
 // Variants of FlagRiskLLMAnalyzer, the risk engine mode of an organization.
 // Anything else — no variant, an unrecognized key, an unavailable provider,

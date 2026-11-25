@@ -38,7 +38,7 @@ func (s *Service) requireOrganizationAdmin(ctx context.Context) (*contextvalues.
 }
 
 func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTargetsPayload) (*gen.ListAiScanTargetsResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (s *Service) ListAiScanTargets(ctx context.Context, _ *gen.ListAiScanTarget
 }
 
 func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiScanTargetPayload) (*gen.AiScanTargetMutationResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -205,13 +205,13 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 
 	return &gen.AiScanTargetMutationResult{
-		ListVersion: int(aitargets.ListVersion()),
+		ListVersion: int(list.Snapshot.ListVersion),
 		Target:      mv.BuildAiScanTargetView(entry),
 	}, nil
 }
 
 func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiScanTargetPayload) (*gen.DeleteAiScanTargetResult, error) {
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	authCtx, err := s.requireOrganizationAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai scan target delete").LogError(ctx, s.logger)
 	}
 
-	return &gen.DeleteAiScanTargetResult{ListVersion: int(aitargets.ListVersion())}, nil
+	return &gen.DeleteAiScanTargetResult{ListVersion: int(list.Snapshot.ListVersion)}, nil
 }
 
 // aiScanTargetBefore is what the organization's list held for id ahead of a

@@ -17268,7 +17268,14 @@ WHERE s.subject_urn = $2
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = $4
   AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
-  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
+  AND (
+    (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text))
+    OR EXISTS (
+      SELECT 1 FROM projects AS client_project
+      WHERE client_project.id = c.project_id AND client_project.organization_id = $6::text
+        AND (client_project.id = $5::uuid OR $5::uuid = '00000000-0000-0000-0000-000000000000'::uuid)
+    )
+  )
   AND c.deleted IS FALSE
   AND EXISTS (
     SELECT 1 FROM user_session_issuers provenance
@@ -17299,6 +17306,7 @@ WHERE s.subject_urn = $2
       JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = p.organization_id
         AND (auth.project_id IS NULL OR auth.project_id = p.id) AND NOT auth.deleted AND auth.enabled
         AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
+        AND (c.project_id IS NULL OR c.project_id = p.id)
       JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
         AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
       WHERE downstream.id = ANY($7::uuid[])

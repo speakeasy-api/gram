@@ -23,6 +23,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -103,6 +104,14 @@ type Service struct {
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
 
+	// accessRequests lists the organization's pending access requests for
+	// listPendingAccessRequests. Nil answers it not found.
+	accessRequests *access.Service
+
+	// accessRequestsLimiter bounds listPendingAccessRequests per member. Nil
+	// leaves it unlimited.
+	accessRequestsLimiter *ratelimit.Limiter
+
 	// claudePlugins renders getClaudeObservabilityPlugin's ZIP. Nil reports
 	// the plugin as unavailable.
 	claudePlugins ClaudeObservabilityPlugins
@@ -178,6 +187,8 @@ func NewService(aiCatalog *aivendors.Store,
 		agentVersions:                nil,
 		connectionStatuses:           nil,
 		connectionsLimiter:           nil,
+		accessRequests:               nil,
+		accessRequestsLimiter:        nil,
 		crashReportLimiter:           nil,
 		crashReports:                 nil,
 		crashReportCredentialLimiter: nil,
@@ -679,7 +690,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	// Trouble reading the organization's scan targets must not break plugin
 	// delivery: a poll without ai_scan leaves agents on their cached or
 	// embedded list.
-	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.Snapshot()); err != nil {
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.SnapshotFor(ctx)); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; plugin poll omits ai_scan", attr.SlogError(err))
 	} else {
 		attachAIScanEnvelope(configuration, list.Snapshot)

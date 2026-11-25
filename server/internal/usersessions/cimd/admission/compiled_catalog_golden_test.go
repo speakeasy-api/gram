@@ -99,7 +99,8 @@ func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
 	catalog := aivendors.CompiledSnapshot()
-	ids := goldenClientIDs(catalog)
+	// Probe IDs follow registry order so only decisions, not case order, can move the golden.
+	ids := goldenClientIDs(aivendors.NewSnapshot(aivendors.Products()))
 	cases := make([]goldenCase, 0, len(ids))
 	for _, id := range ids {
 		reason, matched := CatalogMatch(catalog, id)
@@ -125,8 +126,7 @@ func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 	testenv.RequireJSONGolden(t, "testdata/admission_golden.json", data)
 }
 
-// The presets listing, and the inbound EMA list built from it, keep the
-// registry's entries and order.
+// The presets listing keeps the registry's entries, in database order.
 func TestCompiledSnapshotListsPresetsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 

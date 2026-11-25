@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestIsPlaceholderTitle(t *testing.T) {
@@ -41,6 +42,26 @@ func TestIsDerivedTitleMatchesTheMessageItCameFrom(t *testing.T) {
 	// Only a title cut at the rune cap may match a longer message by prefix.
 	require.False(t, chat.IsDerivedTitle(short, short+" and more"))
 	require.False(t, chat.IsDerivedTitle(strings.Repeat("x", chat.MaxDerivedTitleRunes+1), strings.Repeat("x", 200)))
+}
+
+func TestDerivedTitleSkipsLeadingSystemReminders(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "summarize this week's support tickets", chat.DerivedTitle(coworkReminderStack+"summarize this week's support tickets"))
+	require.Empty(t, chat.DerivedTitle(coworkReminderStack))
+}
+
+func TestIsDerivedTitleMatchesStandInsWithAndWithoutEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	content := coworkReminderStack + "summarize this week's support tickets"
+	// A stand-in stored while reminders were not stripped holds the reminder's
+	// opening, cut at the rune cap.
+	storedWithEnvelope := conv.TruncateString(content, chat.MaxDerivedTitleRunes)
+
+	require.True(t, chat.IsDerivedTitle(chat.DerivedTitle(content), content))
+	require.True(t, chat.IsDerivedTitle(storedWithEnvelope, content))
+	require.False(t, chat.IsDerivedTitle("Device Folder Access Setup", content))
 }
 
 // An empty title is a placeholder, not something derived from a blank message.

@@ -81,10 +81,10 @@ export const OUTCOME_LABEL: Record<CallOutcome, string> = {
 export const LOW_CONFIDENCE = 0.75;
 
 /** Guardrail label keys the session timeline reads. */
-const CARRIES_SECRET = "carries_secret";
-const TOUCHES_CREDENTIAL_STORE = "touches_credential_store";
+const PAYLOAD_DATA_LABEL = "payload_data";
+const TARGET_LOCATIONS_LABEL = "target_locations";
 const EFFECT_CLASS_LABEL = "effect_class";
-const RUNS_OR_SENDS = ["exec_task", "exec_program", "outbound"];
+const RUNS_OR_SENDS = ["exec", "outbound"];
 
 /** "m:ss", or "h:mm:ss" past an hour, for an elapsed number of seconds. */
 export function formatClock(seconds: number): string {
@@ -130,13 +130,23 @@ export function secretExposure(
   return { firstIndex, riskyIndexes };
 }
 
+function labelIncludes(
+  call: IntentCallAssessment,
+  key: string,
+  member: string,
+): boolean {
+  const value = findLabel(call, key)?.value;
+  return Array.isArray(value) && value.map(String).includes(member);
+}
+
 // Naming a credential store in an outbound call doesn't read it; only a read
 // brings its contents into context.
 function putsSecretInContext(call: IntentCallAssessment): boolean {
-  if (findLabel(call, CARRIES_SECRET)?.value === true) return true;
-  if (findLabel(call, TOUCHES_CREDENTIAL_STORE)?.value !== true) return false;
-  const effects = findLabel(call, EFFECT_CLASS_LABEL)?.value;
-  return Array.isArray(effects) && effects.map(String).includes("read");
+  if (labelIncludes(call, PAYLOAD_DATA_LABEL, "credential")) return true;
+  if (!labelIncludes(call, TARGET_LOCATIONS_LABEL, "credential_store")) {
+    return false;
+  }
+  return labelIncludes(call, EFFECT_CLASS_LABEL, "read");
 }
 
 /** The shell command a call ran, when its arguments carry one. */

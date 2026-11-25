@@ -117,12 +117,13 @@ baseline moves under a dirty draft — is written up on AIM-230.
 
 ## Migration
 
-Done. The table records where each piece came from.
+The table records the origins of the shared pieces still used today.
 
 | Moves from                                            | To                                        |
 | ----------------------------------------------------- | ----------------------------------------- |
 | `…/authentication/remoteMcpIdentity.ts`               | `model/identity.ts`                       |
 | `…/authentication/useUserIdentityDraft.ts`            | `drafts/useIdentityDraft.ts`              |
+| `…/authentication/useAgentCredentialDraft.ts`         | `drafts/useCredentialDraft.ts`            |
 | `…/authentication/useAllRemoteSessionClients.ts`      | `queries/useAllRemoteSessionClients.ts`   |
 | `…/authentication/useProtectedResourceMetadata.ts`    | `queries/useProtectedResourceMetadata.ts` |
 | `…/authentication/useRemoteMcpAuthenticationProbe.ts` | `queries/useUpstreamProbe.ts`             |
@@ -146,9 +147,6 @@ changes:
    `useIdentityDraft` compared values instead of recording an interaction, and
    `useCredentialDraft` stopped reading validity as dirtiness.
 4. `components/`, one at a time, each a pure move with its tests.
-5. Proxied servers moved to typed credential offers. The typed credential
-   editor saves headers on the credential itself, not as source headers in a
-   combined Identity form.
 
 Still deferred: `Secret` reaching the wire, and the provider CRUD pages under
 `pages/remote-identity-providers/`.

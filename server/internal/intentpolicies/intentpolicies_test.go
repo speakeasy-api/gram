@@ -74,9 +74,9 @@ func TestGetGuardrail(t *testing.T) {
 	g, err := svc.GetGuardrail(ctx, &gen.GetGuardrailPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, intentpolicy.GuardrailVersion, g.Version)
-	require.Len(t, g.Statements, 9)
-	require.Len(t, g.Questions, 10)
-	require.Len(t, g.Contracts, 9)
+	require.Len(t, g.Statements, 10)
+	require.Len(t, g.Questions, 6)
+	require.Len(t, g.Contracts, 10)
 }
 
 func TestUploadAndAnalyzeWithGemini(t *testing.T) {
@@ -96,7 +96,7 @@ func TestUploadAndAnalyzeWithGemini(t *testing.T) {
 	require.Equal(t, "permit", res.Assessments[0].Decision)
 	require.JSONEq(t, `{"command":"ls"}`, res.Assessments[0].Arguments)
 	require.Equal(t, "block", res.Assessments[1].Decision)
-	require.Equal(t, []string{"no_force_push"}, res.Assessments[1].DecidedBy)
+	require.Equal(t, []string{"no_remote_destruction"}, res.Assessments[1].DecidedBy)
 	require.Equal(t, 2, res.Totals.Judged)
 	require.Equal(t, 1, res.Totals.Blocked)
 	require.InDelta(t, 0.004, res.Totals.CostUsd, 1e-9)

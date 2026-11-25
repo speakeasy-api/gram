@@ -101,9 +101,16 @@ func (m MandatoryAuthorization) PrincipalID() string { return m.principalID }
 
 func (m MandatoryAuthorization) OrganizationID() string { return m.organizationID }
 
-// RepresentedUserID is the user bound to $represented_user, the same binding
-// enforcement uses. Callers that represent no user return "".
+// RepresentedUserID returns the user the caller represents, if any. It does
+// not include the owner bound only for an auth-client admission check.
 func (m MandatoryAuthorization) RepresentedUserID() string { return m.authorization.representedUser }
+
+func (m MandatoryAuthorization) authClientRepresentedUserID() string {
+	if m.caller == MandatoryCallerWorkload {
+		return m.workloadOwner
+	}
+	return m.RepresentedUserID()
+}
 
 // LegacyAuthCeiling reports whether admission derived the caller's auth
 // client ceiling from server access in a pre-version-5 stored policy.
@@ -134,7 +141,7 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false},
 		key:             nil,
 		narrowedProject: nil,
 		workloadOwner:   "",
@@ -173,7 +180,8 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		if err != nil {
 			return m, fmt.Errorf("prepare mandatory authorization: %w", err)
 		}
-		authorization, ok = grantAuthorizationFromContext(prepared)
+		ctx = prepared
+		authorization, ok = grantAuthorizationFromContext(ctx)
 	}
 	if !ok {
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonNoPolicy), nil
@@ -282,10 +290,9 @@ func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string,
 		return visibilityAdmission(), nil
 	}
 	if m.caller == MandatoryCallerWorkload {
-		// Only this check binds the admitted workload owner as a connection
-		// owner. The workload still has no represented principal and the
-		// credential ceiling, assigned agent and owner policies all apply.
-		m.authorization.representedUser = m.workloadOwner
+		// Bind the admitted workload owner only for this check; the
+		// credential ceiling, assigned agent and owner policies still apply.
+		m.authorization.representedUser = m.authClientRepresentedUserID()
 	}
 	return m.Decide(organizationID, use)
 }

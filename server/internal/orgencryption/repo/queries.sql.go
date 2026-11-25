@@ -2075,6 +2075,42 @@ func (q *Queries) TouchDataEncryptionKeyWrapUnwrapped(ctx context.Context, arg T
 	return err
 }
 
+const tryLockEncryptionClear = `-- name: TryLockEncryptionClear :one
+SELECT pg_try_advisory_lock(hashtextextended('orgencryption-clear:' || $1::text || ':' || $2::text, 0))::boolean AS locked
+`
+
+type TryLockEncryptionClearParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Takes the session advisory lock that serializes clearing one organization's
+// platform-key copies for a use case, without waiting. The caller holds its
+// connection until it unlocks.
+func (q *Queries) TryLockEncryptionClear(ctx context.Context, arg TryLockEncryptionClearParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockEncryptionClear, arg.OrganizationID, arg.UseCase)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
+}
+
+const unlockEncryptionClear = `-- name: UnlockEncryptionClear :one
+SELECT pg_advisory_unlock(hashtextextended('orgencryption-clear:' || $1::text || ':' || $2::text, 0))::boolean AS unlocked
+`
+
+type UnlockEncryptionClearParams struct {
+	OrganizationID string
+	UseCase        string
+}
+
+// Releases the lock TryLockEncryptionClear took on the same connection.
+func (q *Queries) UnlockEncryptionClear(ctx context.Context, arg UnlockEncryptionClearParams) (bool, error) {
+	row := q.db.QueryRow(ctx, unlockEncryptionClear, arg.OrganizationID, arg.UseCase)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const updateEncryptionTransitionState = `-- name: UpdateEncryptionTransitionState :one
 UPDATE organization_encryption_transitions
 SET state = $1,

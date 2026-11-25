@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -110,7 +109,11 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	r.DB = db
 	r.cleanup = append(r.cleanup, func(context.Context) error { db.Close(); return nil })
-	aiCatalog := aivendors.NewStore(aivendors.CompiledSnapshot())
+	aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
+	if err != nil {
+		return nil, err
+	}
+	r.cleanup = append(r.cleanup, func(context.Context) error { stopAICatalog(); return nil })
 	chDB, stop, err := newClickhouseClient(ctx, logger, c)
 	if err != nil {
 		return nil, err
@@ -379,7 +382,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	mcpService.StartRemoteSessionRecheck(ctx)
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
+	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{AICatalog: aiCatalog, MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return nil, err
 	}

@@ -12,8 +12,8 @@ package aivendors
 // "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
 // above the product. Every product with Signatures is also a scan target.
 //
-// Declaration order is load-bearing: wildcards match in order, so reordering
-// can change which entry a client_id is attributed to.
+// Declaration order is listing order; the most specific matching wildcard
+// decides attribution regardless of order.
 var registry = []Product{
 	// Verified 2026-07. Claude Code selects CIMD when the AS advertises
 	// client_id_metadata_document_supported AND "none" among its

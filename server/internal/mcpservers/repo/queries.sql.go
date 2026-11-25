@@ -2220,8 +2220,8 @@ WITH scoped AS (
     JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
     JOIN user_session_issuers AS signin ON signin.id = server.user_session_issuer_id
       AND (signin.project_id = project.id OR (signin.project_id IS NULL AND signin.organization_id = project.organization_id))
-    WHERE signin.id = ANY($1::uuid[])
-      AND project.id = $2::uuid AND project.organization_id = $3::text
+    WHERE signin.id = ANY($3::uuid[])
+      AND project.id = $1::uuid AND project.organization_id = $2::text
       AND NOT server.deleted
 ), typed AS (
     SELECT server.id, auth_client.remote_session_client_id,
@@ -2262,13 +2262,16 @@ FROM derived
 WHERE server.id = derived.id
   AND NOT server.deleted
   AND server.user_session_issuer_id = derived.signin_id
+  AND server.project_id = $1::uuid
+  AND EXISTS (SELECT 1 FROM projects AS project
+              WHERE project.id = server.project_id AND project.organization_id = $2::text AND NOT project.deleted)
   AND server.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
 type ResyncMCPServerRemoteSessionIssuersParams struct {
-	UserSessionIssuerIds []uuid.UUID
 	ProjectID            uuid.UUID
 	OrganizationID       string
+	UserSessionIssuerIds []uuid.UUID
 }
 
 // Stamp exactly one live upstream provider for the server. A typed OAuth
@@ -2276,7 +2279,7 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 // typed OAuth history may still use direct server associations. Sign-in
 // issuer links are FK compatibility only and never determine this stamp.
 func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.UserSessionIssuerIds, arg.ProjectID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
 		return 0, err
 	}

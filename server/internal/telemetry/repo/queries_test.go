@@ -101,6 +101,17 @@ func TestToolUsageTraceRowsCTE_IdentityChipsStayOnSummaryPath(t *testing.T) {
 	require.Contains(t, sql, "FROM telemetry_logs")
 }
 
+func TestToolUsageTraceRowsCTE_RawPathKeepsPerRowWorkCheap(t *testing.T) {
+	t.Parallel()
+
+	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{GramProjectID: "p", Query: ":"})
+	require.NoError(t, err)
+	require.Contains(t, sql, "FROM telemetry_logs")
+	require.NotContains(t, sql, "toString(attributes)")
+	require.Equal(t, 1, strings.Count(sql, "WINDOW log_group AS"))
+	require.NotContains(t, sql, "OVER (PARTITION BY")
+}
+
 func TestToolUsageStatusPredicate(t *testing.T) {
 	t.Parallel()
 

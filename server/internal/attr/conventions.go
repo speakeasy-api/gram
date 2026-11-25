@@ -830,6 +830,8 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey            = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey       = attribute.Key("gram.openrouter.response.body")
+	OpenRouterTimeToFirstChunkKey   = attribute.Key("gram.openrouter.time_to_first_chunk_ms")
+	OpenRouterUpstreamProviderKey   = attribute.Key("gram.openrouter.upstream_provider")
 	OpenRouterRateLimitLimitKey     = attribute.Key("gram.openrouter.ratelimit.limit")
 	OpenRouterRateLimitRemainingKey = attribute.Key("gram.openrouter.ratelimit.remaining")
 	OpenRouterRateLimitResetKey     = attribute.Key("gram.openrouter.ratelimit.reset")
@@ -891,6 +893,18 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// ExtMcpFeedback keys are customer-facing, on exported MCP server feedback.
+	ExtMcpFeedbackIDKey            = attribute.Key("speakeasy.mcp_feedback.id")
+	ExtMcpFeedbackServerIDKey      = attribute.Key("speakeasy.mcp_feedback.server_id")
+	ExtMcpFeedbackSeverityKey      = attribute.Key("speakeasy.mcp_feedback.severity")
+	ExtMcpFeedbackToolNameKey      = attribute.Key("speakeasy.mcp_feedback.tool_name")
+	ExtMcpFeedbackWorkaroundKey    = attribute.Key("speakeasy.mcp_feedback.workaround")
+	ExtMcpFeedbackIntentionKey     = attribute.Key("speakeasy.mcp_feedback.intention")
+	ExtMcpFeedbackModelKey         = attribute.Key("speakeasy.mcp_feedback.model")
+	ExtMcpFeedbackClientNameKey    = attribute.Key("speakeasy.mcp_feedback.client_name")
+	ExtMcpFeedbackClientVersionKey = attribute.Key("speakeasy.mcp_feedback.client_version")
+	ExtMcpFeedbackUserIDKey        = attribute.Key("speakeasy.mcp_feedback.user_id")
 
 	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
 	TestEventKey = attribute.Key("speakeasy.test_event")
@@ -3180,6 +3194,14 @@ func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
 
+func OpenRouterTimeToFirstChunk(v int64) attribute.KeyValue {
+	return OpenRouterTimeToFirstChunkKey.Int64(v)
+}
+
+func OpenRouterUpstreamProvider(v string) attribute.KeyValue {
+	return OpenRouterUpstreamProviderKey.String(v)
+}
+
 func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
 	return OpenRouterRateLimitLimitKey.String(v)
 }
@@ -3435,6 +3457,72 @@ func SlogExtMcpConnectionStepResult(v string) slog.Attr {
 func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
 func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func ExtMcpFeedbackID(v string) attribute.KeyValue { return ExtMcpFeedbackIDKey.String(v) }
+func SlogExtMcpFeedbackID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIDKey), v)
+}
+
+func ExtMcpFeedbackServerID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackServerIDKey.String(v)
+}
+func SlogExtMcpFeedbackServerID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackServerIDKey), v)
+}
+
+func ExtMcpFeedbackSeverity(v string) attribute.KeyValue {
+	return ExtMcpFeedbackSeverityKey.String(v)
+}
+func SlogExtMcpFeedbackSeverity(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackSeverityKey), v)
+}
+
+func ExtMcpFeedbackToolName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackToolNameKey.String(v)
+}
+func SlogExtMcpFeedbackToolName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackToolNameKey), v)
+}
+
+func ExtMcpFeedbackWorkaround(v string) attribute.KeyValue {
+	return ExtMcpFeedbackWorkaroundKey.String(v)
+}
+func SlogExtMcpFeedbackWorkaround(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackWorkaroundKey), v)
+}
+
+func ExtMcpFeedbackIntention(v string) attribute.KeyValue {
+	return ExtMcpFeedbackIntentionKey.String(v)
+}
+func SlogExtMcpFeedbackIntention(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIntentionKey), v)
+}
+
+func ExtMcpFeedbackModel(v string) attribute.KeyValue { return ExtMcpFeedbackModelKey.String(v) }
+func SlogExtMcpFeedbackModel(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackModelKey), v)
+}
+
+func ExtMcpFeedbackClientName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientNameKey.String(v)
+}
+func SlogExtMcpFeedbackClientName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientNameKey), v)
+}
+
+func ExtMcpFeedbackClientVersion(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientVersionKey.String(v)
+}
+func SlogExtMcpFeedbackClientVersion(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientVersionKey), v)
+}
+
+func ExtMcpFeedbackUserID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackUserIDKey.String(v)
+}
+func SlogExtMcpFeedbackUserID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackUserIDKey), v)
 }
 
 func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
@@ -4390,6 +4478,10 @@ func GenAIUsageCacheCreationInputTokens(v int) attribute.KeyValue {
 
 func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
+}
+
+func GenAIUsageReasoningTokens(v int) attribute.KeyValue {
+	return GenAIUsageReasoningTokensKey.Int(v)
 }
 
 func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }

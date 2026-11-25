@@ -59,6 +59,7 @@ LEFT JOIN remote_session_issuers AS rsi
         OR (rsi.project_id IS NULL AND (rsi.organization_id = $1 OR rsi.organization_id IS NULL))
     )
 WHERE m.id = ANY($2::uuid[])
+    AND ($3::uuid IS NULL OR m.project_id = $3::uuid)
     AND m.deleted IS FALSE
     AND (rms.id IS NOT NULL OR rsi.id IS NOT NULL)
 `
@@ -66,6 +67,7 @@ WHERE m.id = ANY($2::uuid[])
 type ListServerUpstreamsParams struct {
 	OrganizationID string
 	ServerIds      []uuid.UUID
+	ProjectID      uuid.NullUUID
 }
 
 type ListServerUpstreamsRow struct {
@@ -74,9 +76,9 @@ type ListServerUpstreamsRow struct {
 	Issuer pgtype.Text
 }
 
-// Remote URL and issuer, each when set, of the live MCP servers among the ids in the organization.
+// Remote URL and issuer, each when set, of the live MCP servers among the ids in the organization, and in the project when one is given.
 func (q *Queries) ListServerUpstreams(ctx context.Context, arg ListServerUpstreamsParams) ([]ListServerUpstreamsRow, error) {
-	rows, err := q.db.Query(ctx, listServerUpstreams, arg.OrganizationID, arg.ServerIds)
+	rows, err := q.db.Query(ctx, listServerUpstreams, arg.OrganizationID, arg.ServerIds, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

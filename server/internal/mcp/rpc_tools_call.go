@@ -109,6 +109,7 @@ func handleToolsCall(
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
 	scan *mcpriskscan.Evaluator,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -138,6 +139,45 @@ func handleToolsCall(
 	// attribution. Preserve their availability when optional lookup fails.
 	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
 	attributedMCPServerID := payload.servingServerID()
+
+	// A local tool's name is taken on the server, so it is matched before any
+	// of the server's own tools and before the filters that narrow them.
+	if local != nil && attributedMCPServerID != nil {
+		if tool, ok := localToolNamed(local(ctx, logger, toolset.OrganizationID, payload), params.Name); ok {
+			// A local tool's arguments are the agent's words like any other
+			// call's, so request risk policies screen them before it answers.
+			decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+				Surface:         mcpriskscan.SurfaceHostedMCP,
+				Method:          mcpriskscan.MethodToolsCall,
+				OrganizationID:  toolset.OrganizationID,
+				ProjectID:       payload.projectID.String(),
+				ServerID:        attributedMCPServerID.String(),
+				MetaServerID:    payload.metaMcpServerID,
+				ToolsetID:       toolset.ID,
+				ToolName:        params.Name,
+				ResourceURI:     "",
+				PromptName:      "",
+				ChatID:          payload.chatID,
+				ToolAnnotations: nil,
+			}, mcpriskscan.BorrowPayload(params.Arguments)))
+			if decision.HeldForApproval() {
+				identity := serverInfoHostedToolset
+				if payload.metaMcpServerID != "" {
+					identity = serverInfoMetaServer
+				}
+				return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+			}
+			if decision.Denied() {
+				return nil, oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+			}
+			return answerHostedLocalToolCall(ctx, logger, clientInfoStore, payload, req.ID, tool, params.Arguments, reqMeta.ClientInfo)
+		}
+	}
+	// A gateway let this call through only because it named a local tool, so
+	// none of the server's own tools may answer it.
+	if localToolsOnly(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", remotemcp.ToolNotApprovedMessage).LogInfo(ctx, logger)
+	}
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a

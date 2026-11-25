@@ -139,7 +139,7 @@ func requireAuthClientSetup(t *testing.T, resp *httptest.ResponseRecorder, err e
 
 // Two remote servers share one user session issuer but use different upstream
 // clients. Each forwards only its own client's credential, a server issued
-// after the credential fails closed into reconnect, and a server needing no
+// after issuance requires sign-in setup, and a server needing no
 // upstream authentication calls anonymously.
 func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	t.Parallel()
@@ -238,7 +238,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	f.associate(t, ctx, notion.ID, linearClient)
 	before := notionUpstream.requestCount()
 	resp, err = callTool(t, f.ti, notionSlug, notionBearer, "ping")
-	requireAuthClientSetup(t, resp, err)
+	requireReconnect(t, resp, err, notionSlug)
 	require.Equal(t, before, notionUpstream.requestCount())
 
 	// Unbinding the chosen client from the issuer, though it stays associated
@@ -265,7 +265,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 
 // An anonymous session is served through its recorded choices like any other
 // session: its chosen client forwards its own connection, and a server
-// configured after it was issued asks it to reconnect rather than serving
+// configured after it was issued asks for sign-in setup rather than serving
 // through the issuer's clients.
 func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T) {
 	t.Parallel()
@@ -359,7 +359,9 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	})
 	fx.ti.service.manual = true
 	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	sibling := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	siblingServer, _ := createRemoteMcpEndpoint(t, ctx, fx.ti.conn, fx.projectID, "https://sibling-client.example.com/mcp", "sel-sibling-"+uuid.NewString()[:8], "public", fx.shared)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, siblingServer.ID, sibling, "remote_session")
 
 	n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        fx.orgID,

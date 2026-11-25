@@ -837,7 +837,7 @@ type metaGateAdmission struct {
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
 func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
-	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx, s.aiCatalog.Snapshot()))
+	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))
 	skipped := new(remotesessions.SkippedClients)
 
 	var gateProjectTokens *projectTokenCache
@@ -869,7 +869,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		gateCaller = admission.caller
 		gateAgentID = admission.agentID
 		authentication.skippedUpstreams = skipped
-		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
+		gateProjectTokens = s.newOrganizationGatewayTokens(ctx, r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -899,8 +899,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
 		// Proxied members resolve only their chosen clients. Hosted members
-		// still resolve issuer clients lazily in their own project.
-		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
+		// resolve their exact upstream placement on first use.
+		gateProjectTokens = s.newOrganizationGatewayTokens(ctx, r, authentication.endpoint, authentication.subject, skipped)
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
 	}

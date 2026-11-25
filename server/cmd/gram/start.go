@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/anthropicinference"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
@@ -112,6 +111,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -140,8 +140,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
-	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
@@ -805,7 +803,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			dbClose = db.Close
-			aiCatalog := aivendors.NewStore(aivendors.CompiledSnapshot())
+			aiCatalog, stopAICatalog, err := startAICatalog(ctx, db, logger, meterProvider)
+			if err != nil {
+				return err
+			}
+			defer stopAICatalog()
 
 			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
@@ -1204,10 +1206,8 @@ func newStartCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
-			// mcpService captures this map by reference now; the remaining
-			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
-			// their backing services exist further down.
-			managedInsightsTools := append([]platformtools.ExternalTool{}, platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)...)
+			// mcpService captures this map by reference now; the toolsets are
+			// built once their backing services exist further down.
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
@@ -1546,6 +1546,8 @@ func newStartCommand() *cli.Command {
 			// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
 			// every route the host does not serve, and above customdomains.Middleware,
 			// which refuses hosts it does not know.
+			// Above the authentication host, whose router serves its routes itself.
+			mux.Use(aiCatalog.Middleware)
 			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
@@ -1611,7 +1613,9 @@ func newStartCommand() *cli.Command {
 				WithFeatures(featureFlags)
 			access.Attach(mux, accessService)
 			agentService := agent.NewService(aiCatalog, logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens, marketplaceTokens).
-				WithWorkloadTokenTargets(mcpService)
+				WithWorkloadTokenTargets(mcpService).
+				WithAccessRequests(accessService).
+				WithAccessRequestsLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-access-requests", agent.AccessRequestsRate, ratelimit.WithMetrics(meterProvider)))
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agentService.WithCrashReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-crash", agent.CrashReportRate, ratelimit.WithMetrics(meterProvider))).
@@ -1929,6 +1933,7 @@ func newStartCommand() *cli.Command {
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedServerWriter(toolsetsSvc).WithServerURL(serverURL)
 			mcpservers.Attach(mux, mcpServersService)
+			mcpfeedback.Attach(mux, mcpfeedback.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission, mcpService.CodeModeAvailable, upstreamRevoker).
@@ -1937,7 +1942,7 @@ func newStartCommand() *cli.Command {
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, clientSecrets, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 			identityCommitter.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner), remotesessions.WithRefreshConnectionRecorder(connectionRecorder), remotesessions.WithRefreshFeatureFlags(featureFlags), remotesessions.WithRefreshClientSecrets(clientSecrets), remotesessions.WithRefreshUpstreamTokens(upstreamTokens)), productFeatures, protectedResources)
-			remoteSessionsService.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(logger, db, encryptionClient, guardianPolicy, remoteChallengeManager))
+			remoteSessionsService.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aiCatalog, logger, db, encryptionClient, guardianPolicy, remoteChallengeManager))
 			userSessionsService := usersessions.NewService(aiCatalog, logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, clientSecrets, upstreamTokens, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
 			usersessions.Attach(mux, userSessionsService)
 			mcpconnectionhealth.Attach(mux, mcpconnectionhealth.NewService(logger, tracerProvider, db, chReadDB, sessionManager, authzEngine, featureFlags, mcpconnectionhealth.LogsEnabled(logsEnabled)))
@@ -1978,8 +1983,9 @@ func newStartCommand() *cli.Command {
 			tunnelService.Metrics = tunnelmetrics.NewStore(chDB)
 			tunneledmcp.Attach(mux, tunnelService)
 			mcpRuntime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{
-				MCP:      mcpService,
-				Metadata: mcpMetadataService,
+				AICatalog: aiCatalog,
+				MCP:       mcpService,
+				Metadata:  mcpMetadataService,
 			})
 			if err != nil {
 				return fmt.Errorf("build MCP server runtime: %w", err)
@@ -2053,6 +2059,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			platformMCPCfg := platformMCPConfig{
+				AICatalog:                 aiCatalog,
 				CustomDomainTargetSuffix:  customDomainTargetSuffix,
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
@@ -2286,31 +2293,13 @@ func newStartCommand() *cli.Command {
 			)
 			telemLogger.AddObserver(spendUsageTrigger)
 
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService, c.String(usersessions.JWTSigningKeyFlag))...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chReadDB))...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
-			// One-off fetches on a cold cache; a pooled client would only hold
-			// idle connections to the marketing site. Bound the whole request
-			// so a stalled marketing-site response can't hang the fetch; the
-			// client is dedicated to these speakeasy.com tools, which share the
-			// same bound, so a per-client timeout is safe.
-			marketingSiteClient := guardianPolicy.Client()
-			// Take the larger bound so the shared client stays correct if either
-			// tool's timeout is tuned independently later.
-			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(marketingSiteClient)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDocsTools(marketingSiteClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools:          memoryTools,
-				AssistantSkillTools:           skillTools,
-				AssistantTriggerTools:         triggerTools,
-				ManagedAssistantInsightsTools: managedInsightsTools,
-				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
-				PlatformMCPReadActingContext:  assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
-				SpeakeasySlackTools:           platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
+				AssistantMemoryTools:         memoryTools,
+				AssistantSkillTools:          skillTools,
+				AssistantTriggerTools:        triggerTools,
+				PlatformMCPReadTools:         assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
+				PlatformMCPReadActingContext: assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
+				SpeakeasySlackTools:          platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can

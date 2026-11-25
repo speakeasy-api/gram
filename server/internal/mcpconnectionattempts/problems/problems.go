@@ -154,6 +154,9 @@ type Problem struct {
 
 	// OtherAppsWorked is whether another named family worked on one of its servers after its first failure there.
 	OtherAppsWorked bool
+
+	// OthersOnScope counts the people failing on its scope who are not in it, zero for a person.
+	OthersOnScope int
 }
 
 // way is how an episode failed: two episodes failed the same way when both are equal.
@@ -182,14 +185,14 @@ func evidenceKey(e mcpconnectionattempts.FailingPerson, part mcpconnectionattemp
 	if part == mcpconnectionattempts.PartAppSignIn {
 		return servedKey{kind: e.ServerKind, id: e.ServerID, server: ""}
 	}
-	return servedKey{kind: "", id: "", server: serverOf(e)}
+	return servedKey{kind: "", id: "", server: ServerOf(e)}
 }
 
 // workedAt is when a family was last served and last answered on one server.
 type workedAt struct{ served, answered time.Time }
 
-// serverOf is the episode's server: its mcp_servers row, else its own kind, id and member.
-func serverOf(e mcpconnectionattempts.FailingPerson) string {
+// ServerOf is the episode's server: its mcp_servers row, else its own kind, id and member.
+func ServerOf(e mcpconnectionattempts.FailingPerson) string {
 	if id := e.BackingServerID(); id != "" {
 		return id
 	}
@@ -217,6 +220,7 @@ type grouper struct {
 	ways           []way
 	servers        []string
 	scopes         [][]Scope
+	onScope        map[Scope]map[string]struct{}
 	worked         map[servedKey]map[string]workedAt
 }
 
@@ -229,13 +233,20 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 		servers:        make([]string, len(episodes)),
 		scopes:         make([][]Scope, len(episodes)),
 		worked:         map[servedKey]map[string]workedAt{},
+		onScope:        map[Scope]map[string]struct{}{},
 	}
 	for i, e := range episodes {
 		g.people[i] = isPerson(e.SubjectURN)
 		g.ways[i] = wayOf(e)
-		g.servers[i] = serverOf(e)
+		g.servers[i] = ServerOf(e)
 		if g.people[i] {
 			g.scopes[i] = scopesOf(e, g.ways[i], g.servers[i], upstreams)
+			for _, sc := range g.scopes[i] {
+				if g.onScope[sc] == nil {
+					g.onScope[sc] = map[string]struct{}{}
+				}
+				g.onScope[sc][e.SubjectURN] = struct{}{}
+			}
 		}
 	}
 	for _, s := range served {
@@ -479,6 +490,7 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 		Episodes:        eps,
 		SharedApp:       sharedApp(eps),
 		OtherAppsWorked: otherApps,
+		OthersOnScope:   g.othersOn(scope, eps),
 	}
 	for _, e := range eps[1:] {
 		if e.LastFailureAt.After(p.LastFailedAt) {
@@ -486,6 +498,24 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 		}
 	}
 	return p
+}
+
+// othersOn counts the people who could join scope in any way and are not among eps.
+func (g grouper) othersOn(scope Scope, eps []mcpconnectionattempts.FailingPerson) int {
+	if scope.Kind == ScopePerson {
+		return 0
+	}
+	in := map[string]bool{}
+	for _, e := range eps {
+		in[e.SubjectURN] = true
+	}
+	others := 0
+	for subject := range g.onScope[scope] {
+		if !in[subject] {
+			others++
+		}
+	}
+	return others
 }
 
 // otherAppsWorked is whether withEvidence keeps any of idx.

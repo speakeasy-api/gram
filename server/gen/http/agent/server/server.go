@@ -38,6 +38,7 @@ type Server struct {
 	ReportState                  http.Handler
 	ReportCrash                  http.Handler
 	CreateSessionHandoff         http.Handler
+	ListPendingAccessRequests    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -84,6 +85,7 @@ func New(
 			{"ReportState", "POST", "/rpc/agent.reportState"},
 			{"ReportCrash", "POST", "/rpc/agent.reportCrash"},
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
+			{"ListPendingAccessRequests", "GET", "/rpc/agent.listPendingAccessRequests"},
 		},
 		GetPlugins:                   NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetMyConnections:             NewGetMyConnectionsHandler(e.GetMyConnections, mux, decoder, encoder, errhandler, formatter),
@@ -102,6 +104,7 @@ func New(
 		ReportState:                  NewReportStateHandler(e.ReportState, mux, decoder, encoder, errhandler, formatter),
 		ReportCrash:                  NewReportCrashHandler(e.ReportCrash, mux, decoder, encoder, errhandler, formatter),
 		CreateSessionHandoff:         NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
+		ListPendingAccessRequests:    NewListPendingAccessRequestsHandler(e.ListPendingAccessRequests, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -127,6 +130,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ReportState = m(s.ReportState)
 	s.ReportCrash = m(s.ReportCrash)
 	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
+	s.ListPendingAccessRequests = m(s.ListPendingAccessRequests)
 }
 
 // MethodNames returns the methods served.
@@ -151,6 +155,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountReportStateHandler(mux, h.ReportState)
 	MountReportCrashHandler(mux, h.ReportCrash)
 	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
+	MountListPendingAccessRequestsHandler(mux, h.ListPendingAccessRequests)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -1072,6 +1077,60 @@ func NewCreateSessionHandoffHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createSessionHandoff")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPendingAccessRequestsHandler configures the mux to serve the
+// "agent" service "listPendingAccessRequests" endpoint.
+func MountListPendingAccessRequestsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.listPendingAccessRequests", f)
+}
+
+// NewListPendingAccessRequestsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "agent" service "listPendingAccessRequests"
+// endpoint.
+func NewListPendingAccessRequestsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPendingAccessRequestsRequest(mux, decoder)
+		encodeResponse = EncodeListPendingAccessRequestsResponse(encoder)
+		encodeError    = EncodeListPendingAccessRequestsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPendingAccessRequests")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

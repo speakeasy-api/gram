@@ -497,6 +497,24 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+function useProxiedGitHub() {
+  mocks.mcpServers.mockResolvedValue({
+    mcpServers: [
+      {
+        id: "server_one",
+        name: "GitHub",
+        slug: "github",
+        projectId: "project_one",
+        remoteMcpServerId: "remote_github",
+        visibility: "private",
+        networkAccessMode: "dual",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requiredClientIds = {};
@@ -806,8 +824,8 @@ describe("Provisioning a new agent", () => {
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
   });
 
-  it("stops on the server step when the organization requires the sign-in grant its creator cannot give", async () => {
-    mocks.authEnforced = true;
+  it("stops on the server step when a proxied server needs a sign-in grant its creator cannot give", async () => {
+    useProxiedGitHub();
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "caller" }],
     });
@@ -827,6 +845,31 @@ describe("Provisioning a new agent", () => {
         .disabled,
     ).toBe(true);
     expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("can create a hosted-only agent when the optional sign-in grant is refused", async () => {
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    await waitFor(() => expect(mocks.checkAuthGrant).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const { policyGrants } =
+      mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    expect(policyGrants).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ scope: "mcp:auth" })]),
+    );
   });
 
   it("gives a new agent hook ingestion in its project, and asks its first key for it", async () => {
@@ -1474,10 +1517,12 @@ describe("Connecting a GKE cluster", () => {
     // It is not on the Authorization Servers page, so the step points at the
     // page that lists it, in the project that owns it.
     expect(
-      screen.getByText(/listed on the MCP Sessions page as an MCP/),
+      screen.getByText(
+        /listed on the MCP Sign-in page, not on the Authorization/,
+      ),
     ).toBeTruthy();
     const link = screen.getByRole("link", {
-      name: "Open assistant-shared in MCP Sessions",
+      name: "Open assistant-shared in MCP Sign-in",
     });
     expect(link.getAttribute("href")).toBe(
       "/acme/projects/project-two/mcp-sessions/usi_project/mcp-servers",
@@ -1586,7 +1631,7 @@ describe("Connecting a GKE cluster", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Change MCP Authentication Provider",
+        name: "Change MCP sign-in",
       }),
     );
 
@@ -2366,12 +2411,18 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
   });
 
-  it("will not save an agent without the sign-in grant its editor cannot give where it is required", async () => {
-    mocks.authEnforced = true;
+  it("will not save a proxied agent without the sign-in grant its editor cannot give", async () => {
+    useProxiedGitHub();
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "owner" }],
     });
-    editing({ withoutAuth: true });
+    const grant = (grants as unknown as { selector: object }[])[0]!;
+    editing({
+      withoutAuth: true,
+      grants: [
+        { ...grant, selector: { ...grant.selector, resourceId: "server_one" } },
+      ],
+    });
 
     expect(
       await screen.findByText(/This agent's owner cannot give it mcp:auth/),

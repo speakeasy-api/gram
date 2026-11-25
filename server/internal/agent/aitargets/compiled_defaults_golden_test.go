@@ -1,8 +1,8 @@
 package aitargets_test
 
 // This golden was first generated from the registry-backed Defaults before it
-// took a snapshot, which established equivalence. A registry change needs
-// `-args -update`.
+// took a snapshot, which established equivalence. list_version and etag derive
+// from the served built-in targets, so a scan list change needs `-args -update`.
 
 import (
 	"encoding/json"
@@ -34,11 +34,12 @@ type compiledDefaultsGolden struct {
 func TestCompiledSnapshotServesTheRegistryScanList(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
-	snapshot := aitargets.NewSnapshot(aitargets.ListVersion(), aitargets.Served(aitargets.Overlay(defaults, nil)))
+	catalog := aivendors.CompiledSnapshot()
+	defaults := aitargets.Defaults(catalog)
+	snapshot := aitargets.NewOrganizationList(catalog, nil).Snapshot
 	data, err := json.Marshal(compiledDefaultsGolden{
 		Defaults:    defaults,
-		ListVersion: aitargets.ListVersion(),
+		ListVersion: snapshot.ListVersion,
 		ETag:        snapshot.ETag,
 		Envelope:    snapshot.EnvelopeValue(),
 	})

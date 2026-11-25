@@ -136,13 +136,52 @@ func TestIssuerMigrationPreviewReadsDirectAssociationWithoutTypedHistory(t *test
 
 func seedMigrationTypedOffer(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID, registration uuid.UUID) uuid.UUID {
 	t.Helper()
+	return seedMigrationTypedOfferWithSource(t, ctx, ti, projectID, serverID, registration, "admin")
+}
+
+func seedMigrationTypedOfferWithSource(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID, registration uuid.UUID, source string) uuid.UUID {
+	t.Helper()
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	q := authclientbackfill.New(ti.conn)
-	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: source, RemoteSessionClientID: conv.ToNullUUID(registration)})
 	require.NoError(t, err)
-	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, AuthClientID: id, Source: source}))
 	return id
+}
+
+func TestOrganizationUserSessionIssuerMigratePreservesBackfilledTypedOffers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "backfill-target")
+	source := seedIssuer(t, ctx, ti, "backfill-source")
+	proxiedReg := seedMigrationRemoteClient(t, ctx, ti, "backfill-proxied-reg", source)
+	hostedReg := seedMigrationRemoteClient(t, ctx, ti, "backfill-hosted-reg", source)
+	member := impactSeedServer(t, ctx, ti, source)
+	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "backfill-hosted")
+	proxiedOffer := seedMigrationTypedOfferWithSource(t, ctx, ti, *auth.ProjectID, member, proxiedReg, "backfill")
+	hostedOffer := seedMigrationTypedOfferWithSource(t, ctx, ti, *auth.ProjectID, hosted, hostedReg, "backfill")
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.String(), TargetID: target.String()})
+	require.NoError(t, err)
+	require.True(t, preflight.CanMigrate)
+	require.Empty(t, preflight.ServerImpacts)
+	require.Empty(t, preflight.DroppedClientLinks)
+
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, source.String(), target.String()))
+	require.NoError(t, err)
+	require.Empty(t, result.ServerImpacts)
+	require.Empty(t, result.DroppedClientLinks)
+
+	backfillQueries := authclientbackfill.New(ti.conn)
+	memberOffers, err := backfillQueries.ListServerAuthClientsFixture(ctx, member)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{proxiedOffer}, memberOffers, "consolidation must not retire backfilled typed offers on proxied servers")
+	hostedOffers, err := backfillQueries.ListServerAuthClientsFixture(ctx, hosted)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{hostedOffer}, hostedOffers, "consolidation must not retire backfilled typed offers on hosted servers")
 }
 
 // A deleted client's binding is never carried to the target. It changes

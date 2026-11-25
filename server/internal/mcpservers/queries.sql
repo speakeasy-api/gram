@@ -686,6 +686,9 @@ FROM derived
 WHERE server.id = derived.id
   AND NOT server.deleted
   AND server.user_session_issuer_id = derived.signin_id
+  AND server.project_id = @project_id::uuid
+  AND EXISTS (SELECT 1 FROM projects AS project
+              WHERE project.id = server.project_id AND project.organization_id = @organization_id::text AND NOT project.deleted)
   AND server.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id;
 
 -- name: ListProjectsSharingOrganizationUserSessionIssuers :many

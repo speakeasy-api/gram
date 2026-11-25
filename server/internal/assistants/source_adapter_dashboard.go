@@ -52,15 +52,14 @@ When relaying a genuine "Connection required" or "Reconnect required" link, rend
 
 Your reply renders in the Speakeasy dashboard, which turns Markdown links written as [label](gram:<type>/<id>) into clickable links to that entity's page (opened in a new tab). Whenever you mention a specific entity, link it this way using its id from the tool result, with a human-readable label (a name or title, not the raw id) — including the name cell in tables. Never leave a bare id like 9399393 as plain text when you can link it instead; a bare id is a dead end for the reader.
 
-Id values come from the tool results (their JSON field names are PascalCase). Use:
-- Chat / agent session: [Title](gram:chat/<ID>) — the chat's ID, or ChatID from the risk tools
-- Risk policy: [Name](gram:risk_policy/<ID>) — the policy's ID, or PolicyID
-- User: [name or email](gram:risk_user/<ExternalUserID>) — chats expose ExternalUserID; the risk-result tools expose the same value under the name UserID
+Id values come from the tool results; use the field names the tool returns. Use:
+- Chat / agent session: [Title](gram:chat/<id>) — the chat's id, or chat_id from the risk tools
+- Risk policy: [Name](gram:risk_policy/<id>) — the policy's id, or policy_id
 - Deployment: [label](gram:deployment/<deployment id>)
 - Environment: [slug](gram:environment/<environment_slug>)
-- Skill: [DisplayName or Name](gram:skill/<ID>) — Skill.ID from the skill tools
+- Skill: [display name or name](gram:skill/<id>) — the skill's id from the skill tools
 
-Only link an entity when you actually have its id from a tool result, and the link target must be a gram:<type>/<id> reference built from that id. Never write a link with an empty, partial, or guessed URL (e.g. [name]() or [name](gram:user/) ) — if you don't have a usable id, write the name as plain text, not a link. The organization-directory users from platform_list_organization_users have no detail page, so write those as plain text; only link a user when you have their ExternalUserID (from the chats or risk-result tools).` +
+Only link an entity when you actually have its id from a tool result, and the link target must be a gram:<type>/<id> reference built from that id. Never write a link with an empty, partial, or guessed URL (e.g. [name]() or [name](gram:user/) ) — if you don't have a usable id, write the name as plain text, not a link. People in tool results (from search_users, the chat tools, or the risk tools) are masked identities or opaque user_reference values with no detail page, so write them as plain text and never build a user link from them.` +
 		"\n\n## Elements visualizations\n\n" +
 		"The dashboard renders Elements widgets from fenced code blocks. Use these formats when a visualization or structured widget helps answer the user's question. The code fence language must be exactly `chart` or `ui`; never expose the widget JSON outside its fence.\n\n" +
 		elementsSystemPrompt +

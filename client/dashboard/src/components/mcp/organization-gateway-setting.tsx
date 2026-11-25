@@ -99,13 +99,13 @@ export function GatewayNotServed({
   const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin", organization.id);
-  // The MCP Authentication page can make a project's server
+  // The organization MCP Sign-in page can make a project's server
   // organization-wide and consolidate one server into another (removing the
   // source). Its actions need org:admin; without it, point to an admin or
   // support instead.
   const issuersPage = canManage ? (
     <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
-      MCP Authentication
+      MCP Sign-in
     </Link>
   ) : null;
   const askFor = canManage
@@ -116,11 +116,11 @@ export function GatewayNotServed({
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">
-          Not available: it needs an organization-wide sign-in, and your
+          Not available: it needs an organization-wide MCP sign-in, and your
           organization doesn&apos;t have one.{" "}
           {issuersPage ? (
             <>
-              Make a project&apos;s authorization server organization-wide in{" "}
+              Make a project&apos;s MCP sign-in organization-wide in{" "}
               {issuersPage}, or contact support.
             </>
           ) : (
@@ -132,7 +132,7 @@ export function GatewayNotServed({
       return (
         <Text small className="text-warning mt-3">
           Not available: the organization has more than one organization-wide
-          sign-in, and the gateway needs exactly one.{" "}
+          MCP sign-in, and the gateway needs exactly one.{" "}
           {issuersPage ? (
             <>
               In {issuersPage}, use Consolidate into another until one is left.

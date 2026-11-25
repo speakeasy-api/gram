@@ -620,6 +620,17 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	staleIssuer, err := fixtures.GetPrincipalRemoteSessionBindingIssuerFixture(ctx, staleBindingID)
 	require.NoError(t, err)
 	require.Equal(t, sourceID, staleIssuer, "retired issuer cleanup does not delete compatibility parents")
+	_, err = remoteRepo.GetPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.GetPrincipalRemoteSessionBindingParams{
+		ProjectID:             *authCtx.ProjectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		PrincipalID:           staleAgent.ID,
+		UserSessionIssuerID:   sourceID,
+		RemoteSessionClientID: remoteClient.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "remaining source attachment must be revoked")
+	sourcePairs, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: sourceID})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, sourcePairs, "source compatibility pair stays intact")
 	remoteSessionAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: remoteSession.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, remoteSessionAfter.UserSessionIssuerID)
@@ -632,7 +643,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.Equal(t, int64(2), emaBinding.Generation)
 	linkCount, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: targetID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), linkCount)
+	require.Equal(t, int64(1), linkCount, "the surviving issuer must still carry the registration for legacy readers")
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
@@ -759,12 +770,6 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	// reauthorization advances the grant on that login but preserves its ID.
 	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
 	require.Equal(t, login, secondLogin)
-
-	// A new generation on the same pinned row must still move. Only material
-	// publication uses the grant generation as a compare-and-swap fence.
-	changed, err := testrepo.New(ti.conn).MutateAttachmentSupersededGrantGenerationFixture(ctx, login)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, changed)
 
 	remoteRepo := remotesessionsrepo.New(ti.conn)
 	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}

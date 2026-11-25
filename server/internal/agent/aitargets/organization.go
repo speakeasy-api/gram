@@ -2,6 +2,9 @@ package aitargets
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
@@ -14,31 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
-
-// DefaultsVersion counts revisions of Defaults. Bump it whenever the
-// compiled-in list changes, so agents can tell which defaults they hold.
-//
-// 2: the registry grew past the original harnesses to cover assistants and
-// open model runners, and gained the gateway-client matchers.
-//
-// 3: ChatGPT moved from harness to assistant, and Cline gained the versioned
-// VS Code extension config dirs that detect an install without the npm CLI.
-//
-// 4: ChatGPT Classic gained its process name, so an agent reports it as
-// running and not merely installed.
-//
-// 5: Pi joined the catalog, so a device running it no longer scans clean.
-//
-// 6: the current ChatGPT app became its own target under the bundle id it
-// moved to, and the ChatGPT gateway documents moved onto it, leaving Classic
-// a scan target the gateway cannot single out.
-//
-// 7: Conductor joined the catalog (both admission and detection).
-//
-// 8: Google Antigravity joined the catalog (both admission and detection).
-//
-// 9: Pi gained stable and per-server gateway client metadata matchers.
-const DefaultsVersion int32 = 9
 
 // Source says where a target in an organization's list comes from.
 type Source string
@@ -155,9 +133,9 @@ func Served(entries []Entry) []Target {
 
 // DefaultByID resolves a catalog default by id.
 func DefaultByID(catalog *aivendors.Snapshot, id string) (Target, bool) {
-	for _, target := range Defaults(catalog) {
+	for _, target := range catalogDefaultsOf(catalog).targets {
 		if target.ID == id {
-			return target, true
+			return target.Clone(), true
 		}
 	}
 	return ZeroTarget(), false
@@ -216,13 +194,6 @@ func normalizeForComparison(t Target) Target {
 	return out
 }
 
-// ListVersion is the served list_version: the compiled-in defaults revision.
-// Organization edits do not move it — they change the served targets, which
-// the snapshot ETag hashes, and that is what makes an agent re-apply.
-func ListVersion() int32 {
-	return DefaultsVersion
-}
-
 // OrganizationList is an organization's full target list and the snapshot
 // its agents are served.
 type OrganizationList struct {
@@ -261,11 +232,43 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 	for _, row := range rows {
 		entries = append(entries, EntryFromRow(row))
 	}
-	overlaid := Overlay(Defaults(catalog), entries)
+	return NewOrganizationList(catalog, entries), nil
+}
+
+// NewOrganizationList overlays entries on the catalog defaults. The served
+// list_version identifies the built-in targets; organization edits move only
+// the ETag.
+func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
+	defaults := catalogDefaultsOf(catalog)
+	overlaid := Overlay(defaults.targets, entries)
 	return &OrganizationList{
 		Entries:  overlaid,
-		Snapshot: NewSnapshot(ListVersion(), Served(overlaid)),
-	}, nil
+		Snapshot: NewSnapshot(defaults.listVersion, Served(overlaid)),
+	}
+}
+
+// ListVersion hashes the built-in targets exactly as devices are served them,
+// ordered by id, so catalog data devices never receive cannot move it.
+func ListVersion(defaults []Target) int32 {
+	sorted := slices.Clone(defaults)
+	slices.SortFunc(sorted, func(a, b Target) int { return strings.Compare(a.ID, b.ID) })
+	hash := sha256.New()
+	data, err := json.Marshal(wireTargets(sorted))
+	if err != nil {
+		_, _ = fmt.Fprintf(hash, "marshal error: %v", err)
+	}
+	_, _ = hash.Write(data)
+	return wireVersion(binary.BigEndian.Uint32(hash.Sum(nil)[:4]))
+}
+
+// wireVersion reduces a hash prefix to 1..MaxInt32: devices reserve 0 for their
+// embedded list and reject negatives. The result is opaque, not ordered.
+func wireVersion(prefix uint32) int32 {
+	const versionMask = uint32(1<<31 - 1)
+	if v := int32(prefix & versionMask); v != 0 {
+		return v
+	}
+	return 1
 }
 
 // EntryFromRow converts an organization's row into an Entry. Overlay settles
