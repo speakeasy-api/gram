@@ -200,6 +200,8 @@ export const catalogDefinition = defineResource<CatalogRow, CatalogRecord>({
       inspect_mcp_candidate: {
         opens: "record",
         id: (input) => catalogRef(input),
+        // A candidate by URL isn't in the catalog; its list would mislead.
+        listFallback: false,
       },
     },
     keywords: [

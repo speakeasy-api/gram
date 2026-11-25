@@ -2,7 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { actionDef } from "./action-def";
 import { ActionButton } from "./actions";
 import { useReportPageTitle } from "./page-title";
@@ -35,18 +35,19 @@ export function ResourceRecord<Row, Rec>({
   const handlers = data.useRecordActions(rec);
   useReportPageTitle(rec ? definition.record.header(rec).identity.title : null);
   // A `leavesRecord` action (delete) can make the record vanish before the
-  // action settles; leave as soon as that happens instead of showing an error.
+  // action settles. Leave only once it succeeds; until then show the loading
+  // state rather than an error, and stay if it fails.
   const [leaving, setLeaving] = useState(false);
-  const gone = query.status === "error";
-  useEffect(() => {
-    if (leaving && gone) onBack();
-  }, [leaving, gone, onBack]);
   const leaveProps = (actionId: string) =>
     actionDef(definition, actionId).leavesRecord
-      ? { onStart: () => setLeaving(true), onDone: onBack }
+      ? {
+          onStart: () => setLeaving(true),
+          onDone: onBack,
+          onFail: () => setLeaving(false),
+        }
       : {};
 
-  if (query.status === "loading") {
+  if (query.status === "loading" || (leaving && query.status === "error")) {
     return (
       <div
         className="flex flex-col gap-8"

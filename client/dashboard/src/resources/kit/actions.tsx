@@ -26,6 +26,7 @@ export function ActionButton({
   size = "md",
   onStart,
   onDone,
+  onFail,
 }: {
   def: ActionDef;
   handlers: ActionHandlers;
@@ -41,6 +42,8 @@ export function ActionButton({
   onStart?: () => void;
   /** Called once a run settles without an error. */
   onDone?: () => void;
+  /** Called once a run settles with an error. */
+  onFail?: () => void;
 }): JSX.Element | null {
   const [confirming, setConfirming] = useState(false);
   const bridge = useChatBridge();
@@ -60,9 +63,10 @@ export function ActionButton({
     } else if (!pending && running.current === "pending") {
       running.current = "idle";
       setConfirming(false);
-      if (!failed) onDone?.();
+      if (failed) onFail?.();
+      else onDone?.();
     }
-  }, [pending, failed, onDone]);
+  }, [pending, failed, onDone, onFail]);
 
   if (!state) return null;
   // Chat actions hand the job to the assistant; without one they don't exist.

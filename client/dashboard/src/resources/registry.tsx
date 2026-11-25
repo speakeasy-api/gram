@@ -160,12 +160,11 @@ function routeDirect(
     if (route.opens === "list") {
       return { resource: resource.id, location: { view: "list" } };
     }
-    // A lookup we can't tie to one record opens nothing, rather than a list
-    // the thing it looked up may not even be in.
     const id = route.id(input, output);
-    return id
-      ? { resource: resource.id, location: { view: "record", id } }
-      : undefined;
+    if (id) return { resource: resource.id, location: { view: "record", id } };
+    return route.listFallback === false
+      ? undefined
+      : { resource: resource.id, location: { view: "list" } };
   }
   return undefined;
 }

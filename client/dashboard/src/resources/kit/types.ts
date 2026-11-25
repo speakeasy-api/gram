@@ -311,6 +311,12 @@ type ToolRoute =
       opens: "record";
       /** Pulls the record id out of the tool's input or output. */
       id: (input: unknown, output: unknown) => string | undefined;
+      /**
+       * Without an id (a create whose id is only in output the client can't
+       * see), the list opens instead. Set false when the record may not be in
+       * the list at all.
+       */
+      listFallback?: false;
     };
 
 export interface ChatDef {

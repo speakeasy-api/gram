@@ -307,7 +307,7 @@ function useRecordActions(rec: McpServerRecord | undefined): ActionHandlers {
   const gateway = isGatewayId(rec.id);
   const rawId = rec.serverId;
   // Checked like the API does: a hosted server is granted under its toolset id.
-  const canWrite = hasScope("mcp:write", rec.toolsetId ?? rawId);
+  const canWrite = hasScope("mcp:write", rec.toolsetId ?? rawId, project.id);
 
   const refresh = async () => {
     await invalidateMcpServerQueries(queryClient);

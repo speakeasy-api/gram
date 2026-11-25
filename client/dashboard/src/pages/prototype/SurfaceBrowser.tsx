@@ -206,7 +206,11 @@ export function StartPage({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask Speakeasy or type an address"
+            placeholder={
+              bridge.available
+                ? "Ask Speakeasy or type an address"
+                : "Type an address. The assistant is starting…"
+            }
             className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-[15px] outline-none"
           />
           {query.trim() && (
