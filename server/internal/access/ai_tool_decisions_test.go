@@ -532,3 +532,36 @@ func TestService_ListAIDetections_ShowsBlockOnRemovedProduct(t *testing.T) {
 	require.True(t, listed.Detections[0].Access.Enforceable)
 	require.Equal(t, "removed", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
 }
+
+func TestService_SetAIToolDecision_LiveProductWhoseLastDocumentWasRemoved(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
+	seedAIDetection(t, ctx, ti, orgID, "zed", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+	_, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "blocked"})
+	require.NoError(t, err)
+	docs, err := seedrepo.New(ti.conn).ListDocuments(ctx)
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.AiProductID == "zed" {
+			require.NoError(t, testrepo.New(ti.conn).EditDocumentFixture(ctx, testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: true, DeletedAt: productRemovedAt}))
+		}
+	}
+	snapshot, err := aivendors.Load(ctx, ti.conn, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	ti.service.aiCatalog = aivendors.NewStore(snapshot)
+
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Detections, 1)
+	require.Equal(t, "blocked", listed.Detections[0].Access.State, "the gateway still enforces it through the removed document")
+	require.Equal(t, "documents_disabled", conv.PtrValOr(listed.Detections[0].Access.CatalogStatus, ""))
+
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "unreviewed"})
+	require.NoError(t, err)
+	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{TargetID: "zed", Decision: "blocked"})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
+}

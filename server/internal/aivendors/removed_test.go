@@ -368,3 +368,101 @@ func TestOrganizationListShowsARemovedProductOnlyForItsDecision(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, aitargets.SummarizeAccess(goose).Enforceable, "nothing decided means nothing to keep")
 }
+
+func insertDocument(t *testing.T, db *pgxpool.Pool, product string, url string, enabled bool, pattern bool, deleted pgtype.Timestamptz) {
+	t.Helper()
+	id := uuid.New()
+	require.NoError(t, testrepo.New(db).InsertDocumentFixture(t.Context(), testrepo.InsertDocumentFixtureParams{ID: id, AiProductID: product, Url: url, DisplayName: product, Enabled: enabled, IsPattern: pattern}))
+	if deleted.Valid {
+		require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: id, Url: url, DisplayName: product, Enabled: enabled, DeletedAt: deleted}))
+	}
+}
+
+func TestLastKnownPicksOneCandidateByOneRule(t *testing.T) {
+	t.Parallel()
+	later := pgtype.Timestamptz{Time: removedAt.Time.Add(24 * time.Hour), Valid: true, InfinityModifier: pgtype.Finite}
+	for _, tc := range []struct {
+		name     string
+		arrange  func(t *testing.T, db *pgxpool.Pool)
+		clientID string
+		want     string
+	}{
+		{
+			// Case (a): the removed exact URL beats a broader disabled live pattern.
+			name: "removed exact before disabled live pattern",
+			arrange: func(t *testing.T, db *pgxpool.Pool) {
+				t.Helper()
+				editDocument(t, db, removedZedURL, true, removedAt)
+				insertDocument(t, db, "goose", "https://zed.dev/oauth/*", false, true, pgtype.Timestamptz{})
+			},
+			clientID: removedZedURL, want: "zed",
+		},
+		{
+			// Case (b): nothing records that the pattern covered the URL when it was removed, so exact still wins.
+			name: "removed exact before a later removed pattern",
+			arrange: func(t *testing.T, db *pgxpool.Pool) {
+				t.Helper()
+				editDocument(t, db, removedZedURL, true, removedAt)
+				insertDocument(t, db, "goose", "https://zed.dev/oauth/*", true, true, later)
+			},
+			clientID: removedZedURL, want: "zed",
+		},
+		{
+			name: "disabled live pattern before removed pattern",
+			arrange: func(t *testing.T, db *pgxpool.Pool) {
+				t.Helper()
+				editDocument(t, db, removedPiPattern, true, removedAt)
+				insertDocument(t, db, "goose", "https://pi.dev/*/fixture-server/client.json", false, true, pgtype.Timestamptz{})
+			},
+			clientID: removedPiConnection, want: "goose",
+		},
+		{
+			name: "most recently removed pattern, whatever its specificity",
+			arrange: func(t *testing.T, db *pgxpool.Pool) {
+				t.Helper()
+				editDocument(t, db, removedPiPattern, true, removedAt)
+				insertDocument(t, db, "goose", "https://pi.dev/*/*/client.json", true, true, later)
+			},
+			clientID: removedPiConnection, want: "goose",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db := seededCatalog(t)
+			tc.arrange(t, db)
+			snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+			require.NoError(t, err)
+			require.False(t, snapshot.BuiltIn())
+			last, ok := snapshot.LastKnown(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, tc.want, last.ProductID)
+		})
+	}
+}
+
+func TestLastKnownDropsAVendorKeyALiveProductCarries(t *testing.T) {
+	t.Parallel()
+	db := seededCatalog(t)
+	setProductDeleted(t, db, "claude-code", "Claude Code", removedAt)
+	setProductDeleted(t, db, "zed", "Zed", removedAt)
+	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	last, ok := snapshot.LastKnown("https://claude.ai/oauth/claude-code-client-metadata")
+	require.True(t, ok)
+	require.Equal(t, "claude-code", last.ProductID)
+	require.Empty(t, last.VendorKey, "anthropic still names live products")
+	last, ok = snapshot.LastKnown(removedZedURL)
+	require.True(t, ok)
+	require.Equal(t, "zed", last.VendorKey, "no live product carries zed")
+}
+
+func TestALiveProductWithOnlyRemovedDocumentsReadsAsDocumentsDisabled(t *testing.T) {
+	t.Parallel()
+	db := seededCatalog(t)
+	editDocument(t, db, removedZedURL, true, removedAt)
+	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, snapshot.DocumentsDisabled("zed"))
+	_, removed := snapshot.RemovedProduct("zed")
+	require.False(t, removed, "the product itself is live")
+}

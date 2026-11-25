@@ -77,8 +77,10 @@ type Snapshot struct {
 	removedExact    map[string]removedDocument
 	removedPatterns []removedDocument
 	removedProducts map[string]LastKnownProduct
-	fingerprint     string
-	builtIn         bool
+	// removedDocumentsOf holds every product with a document in the index, live or not.
+	removedDocumentsOf map[string]struct{}
+	fingerprint        string
+	builtIn            bool
 	// skipped are the rows the load that built this snapshot left out.
 	skipped []string
 	derived sync.Map // values other packages compute once per snapshot
@@ -89,18 +91,19 @@ type Snapshot struct {
 // only on content.
 func NewSnapshot(products []Product) *Snapshot {
 	s := &Snapshot{
-		products:        make([]Product, 0, len(products)),
-		presets:         nil,
-		exact:           make(map[string]Preset),
-		patterns:        nil,
-		vendors:         make(map[string]int),
-		removedExact:    nil,
-		removedPatterns: nil,
-		removedProducts: nil,
-		fingerprint:     "",
-		builtIn:         false,
-		skipped:         nil,
-		derived:         sync.Map{},
+		products:           make([]Product, 0, len(products)),
+		presets:            nil,
+		exact:              make(map[string]Preset),
+		patterns:           nil,
+		vendors:            make(map[string]int),
+		removedExact:       nil,
+		removedPatterns:    nil,
+		removedProducts:    nil,
+		removedDocumentsOf: nil,
+		fingerprint:        "",
+		builtIn:            false,
+		skipped:            nil,
+		derived:            sync.Map{},
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -149,8 +152,9 @@ func NewSnapshot(products []Product) *Snapshot {
 	return s
 }
 
-// keepRemoved indexes removed documents for LastKnown, most recently removed
-// first, and folds them into the fingerprint. Malformed patterns are omitted.
+// keepRemoved indexes removed documents for LastKnown, keeping the order they
+// arrive in, most recently removed first, and folds them into the
+// fingerprint. Malformed patterns are omitted.
 func (s *Snapshot) keepRemoved(docs []removedDocument) {
 	if len(docs) == 0 {
 		return
@@ -161,10 +165,12 @@ func (s *Snapshot) keepRemoved(docs []removedDocument) {
 	}
 	s.removedExact = make(map[string]removedDocument, len(docs))
 	s.removedProducts = make(map[string]LastKnownProduct)
+	s.removedDocumentsOf = make(map[string]struct{})
 	for _, d := range docs {
 		if d.Pattern && validatePattern(d.URL) != nil {
 			continue
 		}
+		s.removedDocumentsOf[d.ProductID] = struct{}{}
 		if d.Pattern {
 			s.removedPatterns = append(s.removedPatterns, d)
 		} else if _, taken := s.removedExact[d.URL]; !taken {
@@ -176,9 +182,6 @@ func (s *Snapshot) keepRemoved(docs []removedDocument) {
 			}
 		}
 	}
-	slices.SortStableFunc(s.removedPatterns, func(a, b removedDocument) int {
-		return cmp.Compare(patternSpecificity(b.URL), patternSpecificity(a.URL))
-	})
 	// removedDocument contains only JSON-encodable value fields.
 	data, _ := json.Marshal(docs)
 	hash := sha256.Sum256(append([]byte(s.fingerprint), data...))
@@ -321,27 +324,52 @@ func (s *Snapshot) CatalogPreset(clientID string) (Preset, bool) {
 
 // LastKnown resolves a client ID the live catalog does not admit to the
 // product that last published it. It is read only to keep blocks applying.
-// Live attribution wins: an enabled live document returns false, a disabled
-// one returns its product, and only a client ID no live document matches
-// falls through to removed documents, exact URLs first, then the most
-// specific pattern.
+// An enabled live match always decides, so it returns false. Otherwise the
+// candidates are the disabled live documents and the removed documents that
+// match: exact before pattern; within one kind a disabled live document before
+// a removed one; among removed ones the most recently removed.
 func (s *Snapshot) LastKnown(clientID string) (LastKnownProduct, bool) {
-	if p, ok := s.match(clientID); ok {
-		if p.Enabled {
-			return LastKnownProduct{ProductID: "", VendorKey: "", DisplayName: "", Category: "", URL: ""}, false
-		}
-		product := s.product(p.ProductID)
-		return LastKnownProduct{ProductID: p.ProductID, VendorKey: p.VendorKey, DisplayName: product.DisplayName, Category: product.Category, URL: p.URL}, true
+	if _, admitted := s.CatalogPreset(clientID); admitted {
+		return LastKnownProduct{ProductID: "", VendorKey: "", DisplayName: "", Category: "", URL: ""}, false
+	}
+	if p, ok := s.exact[clientID]; ok && !p.Enabled {
+		return s.lastKnownLive(p), true
 	}
 	if d, ok := s.removedExact[clientID]; ok {
-		return d.LastKnownProduct, true
+		return s.lastKnownRemoved(d), true
+	}
+	for _, p := range s.patterns {
+		if !p.Enabled && matchesPattern(p.URL, clientID) {
+			return s.lastKnownLive(p), true
+		}
 	}
 	for _, d := range s.removedPatterns {
 		if matchesPattern(d.URL, clientID) {
-			return d.LastKnownProduct, true
+			return s.lastKnownRemoved(d), true
 		}
 	}
 	return LastKnownProduct{ProductID: "", VendorKey: "", DisplayName: "", Category: "", URL: ""}, false
+}
+
+// lastKnownLive describes a disabled live document's product.
+func (s *Snapshot) lastKnownLive(p Preset) LastKnownProduct {
+	product := s.product(p.ProductID)
+	return LastKnownProduct{ProductID: p.ProductID, VendorKey: p.VendorKey, DisplayName: product.DisplayName, Category: product.Category, URL: p.URL}
+}
+
+// lastKnownRemoved describes a removed document's product. A vendor key
+// another live product now carries is dropped, so a block aimed at that
+// product never reaches a removed sibling.
+func (s *Snapshot) lastKnownRemoved(d removedDocument) LastKnownProduct {
+	last := d.LastKnownProduct
+	owners := s.vendors[last.VendorKey]
+	if s.product(last.ProductID).VendorKey == last.VendorKey {
+		owners--
+	}
+	if owners > 0 {
+		last.VendorKey = ""
+	}
+	return last
 }
 
 // RemovedProduct reports a product removed from the catalog whose documents
@@ -351,11 +379,15 @@ func (s *Snapshot) RemovedProduct(id string) (LastKnownProduct, bool) {
 	return p, ok
 }
 
-// DocumentsDisabled reports a live product whose documents are all disabled,
-// so blocks on it apply through those documents but nothing admits it.
+// DocumentsDisabled reports a live product no document admits whose disabled
+// or removed documents still keep blocks on it applying.
 func (s *Snapshot) DocumentsDisabled(id string) bool {
 	p := s.product(id)
-	return p.ID != "" && len(p.Documents) > 0 && !hasEnabledDocument(p)
+	if p.ID == "" || hasEnabledDocument(p) {
+		return false
+	}
+	_, removed := s.removedDocumentsOf[id]
+	return len(p.Documents) > 0 || removed
 }
 
 // product returns the live product with id, or the zero product.

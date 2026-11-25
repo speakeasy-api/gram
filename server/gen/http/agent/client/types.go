@@ -3578,8 +3578,12 @@ type AiScanTargetResponseBody struct {
 	GatewayClient   *AiScanTargetGatewayClientResponseBody `form:"gateway_client,omitempty" json:"gateway_client,omitempty" xml:"gateway_client,omitempty"`
 	// Where the target comes from: default (a Speakeasy built-in, whose definition
 	// is read-only) or organization (added by the organization, fully editable).
-	// Every target listed here is probed for; a built-in leaves the list by being
-	// removed from Speakeasy's catalog, an organization target by being deleted.
+	// Every target listed here is probed for, including a built-in whose sign-in
+	// documents are turned off (access.catalog_status documents_disabled), except
+	// a built-in removed from Speakeasy's catalog (access.catalog_status removed),
+	// which is listed only while the organization's decision on it still applies.
+	// Otherwise a built-in leaves the list by being removed from Speakeasy's
+	// catalog, an organization target by being deleted.
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
@@ -3588,9 +3592,10 @@ type AiScanTargetResponseBody struct {
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
 	// never enforceable without a verifiable gateway matcher, except a built-in
 	// the catalog no longer admits whose recorded decision still applies (see
-	// catalog_status). Such a built-in is listed for its decision only and is
-	// never served to device agents. Absent only from a server that predates it;
-	// read a missing summary as unreviewed.
+	// catalog_status). A removed one is listed for its decision only and is never
+	// served to device agents; one whose sign-in documents are turned off is still
+	// probed for. Absent only from a server that predates it; read a missing
+	// summary as unreviewed.
 	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`

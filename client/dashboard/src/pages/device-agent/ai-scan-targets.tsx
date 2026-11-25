@@ -187,7 +187,11 @@ function Library(): JSX.Element {
   });
 
   const targets = useMemo(() => {
-    const all = list.data?.targets ?? [];
+    // A removed built-in is listed only for its access decision; devices do
+    // not probe for it, so the scan library leaves it out.
+    const all = (list.data?.targets ?? []).filter(
+      (target) => target.access?.catalogStatus !== "removed",
+    );
     const needle = search.trim().toLowerCase();
     if (!needle) return all;
     return all.filter(

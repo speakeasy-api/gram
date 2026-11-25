@@ -6,6 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { accessLibrary, detection, scanTarget } from "./access-fixtures";
 import { type AccessDecision, buildAccessRows } from "./access-rows";
@@ -109,5 +110,28 @@ describe("ShadowAIAccessStep", () => {
     ).toBe("true");
     fireEvent.click(within(control("Zed")).getByText("Deny"));
     expect(onDecide).toHaveBeenCalledWith("zed", "unreviewed");
+  });
+
+  it("lists a tool of no known kind under Other, and hides Other when empty", () => {
+    renderStep();
+    expect(screen.queryByText("Other")).toBeNull();
+
+    cleanup();
+    renderStep(new Map(), [
+      scanTarget({
+        id: "gone-tool",
+        displayName: "Gone Tool",
+        category: unrecognized(""),
+        access: {
+          state: "blocked",
+          decision: "blocked",
+          enforceable: true,
+          catalogStatus: "removed",
+        },
+      }),
+    ]);
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByText("Gone Tool")).toBeTruthy();
+    expect(control("Gone Tool")).toBeTruthy();
   });
 });

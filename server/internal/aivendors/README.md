@@ -54,20 +54,39 @@ is removed or the removals would leave no product, where the built-in catalog
 lists every product.
 
 When no live target matches a client at sign-in, `Snapshot.LastKnown` names
-the product that last published its client ID: a disabled live document
-first, then a removed exact URL, then the most specific removed pattern. Live
-attribution always wins. An enabled live document, including a broader
-pattern of another product that now matches a removed exact URL, decides
-instead, and a URL added back under another product follows that product.
-The organization's own targets are matched against the last product's vendor
-key and document URL first, then the product id itself decides.
+the product that last published its client ID, by one rule. An enabled live
+match always decides instead. Otherwise the candidates are the disabled live
+documents and removed documents that match the client: exact before pattern;
+within one kind, a disabled live document before a removed one; among removed
+ones, the most recently removed. A URL added back under another product
+follows that product. One case this rule cannot see: if a product's exact URL
+was removed while another product's enabled pattern covered it, and that
+pattern was removed later, the exact URL's product still decides, because the
+index does not record which pattern covered a URL when.
 
-The rule for decisions: for a removed product, or a live one whose documents
-are all disabled, a decision can be changed or cleared only while one other
-than unreviewed is on file. Such a product is listed in Shadow AI with
-`catalog_status` set and its block shown as in force. Once cleared it drops
-out of the list (removed) or reads as not enforceable (documents disabled),
-and a new decision is refused.
+The organization's own targets are matched first, against the last product's
+document URL and its vendor key. The vendor key is left out while another live
+product carries it, so a block aimed at that product never reaches a removed
+sibling. Then the product id decides.
+
+The rule for decisions: for a removed product, or a live one no document
+admits (its documents are disabled or removed), a decision can be changed or
+cleared only while one other than unreviewed is on file. Such a product is
+listed in Shadow AI with `catalog_status` set and its block shown as in force.
+A removed product is not probed for and the scan library leaves it out; a
+live one is still probed for. A removed product with no category is sent with
+an empty category and listed under Other. Once cleared it drops out of the
+list (removed) or reads as not enforceable (live), and a new decision is
+refused. The stored decision of a product whose only URL moved to another
+product no longer applies and is not listed; it can still be cleared through
+the API.
+
+The built-in fallback is a degraded mode and keeps its own rules after a cold
+start with an invalid catalog: it does not know a URL moved between live
+products, a database-only disabled document, or that every built-in product
+was removed. A pod also takes up to a minute to see a document change, so a
+new block recorded in that minute after a product's last document is disabled
+can still be accepted.
 
 Before removing a row, check how many organizations block the product:
 

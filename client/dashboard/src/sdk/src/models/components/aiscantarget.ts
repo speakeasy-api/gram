@@ -36,14 +36,14 @@ export const AiScanTargetCategory = {
 export type AiScanTargetCategory = OpenEnum<typeof AiScanTargetCategory>;
 
 /**
- * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for, including a built-in whose sign-in documents are turned off (access.catalog_status documents_disabled), except a built-in removed from Speakeasy's catalog (access.catalog_status removed), which is listed only while the organization's decision on it still applies. Otherwise a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export const Origin = {
   Default: "default",
   Organization: "organization",
 } as const;
 /**
- * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for, including a built-in whose sign-in documents are turned off (access.catalog_status documents_disabled), except a built-in removed from Speakeasy's catalog (access.catalog_status removed), which is listed only while the organization's decision on it still applies. Otherwise a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export type Origin = OpenEnum<typeof Origin>;
 
@@ -80,7 +80,7 @@ export type AiScanTarget = {
    */
   id: string;
   /**
-   * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
+   * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for, including a built-in whose sign-in documents are turned off (access.catalog_status documents_disabled), except a built-in removed from Speakeasy's catalog (access.catalog_status removed), which is listed only while the organization's decision on it still applies. Otherwise a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
    */
   origin: Origin;
   /**

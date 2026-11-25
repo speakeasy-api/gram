@@ -33,6 +33,54 @@ const mocks = vi.hoisted(() => ({
 
 const targets: AiScanTarget[] = [
   {
+    id: "zed",
+    displayName: "Zed",
+    category: "harness",
+    signatures: {
+      bundleIds: [],
+      binaries: [],
+      configDirs: [],
+      processNames: [],
+    },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      oauthClientIds: [],
+      clientInfoNames: [],
+    },
+    origin: "default",
+    customized: true,
+    access: {
+      state: "blocked",
+      decision: "blocked",
+      enforceable: true,
+      catalogStatus: "removed",
+    },
+  },
+  {
+    id: "goose",
+    displayName: "Goose",
+    category: "harness",
+    signatures: {
+      bundleIds: [],
+      binaries: ["goose"],
+      configDirs: [],
+      processNames: [],
+    },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      oauthClientIds: [],
+      clientInfoNames: [],
+    },
+    origin: "default",
+    customized: true,
+    access: {
+      state: "blocked",
+      decision: "blocked",
+      enforceable: true,
+      catalogStatus: "documents_disabled",
+    },
+  },
+  {
     id: "acme-tool",
     displayName: "Acme Tool",
     category: "harness",
@@ -261,6 +309,16 @@ describe("AiScanTargetsSection", () => {
     expect(screen.getAllByText("Assistants")).toHaveLength(1);
     expect(screen.getAllByText("Open models")).toHaveLength(1);
     expect(screen.queryByText(/Library version/)).toBeNull();
+  });
+
+  // A removed built-in is listed by the server only for its decision; devices
+  // do not probe for it. One whose sign-in documents are off still is.
+  it("leaves out a removed built-in but keeps one whose documents are off", () => {
+    renderPage();
+    expandBuiltin("Harnesses");
+
+    expect(screen.queryByTestId("zed")).toBeNull();
+    expect(screen.getByTestId("goose")).toBeDefined();
   });
 
   // A match hidden under a collapsed heading is a search that found nothing

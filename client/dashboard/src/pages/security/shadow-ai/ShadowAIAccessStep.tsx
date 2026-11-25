@@ -36,7 +36,20 @@ const DEFAULT_EXPANDED: Record<string, boolean> = {
   harness: true,
   assistant: true,
   local_model: false,
+  other: true,
 };
+
+// A tool with no known kind, such as one removed from the Speakeasy catalog,
+// still needs a row so its decision can be cleared. Shown only when non-empty.
+const OTHER_GROUP = {
+  value: "other",
+  plural: "Other",
+  description: "AI tools of no listed kind.",
+};
+
+const KNOWN_CATEGORIES = new Set<string>(
+  TARGET_CATEGORIES.map((category) => category.value),
+);
 
 /**
  * Approve | Deny for one target, written to the editor's draft. A target
@@ -261,10 +274,13 @@ export function ShadowAIAccessStep({
             </Alert>
           ) : null}
           <div className="divide-border border divide-y">
-            {TARGET_CATEGORIES.map((category) => {
-              const group = rows.filter(
-                (row) => row.target.category === category.value,
+            {[...TARGET_CATEGORIES, OTHER_GROUP].map((category) => {
+              const group = rows.filter((row) =>
+                category === OTHER_GROUP
+                  ? !KNOWN_CATEGORIES.has(row.target.category)
+                  : row.target.category === category.value,
               );
+              if (category === OTHER_GROUP && group.length === 0) return null;
               return (
                 <div key={category.value}>
                   <CollapsibleSectionHeader

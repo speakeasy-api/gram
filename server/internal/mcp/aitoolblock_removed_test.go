@@ -247,3 +247,23 @@ func TestHandleToken_RefreshRefusedAfterProductRemoval(t *testing.T) {
 	requireTokenOAuthError(t, w, "invalid_grant")
 	requireTokenErrorDescription(t, w, "administrator must approve")
 }
+
+func TestCheckAIToolGatewayBlock_RemovedSiblingDoesNotInheritAVendorBlock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	snapshot := loadCatalogAfter(t, ctx, ti, func() {
+		require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{ID: "claude-code", DisplayName: "Claude Code", DeletedAt: catalogRemovedAt}))
+	})
+	// Aimed at the vendor's live products, not at the removed one.
+	_, err := agentrepo.New(ti.conn).UpsertAIScanTarget(ctx, agentrepo.UpsertAIScanTargetParams{
+		OrganizationID: orgID, ID: "our-anthropic", DisplayName: conv.ToPGText("Our Anthropic"), Category: conv.ToPGText("assistant"),
+		BundleIds: []string{}, Binaries: []string{"our-anthropic"}, ConfigDirs: []string{}, ProcessNames: []string{},
+		VersionPlistKey: pgtype.Text{}, CimdVendorKeys: []string{"anthropic"}, OauthClientIds: []string{}, ClientInfoNames: []string{},
+	})
+	require.NoError(t, err)
+	blockTarget(t, ctx, ti, orgID, "our-anthropic")
+	require.NoError(t, ti.service.CheckAIToolGatewayBlock(ctx, snapshot, orgID, claudeCodeCIMDClientID))
+}
