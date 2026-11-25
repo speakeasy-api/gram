@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -366,8 +367,10 @@ func TestOAuthPageScriptIsServedFromHashedURL(t *testing.T) {
 	t.Parallel()
 
 	require.Regexp(t, `^/platform-mcp/oauth-page-[0-9a-f]{8}\.js$`, oauthPageScriptURL)
+	mux := goahttp.NewMuxer()
+	newTestOAuthHTTP(t).Attach(mux)
 	w := httptest.NewRecorder()
-	serveOAuthPageScript(w, httptest.NewRequest(http.MethodGet, oauthPageScriptURL, nil))
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, oauthPageScriptURL, nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "application/javascript; charset=utf-8", w.Header().Get("Content-Type"))
 	require.Contains(t, w.Header().Get("Cache-Control"), "immutable")
