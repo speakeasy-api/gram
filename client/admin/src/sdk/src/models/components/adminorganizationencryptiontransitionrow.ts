@@ -57,6 +57,10 @@ export type AdminOrganizationEncryptionTransitionRow = {
    */
   lastVerifiedAt?: Date | undefined;
   /**
+   * The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
+   */
+  lastWrittenAt?: Date | undefined;
+  /**
    * The organization name.
    */
   name: string;
@@ -80,6 +84,10 @@ export type AdminOrganizationEncryptionTransitionRow = {
    * When the state was entered.
    */
   stateChangedAt?: Date | undefined;
+  /**
+   * How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.
+   */
+  valueCount: number;
 };
 
 /** @internal */
@@ -105,6 +113,9 @@ export const AdminOrganizationEncryptionTransitionRow$inboundSchema:
       last_verified_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
+      last_written_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       name: z.string(),
       organization_id: z.string(),
       platform_copies_cleared_at: z.optional(
@@ -115,6 +126,7 @@ export const AdminOrganizationEncryptionTransitionRow$inboundSchema:
       state_changed_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
+      value_count: z.int(),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -124,9 +136,11 @@ export const AdminOrganizationEncryptionTransitionRow$inboundSchema:
         "last_backfill_started_at": "lastBackfillStartedAt",
         "last_backfill_unreadable": "lastBackfillUnreadable",
         "last_verified_at": "lastVerifiedAt",
+        "last_written_at": "lastWrittenAt",
         "organization_id": "organizationId",
         "platform_copies_cleared_at": "platformCopiesClearedAt",
         "state_changed_at": "stateChangedAt",
+        "value_count": "valueCount",
       });
     }),
   );

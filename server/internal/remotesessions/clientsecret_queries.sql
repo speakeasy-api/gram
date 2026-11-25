@@ -102,6 +102,9 @@ LIMIT @limit_value;
 -- hash still matches the stored platform-key copy. Unattributed counts project
 -- clients of the organization's projects stored without organization_id,
 -- which the organization-scoped queries never reach.
+-- value_count and last_written_at cover every row of the organization storing
+-- a value under either key, soft-deleted rows included, as
+-- ListOrganizationsWith* reports them.
 SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text
@@ -122,7 +125,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = @organization_id::text
           AND c.client_secret_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = @organization_id::text
+          AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM remote_session_clients AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -175,3 +186,16 @@ SELECT p.organization_id FROM projects AS p WHERE p.id = @project_id;
 -- name: GetRemoteSessionClientRowFixture :one
 -- Test fixture: the client row as stored, soft-deleted or not.
 SELECT * FROM remote_session_clients WHERE id = @id;
+
+-- name: ListOrganizationsWithRemoteSessionClientSecrets :many
+-- Every organization storing a client secret under either key,
+-- soft-deleted rows included, with how many and the latest updated_at of the
+-- rows storing them. Rows without organization_id are left out.
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM remote_session_clients AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.client_secret_encrypted IS NOT NULL OR c.client_secret_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id;

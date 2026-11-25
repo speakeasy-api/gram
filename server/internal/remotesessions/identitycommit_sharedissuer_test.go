@@ -317,8 +317,8 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	associateClient(t, ctx, ti.conn, organizationID, projectID, associated, ownClient)
 	recordTypedClients(t, ctx, ti.conn, organizationID, associated)
 
-	// A leftover FK parent without a server placement is not an offer.
-	ensureAttachmentParent(t, ctx, ti.conn, siblingClient, issuer)
+	// A leftover legacy link without a server placement is not an offer.
+	seedLegacyIssuerClientLink(t, ctx, ti.conn, siblingClient, issuer)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, siblingClient, issuer))
 
 	// The caller connected the server's own client and never the sibling's.

@@ -511,13 +511,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
-	// Keep the compatibility parent only for the exact attachment FK.
-	if err := s.q.ServersInsertAttachmentParent(ctx, repo.ServersInsertAttachmentParentParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-	}); err != nil {
-		return fmt.Errorf("insert demo attachment compatibility parent: %w", err)
-	}
 	// Show both a working connection and an expired delegated connection.
 	for _, agent := range []int{1, 4} {
 		num := strconv.Itoa(agent)

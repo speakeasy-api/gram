@@ -124,3 +124,66 @@ func TestWithoutOrganizationEncryption_FailsClosedForEnrolledOrganizations(t *te
 	_, err := plain.Open(t.Context(), storedKey(ti.stored(t, id)))
 	require.ErrorIs(t, err, orgencryption.ErrOrganizationEncryptionUnavailable)
 }
+
+func TestCopyStore_ReportsStoredKeys(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	project := ti.createProject(t, ti.orgID)
+	live := ti.create(t, ti.createFunction(t, ti.orgID, project))
+	deleted := ti.create(t, ti.createFunction(t, ti.orgID, project))
+	require.NoError(t, testrepo.New(ti.conn).SoftDeleteFunctionsAccessFixture(t.Context(), deleted))
+	unattributed := ti.create(t, ti.createFunction(t, ti.orgID, project))
+	require.NoError(t, testrepo.New(ti.conn).ClearFunctionsAccessOrganizationFixture(t.Context(), unattributed))
+
+	lastWrittenAt := ti.stored(t, live).UpdatedAt.Time
+	if deletedAt := ti.stored(t, deleted).UpdatedAt.Time; deletedAt.After(lastWrittenAt) {
+		lastWrittenAt = deletedAt
+	}
+
+	store := runnerkeys.NewCopyStore(ti.conn)
+	listed, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	var organization orgencryption.OrganizationValues
+	for _, h := range listed {
+		if h.OrganizationID == ti.orgID {
+			organization = h
+		}
+	}
+	require.Equal(t, int64(2), organization.Values, "the soft-deleted key counts and the key without an organization does not")
+	require.True(t, lastWrittenAt.Equal(organization.LastWrittenAt), "listed %v, stored %v", organization.LastWrittenAt, lastWrittenAt)
+
+	counted, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, organization.Values, counted.Values)
+	require.True(t, organization.LastWrittenAt.Equal(counted.LastWrittenAt))
+
+	other := createOrganization(t, ti.conn)
+	empty, err := store.Count(t.Context(), other)
+	require.NoError(t, err)
+	require.Zero(t, empty.Values)
+	require.True(t, empty.LastWrittenAt.IsZero())
+}
+
+func TestCopyStore_CountsKeysStoredOnlyUnderTheOrganizationKey(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	project := ti.createProject(t, ti.orgID)
+	id := ti.create(t, ti.createFunction(t, ti.orgID, project))
+	ti.enroll(t)
+	ti.finalize(t)
+	row := ti.stored(t, id)
+	require.Empty(t, row.EncryptionKey.Reveal(), "finalize leaves only the organization-key copy")
+
+	store := runnerkeys.NewCopyStore(ti.conn)
+	counts, err := store.Count(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Zero(t, counts.PlatformCopies)
+	require.Equal(t, int64(1), counts.Values, "a key stored only under the organization key is still a value")
+	require.True(t, row.UpdatedAt.Time.Equal(counts.LastWrittenAt), "want %s, got %s", row.UpdatedAt.Time, counts.LastWrittenAt)
+
+	listed, err := store.ListOrganizationsWithValues(t.Context())
+	require.NoError(t, err)
+	require.Contains(t, listed, orgencryption.OrganizationValues{OrganizationID: ti.orgID, Values: 1, LastWrittenAt: counts.LastWrittenAt})
+}

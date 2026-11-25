@@ -399,17 +399,13 @@ func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pg
 	require.NoError(t, err)
 }
 
-// ensureAttachmentParent supplies only the compatibility FK for direct
-// principal-attachment fixture writes. It never configures a login.
-func ensureAttachmentParent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) {
+// seedLegacyIssuerClientLink gives tests an existing retired link, not an attachment prerequisite.
+func seedLegacyIssuerClientLink(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, signInID uuid.UUID) {
 	t.Helper()
-	require.NoError(t, repo.New(conn).EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{
-		UserSessionIssuerID: signInID,
-		ClientIds:           []uuid.UUID{clientID},
-		OrganizationID:      activeOrganizationID(t, ctx),
-		ProjectID:           conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	require.NoError(t, repo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   signInID,
 	}))
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, conn, clientID, signInID), "the attachment fixture needs a compatibility FK parent")
 }
 
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
