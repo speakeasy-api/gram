@@ -474,7 +474,6 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 			return memberTokens, nil
 		},
 		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
-		byMember:  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
 	}}
 
 	associated := metaMember{serverID: uuid.New(), slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}}

@@ -279,6 +279,23 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.NotContains(t, w.Body.String(), "unknown tool")
+
+	// An explicit no-upstream server and a required server with no placement
+	// look the same to issuer-wide credential lookup. Only the first can run.
+	for _, required := range []bool{false, true} {
+		_, err = ti.conn.Exec(ctx, `UPDATE mcp_servers SET requires_upstream_auth = $1 WHERE id = $2 AND project_id = $3`, required, hosted.serverID, *authCtx.ProjectID)
+		require.NoError(t, err)
+		w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+			"name": hosted.slug + "--alpha", "arguments": map[string]any{},
+		}))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		if required {
+			require.Contains(t, w.Body.String(), "has no usable upstream configuration")
+		} else {
+			require.NotContains(t, w.Body.String(), "has no usable upstream configuration")
+		}
+	}
 }
 
 func TestServeOrganizationGateway_SameSlugInTwoProjects(t *testing.T) {

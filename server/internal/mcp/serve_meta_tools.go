@@ -605,9 +605,9 @@ func (s *Service) buildMemberDispatch(
 	}
 
 	// Signed-in gateways resolve and check the exact hosted placement.
-	// Issuerless legacy dispatch still uses the derived stamp.
+	// Legacy dispatch (including agent attachments) still uses the derived stamp.
 	hostedTokens, err := s.resolveMemberTokens(ctx, gate, member)
-	if err == nil && gate.projectTokens == nil {
+	if err == nil && (gate.projectTokens == nil || gate.agentID != uuid.Nil) {
 		tokens := hostedTokens
 		hostedTokens, err = hostedMemberTokens(tokens, member)
 		s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
@@ -616,6 +616,8 @@ func (s *Service) buildMemberDispatch(
 		switch {
 		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialUnavailable):
 			err = metaMemberClientCredentialError(member, err)
+		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrChosenClientUnbound):
+			err = &metaMemberError{message: fmt.Sprintf("server %q has no usable upstream configuration", member.slug)}
 		case errors.Is(err, remotesessions.ErrNoValidToken):
 			err = &metaMemberError{message: fmt.Sprintf("server %q needs an upstream connection", member.slug)}
 		}
