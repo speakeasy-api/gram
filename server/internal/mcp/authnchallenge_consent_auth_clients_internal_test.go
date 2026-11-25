@@ -39,6 +39,15 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	}
 
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.Nil, nil), "shared clients come first, by name")
+	withOutage := func(options []consentAuthClientOption) {
+		for i := range options {
+			if options[i].ID == engineering {
+				options[i].unavailable = true
+			}
+		}
+	}
+	require.Equal(t, marketing, selected(uuid.Nil, uuid.Nil, withOutage), "a healthy option wins over the default during an outage")
+	require.Equal(t, engineering, selected(engineering, uuid.Nil, withOutage), "an outage option is still explicitly selectable")
 	require.Equal(t, personal, selected(uuid.Nil, personal, nil), "a still-usable remembered choice wins over the order")
 	require.Equal(t, forwarded, selected(forwarded, personal, nil), "the person's pick wins over the remembered choice")
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.New(), nil), "a remembered client no longer offered is ignored")
@@ -53,6 +62,10 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	}
 	require.Equal(t, uuid.Nil, selected(uuid.Nil, personal, shareRegistration), "a remembered offer does not disambiguate a shared registration")
 	require.Equal(t, marketing, selected(marketing, personal, shareRegistration), "an exact pick disambiguates even when another offer was remembered")
+	require.Equal(t, uuid.Nil, selected(uuid.Nil, uuid.Nil, func(options []consentAuthClientOption) {
+		withOutage(options)
+		shareRegistration(options)
+	}), "an ambiguous healthy default requires an explicit choice rather than silently selecting another credential")
 
 	ema := uuid.New()
 	withEMA := func(options []consentAuthClientOption) {

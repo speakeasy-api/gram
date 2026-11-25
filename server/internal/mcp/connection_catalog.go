@@ -786,6 +786,7 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 	if err != nil {
 		return err
 	}
+	resolved = enforcedCompatibility(resolved)
 	if (resolved.outcome != authClientResolved && resolved.outcome != authClientLegacy) || resolved.clientID != member.Auth.ClientID || resolved.choice.clientID != member.Auth.RegistrationID {
 		return errConsentConfigurationChanged
 	}

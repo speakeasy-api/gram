@@ -15,7 +15,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -95,7 +94,8 @@ func (s *Service) resolveMetaMemberResource(
 // project owns is claimed only by that project's members, the ones whose
 // dispatch routes through it.
 //
-// Each proxied member claims only registrations it offers through typed clients.
+// Typed consent limits claims to registrations offered by the proxied member.
+// Legacy keepalive checks can still use existing associations.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -161,28 +161,6 @@ func (s *Service) authorizedMetaMembers(
 ) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, error) {
 	if len(rows) == 0 {
 		return nil, nil
-	}
-
-	if usesTypedConsentInventory(ctx) {
-		admission, err := s.admitMandatoryShadow(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("load login member permissions: %w", err)
-		}
-		allowed := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
-		for _, candidate := range rows {
-			if candidate.McpServerVisibility != mcpservers.VisibilityPublic && candidate.McpServerVisibility != mcpservers.VisibilityPrivate {
-				continue
-			}
-			connect := authz.MCPServer(authz.MCPServerIDOf(candidate.McpServerID), authz.ProjectIDOf(candidate.ProjectID)).Connect()
-			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
-			if err != nil {
-				return nil, fmt.Errorf("authorize login member: %w", err)
-			}
-			if decision.Allowed {
-				allowed = append(allowed, candidate)
-			}
-		}
-		return allowed, nil
 	}
 
 	ctx, err := s.authz.PrepareContext(ctx)

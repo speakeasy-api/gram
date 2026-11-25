@@ -71,6 +71,8 @@ type consentAuthClientOption struct {
 	// registrationID is the OAuth registration the client authenticates
 	// through, recorded with the pick.
 	registrationID uuid.NullUUID
+	// unavailable marks an outage; the option can still be picked explicitly.
+	unavailable bool
 }
 
 // TypeLabel names how the client authenticates, in the person's words.
@@ -214,6 +216,10 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 	if err != nil {
 		return nil, fmt.Errorf("list consent auth clients: %w", err)
 	}
+	unavailable := make(map[string]bool)
+	for _, card := range cards {
+		unavailable[card.ClientID] = cardStatus(card) == gatewayServerUnavailable
+	}
 	remembered := map[uuid.UUID]uuid.UUID{}
 	rememberedRows, err := queries.ListRememberedAuthClients(ctx, upstreamclientsrepo.ListRememberedAuthClientsParams{SubjectUrn: subject.String(), OrganizationID: organizationID, McpServerIds: ids})
 	if err != nil {
@@ -260,6 +266,7 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			if err != nil {
 				return nil, fmt.Errorf("resolve consent auth client: %w", err)
 			}
+			res = enforcedCompatibility(res)
 			if res.outcome == authClientNoAccess {
 				denied++
 				continue
@@ -272,6 +279,7 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 				ConnectClientID: "",
 				Selected:        false,
 				registrationID:  row.RemoteSessionClientID,
+				unavailable:     row.RemoteSessionClientID.Valid && unavailable[row.RemoteSessionClientID.UUID.String()],
 			}
 			switch {
 			case res.outcome == authClientGap:
@@ -343,7 +351,8 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 
 // selectConsentAuthClient marks the option the credential will record. A pick
 // or a remembered choice applies only while it is still usable; otherwise
-// the fixed order decides: identity provider, then shared clients by name,
+// healthy options come before outages. Within each group, the fixed order
+// is identity provider, then shared clients by name,
 // then the person's own account, then the app's own credential.
 func selectConsentAuthClient(auth *consentServerAuth, picked, remembered uuid.UUID) {
 	slices.SortStableFunc(auth.Options, func(a, b consentAuthClientOption) int {
@@ -372,10 +381,12 @@ func selectConsentAuthClient(auth *consentServerAuth, picked, remembered uuid.UU
 			}
 		}
 	}
-	for i := range auth.Options {
-		if auth.Options[i].Usable() {
-			selectOption(&auth.Options[i])
-			return
+	for _, unavailable := range []bool{false, true} {
+		for i := range auth.Options {
+			if auth.Options[i].Usable() && auth.Options[i].unavailable == unavailable {
+				selectOption(&auth.Options[i])
+				return
+			}
 		}
 	}
 }
@@ -526,7 +537,8 @@ func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *Resolve
 		return res, nil
 	}
 	if selected := auth.Selected(); selected != nil {
-		return s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID, member.projectID, selected.ID, subject)
+		resolved, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID, member.projectID, selected.ID, subject)
+		return enforcedCompatibility(resolved), err
 	}
 	return gapResolution(authClientReasonSetup), nil
 }
