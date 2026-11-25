@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tiktoken-go/tokenizer"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
@@ -461,6 +462,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	if chatResp.Usage != nil {
 		usage = *chatResp.Usage
 	}
+	recordCompletionSpanAttributes(ctx, chatResp.Provider, usage, 0)
 
 	// Extract tool calls
 	var toolCalls []ToolCall
@@ -553,6 +555,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
 		startTime:            time.Now(),
+		firstChunkAt:         time.Time{},
 		messageID:            "",
 		model:                "",
 		provider:             "",
@@ -653,6 +656,9 @@ type streamingResponseReader struct {
 	usage        Usage
 	usageSet     bool
 	startTime    time.Time
+	// firstChunkAt is when the first parsed data chunk arrived: the wait for
+	// the provider, before any streaming.
+	firstChunkAt time.Time
 }
 
 // Read implements io.Reader, passing data through while parsing SSE chunks.
@@ -679,6 +685,12 @@ func (r *streamingResponseReader) Close() error {
 	if err != nil {
 		err = fmt.Errorf("close response body: %w", err)
 	}
+
+	var firstChunk time.Duration
+	if !r.firstChunkAt.IsZero() {
+		firstChunk = r.firstChunkAt.Sub(r.startTime)
+	}
+	recordCompletionSpanAttributes(r.ctx, r.provider, r.usage, firstChunk)
 
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
@@ -752,6 +764,10 @@ func (r *streamingResponseReader) processSSELine(line string) {
 	if err := json.Unmarshal([]byte(jsonData), &chunk); err != nil {
 		r.logger.ErrorContext(r.ctx, "failed to parse SSE chunk", attr.SlogError(err))
 		return
+	}
+
+	if r.firstChunkAt.IsZero() {
+		r.firstChunkAt = time.Now()
 	}
 
 	// Extract message ID and model (sent in first chunk)
@@ -1176,4 +1192,29 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 	}
 
 	return results, nil
+}
+
+// recordCompletionSpanAttributes adds what a model call's latency and cost
+// depend on to the span in ctx: the upstream provider OpenRouter routed to,
+// the time to the first streamed chunk (zero when unknown, as for a
+// non-streaming call), and the reasoning and prompt-cache token counts.
+func recordCompletionSpanAttributes(ctx context.Context, provider string, usage Usage, firstChunk time.Duration) {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	attrs := make([]attribute.KeyValue, 0, 4)
+	if provider != "" {
+		attrs = append(attrs, attr.OpenRouterUpstreamProvider(provider))
+	}
+	if firstChunk > 0 {
+		attrs = append(attrs, attr.OpenRouterTimeToFirstChunk(firstChunk.Milliseconds()))
+	}
+	if details := usage.CompletionTokensDetails; details != nil {
+		attrs = append(attrs, attr.GenAIUsageReasoningTokens(details.ReasoningTokens))
+	}
+	if details := usage.PromptTokensDetails; details != nil {
+		attrs = append(attrs, attr.GenAIUsageCacheReadInputTokens(details.CachedTokens))
+	}
+	span.SetAttributes(attrs...)
 }

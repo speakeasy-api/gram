@@ -830,6 +830,8 @@ const (
 	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey            = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey       = attribute.Key("gram.openrouter.response.body")
+	OpenRouterTimeToFirstChunkKey   = attribute.Key("gram.openrouter.time_to_first_chunk_ms")
+	OpenRouterUpstreamProviderKey   = attribute.Key("gram.openrouter.upstream_provider")
 	OpenRouterRateLimitLimitKey     = attribute.Key("gram.openrouter.ratelimit.limit")
 	OpenRouterRateLimitRemainingKey = attribute.Key("gram.openrouter.ratelimit.remaining")
 	OpenRouterRateLimitResetKey     = attribute.Key("gram.openrouter.ratelimit.reset")
@@ -3192,6 +3194,14 @@ func SlogOpenRouterResponseBody(v string) slog.Attr {
 	return slog.String(string(OpenRouterResponseBodyKey), v)
 }
 
+func OpenRouterTimeToFirstChunk(v int64) attribute.KeyValue {
+	return OpenRouterTimeToFirstChunkKey.Int64(v)
+}
+
+func OpenRouterUpstreamProvider(v string) attribute.KeyValue {
+	return OpenRouterUpstreamProviderKey.String(v)
+}
+
 func OpenRouterRateLimitLimit(v string) attribute.KeyValue {
 	return OpenRouterRateLimitLimitKey.String(v)
 }
@@ -4468,6 +4478,10 @@ func GenAIUsageCacheCreationInputTokens(v int) attribute.KeyValue {
 
 func SlogGenAIUsageCacheCreationInputTokens(v int) slog.Attr {
 	return slog.Int(string(GenAIUsageCacheCreationInputTokensKey), v)
+}
+
+func GenAIUsageReasoningTokens(v int) attribute.KeyValue {
+	return GenAIUsageReasoningTokensKey.Int(v)
 }
 
 func GenAIUsageCost(v float64) attribute.KeyValue { return GenAIUsageCostKey.Float64(v) }
