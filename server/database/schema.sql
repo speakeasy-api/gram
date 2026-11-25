@@ -7314,7 +7314,10 @@ CREATE TABLE IF NOT EXISTS chat_message_transcript_tool_calls (
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT chat_message_transcript_tool_calls_pkey PRIMARY KEY (message_id, tool_call_id),
-  CONSTRAINT chat_message_transcript_tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_message_transcripts(message_id) ON DELETE CASCADE
+  CONSTRAINT chat_message_transcript_tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_message_transcripts(message_id) ON DELETE CASCADE,
+  -- Binds project_id to the message's own project, so a row cannot name
+  -- another tenant. chat_id is written only from the message by the store.
+  CONSTRAINT chat_message_transcript_tool_calls_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN chat_message_transcript_tool_calls.message_id IS 'Shadowed assistant message that issued the tool call.
