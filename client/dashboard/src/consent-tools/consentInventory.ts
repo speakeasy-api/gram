@@ -95,6 +95,8 @@ export async function fetchConsentInventory(
       fetch: (input, init) =>
         fetch(input, {
           ...init,
+          // Credentialed requests must never follow a redirect.
+          redirect: "error",
           signal:
             init?.method === "DELETE"
               ? AbortSignal.timeout(2000)
